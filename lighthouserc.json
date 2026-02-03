@@ -2,10 +2,9 @@
   "ci": {
     "collect": {
       "staticDistDir": "./dist",
-      "url": ["./index.html"]
+      "url": ["/index.html"]
     },
     "assert": {
-      "preset": "lighthouse:no-pwa",
       "assertions": {
         "categories:performance": ["error", { "minScore": 0.9 }],
         "first-contentful-paint": ["warn", { "maxNumericValue": 2000, "aggregationMethod": "optimistic" }]
