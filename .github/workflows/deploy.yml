@@ -23,10 +23,13 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build
         run: npm run build
+
+      - name: Lighthouse CI (static)
+        run: npx @lhci/cli@0.13.0 autorun
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

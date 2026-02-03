@@ -1,3 +1,21 @@
+# The Magician's Cosmos — Portfolio
+
+Live (GitHub Pages): https://thomasnavarro38.github.io/cosmos-portfolio/
+
+Scripts
+- dev: `npm run dev`
+- build: `npm run build`
+- preview: `npm run preview`
+
+CI/CD
+- Deploys to GitHub Pages via `.github/workflows/deploy.yml`.
+- Uses `npm ci` for reproducible installs and runs `npx @lhci/cli@0.13.0 autorun` against the static `dist` build to enforce a basic performance budget (Performance score ≥ 0.90).
+
+Performance Target
+- Goal: 60 FPS for interactive scenes. Early guardrail via Lighthouse CI; runtime FPS instrumentation (e.g., rAF sampler or `@react-three/drei` PerformanceMonitor) will be introduced in future stories.
+
+---
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
