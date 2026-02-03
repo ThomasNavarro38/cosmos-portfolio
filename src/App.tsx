@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useStore } from './engine/store';
+import AccessibilityLayer from './components/dom/AccessibilityLayer';
 
 function App() {
   const { loadResumeData, resumeData, isLoading, error } = useStore();
@@ -34,6 +35,7 @@ function App() {
 
   return (
     <main className="flex flex-col items-center justify-center w-full min-h-screen bg-black text-white p-8">
+      <AccessibilityLayer />
       <div className="max-w-4xl w-full">
         {error && (
           <div className="bg-red-900/20 border border-red-500/50 text-red-200 px-4 py-2 rounded mb-8 text-sm font-mono flex justify-between items-center">
@@ -55,7 +57,7 @@ function App() {
                 href={social.url} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-gray-500 hover:text-white transition-colors text-sm font-mono"
+                className="text-gray-400 hover:text-white transition-colors text-sm font-mono"
               >
                 [{social.platform}]
               </a>
@@ -121,7 +123,7 @@ function App() {
                 <p className="text-sm text-gray-400 mb-4">{project.description}</p>
                 <div className="flex flex-wrap gap-2 mb-4">
                   {project.technologies.map(tech => (
-                    <span key={tech} className="text-[10px] font-mono bg-black px-2 py-1 rounded text-gray-500">
+                    <span key={tech} className="text-[10px] font-mono bg-black px-2 py-1 rounded text-gray-400">
                       {tech}
                     </span>
                   ))}
@@ -143,7 +145,7 @@ function App() {
           </div>
         </section>
 
-        <footer className="text-center text-gray-500 text-sm font-mono border-t border-gray-900 pt-8">
+        <footer className="text-center text-gray-400 text-sm font-mono border-t border-gray-900 pt-8">
           {resumeData?.contact.location} • {resumeData?.contact.email}
         </footer>
       </div>
