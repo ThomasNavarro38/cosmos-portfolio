@@ -1,13 +1,18 @@
-import { useEffect } from 'react';
 import { useStore } from './engine/store';
 import AccessibilityLayer from './components/dom/AccessibilityLayer';
+import { useScrollEngine } from './hooks/useScrollEngine';
+import { useInteractionBridge } from './hooks/useInteractionBridge';
 
 function App() {
-  const { loadResumeData, resumeData, isLoading, error } = useStore();
+  const resumeData = useStore((state) => state.resumeData);
+  const isLoading = useStore((state) => state.isLoading);
+  const error = useStore((state) => state.error);
+  const hoveredId = useStore((state) => state.hoveredId);
+  const scrollProgress = useStore((state) => state.scrollProgress);
+  const generateProxyId = useStore((state) => state.generateProxyId);
+  const { handlePointerEnter, handlePointerLeave, handleClick } = useInteractionBridge();
 
-  useEffect(() => {
-    loadResumeData();
-  }, [loadResumeData]);
+  useScrollEngine();
 
   if (isLoading) {
     return (
@@ -36,6 +41,15 @@ function App() {
   return (
     <main className="flex flex-col items-center justify-center w-full min-h-screen bg-black text-white p-8">
       <AccessibilityLayer />
+      
+      {/* Debug Overlay */}
+      {import.meta.env.DEV && (
+        <div className="fixed top-4 right-4 z-[9999] bg-black/80 border border-purple-500/50 p-3 rounded font-mono text-[10px] pointer-events-none">
+          <div>Hovered: <span className="text-purple-400">{hoveredId || 'none'}</span></div>
+          <div>Scroll: <span className="text-pink-400">{(scrollProgress * 100).toFixed(1)}%</span></div>
+        </div>
+      )}
+
       <div className="max-w-4xl w-full">
         {error && (
           <div className="bg-red-900/20 border border-red-500/50 text-red-200 px-4 py-2 rounded mb-8 text-sm font-mono flex justify-between items-center">
@@ -74,42 +88,60 @@ function App() {
           <div>
             <h2 className="text-2xl font-bold mb-4 border-b border-gray-800 pb-2">Sorceries (Skills)</h2>
             <ul className="space-y-4">
-              {resumeData?.skills.map((skill) => (
-                <li key={skill.name}>
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-gray-300">{skill.name}</span>
-                    <span className="text-xs font-mono px-2 py-1 bg-gray-900 rounded text-purple-400">
-                      {skill.category}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-900 h-1 rounded-full overflow-hidden">
-                    <div 
-                      className="bg-purple-600 h-full transition-all duration-1000" 
-                      style={{ width: `${skill.proficiency * 100}%` }}
-                    />
-                  </div>
-                </li>
-              ))}
+              {resumeData?.skills.map((skill) => {
+                const id = generateProxyId(skill.name);
+                return (
+                  <li 
+                    key={skill.name}
+                    onPointerEnter={() => handlePointerEnter(id)}
+                    onPointerLeave={handlePointerLeave}
+                    onClick={() => handleClick(id)}
+                    className="cursor-pointer group"
+                  >
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-gray-300 group-hover:text-purple-300 transition-colors">{skill.name}</span>
+                      <span className="text-xs font-mono px-2 py-1 bg-gray-900 rounded text-purple-400">
+                        {skill.category}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-900 h-1 rounded-full overflow-hidden">
+                      <div 
+                        className="bg-purple-600 h-full transition-all duration-1000 group-hover:bg-purple-400" 
+                        style={{ width: `${skill.proficiency * 100}%` }}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
           <div>
             <h2 className="text-2xl font-bold mb-4 border-b border-gray-800 pb-2">Impact Spheres</h2>
             <div className="space-y-6">
-              {resumeData?.impactAreas.map((area) => (
-                <div key={area.title}>
-                  <h3 className="font-bold text-purple-400 text-lg">{area.title}</h3>
-                  <p className="text-sm text-gray-300 mb-2">{area.description}</p>
-                  {area.metrics && (
-                    <div className="flex flex-wrap gap-2">
-                      {area.metrics.map(metric => (
-                        <span key={metric} className="text-[10px] font-mono bg-purple-900/30 border border-purple-500/30 px-2 py-0.5 rounded text-purple-200">
-                          {metric}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+              {resumeData?.impactAreas.map((area) => {
+                const id = generateProxyId(area.title);
+                return (
+                  <div 
+                    key={area.title}
+                    onPointerEnter={() => handlePointerEnter(id)}
+                    onPointerLeave={handlePointerLeave}
+                    onClick={() => handleClick(id)}
+                    className="cursor-pointer group"
+                  >
+                    <h3 className="font-bold text-purple-400 text-lg group-hover:text-purple-300 transition-colors">{area.title}</h3>
+                    <p className="text-sm text-gray-300 mb-2">{area.description}</p>
+                    {area.metrics && (
+                      <div className="flex flex-wrap gap-2">
+                        {area.metrics.map(metric => (
+                          <span key={metric} className="text-[10px] font-mono bg-purple-900/30 border border-purple-500/30 px-2 py-0.5 rounded text-purple-200">
+                            {metric}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>
@@ -118,8 +150,14 @@ function App() {
           <h2 className="text-2xl font-bold mb-4 border-b border-gray-800 pb-2">Constellations (Projects)</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {resumeData?.projects.map(project => (
-              <div key={project.id} className="p-4 bg-gray-900/50 border border-gray-800 rounded-lg hover:border-purple-500/50 transition-colors">
-                <h3 className="text-xl font-bold text-white mb-2">{project.title}</h3>
+              <div 
+                key={project.id} 
+                onPointerEnter={() => handlePointerEnter(project.id)}
+                onPointerLeave={handlePointerLeave}
+                onClick={() => handleClick(project.id)}
+                className="p-4 bg-gray-900/50 border border-gray-800 rounded-lg hover:border-purple-500/50 transition-colors cursor-pointer group"
+              >
+                <h3 className="text-xl font-bold text-white mb-2 group-hover:text-purple-300 transition-colors">{project.title}</h3>
                 <p className="text-sm text-gray-400 mb-4">{project.description}</p>
                 <div className="flex flex-wrap gap-2 mb-4">
                   {project.technologies.map(tech => (

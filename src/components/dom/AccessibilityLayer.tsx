@@ -1,7 +1,10 @@
 import { useStore } from '../../engine/store';
+import { useInteractionBridge } from '../../hooks/useInteractionBridge';
 
 const AccessibilityLayer = () => {
-  const { resumeData } = useStore();
+  const resumeData = useStore((state) => state.resumeData);
+  const generateProxyId = useStore((state) => state.generateProxyId);
+  const { handlePointerEnter, handlePointerLeave, handleClick } = useInteractionBridge();
 
   if (!resumeData) return null;
 
@@ -81,37 +84,61 @@ const AccessibilityLayer = () => {
         <section id="skills" tabIndex={-1} aria-labelledby="skills-h">
           <h2 id="skills-h">Skills</h2>
           <ul>
-            {skills.map((skill) => (
-              <li key={skill.name}>
-                <h3>{skill.name}</h3>
-                <p>Category: {skill.category}</p>
-                <p>Proficiency: {Math.round(skill.proficiency * 100)}%</p>
-              </li>
-            ))}
+            {skills.map((skill) => {
+              const id = generateProxyId(skill.name);
+              return (
+                <li 
+                  key={skill.name} 
+                  id={id}
+                  onPointerEnter={() => handlePointerEnter(id)}
+                  onPointerLeave={handlePointerLeave}
+                  onClick={() => handleClick(id)}
+                >
+                  <h3>{skill.name}</h3>
+                  <p>Category: {skill.category}</p>
+                  <p>Proficiency: {Math.round(skill.proficiency * 100)}%</p>
+                </li>
+              );
+            })}
           </ul>
         </section>
 
         <section id="impact-areas" tabIndex={-1} aria-labelledby="impact-h">
           <h2 id="impact-h">Impact Areas</h2>
-          {impactAreas.map((area) => (
-            <article key={area.title}>
-              <h3>{area.title}</h3>
-              <p>{area.description}</p>
-              {area.metrics && area.metrics.length > 0 && (
-                <ul>
-                  {area.metrics.map((metric) => (
-                    <li key={metric}>{metric}</li>
-                  ))}
-                </ul>
-              )}
-            </article>
-          ))}
+          {impactAreas.map((area) => {
+            const id = generateProxyId(area.title);
+            return (
+              <article 
+                key={area.title} 
+                id={id}
+                onPointerEnter={() => handlePointerEnter(id)}
+                onPointerLeave={handlePointerLeave}
+                onClick={() => handleClick(id)}
+              >
+                <h3>{area.title}</h3>
+                <p>{area.description}</p>
+                {area.metrics && area.metrics.length > 0 && (
+                  <ul>
+                    {area.metrics.map((metric) => (
+                      <li key={metric}>{metric}</li>
+                    ))}
+                  </ul>
+                )}
+              </article>
+            );
+          })}
         </section>
 
         <section id="projects" tabIndex={-1} aria-labelledby="projects-h">
           <h2 id="projects-h">Projects</h2>
           {projects.map((project) => (
-            <article key={project.id}>
+            <article 
+              key={project.id} 
+              id={project.id}
+              onPointerEnter={() => handlePointerEnter(project.id)}
+              onPointerLeave={handlePointerLeave}
+              onClick={() => handleClick(project.id)}
+            >
               <h3>{project.title}</h3>
               <p>{project.description}</p>
               <p>Technologies used: {project.technologies.join(', ')}</p>

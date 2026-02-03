@@ -6,6 +6,17 @@ interface AppState {
   ready: boolean;
   setReady: (ready: boolean) => void;
   
+  // Interaction State
+  hoveredId: string | null;
+  activeId: string | null;
+  scrollProgress: number;
+  setHoveredId: (id: string | null) => void;
+  setActiveId: (id: string | null) => void;
+  setScrollProgress: (progress: number) => void;
+  
+  // Utils
+  generateProxyId: (name: string) => string;
+  
   // Data State
   resumeData: ResumeData | null;
   isLoading: boolean;
@@ -32,6 +43,15 @@ const DEFAULT_RESUME_DATA: ResumeData = {
 export const useStore = create<AppState>((set) => ({
   ready: false,
   setReady: (ready) => set({ ready }),
+
+  hoveredId: null,
+  activeId: null,
+  scrollProgress: 0,
+  setHoveredId: (id) => set({ hoveredId: id }),
+  setActiveId: (id) => set({ activeId: id }),
+  setScrollProgress: (progress) => set({ scrollProgress: progress }),
+  
+  generateProxyId: (name) => name.toLowerCase().replace(/\s+/g, '-'),
   
   resumeData: null,
   isLoading: false,
