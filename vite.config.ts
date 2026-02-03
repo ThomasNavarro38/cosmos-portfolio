@@ -5,6 +5,10 @@ import path from 'path'
 const isCI = process.env.GITHUB_ACTIONS === 'true'
 const repo = process.env.GITHUB_REPOSITORY?.split('/')[1] ?? 'cosmos-portfolio'
 
+// Build-time overrides for CI variants
+const explicitBase = process.env.BUILD_BASE
+const outDir = process.env.BUILD_OUT_DIR
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
@@ -13,5 +17,8 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  base: isCI ? `/${repo}/` : '/',
+  base: explicitBase ?? (isCI ? `/${repo}/` : '/'),
+  build: {
+    outDir: outDir ?? 'dist',
+  },
 })

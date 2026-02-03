@@ -25,11 +25,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      # Build for Lighthouse (base "/" into dist-lhci)
+      - name: Build (LHCI)
+        run: BUILD_BASE=/ BUILD_OUT_DIR=dist-lhci npm run build
 
       - name: Lighthouse CI (static)
-        run: npx @lhci/cli@0.13.0 autorun
+        run: npx @lhci/cli@0.13.0 autorun --collect.staticDistDir=./dist-lhci --collect.url=/index.html
+
+      # Build for deployment (uses dynamic base `/${{ github.event.repository.name }}/`)
+      - name: Build (deploy)
+        run: npm run build
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
