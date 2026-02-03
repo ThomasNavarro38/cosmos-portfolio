@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "validate-resume": "npx tsx verify-schema.ts",
+    "build": "npm run validate-resume && tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

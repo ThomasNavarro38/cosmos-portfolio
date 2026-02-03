@@ -1,0 +1,63 @@
+{
+  "contact": {
+    "name": "The Magician",
+    "title": "Architect of the Infinite",
+    "email": "magician@cosmos.dev",
+    "location": "The Astral Plane / San Francisco, CA",
+    "socials": [
+      {
+        "platform": "GitHub",
+        "url": "https://github.com/thomasnavarro38"
+      },
+      {
+        "platform": "LinkedIn",
+        "url": "https://linkedin.com/in/thomasnavarro"
+      }
+    ]
+  },
+  "summary": "Mastering the boundary between logic and wonder. Crafting high-performance digital universes where DOM meets Canvas in perfect harmony.",
+  "skills": [
+    {
+      "name": "React / TypeScript",
+      "category": "Technical",
+      "proficiency": 0.95
+    },
+    {
+      "name": "Three.js / R3F",
+      "category": "Magical",
+      "proficiency": 0.9
+    },
+    {
+      "name": "GLSL Shaders",
+      "category": "Creative",
+      "proficiency": 0.85
+    },
+    {
+      "name": "Zustand State Bridge",
+      "category": "Technical",
+      "proficiency": 0.9
+    }
+  ],
+  "impactAreas": [
+    {
+      "title": "Performance Optimization",
+      "description": "Achieving 60FPS in complex 3D environments through aggressive culling and shader simplification.",
+      "metrics": ["90+ Lighthouse Score", "60 FPS Stability"]
+    },
+    {
+      "title": "Dual-Track Accessibility",
+      "description": "Ensuring every 3D interaction has a semantic, accessible DOM counterpart.",
+      "metrics": ["WCAG 2.1 Compliance", "SEO Optimized"]
+    }
+  ],
+  "projects": [
+    {
+      "id": "cosmos-portfolio",
+      "title": "The Magician's Cosmos",
+      "description": "A high-performance portfolio using a hybrid DOM/Canvas architecture.",
+      "technologies": ["React", "Three.js", "Zustand", "Zod", "Tailwind"],
+      "repo": "https://github.com/thomasnavarro38/cosmos-portfolio",
+      "impact": ["Demonstrates hybrid state bridge pattern"]
+    }
+  ]
+}
