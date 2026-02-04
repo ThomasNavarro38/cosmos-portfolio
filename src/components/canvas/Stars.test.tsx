@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import Stars from './Stars';
-import React from 'react';
 
 vi.mock('@react-three/drei', () => ({
   Stars: () => <div data-testid="drei-stars" />,

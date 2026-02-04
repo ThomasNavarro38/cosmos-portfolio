@@ -22,8 +22,8 @@ const Nebula = () => {
       <Cloud
         opacity={0.15}
         speed={0.4}
-        width={10}
-        depth={1.5}
+        bounds={[10, 5, 1.5]}
+        volume={10}
         segments={20}
         color="#7c3aed" // nebula color
         position={[-5, 2, -10]}
@@ -33,8 +33,8 @@ const Nebula = () => {
       <Cloud
         opacity={0.1}
         speed={0.3}
-        width={15}
-        depth={2}
+        bounds={[15, 5, 2]}
+        volume={15}
         segments={15}
         color="#2dd4bf" // magic color
         position={[5, -2, -12]}
@@ -44,8 +44,8 @@ const Nebula = () => {
       <Cloud
         opacity={0.05}
         speed={0.2}
-        width={20}
-        depth={1}
+        bounds={[20, 5, 1]}
+        volume={20}
         segments={10}
         color="#0f172a" // void color
         position={[0, 0, -15]}
