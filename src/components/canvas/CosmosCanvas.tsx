@@ -2,6 +2,7 @@ import { Canvas } from '@react-three/fiber';
 import { Suspense } from 'react';
 import { Preload } from '@react-three/drei';
 import Nebula from './Nebula';
+import CameraRail from './CameraRail';
 
 interface CosmosCanvasProps {
   children?: React.ReactNode;
@@ -31,6 +32,7 @@ const CosmosCanvas = ({ children }: CosmosCanvasProps) => {
         <Suspense fallback={null}>
           <Nebula />
           {children}
+          <CameraRail />
           <Preload all />
         </Suspense>
       </Canvas>

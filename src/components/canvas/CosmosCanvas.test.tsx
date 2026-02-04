@@ -21,6 +21,11 @@ vi.mock('./Nebula', () => ({
   default: () => <div data-testid="nebula-mock" />,
 }));
 
+// Mock CameraRail component
+vi.mock('./CameraRail', () => ({
+  default: () => <div data-testid="camera-rail-mock" />,
+}));
+
 describe('CosmosCanvas', () => {
   it('renders correctly and contains the canvas container', () => {
     const { getByTestId } = render(
