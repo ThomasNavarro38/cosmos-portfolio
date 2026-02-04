@@ -2,6 +2,8 @@ import { useStore } from './engine/store';
 import AccessibilityLayer from './components/dom/AccessibilityLayer';
 import { useScrollEngine } from './hooks/useScrollEngine';
 import { useInteractionBridge } from './hooks/useInteractionBridge';
+import CosmosCanvas from './components/canvas/CosmosCanvas';
+import Stars from './components/canvas/Stars';
 
 function App() {
   const resumeData = useStore((state) => state.resumeData);
@@ -39,8 +41,13 @@ function App() {
   }
 
   return (
-    <main className="flex flex-col items-center justify-center w-full min-h-screen bg-black text-white p-8">
-      <AccessibilityLayer />
+    <>
+      <CosmosCanvas>
+        <Stars />
+      </CosmosCanvas>
+
+      <main className="relative z-10 flex flex-col items-center justify-center w-full min-h-screen text-white p-8">
+        <AccessibilityLayer />
       
       {/* Debug Overlay */}
       {import.meta.env.DEV && (
@@ -59,7 +66,7 @@ function App() {
         )}
         
         <header className="mb-12 text-center">
-          <h1 className="text-5xl font-extrabold mb-2 bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent">
+          <h1 className="text-5xl font-extrabold mb-2 bg-gradient-to-r from-nebula to-magic bg-clip-text text-transparent">
             {resumeData?.contact.name}
           </h1>
           <p className="text-xl text-gray-400 font-mono italic">{resumeData?.contact.title}</p>
@@ -99,14 +106,14 @@ function App() {
                     className="cursor-pointer group"
                   >
                     <div className="flex justify-between items-center mb-1">
-                      <span className="text-gray-300 group-hover:text-purple-300 transition-colors">{skill.name}</span>
-                      <span className="text-xs font-mono px-2 py-1 bg-gray-900 rounded text-purple-400">
+                      <span className="text-gray-300 group-hover:text-magic transition-colors">{skill.name}</span>
+                      <span className="text-xs font-mono px-2 py-1 bg-gray-900 rounded text-nebula">
                         {skill.category}
                       </span>
                     </div>
                     <div className="w-full bg-gray-900 h-1 rounded-full overflow-hidden">
                       <div 
-                        className="bg-purple-600 h-full transition-all duration-1000 group-hover:bg-purple-400" 
+                        className="bg-nebula h-full transition-all duration-1000 group-hover:bg-magic" 
                         style={{ width: `${skill.proficiency * 100}%` }}
                       />
                     </div>
@@ -128,12 +135,12 @@ function App() {
                     onClick={() => handleClick(id)}
                     className="cursor-pointer group"
                   >
-                    <h3 className="font-bold text-purple-400 text-lg group-hover:text-purple-300 transition-colors">{area.title}</h3>
+                    <h3 className="font-bold text-nebula text-lg group-hover:text-magic transition-colors">{area.title}</h3>
                     <p className="text-sm text-gray-300 mb-2">{area.description}</p>
                     {area.metrics && (
                       <div className="flex flex-wrap gap-2">
                         {area.metrics.map(metric => (
-                          <span key={metric} className="text-[10px] font-mono bg-purple-900/30 border border-purple-500/30 px-2 py-0.5 rounded text-purple-200">
+                          <span key={metric} className="text-[10px] font-mono bg-nebula/20 border border-nebula/30 px-2 py-0.5 rounded text-nebula/90">
                             {metric}
                           </span>
                         ))}
@@ -155,9 +162,9 @@ function App() {
                 onPointerEnter={() => handlePointerEnter(project.id)}
                 onPointerLeave={handlePointerLeave}
                 onClick={() => handleClick(project.id)}
-                className="p-4 bg-gray-900/50 border border-gray-800 rounded-lg hover:border-purple-500/50 transition-colors cursor-pointer group"
+                className="p-4 bg-gray-900/50 border border-gray-800 rounded-lg hover:border-nebula/50 transition-colors cursor-pointer group"
               >
-                <h3 className="text-xl font-bold text-white mb-2 group-hover:text-purple-300 transition-colors">{project.title}</h3>
+                <h3 className="text-xl font-bold text-white mb-2 group-hover:text-magic transition-colors">{project.title}</h3>
                 <p className="text-sm text-gray-400 mb-4">{project.description}</p>
                 <div className="flex flex-wrap gap-2 mb-4">
                   {project.technologies.map(tech => (
@@ -168,12 +175,12 @@ function App() {
                 </div>
                 <div className="flex gap-4">
                   {project.repo && (
-                    <a href={project.repo} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-purple-400 hover:text-purple-300">
+                    <a href={project.repo} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-nebula hover:text-magic">
                       SOURCE_CODE
                     </a>
                   )}
                   {project.url && (
-                    <a href={project.url} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-pink-400 hover:text-pink-300">
+                    <a href={project.url} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-magic hover:text-nebula">
                       LIVE_VIEW
                     </a>
                   )}
@@ -188,6 +195,7 @@ function App() {
         </footer>
       </div>
     </main>
+    </>
   );
 }
 
