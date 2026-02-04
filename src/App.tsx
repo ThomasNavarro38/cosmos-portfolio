@@ -2,8 +2,11 @@ import { useStore } from './engine/store';
 import AccessibilityLayer from './components/dom/AccessibilityLayer';
 import { useScrollEngine } from './hooks/useScrollEngine';
 import { useInteractionBridge } from './hooks/useInteractionBridge';
-import CosmosCanvas from './components/canvas/CosmosCanvas';
-import Stars from './components/canvas/Stars';
+import { lazy, Suspense } from 'react';
+
+// Lazy load heavy R3F components to improve FCP/LCP
+const CosmosCanvas = lazy(() => import('./components/canvas/CosmosCanvas'));
+const Stars = lazy(() => import('./components/canvas/Stars'));
 
 function App() {
   const resumeData = useStore((state) => state.resumeData);
@@ -42,9 +45,11 @@ function App() {
 
   return (
     <>
-      <CosmosCanvas>
-        <Stars />
-      </CosmosCanvas>
+      <Suspense fallback={<div className="fixed inset-0 bg-black z-0" aria-hidden="true" />}>
+        <CosmosCanvas>
+          <Stars />
+        </CosmosCanvas>
+      </Suspense>
 
       <main className="relative z-10 flex flex-col items-center justify-center w-full min-h-screen text-white p-8">
         <AccessibilityLayer />

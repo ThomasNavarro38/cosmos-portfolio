@@ -20,5 +20,14 @@ export default defineConfig({
   base: explicitBase ?? (isCI ? `/${repo}/` : '/'),
   build: {
     outDir: outDir ?? 'dist',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-three': ['three', '@react-three/fiber', '@react-three/drei'],
+          'vendor-react': ['react', 'react-dom'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000,
   },
 })
