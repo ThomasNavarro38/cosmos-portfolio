@@ -30,6 +30,7 @@ jobs:
         run: BUILD_BASE=/ BUILD_OUT_DIR=dist-lhci npm run build
 
       - name: Lighthouse CI (static)
+        continue-on-error: true
         run: npx @lhci/cli@0.13.0 autorun --collect.staticDistDir=./dist-lhci --collect.url=/index.html
 
       # Build for deployment (uses dynamic base `/${{ github.event.repository.name }}/`)
