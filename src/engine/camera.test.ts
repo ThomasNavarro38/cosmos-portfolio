@@ -37,8 +37,8 @@ describe('Camera Rail Engine', () => {
 
   it('should return a stable target (look-ahead)', () => {
     const pose0 = getCameraPose(0);
-    const pose1 = getCameraPose(0.1);
-    // Target should be different from position
+    getCameraPose(0.1);
+// Target should be different from position
     expect(pose0.target.equals(pose0.position)).toBe(false);
   });
 });

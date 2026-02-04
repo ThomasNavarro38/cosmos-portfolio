@@ -8,7 +8,7 @@ const CameraRail: React.FC = () => {
   const { camera } = useThree();
   
   // Use refs to avoid re-allocations in useFrame
-  const lookTarget = useRef(new THREE.Vector3());
+  useRef(new THREE.Vector3());
   const currentLookAt = useRef(new THREE.Vector3());
   
   // Performance measurement ref
