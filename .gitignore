@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Editor and IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local tooling and session scratch
+resume.txt
+.claude/
+.impeccable/
+
+# Logs
+*.log
+npm-debug.log*
+
+# BMad regenerable workflow snapshots
+_bmad/render/

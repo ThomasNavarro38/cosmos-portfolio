@@ -1,0 +1,97 @@
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates the next story after the previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; the status view surfaces open ones
+generated: 09-01-2026 23:45
+last_updated: 09-01-2026 23:45
+project: cosmos-portfolio
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+development_status:
+  epic-1: backlog
+  1-1-project-scaffold-on-the-pinned-stack: backlog
+  1-2-authored-career-data-with-a-build-gating-schema: backlog
+  1-3-the-three-mapping-rules-and-classification-by-absence: backlog
+  1-4-a-deterministic-force-solve: backlog
+  1-5-the-versioned-layout-artifact: backlog
+  1-6-one-emitted-destination-set: backlog
+  1-7-client-granular-dwell-and-default-shot-framing: backlog
+  1-8-enforced-boundaries-and-the-maintenance-contract: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-the-dom-destination-index: backlog
+  2-2-the-navigation-state-machine: backlog
+  2-3-bodies-at-rest-in-the-3d-scene: backlog
+  2-4-dust-at-rest: backlog
+  2-5-backward-time-rail-traversal: backlog
+  2-6-client-stop-framing-and-derived-dwell: backlog
+  2-7-focus-entry-the-panel-shell-and-scroll-s-two-meanings: backlog
+  2-8-condensation-and-decay: backlog
+  2-9-free-flight-in-three-layers: backlog
+  2-10-escape-precedence-and-reduced-motion: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-generated-design-tokens-from-a-single-source: backlog
+  3-2-the-stroke-and-ink-ladders-applied-to-the-scene: backlog
+  3-3-the-deep-shallow-signal-moon-and-ring: backlog
+  3-4-the-hover-and-keyboard-focus-affordance: backlog
+  3-5-mote-tiering-and-label-legibility: backlog
+  3-6-the-information-panel: backlog
+  3-7-the-notable-and-the-editorial-rule-line: backlog
+  3-8-corner-chrome-and-the-stateful-instruction-slot: backlog
+  3-9-identity-definition-of-done-audit: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-capability-detection-in-the-thin-entry: backlog
+  4-2-surface-routing-with-real-history: backlog
+  4-3-the-fallback-star-chart: backlog
+  4-4-the-deep-shallow-signal-on-a-flat-chart: backlog
+  4-5-one-click-movement-between-surfaces: backlog
+  4-6-performance-offers-never-forces: backlog
+  epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-the-colophon-as-a-fourth-lazy-chunk: backlog
+  5-2-the-three-mapping-rules-worked-on-real-entities: backlog
+  5-3-the-data-file-rendered-in-full: backlog
+  5-4-stating-what-is-not-there: backlog
+  5-5-the-live-re-solve-honestly-framed: backlog
+  epic-5-retrospective: optional
+
+  epic-6: backlog
+  6-1-the-composed-link-preview: backlog
+  6-2-preview-drift-guard: backlog
+  6-3-the-contact-route: backlog
+  6-4-first-paint-verified-on-target-hardware: backlog
+  6-5-launch-readiness-pass: backlog
+  epic-6-retrospective: optional

@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Direction 01 — Orbital Instrument</title>
+<style>
+/* ============================================================================
+   DIRECTION 01 — ORBITAL INSTRUMENT
+   Ground tone : cold blue-grey. Type: monospace throughout, one grotesque for
+   reading prose. Line weight: hairline structure + one confident focus stroke.
+   Accent     : a single cold amber, used ONLY on the currently-focused entity.
+   ----------------------------------------------------------------------------
+   PALETTE — every hex documented
+   --void        #0A0E13  deepest ground, page background
+   --panel       #0D1218  instrument panel fill, one step off the void
+   --panel-hi    #111823  raised panel / info layer fill
+   --rule        #1B2531  hairline structure rules, graticule, ticks
+   --rule-lit    #27374A  second-level rules, orbit paths, frame edges
+   --ink-dim     #4A5A6E  disabled / secondary annotation text
+   --ink         #7E93A8  body annotation, field labels
+   --ink-hi      #A8BCCF  primary label text, headings
+   --ink-max     #DCE6EF  reading prose, focused label — the brightest ink
+   --accent      #C98A3C  cold amber. FOCUS ONLY. Never decorative.
+   --accent-dim  #6B4A22  accent at rest / trailing, focus ring outer
+   --accent-wash #221A10  accent-tinted fill behind a focused body
+   ========================================================================= */
+
+:root{
+  --void:#0A0E13; --panel:#0D1218; --panel-hi:#111823;
+  --rule:#1B2531; --rule-lit:#27374A;
+  --ink-dim:#4A5A6E; --ink:#7E93A8; --ink-hi:#A8BCCF; --ink-max:#DCE6EF;
+  --accent:#C98A3C; --accent-dim:#6B4A22; --accent-wash:#221A10;
+  --mono:ui-monospace,"SFMono-Regular","Consolas","Liberation Mono",Menlo,monospace;
+  --sans:"Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--void); color:var(--ink);
+  font-family:var(--mono); font-size:13px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+.page{max-width:1180px;margin:0 auto;padding:40px 28px 120px}
+
+/* --- rationale block ---------------------------------------------------- */
+.rationale{
+  border:1px solid var(--rule-lit); background:var(--panel);
+  padding:22px 24px; margin-bottom:52px;
+}
+.rationale .tag{
+  font-size:10px;letter-spacing:.22em;color:var(--accent);
+  text-transform:uppercase;margin-bottom:12px;
+}
+.rationale h1{
+  font-size:19px;font-weight:400;letter-spacing:.04em;
+  color:var(--ink-max);margin:0 0 14px;
+}
+.rationale p{
+  font-family:var(--sans);font-size:14px;line-height:1.65;
+  color:var(--ink-hi);margin:0;max-width:76ch;
+}
+
+/* --- screen scaffolding ------------------------------------------------- */
+.screen{margin-bottom:64px}
+.screen-hd{
+  display:flex;align-items:baseline;gap:14px;
+  border-bottom:1px solid var(--rule);padding-bottom:8px;margin-bottom:14px;
+}
+.screen-hd .id{font-size:10px;letter-spacing:.2em;color:var(--accent)}
+.screen-hd .nm{font-size:11px;letter-spacing:.16em;color:var(--ink-hi);text-transform:uppercase}
+.screen-hd .note{margin-left:auto;font-size:10px;color:var(--ink-dim);letter-spacing:.08em}
+
+.frame{
+  position:relative;background:var(--void);
+  border:1px solid var(--rule-lit);overflow:hidden;
+}
+.frame svg{display:block;width:100%;height:auto}
+
+/* --- fixed instrument chrome overlaid on the scene ---------------------- */
+.chrome{position:absolute;inset:0;pointer-events:none;font-size:10px;letter-spacing:.1em}
+.chrome .cell{position:absolute;color:var(--ink-dim)}
+.chrome .cell b{font-weight:400;color:var(--ink)}
+.tl{top:12px;left:14px} .tr{top:12px;right:14px;text-align:right}
+.bl{bottom:12px;left:14px} .br{bottom:12px;right:14px;text-align:right}
+
+/* --- reading layer ------------------------------------------------------ */
+.read h2{
+  font-family:var(--mono);font-size:12px;font-weight:400;letter-spacing:.16em;
+  color:var(--accent);text-transform:uppercase;margin:0 0 4px;
+}
+.read .proj{
+  font-family:var(--sans);font-size:22px;font-weight:400;letter-spacing:-.01em;
+  color:var(--ink-max);margin:0 0 20px;line-height:1.25;
+}
+.read p{
+  font-family:var(--sans);font-size:15.5px;line-height:1.72;
+  color:var(--ink-max);margin:0 0 15px;max-width:64ch;
+}
+.fields{border-top:1px solid var(--rule);margin-top:22px;padding-top:16px}
+.fld{display:flex;gap:16px;padding:5px 0;border-bottom:1px solid var(--rule)}
+.fld:last-child{border-bottom:0}
+.fld dt{
+  flex:0 0 116px;font-size:10px;letter-spacing:.14em;
+  color:var(--ink-dim);text-transform:uppercase;padding-top:2px;
+}
+.fld dd{margin:0;font-size:12.5px;color:var(--ink-hi);line-height:1.55}
+.skills{display:flex;flex-wrap:wrap;gap:5px}
+.skills span{
+  border:1px solid var(--rule-lit);padding:2px 7px;
+  font-size:10.5px;color:var(--ink);letter-spacing:.04em;
+}
+.skills span.lit{border-color:var(--accent-dim);color:var(--accent)}
+.caption{
+  margin-top:10px;font-size:10.5px;color:var(--ink-dim);
+  letter-spacing:.06em;line-height:1.6;max-width:88ch;
+}
+.caption b{color:var(--ink);font-weight:400}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="rationale">
+  <div class="tag">Direction 01</div>
+  <h1>Orbital Instrument</h1>
+  <p>This direction reads the universe through a navigation console: everything on screen is a measurement, and the graticule, tick rules and coordinate readouts are load-bearing rather than ornamental. Type is monospace end to end so that labels, field names and numbers sit on one grid, with a neutral grotesque reserved for prose so the 150 words of <em>notable</em> read as prose and not as telemetry. A single cold amber marks the currently-focused entity and nothing else — the frame is otherwise entirely achromatic, so focus is unambiguous at a glance and the eye never has to hunt for what the camera is looking at.</p>
+</div>
+
+<!-- =====================================================================
+     SCREEN A — OPENING FRAME
+     ================================================================== -->
+<section class="screen">
+  <div class="screen-hd">
+    <span class="id">A</span><span class="nm">Opening frame</span>
+    <span class="note">first paint / composed</span>
+  </div>
+  <div class="frame">
+    <svg viewBox="0 0 1120 620" role="img" aria-label="Schematic starfield: client stars with orbiting project planets, graticule and annotation.">
+      <defs>
+        <!-- fine graticule: the instrument ground -->
+        <pattern id="d1grat" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M40 0 L0 0 0 40" fill="none" stroke="#1B2531" stroke-width="0.5"/>
+        </pattern>
+        <pattern id="d1gratC" width="200" height="200" patternUnits="userSpaceOnUse">
+          <path d="M200 0 L0 0 0 200" fill="none" stroke="#27374A" stroke-width="0.6"/>
+        </pattern>
+        <!-- dust: skills at rest, diffuse, never fog -->
+        <radialGradient id="d1dust" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#27374A" stop-opacity="0.30"/>
+          <stop offset="100%" stop-color="#27374A" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="d1vig" cx="50%" cy="48%" r="62%">
+          <stop offset="55%" stop-color="#0A0E13" stop-opacity="0"/>
+          <stop offset="100%" stop-color="#0A0E13" stop-opacity="0.85"/>
+        </radialGradient>
+        <!-- hatched fill for star bodies: schematic, not shaded -->
+        <pattern id="d1hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1="0" y1="0" x2="0" y2="4" stroke="#27374A" stroke-width="0.8"/>
+        </pattern>
+        <pattern id="d1hatchA" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1="0" y1="0" x2="0" y2="4" stroke="#6B4A22" stroke-width="1"/>
+        </pattern>
+      </defs>
+
+      <rect width="1120" height="620" fill="#0A0E13"/>
+      <rect width="1120" height="620" fill="url(#d1grat)"/>
+      <rect width="1120" height="620" fill="url(#d1gratC)"/>
+
+      <!-- dust fields -->
+      <ellipse cx="700" cy="300" rx="380" ry="250" fill="url(#d1dust)"/>
+      <ellipse cx="230" cy="420" rx="240" ry="180" fill="url(#d1dust)"/>
+
+      <!-- background dust motes: individual skill particles -->
+      <g fill="#27374A">
+        <circle cx="120" cy="90" r="0.9"/><circle cx="318" cy="140" r="0.7"/>
+        <circle cx="505" cy="72" r="1"/><circle cx="905" cy="118" r="0.8"/>
+        <circle cx="1040" cy="215" r="0.9"/><circle cx="88" cy="300" r="0.8"/>
+        <circle cx="415" cy="520" r="0.9"/><circle cx="640" cy="565" r="0.7"/>
+        <circle cx="985" cy="480" r="1"/><circle cx="770" cy="95" r="0.7"/>
+        <circle cx="205" cy="200" r="0.7"/><circle cx="1075" cy="380" r="0.8"/>
+        <circle cx="560" cy="240" r="0.6"/><circle cx="300" cy="600" r="0.8"/>
+        <circle cx="860" cy="540" r="0.7"/><circle cx="150" cy="540" r="0.9"/>
+      </g>
+
+      <!-- ================= SNCF system — the composed subject ============ -->
+      <!-- orbit paths, hairline -->
+      <ellipse cx="700" cy="300" rx="118" ry="43" fill="none" stroke="#27374A" stroke-width="0.8"/>
+      <ellipse cx="700" cy="300" rx="186" ry="68" fill="none" stroke="#27374A" stroke-width="0.8"/>
+      <ellipse cx="700" cy="300" rx="252" ry="92" fill="none" stroke="#1B2531" stroke-width="0.8"/>
+
+      <!-- orbit tick marks: measurement, not decoration -->
+      <g stroke="#1B2531" stroke-width="0.7">
+        <line x1="700" y1="257" x2="700" y2="250"/><line x1="700" y1="343" x2="700" y2="350"/>
+        <line x1="818" y1="300" x2="826" y2="300"/><line x1="582" y1="300" x2="574" y2="300"/>
+        <line x1="700" y1="232" x2="700" y2="224"/><line x1="700" y1="368" x2="700" y2="376"/>
+        <line x1="886" y1="300" x2="894" y2="300"/><line x1="514" y1="300" x2="506" y2="300"/>
+      </g>
+
+      <!-- SNCF star: focused. Amber, hatched, ringed. -->
+      <circle cx="700" cy="300" r="34" fill="#221A10"/>
+      <circle cx="700" cy="300" r="34" fill="url(#d1hatchA)"/>
+      <circle cx="700" cy="300" r="34" fill="none" stroke="#C98A3C" stroke-width="1.5"/>
+      <circle cx="700" cy="300" r="46" fill="none" stroke="#6B4A22" stroke-width="0.8" stroke-dasharray="3 5"/>
+      <!-- crosshair on the focused star -->
+      <g stroke="#C98A3C" stroke-width="0.9">
+        <line x1="700" y1="240" x2="700" y2="254"/><line x1="700" y1="346" x2="700" y2="360"/>
+        <line x1="640" y1="300" x2="654" y2="300"/><line x1="746" y1="300" x2="760" y2="300"/>
+      </g>
+
+      <!-- PLANET 1: Client referential — DEEP, carries a satellite (a moon) -->
+      <circle cx="818" cy="288" r="11" fill="#0D1218" stroke="#A8BCCF" stroke-width="1.3"/>
+      <circle cx="818" cy="288" r="11" fill="url(#d1hatch)"/>
+      <ellipse cx="818" cy="288" rx="21" ry="8" fill="none" stroke="#27374A" stroke-width="0.6"/>
+      <circle cx="838" cy="286" r="3" fill="#A8BCCF"/>
+
+      <!-- PLANET 2: Platform upgrade — SHALLOW, no satellite -->
+      <circle cx="586" cy="322" r="9" fill="#0D1218" stroke="#7E93A8" stroke-width="1.1"/>
+      <circle cx="586" cy="322" r="9" fill="url(#d1hatch)"/>
+
+      <!-- PLANET 3 on outer orbit, shallow -->
+      <circle cx="762" cy="366" r="7.5" fill="#0D1218" stroke="#7E93A8" stroke-width="1.1"/>
+
+      <!-- leader lines + labels for the SNCF system -->
+      <g stroke="#27374A" stroke-width="0.7" fill="none">
+        <path d="M734 268 L790 210 L900 210"/>
+        <path d="M829 282 L900 246"/>
+        <path d="M580 313 L520 262 L400 262"/>
+      </g>
+      <g font-family="ui-monospace,Consolas,monospace" font-size="11" letter-spacing="1.4">
+        <text x="906" y="206" fill="#C98A3C">SNCF</text>
+        <text x="906" y="221" fill="#7E93A8" font-size="9.5">STAR · 6 PROJECTS · 2016—2024</text>
+        <text x="906" y="243" fill="#A8BCCF" font-size="10">P-01 CLIENT REFERENTIAL</text>
+        <text x="906" y="256" fill="#4A5A6E" font-size="9">DEEP · SATELLITE PRESENT</text>
+        <text x="272" y="258" fill="#7E93A8" font-size="10">P-02 PLATFORM UPGRADE</text>
+        <text x="272" y="271" fill="#4A5A6E" font-size="9">SHALLOW</text>
+      </g>
+
+      <!-- ================= other client stars ============================ -->
+      <!-- CLIENT-02 -->
+      <ellipse cx="230" cy="418" rx="72" ry="27" fill="none" stroke="#1B2531" stroke-width="0.7"/>
+      <ellipse cx="230" cy="418" rx="118" ry="44" fill="none" stroke="#1B2531" stroke-width="0.7"/>
+      <circle cx="230" cy="418" r="19" fill="#0D1218" stroke="#7E93A8" stroke-width="1.1"/>
+      <circle cx="230" cy="418" r="19" fill="url(#d1hatch)"/>
+      <circle cx="302" cy="410" r="7" fill="#0D1218" stroke="#7E93A8" stroke-width="1"/>
+      <circle cx="316" cy="408" r="2.2" fill="#7E93A8"/>
+      <circle cx="148" cy="432" r="5.5" fill="#0D1218" stroke="#4A5A6E" stroke-width="1"/>
+      <path d="M230 399 L230 352 L300 352" fill="none" stroke="#1B2531" stroke-width="0.7"/>
+      <text x="306" y="349" font-family="ui-monospace,Consolas,monospace" font-size="10" letter-spacing="1.4" fill="#7E93A8">CLIENT-02</text>
+      <text x="306" y="362" font-family="ui-monospace,Consolas,monospace" font-size="9" letter-spacing="1.2" fill="#4A5A6E">3 PROJECTS</text>
+
+      <!-- CLIENT-03, distant -->
+      <ellipse cx="960" cy="486" rx="54" ry="20" fill="none" stroke="#1B2531" stroke-width="0.6"/>
+      <circle cx="960" cy="486" r="13" fill="#0D1218" stroke="#4A5A6E" stroke-width="1"/>
+      <circle cx="1014" cy="482" r="5" fill="#0D1218" stroke="#4A5A6E" stroke-width="0.9"/>
+      <path d="M960 473 L960 444 L1010 444" fill="none" stroke="#1B2531" stroke-width="0.6"/>
+      <text x="1016" y="441" font-family="ui-monospace,Consolas,monospace" font-size="9.5" letter-spacing="1.3" fill="#4A5A6E">CLIENT-03</text>
+
+      <!-- CLIENT-04, far edge -->
+      <circle cx="128" cy="152" r="10" fill="#0D1218" stroke="#4A5A6E" stroke-width="0.9"/>
+      <ellipse cx="128" cy="152" rx="40" ry="15" fill="none" stroke="#1B2531" stroke-width="0.6"/>
+      <text x="150" y="128" font-family="ui-monospace,Consolas,monospace" font-size="9.5" letter-spacing="1.3" fill="#4A5A6E">CLIENT-04</text>
+
+      <!-- the rail: the camera path, time running backward -->
+      <path d="M1100 180 C 940 250, 880 300, 700 300 C 480 300, 380 380, 230 418 C 140 440, 90 500, 40 560"
+            fill="none" stroke="#27374A" stroke-width="0.8" stroke-dasharray="1 6" stroke-linecap="round"/>
+      <g font-family="ui-monospace,Consolas,monospace" font-size="8.5" letter-spacing="1.2" fill="#4A5A6E">
+        <text x="1024" y="172">RAIL · t−</text>
+      </g>
+
+      <rect width="1120" height="620" fill="url(#d1vig)"/>
+
+      <!-- frame corner brackets: the instrument bezel -->
+      <g stroke="#27374A" stroke-width="1" fill="none">
+        <path d="M20 44 L20 20 L44 20"/><path d="M1076 20 L1100 20 L1100 44"/>
+        <path d="M20 576 L20 600 L44 600"/><path d="M1076 600 L1100 600 L1100 576"/>
+      </g>
+      <!-- edge tick rule, left: the measurement register -->
+      <g stroke="#1B2531" stroke-width="0.7">
+        <line x1="20" y1="120" x2="27" y2="120"/><line x1="20" y1="160" x2="27" y2="160"/>
+        <line x1="20" y1="200" x2="30" y2="200"/><line x1="20" y1="240" x2="27" y2="240"/>
+        <line x1="20" y1="280" x2="27" y2="280"/><line x1="20" y1="320" x2="30" y2="320"/>
+        <line x1="20" y1="360" x2="27" y2="360"/><line x1="20" y1="400" x2="27" y2="400"/>
+        <line x1="20" y1="440" x2="30" y2="440"/><line x1="20" y1="480" x2="27" y2="480"/>
+      </g>
+    </svg>
+    <div class="chrome">
+      <div class="cell tl">COSMOS · <b>T. NAVARRO</b><br>SCHEMATIC / M2</div>
+      <div class="cell tr">BODIES <b>15</b> · STARS <b>5</b><br>DUST <b>ACTIVE</b></div>
+      <div class="cell bl">SCROLL ↓ RUNS TIME BACKWARD</div>
+      <div class="cell br">FOCUS <b style="color:#C98A3C">SNCF</b><br>t <b>2024.Q2</b></div>
+    </div>
+  </div>
+  <p class="caption">The frame is composed, not incidental: SNCF sits on the rail's inflection, three further stars fall away toward the corners at decreasing stroke weight, and the graticule holds the whole thing on one measured plane. Amber appears exactly once. <b>The dashed rail</b> tells the visitor there is a path before they have scrolled a pixel.</p>
+</section>
+
+<!-- =====================================================================
+     SCREEN B — CLIENT STOP
+     ================================================================== -->
+<section class="screen">
+  <div class="screen-hd">
+    <span class="id">B</span><span class="nm">Client stop · system framed</span>
+    <span class="note">every project visible + selectable</span>
+  </div>
+  <div class="frame">
+    <svg viewBox="0 0 1120 560" role="img" aria-label="SNCF system framed: six project planets in orbit, one hovered and selectable.">
+      <rect width="1120" height="560" fill="#0A0E13"/>
+      <rect width="1120" height="560" fill="url(#d1grat)"/>
+      <rect width="1120" height="560" fill="url(#d1gratC)"/>
+      <ellipse cx="520" cy="280" rx="420" ry="270" fill="url(#d1dust)"/>
+
+      <!-- orbit family -->
+      <g fill="none" stroke="#27374A" stroke-width="0.8">
+        <ellipse cx="520" cy="280" rx="112" ry="41"/>
+        <ellipse cx="520" cy="280" rx="186" ry="68"/>
+        <ellipse cx="520" cy="280" rx="262" ry="96"/>
+        <ellipse cx="520" cy="280" rx="342" ry="125"/>
+      </g>
+      <!-- radial graticule spokes: bearing lines -->
+      <g stroke="#1B2531" stroke-width="0.6">
+        <line x1="520" y1="280" x2="862" y2="280"/><line x1="520" y1="280" x2="178" y2="280"/>
+        <line x1="520" y1="280" x2="762" y2="368"/><line x1="520" y1="280" x2="278" y2="192"/>
+        <line x1="520" y1="280" x2="762" y2="192"/><line x1="520" y1="280" x2="278" y2="368"/>
+      </g>
+
+      <!-- star -->
+      <circle cx="520" cy="280" r="40" fill="#0D1218"/>
+      <circle cx="520" cy="280" r="40" fill="url(#d1hatch)"/>
+      <circle cx="520" cy="280" r="40" fill="none" stroke="#A8BCCF" stroke-width="1.4"/>
+      <text x="520" y="284" text-anchor="middle" font-family="ui-monospace,Consolas,monospace"
+            font-size="12" letter-spacing="2.6" fill="#DCE6EF">SNCF</text>
+
+      <!-- P-01 DEEP + satellite, HOVERED/SELECTABLE (amber) -->
+      <circle cx="632" cy="268" r="13" fill="#221A10"/>
+      <circle cx="632" cy="268" r="13" fill="url(#d1hatchA)"/>
+      <circle cx="632" cy="268" r="13" fill="none" stroke="#C98A3C" stroke-width="1.5"/>
+      <circle cx="632" cy="268" r="24" fill="none" stroke="#C98A3C" stroke-width="0.8" stroke-dasharray="2 4"/>
+      <ellipse cx="632" cy="268" rx="26" ry="10" fill="none" stroke="#6B4A22" stroke-width="0.7"/>
+      <circle cx="656" cy="264" r="3.6" fill="#C98A3C"/>
+      <g stroke="#C98A3C" stroke-width="0.9">
+        <line x1="632" y1="236" x2="632" y2="244"/><line x1="632" y1="292" x2="632" y2="300"/>
+        <line x1="600" y1="268" x2="608" y2="268"/><line x1="656" y1="268" x2="664" y2="268"/>
+      </g>
+
+      <!-- other projects, at rest -->
+      <circle cx="406" cy="296" r="10" fill="#0D1218" stroke="#A8BCCF" stroke-width="1.2"/>
+      <circle cx="406" cy="296" r="10" fill="url(#d1hatch)"/>
+      <ellipse cx="406" cy="296" rx="20" ry="8" fill="none" stroke="#27374A" stroke-width="0.6"/>
+      <circle cx="388" cy="299" r="2.8" fill="#A8BCCF"/><!-- DEEP: satellite -->
+
+      <circle cx="706" cy="332" r="9" fill="#0D1218" stroke="#7E93A8" stroke-width="1.1"/>
+      <circle cx="706" cy="332" r="9" fill="url(#d1hatch)"/><!-- SHALLOW -->
+
+      <circle cx="334" cy="238" r="8.5" fill="#0D1218" stroke="#7E93A8" stroke-width="1.1"/>
+      <circle cx="782" cy="238" r="8" fill="#0D1218" stroke="#7E93A8" stroke-width="1.1"/>
+      <circle cx="520" cy="405" r="7.5" fill="#0D1218" stroke="#7E93A8" stroke-width="1.1"/>
+
+      <!-- leader lines and catalogue labels -->
+      <g stroke="#27374A" stroke-width="0.7" fill="none">
+        <path d="M646 256 L720 190 L830 190"/>
+        <path d="M398 286 L330 150 L200 150"/>
+        <path d="M714 341 L800 400 L900 400"/>
+        <path d="M328 246 L250 300 L140 300"/>
+        <path d="M789 232 L860 130"/>
+        <path d="M520 413 L520 470 L380 470"/>
+      </g>
+      <g font-family="ui-monospace,Consolas,monospace" letter-spacing="1.4">
+        <text x="836" y="186" font-size="10.5" fill="#C98A3C">P-01 · CLIENT REFERENTIAL — MDM REPLACEMENT</text>
+        <text x="836" y="200" font-size="9" fill="#6B4A22">DEEP · TECHNICAL LEAD · TEAM 11 · ⏎ TO OPEN</text>
+
+        <text x="40" y="146" font-size="10.5" fill="#A8BCCF">P-03 · [DEEP]</text>
+        <text x="40" y="160" font-size="9" fill="#4A5A6E">SATELLITE PRESENT</text>
+
+        <text x="906" y="396" font-size="10.5" fill="#7E93A8">P-02 · PLATFORM UPGRADE PROGRAMME</text>
+        <text x="906" y="410" font-size="9" fill="#4A5A6E">SHALLOW · NO SATELLITE</text>
+
+        <text x="40" y="296" font-size="10.5" fill="#7E93A8">P-04</text>
+        <text x="866" y="126" font-size="10.5" fill="#7E93A8">P-05</text>
+        <text x="250" y="474" font-size="10.5" fill="#7E93A8">P-06</text>
+      </g>
+
+      <!-- selection legend, bottom-left, in-frame -->
+      <g font-family="ui-monospace,Consolas,monospace" font-size="9" letter-spacing="1.2">
+        <circle cx="46" cy="512" r="6" fill="none" stroke="#C98A3C" stroke-width="1.4"/>
+        <circle cx="46" cy="512" r="11" fill="none" stroke="#C98A3C" stroke-width="0.7" stroke-dasharray="2 4"/>
+        <text x="64" y="515" fill="#C98A3C">SELECTABLE — CROSSHAIR + RING</text>
+        <circle cx="46" cy="534" r="6" fill="none" stroke="#A8BCCF" stroke-width="1.2"/>
+        <circle cx="58" cy="532" r="2" fill="#A8BCCF"/>
+        <text x="64" y="537" fill="#7E93A8">DEEP — SATELLITE AT REST</text>
+        <circle cx="330" cy="534" r="6" fill="none" stroke="#7E93A8" stroke-width="1.1"/>
+        <text x="348" y="537" fill="#7E93A8">SHALLOW — NO SATELLITE</text>
+      </g>
+
+      <rect width="1120" height="560" fill="url(#d1vig)"/>
+      <g stroke="#27374A" stroke-width="1" fill="none">
+        <path d="M20 44 L20 20 L44 20"/><path d="M1076 20 L1100 20 L1100 44"/>
+        <path d="M20 516 L20 540 L44 540"/><path d="M1076 540 L1100 540 L1100 516"/>
+      </g>
+    </svg>
+    <div class="chrome">
+      <div class="cell tl">STOP <b>04 / 11</b><br>SYSTEM <b>SNCF</b></div>
+      <div class="cell tr">PROJECTS <b>6</b> · DEEP <b>2</b><br>SHALLOW <b>4</b></div>
+      <div class="cell br">DWELL <b>EXTENDED</b> — DEEP AHEAD</div>
+    </div>
+  </div>
+  <p class="caption">Selectability is carried by three stacked signals, none of which is colour alone: a dashed proximity ring, a four-arm crosshair, and the amber stroke. <b>Deep versus Shallow is structural</b> — the satellite is present or it is not — so the distinction survives greyscale, low contrast, and colour-blind vision.</p>
+</section>
+
+<!-- =====================================================================
+     SCREEN C — INFORMATION LAYER, DEEP PROJECT
+     ================================================================== -->
+<section class="screen">
+  <div class="screen-hd">
+    <span class="id">C</span><span class="nm">Information layer · Deep Project</span>
+    <span class="note">reading typography — the 150 words</span>
+  </div>
+  <div class="frame">
+    <div style="display:grid;grid-template-columns:1fr 486px">
+      <!-- scene, pushed left and dimmed under the panel -->
+      <div style="position:relative">
+        <svg viewBox="0 0 634 660" role="img" aria-label="Focused project with condensed skill motes, scene dimmed beneath the information layer.">
+          <rect width="634" height="660" fill="#0A0E13"/>
+          <rect width="634" height="660" fill="url(#d1grat)"/>
+          <ellipse cx="330" cy="330" rx="300" ry="300" fill="url(#d1dust)"/>
+
+          <!-- parent star, receded -->
+          <circle cx="118" cy="418" r="26" fill="#0D1218" stroke="#27374A" stroke-width="1"/>
+          <circle cx="118" cy="418" r="26" fill="url(#d1hatch)"/>
+          <text x="118" y="422" text-anchor="middle" font-family="ui-monospace,Consolas,monospace"
+                font-size="9" letter-spacing="1.8" fill="#4A5A6E">SNCF</text>
+          <path d="M144 418 C 210 400, 250 360, 300 322" fill="none" stroke="#1B2531" stroke-width="0.8" stroke-dasharray="2 5"/>
+
+          <!-- focused planet, large -->
+          <circle cx="352" cy="300" r="46" fill="#221A10"/>
+          <circle cx="352" cy="300" r="46" fill="url(#d1hatchA)"/>
+          <circle cx="352" cy="300" r="46" fill="none" stroke="#C98A3C" stroke-width="1.6"/>
+          <!-- satellite: the Deep marker, at rest -->
+          <ellipse cx="352" cy="300" rx="84" ry="30" fill="none" stroke="#6B4A22" stroke-width="0.8"/>
+          <circle cx="434" cy="292" r="7" fill="#221A10" stroke="#C98A3C" stroke-width="1.2"/>
+          <text x="450" y="290" font-family="ui-monospace,Consolas,monospace" font-size="8.5"
+                letter-spacing="1.2" fill="#6B4A22">NOTABLE</text>
+
+          <!-- condensed motes: skills, orbiting -->
+          <g fill="none" stroke="#27374A" stroke-width="0.6">
+            <ellipse cx="352" cy="300" rx="132" ry="118" transform="rotate(-16 352 300)"/>
+            <ellipse cx="352" cy="300" rx="176" ry="152" transform="rotate(22 352 300)"/>
+            <ellipse cx="352" cy="300" rx="212" ry="186" transform="rotate(-40 352 300)"/>
+          </g>
+          <g font-family="ui-monospace,Consolas,monospace" font-size="8.5" letter-spacing="1.1" fill="#A8BCCF">
+            <circle cx="470" cy="238" r="3" fill="#A8BCCF"/><text x="480" y="236">JAVA</text>
+            <circle cx="238" cy="192" r="3" fill="#A8BCCF"/><text x="180" y="180">SPRING BOOT</text>
+            <circle cx="196" cy="392" r="2.6" fill="#7E93A8"/><text x="126" y="410">TOMCAT</text>
+            <circle cx="510" cy="378" r="2.6" fill="#7E93A8"/><text x="520" y="394">ORACLE</text>
+            <circle cx="352" cy="122" r="2.6" fill="#7E93A8"/><text x="316" y="110">CLOUDERA</text>
+            <circle cx="352" cy="492" r="2.6" fill="#7E93A8"/><text x="336" y="512">MDM</text>
+            <circle cx="118" cy="272" r="2.2" fill="#4A5A6E"/><text x="30" y="264" fill="#4A5A6E">CODE REVIEW</text>
+            <circle cx="560" cy="500" r="2.2" fill="#4A5A6E"/><text x="480" y="522" fill="#4A5A6E">MENTORING</text>
+            <circle cx="560" cy="140" r="2.2" fill="#4A5A6E"/><text x="440" y="130" fill="#4A5A6E">TECH LEADERSHIP</text>
+          </g>
+          <rect width="634" height="660" fill="#0A0E13" opacity="0.34"/>
+          <g font-family="ui-monospace,Consolas,monospace" font-size="9" letter-spacing="1.3" fill="#4A5A6E">
+            <text x="20" y="30">CONDENSED · 9 MOTES</text>
+            <text x="20" y="642">DUST → MOTE ON FOCUS</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- information layer panel -->
+      <div class="read" style="background:var(--panel-hi);border-left:1px solid var(--rule-lit);padding:30px 32px 34px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;
+                    border-bottom:1px solid var(--rule);padding-bottom:10px;margin-bottom:18px">
+          <span style="font-size:9.5px;letter-spacing:.2em;color:var(--ink-dim)">P-01 · SNCF · DEEP</span>
+          <span style="font-size:9.5px;letter-spacing:.2em;color:var(--ink-dim)">ESC ↩</span>
+        </div>
+
+        <h2>SNCF</h2>
+        <p class="proj">Client referential —<br>MDM replacement</p>
+
+        <p>The Oracle MDM cost twice: an expensive licence, and a team employed full-time to correct the data it produced. Replacing it meant rebuilding a mature product's behaviour with no specification to work from — documentation was absent or years stale, so the incumbent's real rules had to be recovered from the system itself.</p>
+
+        <p>The house standard was Spring on a dedicated external Tomcat, on ageing on-premise infrastructure. I argued for Spring Boot with embedded Tomcat instead — the better fit, and the furthest the client would go. With a mostly junior team on a critical system, a from-scratch rebuild on a current stack was also the one chance they'd get to learn one.</p>
+
+        <dl class="fields">
+          <div class="fld"><dt>Role</dt><dd>Technical lead</dd></div>
+          <div class="fld"><dt>Team</dt><dd>11 — 6 developers, 2 QA, 2 lead developers, plus me</dd></div>
+          <div class="fld"><dt>Built</dt><dd>Replaced a commercial Oracle MDM at the core of SNCF's client referential with a Spring Boot application, alongside a Java and Cloudera upgrade of the surrounding platform.</dd></div>
+          <div class="fld"><dt>Skills</dt><dd>
+            <div class="skills">
+              <span class="lit">Java</span><span class="lit">Spring Boot</span><span>Tomcat</span>
+              <span>Oracle</span><span>Cloudera</span><span>MDM</span>
+              <span>technical leadership</span><span>code review</span><span>mentoring</span>
+            </div>
+            <div style="margin-top:8px;font-size:9.5px;color:var(--ink-dim);letter-spacing:.08em">
+              9 CONDENSED — ORBITING IN SCENE
+            </div>
+          </dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+  <p class="caption">Prose switches to a grotesque at 15.5px on a 64-character measure — long enough to hold a sentence, short enough to return the eye without effort. The monospace field grid sits <b>below</b> the prose, not above it: the reader meets the argument first and the metadata second, which is the whole point of a Deep entry.</p>
+</section>
+
+<!-- =====================================================================
+     SCREEN D — SHALLOW PROJECT
+     ================================================================== -->
+<section class="screen">
+  <div class="screen-hd">
+    <span class="id">D</span><span class="nm">State variant · Shallow Project</span>
+    <span class="note">complete, not empty</span>
+  </div>
+  <div class="frame">
+    <div style="display:grid;grid-template-columns:1fr 486px">
+      <div style="position:relative">
+        <svg viewBox="0 0 634 520" role="img" aria-label="Shallow project focused: no satellite, motes condensed, complete frame.">
+          <rect width="634" height="520" fill="#0A0E13"/>
+          <rect width="634" height="520" fill="url(#d1grat)"/>
+          <ellipse cx="330" cy="260" rx="300" ry="240" fill="url(#d1dust)"/>
+          <circle cx="108" cy="368" r="24" fill="#0D1218" stroke="#27374A" stroke-width="1"/>
+          <circle cx="108" cy="368" r="24" fill="url(#d1hatch)"/>
+          <text x="108" y="372" text-anchor="middle" font-family="ui-monospace,Consolas,monospace"
+                font-size="9" letter-spacing="1.8" fill="#4A5A6E">SNCF</text>
+          <path d="M132 368 C 196 350, 240 310, 292 268" fill="none" stroke="#1B2531" stroke-width="0.8" stroke-dasharray="2 5"/>
+
+          <!-- focused, NO satellite, NO satellite orbit ring -->
+          <circle cx="340" cy="248" r="40" fill="#221A10"/>
+          <circle cx="340" cy="248" r="40" fill="url(#d1hatchA)"/>
+          <circle cx="340" cy="248" r="40" fill="none" stroke="#C98A3C" stroke-width="1.6"/>
+
+          <g fill="none" stroke="#27374A" stroke-width="0.6">
+            <ellipse cx="340" cy="248" rx="118" ry="104" transform="rotate(-20 340 248)"/>
+            <ellipse cx="340" cy="248" rx="164" ry="142" transform="rotate(26 340 248)"/>
+          </g>
+          <g font-family="ui-monospace,Consolas,monospace" font-size="8.5" letter-spacing="1.1">
+            <circle cx="450" cy="196" r="3" fill="#A8BCCF"/><text x="460" y="194" fill="#A8BCCF">JAVA</text>
+            <circle cx="232" cy="160" r="2.8" fill="#A8BCCF"/><text x="164" y="148" fill="#A8BCCF">CLOUDERA</text>
+            <circle cx="200" cy="342" r="2.6" fill="#7E93A8"/><text x="112" y="360" fill="#7E93A8">ON-PREMISE</text>
+            <circle cx="488" cy="322" r="2.6" fill="#7E93A8"/><text x="498" y="338" fill="#7E93A8">TOMCAT</text>
+            <circle cx="340" cy="86" r="2.4" fill="#7E93A8"/><text x="290" y="74" fill="#7E93A8">MIGRATION</text>
+          </g>
+          <rect width="634" height="520" fill="#0A0E13" opacity="0.34"/>
+          <g font-family="ui-monospace,Consolas,monospace" font-size="9" letter-spacing="1.3" fill="#4A5A6E">
+            <text x="20" y="30">CONDENSED · 5 MOTES</text>
+            <text x="20" y="502">NO SATELLITE — NO NOTABLE</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="read" style="background:var(--panel-hi);border-left:1px solid var(--rule-lit);padding:30px 32px 34px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;
+                    border-bottom:1px solid var(--rule);padding-bottom:10px;margin-bottom:18px">
+          <span style="font-size:9.5px;letter-spacing:.2em;color:var(--ink-dim)">P-02 · SNCF · SHALLOW</span>
+          <span style="font-size:9.5px;letter-spacing:.2em;color:var(--ink-dim)">ESC ↩</span>
+        </div>
+
+        <h2>SNCF</h2>
+        <p class="proj">Platform upgrade<br>programme</p>
+
+        <!-- the Shallow case: BUILT is promoted to the reading slot.
+             No empty state, no placeholder, no apology. -->
+        <p style="font-size:15px">Major Java upgrades, Cloudera upgrades, accumulated technical debt, ageing on-premise stack.</p>
+
+        <div style="border-left:2px solid var(--rule-lit);padding-left:14px;margin:22px 0 4px">
+          <p style="font-family:var(--mono);font-size:11px;line-height:1.7;color:var(--ink-dim);
+                    letter-spacing:.04em;margin:0;max-width:46ch">
+            Delivered without a contested decision worth writing up. Entries carry a written argument only where one was actually had.
+          </p>
+        </div>
+
+        <dl class="fields">
+          <div class="fld"><dt>Role</dt><dd>Technical lead</dd></div>
+          <div class="fld"><dt>Team</dt><dd>11</dd></div>
+          <div class="fld"><dt>Built</dt><dd>Major Java upgrades and Cloudera upgrades across the surrounding platform, against accumulated technical debt on an ageing on-premise stack.</dd></div>
+          <div class="fld"><dt>Skills</dt><dd>
+            <div class="skills">
+              <span class="lit">Java</span><span class="lit">Cloudera</span><span>Tomcat</span>
+              <span>on-premise</span><span>migration</span>
+            </div>
+            <div style="margin-top:8px;font-size:9.5px;color:var(--ink-dim);letter-spacing:.08em">
+              5 CONDENSED — ORBITING IN SCENE
+            </div>
+          </dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+  <p class="caption">The Shallow panel never renders a blank slot. <b>Built</b> is promoted into the reading position at near-prose size, and a single monospace line states the editorial rule in the author's own voice — the absence is a stated policy, not a gap. The panel is the same height family as a Deep entry, so the layout does not visibly collapse.</p>
+</section>
+
+</div>
+</body>
+</html>
