@@ -1,0 +1,431 @@
+/**
+ * Covers every rules row of the story's I/O & edge-case matrix: mass ordering,
+ * recency ordering, ongoing engagements, the band ceiling, single-entry sets,
+ * the default weight, and rail-distance ordering.
+ *
+ * Run with `npm test`. Assertions are *relative* — a longer engagement yields
+ * greater mass, not that it yields `4.2`. Absolute endpoints get tuned against
+ * the greybox in later epics, and pinning them here would make legitimate tuning
+ * look like a regression. What is pinned is the ordering, which is the contract.
+ *
+ * Each rule is driven both directly and through `deriveEntities`, so inverting a
+ * rule's ordering fails the suite rather than only being asserted in prose.
+ *
+ * No DOM, no React, no Three is imported here.
+ */
+
+import { strict as assert } from 'node:assert';
+import { test } from 'node:test';
+import { CareerSchema } from '../data/schema.ts';
+import { deriveEntities } from './entities.ts';
+import {
+  RESTING_BANDS,
+  deriveLuminanceBand,
+  deriveMass,
+  deriveRailDistance,
+  durationInMonths,
+  recencyOf,
+  type LuminanceBand,
+} from './rules.ts';
+
+const AS_OF = '2026-09';
+
+function baseEntry(): Record<string, unknown> {
+  return {
+    client: 'SNCF',
+    project: 'Client referential — MDM replacement',
+    company: null,
+    role: 'Technical lead',
+    built: 'Replaced a commercial Oracle MDM with a Spring Boot application.',
+    team_size: 11,
+    duration: { start: '2019-01', end: '2021-01' },
+    notable: 'Problem, constraint, decision.',
+    skills: ['Java', 'Spring Boot'],
+  };
+}
+
+function derive(...entries: Record<string, unknown>[]) {
+  return deriveEntities(CareerSchema.parse({ projects: entries }), { asOf: AS_OF });
+}
+
+/** Every Project entity, flattened, in authored order. */
+function allProjects(graph: ReturnType<typeof derive>) {
+  return graph.clients.flatMap((c) => c.projects);
+}
+
+/** Position of a band in the resting ladder, dimmest 0. */
+function brightness(band: LuminanceBand): number {
+  return RESTING_BANDS.indexOf(band);
+}
+
+// --- Exactly three rules ----------------------------------------------------
+
+test('the module exports exactly three mapping rules', async () => {
+  // A fourth is a spec violation, not a feature. `derive*` is the naming the
+  // three rules share; helpers are named for what they compute, not what they
+  // map, so this count stays meaningful as the module grows support code.
+  const module: Record<string, unknown> = await import('./rules.ts');
+
+  // Assert the whole export surface, not a `derive`-prefixed subset. A prefix
+  // filter only enforces a naming convention: a fourth mapping named
+  // `opacityFromTeamSize` or `moteTierFor` would pass it untouched, and those
+  // are exactly the names the next epics would reach for. Anything new here
+  // must be added deliberately, which is the point.
+  const RULES = ['deriveLuminanceBand', 'deriveMass', 'deriveRailDistance'];
+  const HELPERS = ['RESTING_BANDS', 'durationInMonths', 'recencyOf'];
+
+  assert.deepEqual(
+    Object.keys(module).sort(),
+    [...RULES, ...HELPERS].sort(),
+    'the module exports exactly the three rules plus its named helpers',
+  );
+  assert.deepEqual(
+    Object.keys(module).filter((name) => name.startsWith('derive')).sort(),
+    RULES,
+    'and exactly three of them are mapping rules',
+  );
+});
+
+// --- Matrix row: mass ordering ----------------------------------------------
+
+test('a longer engagement yields strictly greater mass', () => {
+  const sixMonths = durationInMonths({ start: '2020-01', end: '2020-06' }, AS_OF);
+  const twentyFour = durationInMonths({ start: '2020-01', end: '2021-12' }, AS_OF);
+  const range = { min: sixMonths, max: twentyFour };
+
+  assert.ok(
+    deriveMass(twentyFour, range) > deriveMass(sixMonths, range),
+    'a 24-month engagement must outweigh a 6-month one',
+  );
+});
+
+test('mass ordering holds through the graph, not only through the rule', () => {
+  const graph = derive(
+    { ...baseEntry(), client: 'Short', project: 'S', duration: { start: '2020-01', end: '2020-06' } },
+    { ...baseEntry(), client: 'Long', project: 'L', duration: { start: '2020-01', end: '2021-12' } },
+  );
+  const [short, long] = allProjects(graph);
+  assert.ok(short !== undefined && long !== undefined);
+  assert.ok(long.mass > short.mass, 'the longer engagement is the more massive Body');
+});
+
+test('equal spans yield equal mass regardless of when they happened', () => {
+  const a = durationInMonths({ start: '2010-01', end: '2011-01' }, AS_OF);
+  const b = durationInMonths({ start: '2020-05', end: '2021-05' }, AS_OF);
+  assert.equal(a, b, 'the same span is the same number of months');
+
+  // The range must span more than these two values. `{min: a, max: b}` is
+  // zero-width when `a === b`, so `normalize` short-circuits and the assertion
+  // holds for any pure function — including an inverted one. A third, longer
+  // span puts both values inside a real range and makes the mapping run.
+  const longer = durationInMonths({ start: '2000-01', end: '2010-01' }, AS_OF);
+  assert.ok(longer > a, 'the third span is genuinely longer');
+  const range = { min: a, max: longer };
+
+  assert.equal(deriveMass(a, range), deriveMass(b, range));
+  assert.ok(
+    deriveMass(longer, range) > deriveMass(a, range),
+    'and the range is live: the longer span still maps to greater mass',
+  );
+});
+
+test('a single-month engagement has a positive span, not zero', () => {
+  // The schema accepts an equal start and end as a real engagement, so it must
+  // not derive to no mass at all.
+  assert.ok(durationInMonths({ start: '2019-01', end: '2019-01' }, AS_OF) > 0);
+});
+
+test('mass is finite and positive across the range', () => {
+  const range = { min: 1, max: 60 };
+  for (const months of [1, 12, 30, 60]) {
+    const mass = deriveMass(months, range);
+    assert.ok(Number.isFinite(mass) && mass > 0, `mass for ${months} months: ${mass}`);
+  }
+});
+
+// --- Matrix row: ongoing engagement -----------------------------------------
+
+test('an ongoing engagement is measured to the reference month', () => {
+  const ongoing = durationInMonths({ start: '2024-01', end: null }, AS_OF);
+  const closed = durationInMonths({ start: '2024-01', end: '2024-06' }, AS_OF);
+  assert.ok(ongoing > closed, 'an engagement still running is longer than one that ended in 2024');
+});
+
+test('no closed engagement outranks an ongoing one on recency', () => {
+  // The schema bounds an authored `end` to a horizon, but an `end` between the
+  // reference month and that horizon is still admissible. Ongoing must win on
+  // recency regardless, or the brightest band goes to finished work while the
+  // engagement running right now is dimmed.
+  const ongoing = { start: '2020-01', end: null };
+  const futureEnd = { start: '2020-01', end: '2027-06' };
+  assert.ok(
+    recencyOf(ongoing, AS_OF) >= recencyOf(futureEnd, AS_OF),
+    'an ongoing engagement must never rank below a closed one',
+  );
+});
+
+test('an ongoing Project is never dimmer than a future-dated closed one', () => {
+  const entries = [
+    { ...baseEntry(), client: 'Ongoing', project: 'O', duration: { start: '2020-01', end: null } },
+    { ...baseEntry(), client: 'Future', project: 'F', duration: { start: '2020-01', end: '2027-06' } },
+  ];
+  const graph = derive(...entries);
+  const all = allProjects(graph);
+  const ongoing = all.find((p) => p.project.client === 'Ongoing');
+  const future = all.find((p) => p.project.client === 'Future');
+  assert.ok(ongoing !== undefined && future !== undefined, 'both Projects derive');
+  assert.ok(
+    RESTING_BANDS.indexOf(ongoing.luminanceBand) >= RESTING_BANDS.indexOf(future.luminanceBand),
+    'the ongoing engagement must not land in a dimmer band than finished work',
+  );
+});
+
+test('an ongoing engagement ranks as the most recent', () => {
+  // `end: null` means ongoing, and ongoing work is current — the alternative,
+  // sorting it last as unknown, would dim the work being done right now.
+  assert.equal(recencyOf({ start: '2024-01', end: null }, AS_OF), AS_OF);
+  assert.ok(
+    recencyOf({ start: '2024-01', end: null }, AS_OF) >
+      recencyOf({ start: '2019-01', end: '2024-01' }, AS_OF),
+    'ongoing sorts after every closed engagement',
+  );
+});
+
+test('an ongoing Project lands in the brightest band of its set', () => {
+  const graph = derive(
+    { ...baseEntry(), client: 'Old', project: 'O', duration: { start: '2010-01', end: '2011-01' } },
+    { ...baseEntry(), client: 'Mid', project: 'M', duration: { start: '2018-01', end: '2019-01' } },
+    { ...baseEntry(), client: 'Now', project: 'N', duration: { start: '2024-01', end: null } },
+  );
+  const [old, mid, now] = allProjects(graph);
+  assert.ok(old !== undefined && mid !== undefined && now !== undefined);
+  assert.ok(brightness(now.luminanceBand) > brightness(old.luminanceBand));
+  assert.ok(brightness(now.luminanceBand) >= brightness(mid.luminanceBand));
+});
+
+// --- Matrix row: recency ordering -------------------------------------------
+
+test('a more recent engagement lands in a brighter band', () => {
+  const range = { min: 0, max: 1 };
+  assert.ok(
+    brightness(deriveLuminanceBand(1, range)) > brightness(deriveLuminanceBand(0, range)),
+    '2024 must be brighter than 2019',
+  );
+});
+
+test('recency ordering holds through the graph', () => {
+  const graph = derive(
+    { ...baseEntry(), client: 'Old', project: 'O', duration: { start: '2018-01', end: '2019-01' } },
+    { ...baseEntry(), client: 'New', project: 'N', duration: { start: '2023-01', end: '2024-01' } },
+  );
+  const [old, recent] = allProjects(graph);
+  assert.ok(old !== undefined && recent !== undefined);
+  assert.ok(
+    brightness(recent.luminanceBand) > brightness(old.luminanceBand),
+    'the more recent Project must be in a brighter band',
+  );
+});
+
+test('band ordering is monotonic across the whole range', () => {
+  const range = { min: 0, max: 9 };
+  const bands = Array.from({ length: 10 }, (_, i) => brightness(deriveLuminanceBand(i, range)));
+  for (let i = 1; i < bands.length; i += 1) {
+    assert.ok(
+      (bands[i] ?? 0) >= (bands[i - 1] ?? 0),
+      `band must never dim as recency increases: ${bands.join(',')}`,
+    );
+  }
+  assert.ok(new Set(bands).size > 1, 'the rule must actually discriminate, not return one band');
+});
+
+test('equal recency yields the same band regardless of authored order', () => {
+  const graph = derive(
+    { ...baseEntry(), client: 'A', project: 'A', duration: { start: '2018-01', end: '2020-01' } },
+    { ...baseEntry(), client: 'B', project: 'B', duration: { start: '2019-06', end: '2020-01' } },
+  );
+  const [a, b] = allProjects(graph);
+  assert.equal(a?.luminanceBand, b?.luminanceBand, 'two entries ending in the same month agree');
+});
+
+// --- Matrix row: band ceiling -----------------------------------------------
+
+test('the band never exceeds the resting maximum', () => {
+  // UX-DR2 reserves `stroke-active` and `stroke-focus` for camera state. The
+  // return type makes them unrepresentable; this pins the values too.
+  const range = { min: 0, max: 4 };
+  for (const rank of [0, 1, 2, 3, 4, 99]) {
+    const band = deriveLuminanceBand(rank, range);
+    assert.ok(
+      RESTING_BANDS.includes(band),
+      `rank ${rank} produced ${band}, outside the resting band`,
+    );
+  }
+});
+
+test('no camera-state step is reachable from the rule or the graph', () => {
+  const reserved = ['stroke-active', 'stroke-focus'];
+  assert.deepEqual(
+    RESTING_BANDS.filter((band) => reserved.includes(band)),
+    [],
+    'the resting band must not contain a camera-state step',
+  );
+
+  const graph = derive(
+    { ...baseEntry(), client: 'A', project: 'A', duration: { start: '2010-01', end: '2011-01' } },
+    { ...baseEntry(), client: 'B', project: 'B', duration: { start: '2025-01', end: null } },
+  );
+  for (const project of allProjects(graph)) {
+    assert.ok(
+      !reserved.includes(project.luminanceBand),
+      `the most recent entry reached ${project.luminanceBand} while unfocused`,
+    );
+  }
+});
+
+// --- Matrix row: single-entry set -------------------------------------------
+
+test('a single-entry set derives without dividing by a zero-width range', () => {
+  // `career.json` holds one entry today. This is real, not hypothetical.
+  const graph = derive(baseEntry());
+  const [only] = allProjects(graph);
+  assert.ok(only !== undefined);
+  assert.ok(Number.isFinite(only.mass), `mass must be a number, got ${only.mass}`);
+  assert.ok(only.mass > 0);
+  assert.ok(RESTING_BANDS.includes(only.luminanceBand));
+  assert.ok(Number.isFinite(only.railDistance) && only.railDistance > 0);
+});
+
+test('a zero-width range yields the top of the range, not NaN', () => {
+  const flat = { min: 12, max: 12 };
+  assert.ok(Number.isFinite(deriveMass(12, flat)));
+  assert.equal(deriveMass(12, flat), deriveMass(12, { min: 0, max: 12 }));
+  assert.equal(deriveLuminanceBand(0, { min: 0, max: 0 }), 'stroke-near');
+});
+
+// --- Matrix row: rail distance ----------------------------------------------
+
+test('a greater weight yields a smaller distance from the Rail', () => {
+  assert.ok(
+    deriveRailDistance(4) < deriveRailDistance(1),
+    'weight 4 must sit closer to the Rail than weight 1',
+  );
+});
+
+test('rail distance ordering holds through the graph', () => {
+  const graph = derive(
+    { ...baseEntry(), client: 'Light', project: 'L', weight: 1 },
+    { ...baseEntry(), client: 'Heavy', project: 'H', weight: 4 },
+  );
+  const [light, heavy] = allProjects(graph);
+  assert.ok(light !== undefined && heavy !== undefined);
+  assert.ok(heavy.railDistance < light.railDistance);
+});
+
+test('rail distance stays positive for any positive weight', () => {
+  // A subtractive form would put a heavily weighted entry behind the Rail.
+  for (const weight of [0.1, 1, 4, 100]) {
+    const distance = deriveRailDistance(weight);
+    assert.ok(distance > 0 && Number.isFinite(distance), `weight ${weight} gave ${distance}`);
+  }
+});
+
+// --- Matrix row: default weight ---------------------------------------------
+
+test('an omitted weight resolves to 1 and the derivation reads the resolved value', () => {
+  const entry = baseEntry();
+  assert.equal('weight' in entry, false, 'the fixture must genuinely omit weight');
+
+  const [omitted] = allProjects(derive(entry));
+  const [explicit] = allProjects(derive({ ...baseEntry(), weight: 1 }));
+  assert.equal(
+    omitted?.railDistance,
+    explicit?.railDistance,
+    'the schema default must reach the rule, with no fallback in derive code',
+  );
+  assert.equal(omitted?.railDistance, deriveRailDistance(1));
+});
+
+test('an authored weight overrides the default', () => {
+  const [entity] = allProjects(derive({ ...baseEntry(), weight: 2.5 }));
+  assert.equal(entity?.railDistance, deriveRailDistance(2.5));
+  assert.notEqual(entity?.railDistance, deriveRailDistance(1));
+});
+
+// --- Purity -----------------------------------------------------------------
+
+test('the rules are pure: the same input gives the same output', () => {
+  const range = { min: 1, max: 60 };
+  assert.equal(deriveMass(30, range), deriveMass(30, range));
+  assert.equal(deriveLuminanceBand(2, { min: 0, max: 4 }), deriveLuminanceBand(2, { min: 0, max: 4 }));
+  assert.equal(deriveRailDistance(3), deriveRailDistance(3));
+});
+
+test('deriving twice yields identical graphs', () => {
+  const entries = [
+    { ...baseEntry(), client: 'A', project: 'A' },
+    { ...baseEntry(), client: 'B', project: 'B', duration: { start: '2023-01', end: null } },
+  ];
+  assert.deepEqual(derive(...entries), derive(...entries));
+});
+
+test('the reference month is injected, never read from the clock', () => {
+  // A rule calling `new Date()` would churn the committed artifact every month
+  // for no authored change. Two assertions: `asOf` genuinely feeds the ongoing
+  // span, and no other output moves when it does.
+  // Three entries, not two. `mass` is normalized across the set, so in a
+  // two-entry set the ongoing engagement is the longest at any reference month
+  // and pins to the top of the range either way — the reference month would be
+  // unobservable in the graph's output. A long closed entry holding the top of
+  // the range lets the ongoing span rise *within* it as the reference advances.
+  const entries = [
+    { ...baseEntry(), client: 'Short', project: 'S', duration: { start: '2020-01', end: '2020-03' } },
+    { ...baseEntry(), client: 'Long', project: 'L', duration: { start: '2010-01', end: '2024-01' } },
+    { ...baseEntry(), client: 'Ongoing', project: 'O', duration: { start: '2024-01', end: null } },
+  ];
+  const parsed = CareerSchema.parse({ projects: entries });
+
+  const early = deriveEntities(parsed, { asOf: '2026-01' });
+  const late = deriveEntities(parsed, { asOf: '2030-01' });
+
+  const ongoing = { start: '2024-01', end: null };
+  assert.ok(
+    durationInMonths(ongoing, '2030-01') > durationInMonths(ongoing, '2026-01'),
+    'a later reference lengthens an ongoing span, so asOf must actually reach the rules',
+  );
+  assert.ok(
+    recencyOf(ongoing, '2030-01') > recencyOf(ongoing, '2026-01'),
+    'and it is what an ongoing engagement ranks by',
+  );
+
+  // Through the graph, not only through the rules. The direct-rule assertions
+  // above pass even if `deriveEntities` ignores `asOf` entirely and hardcodes a
+  // month, which is the regression this test exists to catch.
+  //
+  // `mass` cannot carry this assertion: it is normalized across the set, so the
+  // ongoing entry is the longest engagement at any reference month and pins to
+  // the top of the range either way. The observable that does move is the raw
+  // span, read off the Project the graph produced — so the graph stays in the
+  // path and a hardcoded `asOf` inside `deriveEntities` is still caught.
+  const earlyOngoing = allProjects(early).find((p) => p.project.client === 'Ongoing');
+  const lateOngoing = allProjects(late).find((p) => p.project.client === 'Ongoing');
+  assert.ok(
+    earlyOngoing !== undefined && lateOngoing !== undefined,
+    'the ongoing Project derives under both references',
+  );
+  assert.ok(
+    lateOngoing.mass > earlyOngoing.mass,
+    "a later reference month must raise the ongoing Project's mass in the graph",
+  );
+
+  assert.deepEqual(
+    late.clients.map((c) => c.id),
+    early.clients.map((c) => c.id),
+    'identity must not move with the reference month',
+  );
+
+  assert.deepEqual(
+    deriveEntities(parsed, { asOf: '2026-01' }),
+    early,
+    'the same reference gives byte-identical output',
+  );
+});

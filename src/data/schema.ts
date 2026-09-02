@@ -36,6 +36,19 @@ const IsoYearMonth = z
   );
 
 /**
+ * The furthest month an authored `end` may name.
+ *
+ * A closed engagement ending after the reference month outranks an ongoing one
+ * on recency, which inverts the rule that an ongoing engagement is the most
+ * recent thing in the set — it would dim the work being done right now. The
+ * ceiling is a fixed constant rather than `new Date()` because a schema that
+ * reads the clock rejects different files in different months with no authored
+ * change, the same churn the derive layer avoids by injecting its reference
+ * month. Raise it deliberately when the horizon is genuinely reached.
+ */
+const AUTHORING_HORIZON = '2027-12';
+
+/**
  * One engagement span. `end: null` means ongoing.
  *
  * FR-3 derives both mass (from the span) and recency (from `end`) out of this
@@ -46,6 +59,10 @@ const IsoYearMonth = z
  * negative span and silently corrupt the mass derivation. Because `YYYY-MM`
  * strings sort lexicographically in chronological order, a string compare is
  * the whole check.
+ *
+ * `end` must also not run past `AUTHORING_HORIZON`. A future end date is well
+ * formed and not inverted, so neither check above catches it, and it reaches
+ * the derivation as an engagement more recent than one that is still ongoing.
  */
 export const DurationSchema = z
   .strictObject({
@@ -54,6 +71,10 @@ export const DurationSchema = z
   })
   .refine((d) => d.end === null || d.end >= d.start, {
     error: 'end must not precede start',
+    path: ['end'],
+  })
+  .refine((d) => d.end === null || d.end <= AUTHORING_HORIZON, {
+    error: `end must not be later than ${AUTHORING_HORIZON}; use null for an ongoing engagement`,
     path: ['end'],
   });
 
