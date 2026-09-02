@@ -1,0 +1,12 @@
+# Normalise line endings to LF in the repository.
+# Byte-identical output matters here: the solved layout artifact is
+# committed and diffed, so line-ending drift would produce false diffs.
+* text=auto eol=lf
+
+# Binary assets: never normalise.
+*.png binary
+*.jpg binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ico binary
