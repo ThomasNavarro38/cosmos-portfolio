@@ -210,6 +210,26 @@ test('an inverted `duration` is rejected', () => {
   );
 });
 
+test('an `end` past the authoring horizon is rejected', () => {
+  // Well formed and not inverted, so neither format nor ordering catches it.
+  // Unchecked it derives as more recent than an ongoing engagement, dimming the
+  // work being done right now.
+  const entry = baseEntry();
+  entry['duration'] = { start: '2021-01', end: '2099-01' };
+  assertFails(
+    validateCareer(fileWith(entry)),
+    /end must not be later than/,
+    'a future end date must be rejected',
+  );
+});
+
+test('an ongoing engagement is still accepted', () => {
+  // The horizon check must not catch `null`, which is how ongoing is authored.
+  const entry = baseEntry();
+  entry['duration'] = { start: '2021-01', end: null };
+  assert.deepEqual(validateCareer(fileWith(entry)), []);
+});
+
 test('an equal start and end is accepted as a single-month engagement', () => {
   const entry = baseEntry();
   entry['duration'] = { start: '2019-01', end: '2019-01' };

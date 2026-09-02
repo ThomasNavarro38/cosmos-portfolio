@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "validate": "node src/data/validate.ts",
-    "test": "node --test src/data/*.test.ts"
+    "test": "node --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",
