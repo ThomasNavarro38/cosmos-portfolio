@@ -1,21 +1,16 @@
-import { StrictMode, useEffect } from 'react'
-import { createRoot } from 'react-dom/client'
-import '@/styles/globals.css'
-import App from './App.tsx'
-import { useStore } from './engine/store'
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { App } from './App';
 
-const Root = () => {
-  const loadResumeData = useStore(state => state.loadResumeData);
+// Placeholder mount. Story 1.7+ replaces this with the real shell entry
+// (detection + dynamic import); nothing here is load-bearing.
+const container = document.getElementById('root');
+if (!container) {
+  throw new Error('Root container #root is missing from index.html');
+}
 
-  useEffect(() => {
-    loadResumeData();
-  }, [loadResumeData]);
-
-  return <App />;
-};
-
-createRoot(document.getElementById('root')!).render(
+createRoot(container).render(
   <StrictMode>
-    <Root />
+    <App />
   </StrictMode>,
-)
+);

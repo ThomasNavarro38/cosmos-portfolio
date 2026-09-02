@@ -1,91 +1,49 @@
-# The Magician's Cosmos — Portfolio
+# cosmos-portfolio
 
-Live (GitHub Pages): https://thomasnavarro38.github.io/cosmos-portfolio/
+A static portfolio built on a hand-rolled Vite + TypeScript + React scaffold. No starter template, no backend, no runtime configuration.
 
-Scripts
-- dev: `npm run dev`
-- build: `npm run build`
-- preview: `npm run preview`
+## Node
 
-CI/CD
-- Deploys to GitHub Pages via `.github/workflows/deploy.yml`.
-- Uses `npm ci` for reproducible installs and runs `npx @lhci/cli@0.13.0 autorun` against the static `dist` build to enforce a basic performance budget (Performance score ≥ 0.90).
+The build targets **Node 24 LTS**. The requirement is declared twice: `.nvmrc` (for version managers) and `engines.node` in `package.json`.
 
-Performance Target
-- Goal: 60 FPS for interactive scenes. Early guardrail via Lighthouse CI; runtime FPS instrumentation (e.g., rAF sampler or `@react-three/drei` PerformanceMonitor) will be introduced in future stories.
+`engines` is advisory — npm does not enforce it without `engine-strict`. Building on a different Node major is not blocked, but it is unsupported; a hard enforcement gate arrives with the build gates in Story 1.8.
 
----
-
-# React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```sh
+nvm use      # reads .nvmrc
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The drei 10 / R3F 9 / React 19 pairing was verified, not assumed. Check it rather than trusting a quiet install — a no-op install is silent too:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```sh
+npm ls --all 2>&1 | grep -iE "UNMET|invalid" | grep -viE "UNMET OPTIONAL"
 ```
+
+No output means the pairing holds. Filter out `UNMET OPTIONAL`: the tree carries many optional platform binaries and opt-in integrations (expo, react-native, per-platform TypeScript builds) that are absent by design.
+
+## Scripts
+
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | Vite dev server |
+| `npm run build` | Production build into `dist/` |
+| `npm run preview` | Serve the built output |
+| `npm run typecheck` | `tsc --noEmit` |
+
+`npm run dev` serves on Vite's default `http://localhost:5173`. `npm run build` produces a fully static `dist/` — no Node process, no server, deployable to any file host (NFR-6).
+
+**The solve is not part of the build.** `src/derive/` turns `src/data/career.json` into `generated/layout.generated.json`, and that artifact is committed. Re-solving is a deliberate, out-of-band act — a separate npm script that `npm run build` never invokes (AD-1); the build only consumes what is already committed, and the runtime never solves. That script arrives with Story 1.5, which owns artifact emission.
+
+## Layout
+
+`src/` follows the architecture's Structural Seed. Each directory carries a README naming its role and its import constraints; the boundary that matters most is that **only `src/derive/` may import from `src/data/`**. Story 1.8 turns that from a written rule into a lint rule that fails the build.
+
+`generated/` is tracked on purpose — the solved layout artifact is committed and diffable. Do not add it to `.gitignore`. `public/` is likewise tracked; `preview.png` lands there in Epic 6.
+
+## Reference
+
+Architecture-decision IDs (`AD-1`, `AD-3`, `AD-7`, `AD-12`) cited in the directory stubs are defined in `_bmad-output/planning-artifacts/architecture/architecture-cosmos-portfolio-2026-09-01/ARCHITECTURE-SPINE.md`. Story numbers refer to `_bmad-output/planning-artifacts/epics.md`.
+
+## Dependencies
+
+All versions are pinned exactly, with no `^` or `~` range prefixes. The stack pairing was verified, not guessed; changing any pin means re-verifying the pairing.

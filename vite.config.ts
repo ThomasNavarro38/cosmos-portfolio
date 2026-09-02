@@ -1,33 +1,14 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
-const isCI = process.env.GITHUB_ACTIONS === 'true'
-const repo = process.env.GITHUB_REPOSITORY?.split('/')[1] ?? 'cosmos-portfolio'
-
-// Build-time overrides for CI variants
-const explicitBase = process.env.BUILD_BASE
-const outDir = process.env.BUILD_OUT_DIR
-
-// https://vite.dev/config/
+// Minimal by design. No env handling, no proxy, no server block:
+// NFR-6 forbids any backend or runtime configuration surface.
+//
+// Note: Vite copies `public/` verbatim into `dist/`, so `public/.gitkeep`
+// ships as a harmless empty file. Pruning it would mean either @types/node
+// (a dependency this story does not carry) or a custom hook that outlives its
+// purpose — the marker becomes unnecessary as soon as `preview.png` lands in
+// Epic 6, and should be deleted then.
 export default defineConfig({
   plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
-  base: explicitBase ?? (isCI ? `/${repo}/` : '/'),
-  build: {
-    outDir: outDir ?? 'dist',
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'vendor-three': ['three', '@react-three/fiber', '@react-three/drei'],
-          'vendor-react': ['react', 'react-dom'],
-        },
-      },
-    },
-    chunkSizeWarningLimit: 1000,
-  },
-})
+});
