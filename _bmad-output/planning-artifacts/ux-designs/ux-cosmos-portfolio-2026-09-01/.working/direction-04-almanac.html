@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Direction 04 — Almanac</title>
+<style>
+/* ============================================================================
+   DIRECTION 04 — ALMANAC
+   The register of an astronomical catalogue: designations, magnitude marks, a
+   proper legend, a ruled ecliptic. Warm graphite rather than blue-black — this
+   is printed ink that has been photographed, not a screen glow.
+   Line weight : medium and layered — several deliberate weights, none hairline.
+   Type        : editorial serif for prose and catalogue names, small caps
+                 grotesque for designations and field labels. A true hybrid.
+   Accent      : one desaturated rust, used for the catalogue apparatus
+                 (designations, magnitude scale, the current entry) — an ink
+                 colour a second plate would have been printed in, not a UI hue.
+   ----------------------------------------------------------------------------
+   PALETTE — every hex documented
+   --graphite     #12110F  warm near-black ground, the photographed plate
+   --graphite-lo  #171613  raised panel, information layer
+   --graphite-hi  #1E1C18  legend and catalogue block fill
+   --rule-lo      #2A2723  faint rules, dust, unfocused orbits
+   --rule         #3B3730  standard rules, orbit paths, panel borders
+   --rule-hi      #524C42  emphasised rules, the ecliptic
+   --ink-lo       #6E675B  tertiary text, distant designations
+   --ink          #9A9184  standard label and field text
+   --ink-hi       #C6BCAB  headings, catalogue names
+   --ink-max      #EDE6D9  reading prose — warm paper-white on graphite
+   --rust         #A65E3C  second-plate ink: designations, magnitude, current
+   --rust-lo      #5C3423  rust at rest — rules and dashes in the apparatus
+   --rust-wash    #24150F  rust-tinted fill behind the current entry
+   ========================================================================= */
+
+:root{
+  --graphite:#12110F; --graphite-lo:#171613; --graphite-hi:#1E1C18;
+  --rule-lo:#2A2723; --rule:#3B3730; --rule-hi:#524C42;
+  --ink-lo:#6E675B; --ink:#9A9184; --ink-hi:#C6BCAB; --ink-max:#EDE6D9;
+  --rust:#A65E3C; --rust-lo:#5C3423; --rust-wash:#24150F;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  --grot:"Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--graphite); color:var(--ink);
+  font-family:var(--serif); font-size:15px; line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.page{max-width:1160px;margin:0 auto;padding:44px 28px 128px}
+
+/* --- rationale ---------------------------------------------------------- */
+.rationale{
+  border:1px solid var(--rule);background:var(--graphite-lo);
+  padding:26px 30px;margin-bottom:56px;
+}
+.rationale .tag{
+  font-family:var(--grot);font-size:9.5px;letter-spacing:.28em;
+  text-transform:uppercase;color:var(--rust);margin-bottom:12px;
+}
+.rationale h1{
+  font-size:29px;font-weight:400;color:var(--ink-max);margin:0 0 16px;letter-spacing:-.01em;
+}
+.rationale p{font-size:16px;line-height:1.68;color:var(--ink-hi);margin:0;max-width:76ch}
+
+/* --- entry scaffolding -------------------------------------------------- */
+.entry{margin-bottom:64px}
+.entry-hd{
+  display:flex;align-items:baseline;gap:16px;
+  border-bottom:1px solid var(--rule-hi);padding-bottom:8px;margin-bottom:0;
+}
+.entry-hd .des{
+  font-family:var(--grot);font-size:10px;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--rust);
+}
+.entry-hd .nm{font-size:16px;color:var(--ink-hi);font-style:italic}
+.entry-hd .rt{
+  margin-left:auto;font-family:var(--grot);font-size:9px;
+  letter-spacing:.18em;text-transform:uppercase;color:var(--ink-lo);
+}
+.plate{border:1px solid var(--rule);border-top:0;overflow:hidden;background:var(--graphite)}
+.plate svg{display:block;width:100%;height:auto}
+.gloss{
+  margin-top:12px;font-size:14px;line-height:1.62;color:var(--ink);
+  font-style:italic;max-width:82ch;
+}
+.gloss b{font-style:normal;color:var(--ink-hi);font-weight:600}
+
+/* --- reading layer ------------------------------------------------------ */
+.rd{background:var(--graphite-lo);border-left:1px solid var(--rule);padding:32px 36px 36px}
+.rd .des{
+  font-family:var(--grot);font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--rust);display:flex;justify-content:space-between;
+  border-bottom:1px solid var(--rule);padding-bottom:9px;margin-bottom:20px;
+}
+.rd .des span:last-child{color:var(--ink-lo)}
+.rd .cat{font-family:var(--grot);font-size:10px;letter-spacing:.24em;
+  text-transform:uppercase;color:var(--ink-lo);margin-bottom:7px}
+.rd h2{
+  font-size:26px;font-weight:400;line-height:1.22;color:var(--ink-max);
+  margin:0 0 24px;letter-spacing:-.012em;
+}
+.rd h2 em{font-style:italic;color:var(--ink);font-size:19px;display:block;margin-bottom:3px}
+.rd .prose{font-size:16.5px;line-height:1.72;color:var(--ink-max);margin:0 0 16px;max-width:58ch}
+.tbl{border-top:1px solid var(--rule-hi);margin-top:26px}
+.row{display:flex;gap:20px;padding:8px 0;border-bottom:1px solid var(--rule-lo)}
+.row:last-child{border-bottom:0}
+.row dt{
+  flex:0 0 88px;font-family:var(--grot);font-size:9px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--ink-lo);padding-top:4px;
+}
+.row dd{margin:0;font-size:14.5px;line-height:1.55;color:var(--ink-hi)}
+.sk{font-family:var(--grot);font-size:11.5px;letter-spacing:.03em;line-height:1.9;color:var(--ink)}
+.sk b{color:var(--rust);font-weight:600}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="rationale">
+  <div class="tag">Direction 04</div>
+  <h1>Almanac</h1>
+  <p>This direction borrows the register of a printed star catalogue: every body carries a designation, magnitude is drawn as an actual graded mark rather than implied, and a real legend sits inside the plate instead of floating as interface chrome. The ground is warm graphite rather than blue-black, so it reads as ink photographed off paper, and a single desaturated rust behaves like a catalogue's second printing plate — reserved for designations, the magnitude scale and the current entry. Serif prose and small-caps grotesque apparatus give the reading layer the feel of a well-set reference work, which is exactly the invitation a technical reader responds to.</p>
+</div>
+
+<!-- =====================================================================
+     A — OPENING FRAME
+     ================================================================== -->
+<section class="entry">
+  <div class="entry-hd">
+    <span class="des">Chart I</span>
+    <span class="nm">The catalogue, wide field</span>
+    <span class="rt">Opening frame</span>
+  </div>
+  <div class="plate">
+    <svg viewBox="0 0 1120 660" role="img" aria-label="Star-chart plate: designated client stars with magnitude marks, orbiting projects, ecliptic rule and legend.">
+      <defs>
+        <radialGradient id="d4dust" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#3B3730" stop-opacity="0.40"/>
+          <stop offset="100%" stop-color="#3B3730" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="d4vig" cx="50%" cy="46%" r="64%">
+          <stop offset="48%" stop-color="#12110F" stop-opacity="0"/>
+          <stop offset="100%" stop-color="#12110F" stop-opacity="0.88"/>
+        </radialGradient>
+        <!-- magnitude glyph: catalogue convention, a ringed disc -->
+        <pattern id="d4stip" width="10" height="10" patternUnits="userSpaceOnUse">
+          <circle cx="2" cy="2" r="0.5" fill="#2A2723"/>
+          <circle cx="7" cy="6" r="0.42" fill="#2A2723"/>
+        </pattern>
+      </defs>
+
+      <rect width="1120" height="660" fill="#12110F"/>
+      <ellipse cx="640" cy="316" rx="470" ry="300" fill="url(#d4dust)"/>
+      <rect width="1120" height="660" fill="url(#d4stip)" opacity="0.7"/>
+
+      <!-- the ecliptic: a ruled, graduated baseline running through the chart -->
+      <path d="M0 470 C 220 434, 460 392, 720 340 C 900 304, 1020 282, 1120 268"
+            fill="none" stroke="#524C42" stroke-width="1"/>
+      <g stroke="#3B3730" stroke-width="0.9">
+        <line x1="120" y1="452" x2="120" y2="462"/><line x1="240" y1="432" x2="240" y2="442"/>
+        <line x1="360" y1="412" x2="360" y2="422"/><line x1="480" y1="390" x2="480" y2="400"/>
+        <line x1="600" y1="366" x2="600" y2="376"/><line x1="720" y1="340" x2="720" y2="350"/>
+        <line x1="840" y1="318" x2="840" y2="328"/><line x1="960" y1="298" x2="960" y2="308"/>
+      </g>
+      <g font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="8" letter-spacing="1.2" fill="#6E675B">
+        <text x="112" y="478">2011</text><text x="352" y="438">2016</text>
+        <text x="592" y="392">2020</text><text x="832" y="344">2024</text>
+      </g>
+
+      <!-- ===== SNCF-A: the framed system ================================= -->
+      <g fill="none" stroke="#3B3730" stroke-width="1">
+        <ellipse cx="716" cy="316" rx="128" ry="46"/>
+        <ellipse cx="716" cy="316" rx="204" ry="74"/>
+      </g>
+      <ellipse cx="716" cy="316" rx="278" ry="100" fill="none" stroke="#2A2723" stroke-width="0.9"/>
+
+      <!-- magnitude glyph for the primary: disc + two concentric rings -->
+      <circle cx="716" cy="316" r="9" fill="#A65E3C"/>
+      <circle cx="716" cy="316" r="19" fill="none" stroke="#A65E3C" stroke-width="1.2"/>
+      <circle cx="716" cy="316" r="28" fill="none" stroke="#5C3423" stroke-width="1"/>
+
+      <!-- P: Deep, satellite present -->
+      <circle cx="844" cy="302" r="7" fill="#C6BCAB"/>
+      <circle cx="844" cy="302" r="13" fill="none" stroke="#9A9184" stroke-width="1"/>
+      <ellipse cx="844" cy="302" rx="26" ry="10" fill="none" stroke="#3B3730" stroke-width="0.8"/>
+      <circle cx="869" cy="299" r="3.2" fill="#C6BCAB"/>
+
+      <!-- P: Shallow, no satellite -->
+      <circle cx="588" cy="336" r="5.5" fill="#9A9184"/>
+      <circle cx="588" cy="336" r="11" fill="none" stroke="#6E675B" stroke-width="0.9"/>
+
+      <circle cx="784" cy="388" r="4.5" fill="#9A9184"/>
+      <circle cx="784" cy="388" r="9" fill="none" stroke="#6E675B" stroke-width="0.9"/>
+
+      <!-- leaders with designation-then-name labels, catalogue style -->
+      <g fill="none" stroke="#3B3730" stroke-width="0.9">
+        <path d="M744 300 L806 226 L920 226"/>
+        <path d="M857 294 L920 262"/>
+        <path d="M577 328 L500 258 L340 258"/>
+      </g>
+      <g font-family="Helvetica Neue,Helvetica,Arial,sans-serif" letter-spacing="1.5">
+        <text x="926" y="222" font-size="9" fill="#A65E3C">CX–01</text>
+        <text x="980" y="222" font-size="12" fill="#EDE6D9" font-family="Iowan Old Style,Palatino,Georgia,serif" letter-spacing="0.6">SNCF</text>
+        <text x="926" y="237" font-size="8.5" fill="#6E675B">PRIMARY · MAG 1 · SIX SATELLITES</text>
+        <text x="926" y="259" font-size="9" fill="#A65E3C">CX–01·a</text>
+        <text x="988" y="259" font-size="10" fill="#C6BCAB" font-family="Iowan Old Style,Palatino,Georgia,serif" letter-spacing="0.4">Client referential</text>
+        <text x="926" y="272" font-size="8.5" fill="#6E675B">NOTABLE PRESENT</text>
+        <text x="204" y="254" font-size="9" fill="#5C3423">CX–01·b</text>
+        <text x="266" y="254" font-size="10" fill="#9A9184" font-family="Iowan Old Style,Palatino,Georgia,serif" letter-spacing="0.4">Platform upgrade</text>
+        <text x="204" y="267" font-size="8.5" fill="#6E675B">NO NOTABLE</text>
+      </g>
+
+      <!-- ===== other catalogued primaries, magnitude descending ========== -->
+      <circle cx="286" cy="452" r="6.5" fill="#C6BCAB"/>
+      <circle cx="286" cy="452" r="15" fill="none" stroke="#9A9184" stroke-width="1"/>
+      <ellipse cx="286" cy="452" rx="84" ry="31" fill="none" stroke="#2A2723" stroke-width="0.9"/>
+      <circle cx="370" cy="444" r="4.5" fill="#9A9184"/>
+      <circle cx="382" cy="442" r="2.4" fill="#9A9184"/>
+      <path d="M286 437 L286 400 L360 400" fill="none" stroke="#2A2723" stroke-width="0.8"/>
+      <text x="366" y="396" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+            font-size="9" letter-spacing="1.5" fill="#A65E3C">CX–02</text>
+      <text x="420" y="396" font-family="Iowan Old Style,Palatino,Georgia,serif"
+            font-size="10" fill="#9A9184">three satellites · mag 2</text>
+
+      <circle cx="946" cy="524" r="4.5" fill="#9A9184"/>
+      <circle cx="946" cy="524" r="11" fill="none" stroke="#6E675B" stroke-width="0.9"/>
+      <ellipse cx="946" cy="524" rx="56" ry="20" fill="none" stroke="#2A2723" stroke-width="0.8"/>
+      <path d="M946 513 L946 486 L1000 486" fill="none" stroke="#2A2723" stroke-width="0.8"/>
+      <text x="1006" y="483" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+            font-size="9" letter-spacing="1.5" fill="#5C3423">CX–03</text>
+
+      <circle cx="164" cy="180" r="4" fill="#6E675B"/>
+      <circle cx="164" cy="180" r="9.5" fill="none" stroke="#524C42" stroke-width="0.9"/>
+      <text x="186" y="158" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+            font-size="9" letter-spacing="1.5" fill="#5C3423">CX–04</text>
+
+      <circle cx="1030" cy="150" r="3" fill="#6E675B"/>
+      <circle cx="1030" cy="150" r="7.5" fill="none" stroke="#3B3730" stroke-width="0.8"/>
+      <text x="1000" y="126" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+            font-size="8.5" letter-spacing="1.4" fill="#524C42">CX–05</text>
+
+      <rect width="1120" height="660" fill="url(#d4vig)"/>
+
+      <!-- ===== the legend: a real catalogue key, inside the plate ======== -->
+      <g>
+        <rect x="36" y="512" width="404" height="112" fill="#1E1C18" stroke="#3B3730" stroke-width="1"/>
+        <line x1="36" y1="538" x2="440" y2="538" stroke="#3B3730" stroke-width="1"/>
+        <text x="50" y="531" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+              font-size="9" letter-spacing="2.4" fill="#A65E3C">KEY</text>
+
+        <!-- magnitude scale, drawn to scale -->
+        <circle cx="62" cy="562" r="8" fill="#A65E3C"/>
+        <circle cx="86" cy="562" r="6" fill="#C6BCAB"/>
+        <circle cx="106" cy="562" r="4.5" fill="#9A9184"/>
+        <circle cx="123" cy="562" r="3" fill="#6E675B"/>
+        <text x="140" y="565" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+              font-size="8.5" letter-spacing="1.3" fill="#9A9184">MAGNITUDE — WEIGHT OF ENGAGEMENT</text>
+
+        <circle cx="62" cy="588" r="6" fill="#9A9184"/>
+        <ellipse cx="62" cy="588" rx="17" ry="6.5" fill="none" stroke="#3B3730" stroke-width="0.8"/>
+        <circle cx="78" cy="586" r="2.6" fill="#C6BCAB"/>
+        <text x="140" y="591" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+              font-size="8.5" letter-spacing="1.3" fill="#9A9184">SATELLITE — CARRIES A WRITTEN NOTABLE</text>
+
+        <circle cx="62" cy="610" r="6" fill="#9A9184"/>
+        <text x="140" y="613" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+              font-size="8.5" letter-spacing="1.3" fill="#6E675B">BARE — FULL RECORD, NO WRITTEN ARGUMENT</text>
+      </g>
+
+      <!-- running head, catalogue style -->
+      <text x="40" y="46" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+            font-size="9" letter-spacing="2.6" fill="#6E675B">COSMOS — A CATALOGUE OF ENGAGEMENTS · T. NAVARRO</text>
+      <text x="1080" y="46" text-anchor="end" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+            font-size="9" letter-spacing="2" fill="#A65E3C">CHART I</text>
+      <text x="1080" y="632" text-anchor="end" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+            font-size="8.5" letter-spacing="1.8" fill="#524C42">ECLIPTIC GRADUATED IN YEARS · SCROLL RUNS BACKWARD</text>
+    </svg>
+  </div>
+  <p class="gloss">Magnitude is <b>drawn to a scale the legend actually shows</b>, so a visitor can measure engagement weight off the chart rather than guess at it. The ecliptic doubles as the time axis, graduated in years and running backward left-to-right, which places the scroll's direction in the first frame without a single instruction.</p>
+</section>
+
+<!-- =====================================================================
+     B — CLIENT STOP
+     ================================================================== -->
+<section class="entry">
+  <div class="entry-hd">
+    <span class="des">Chart II</span>
+    <span class="nm">CX–01 · SNCF, primary and satellites</span>
+    <span class="rt">Client stop</span>
+  </div>
+  <div class="plate">
+    <svg viewBox="0 0 1120 600" role="img" aria-label="SNCF system charted: six designated satellites, one marked as the current entry.">
+      <rect width="1120" height="600" fill="#12110F"/>
+      <ellipse cx="540" cy="300" rx="470" ry="300" fill="url(#d4dust)"/>
+      <rect width="1120" height="600" fill="url(#d4stip)" opacity="0.6"/>
+
+      <g fill="none">
+        <ellipse cx="540" cy="298" rx="122" ry="44" stroke="#3B3730" stroke-width="1.05"/>
+        <ellipse cx="540" cy="298" rx="200" ry="72" stroke="#3B3730" stroke-width="1"/>
+        <ellipse cx="540" cy="298" rx="282" ry="102" stroke="#2A2723" stroke-width="0.95"/>
+        <ellipse cx="540" cy="298" rx="366" ry="132" stroke="#2A2723" stroke-width="0.9"/>
+      </g>
+      <!-- orbit designations on the rings themselves -->
+      <g font-family="Helvetica Neue,Helvetica,Arial,sans-serif" font-size="8" letter-spacing="1.4" fill="#524C42">
+        <text x="546" y="250">I</text><text x="546" y="222">II</text>
+        <text x="546" y="192">III</text><text x="546" y="162">IV</text>
+      </g>
+
+      <!-- primary -->
+      <circle cx="540" cy="298" r="11" fill="#A65E3C"/>
+      <circle cx="540" cy="298" r="23" fill="none" stroke="#A65E3C" stroke-width="1.3"/>
+      <circle cx="540" cy="298" r="33" fill="none" stroke="#5C3423" stroke-width="1"/>
+      <text x="540" y="352" text-anchor="middle" font-family="Iowan Old Style,Palatino,Georgia,serif"
+            font-size="15" fill="#EDE6D9">SNCF</text>
+      <text x="540" y="366" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+            font-size="8.5" letter-spacing="2.2" fill="#A65E3C">CX–01 · MAG 1</text>
+
+      <!-- CURRENT ENTRY: rust bracket + designation plate. -->
+      <circle cx="662" cy="282" r="9" fill="#EDE6D9"/>
+      <circle cx="662" cy="282" r="16" fill="none" stroke="#A65E3C" stroke-width="1.4"/>
+      <ellipse cx="662" cy="282" rx="30" ry="11" fill="none" stroke="#5C3423" stroke-width="0.9"/>
+      <circle cx="690" cy="278" r="3.6" fill="#EDE6D9"/>
+      <g stroke="#A65E3C" stroke-width="1.4" fill="none">
+        <path d="M636 260 L628 260 L628 268"/><path d="M688 260 L696 260 L696 268"/>
+        <path d="M636 304 L628 304 L628 296"/><path d="M688 304 L696 304 L696 296"/>
+      </g>
+      <rect x="626" y="316" width="72" height="16" fill="#24150F" stroke="#A65E3C" stroke-width="0.9"/>
+      <text x="662" y="328" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+            font-size="8.5" letter-spacing="1.8" fill="#A65E3C">CX–01·a</text>
+
+      <!-- other satellites -->
+      <circle cx="418" cy="318" r="7" fill="#C6BCAB"/>
+      <circle cx="418" cy="318" r="13" fill="none" stroke="#9A9184" stroke-width="1"/>
+      <ellipse cx="418" cy="318" rx="25" ry="9.5" fill="none" stroke="#3B3730" stroke-width="0.8"/>
+      <circle cx="394" cy="321" r="3" fill="#C6BCAB"/><!-- notable -->
+
+      <circle cx="722" cy="352" r="6" fill="#9A9184"/>
+      <circle cx="722" cy="352" r="11.5" fill="none" stroke="#6E675B" stroke-width="0.9"/><!-- bare -->
+
+      <circle cx="350" cy="250" r="5.5" fill="#9A9184"/>
+      <circle cx="350" cy="250" r="10.5" fill="none" stroke="#6E675B" stroke-width="0.9"/>
+      <circle cx="796" cy="244" r="5" fill="#9A9184"/>
+      <circle cx="796" cy="244" r="10" fill="none" stroke="#6E675B" stroke-width="0.9"/>
+      <circle cx="540" cy="430" r="4.5" fill="#9A9184"/>
+      <circle cx="540" cy="430" r="9.5" fill="none" stroke="#6E675B" stroke-width="0.9"/>
+
+      <!-- catalogue-style label stack, right margin -->
+      <g fill="none" stroke="#3B3730" stroke-width="0.9">
+        <path d="M696 270 L780 200 L892 200"/>
+        <path d="M406 308 L320 168 L200 168"/>
+        <path d="M732 360 L820 418 L896 418"/>
+        <path d="M342 258 L250 310 L134 310"/>
+        <path d="M803 236 L864 166"/>
+        <path d="M540 440 L540 484 L400 484"/>
+      </g>
+      <g font-family="Helvetica Neue,Helvetica,Arial,sans-serif" letter-spacing="1.5">
+        <text x="898" y="196" font-size="9" fill="#A65E3C">CX–01·a</text>
+        <text x="960" y="196" font-size="12.5" font-family="Iowan Old Style,Palatino,Georgia,serif"
+              letter-spacing="0.4" fill="#EDE6D9">Client referential</text>
+        <text x="898" y="211" font-size="8.5" fill="#9A9184">MDM REPLACEMENT · TECHNICAL LEAD · TEAM 11</text>
+        <text x="898" y="224" font-size="8.5" fill="#5C3423">CURRENT ENTRY — PRESS TO OPEN</text>
+
+        <text x="52" y="164" font-size="9" fill="#5C3423">CX–01·c</text>
+        <text x="112" y="164" font-size="10.5" font-family="Iowan Old Style,Palatino,Georgia,serif" fill="#C6BCAB">Satellite present</text>
+
+        <text x="902" y="414" font-size="9" fill="#5C3423">CX–01·b</text>
+        <text x="964" y="414" font-size="10.5" font-family="Iowan Old Style,Palatino,Georgia,serif" fill="#9A9184">Platform upgrade</text>
+        <text x="902" y="427" font-size="8.5" fill="#6E675B">BARE — NO WRITTEN ARGUMENT</text>
+
+        <text x="52" y="306" font-size="9" fill="#5C3423">CX–01·d</text>
+        <text x="868" y="162" font-size="9" fill="#5C3423">CX–01·e</text>
+        <text x="330" y="480" font-size="9" fill="#5C3423">CX–01·f</text>
+      </g>
+
+      <rect width="1120" height="600" fill="url(#d4vig)"/>
+      <text x="40" y="46" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+            font-size="9" letter-spacing="2.6" fill="#6E675B">CX–01 · SNCF · 2016—2024 · SIX ENTRIES, TWO WITH NOTABLES</text>
+      <text x="1080" y="46" text-anchor="end" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+            font-size="9" letter-spacing="2" fill="#A65E3C">CHART II</text>
+    </svg>
+  </div>
+  <p class="gloss">Every satellite is designated, so the reader can refer to one — <b>CX–01·a</b> — the way they would in any catalogue. Selection is a rust bracket plus a designation plate under the body, which means the current entry is named as well as marked; the bracket carries the state even where the rust does not.</p>
+</section>
+
+<!-- =====================================================================
+     C — INFORMATION LAYER, DEEP
+     ================================================================== -->
+<section class="entry">
+  <div class="entry-hd">
+    <span class="des">Entry CX–01·a</span>
+    <span class="nm">The record, opened</span>
+    <span class="rt">Information layer · notable present</span>
+  </div>
+  <div class="plate">
+    <div style="display:grid;grid-template-columns:1fr 546px">
+      <div>
+        <svg viewBox="0 0 574 700" role="img" aria-label="Charted entry with nine skills condensed as designated motes.">
+          <rect width="574" height="700" fill="#12110F"/>
+          <ellipse cx="290" cy="340" rx="330" ry="340" fill="url(#d4dust)"/>
+          <rect width="574" height="700" fill="url(#d4stip)" opacity="0.5"/>
+
+          <circle cx="88" cy="500" r="7" fill="#5C3423"/>
+          <circle cx="88" cy="500" r="16" fill="none" stroke="#3B3730" stroke-width="1"/>
+          <text x="88" y="536" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="8.5" letter-spacing="2" fill="#6E675B">CX–01</text>
+          <path d="M104 492 C 164 464, 214 414, 258 362" fill="none" stroke="#2A2723" stroke-width="0.9"/>
+
+          <!-- the entry body, enlarged -->
+          <circle cx="300" cy="322" r="19" fill="#EDE6D9"/>
+          <circle cx="300" cy="322" r="42" fill="none" stroke="#A65E3C" stroke-width="1.4"/>
+          <ellipse cx="300" cy="322" rx="84" ry="30" fill="none" stroke="#5C3423" stroke-width="1"/>
+          <circle cx="380" cy="313" r="7" fill="#EDE6D9"/>
+          <path d="M388 309 L428 280" fill="none" stroke="#5C3423" stroke-width="0.9"/>
+          <text x="432" y="278" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="8.5" letter-spacing="1.5" fill="#A65E3C">NOTABLE</text>
+
+          <!-- condensed motes, each designated -->
+          <g fill="none" stroke="#2A2723" stroke-width="0.9">
+            <ellipse cx="300" cy="322" rx="136" ry="120" transform="rotate(-16 300 322)"/>
+            <ellipse cx="300" cy="322" rx="186" ry="158" transform="rotate(24 300 322)"/>
+            <ellipse cx="300" cy="322" rx="234" ry="200" transform="rotate(-44 300 322)"/>
+          </g>
+          <g font-family="Iowan Old Style,Palatino,Georgia,serif" font-size="10.5">
+            <circle cx="422" cy="252" r="4" fill="#C6BCAB"/><text x="434" y="248" fill="#C6BCAB">Java</text>
+            <circle cx="196" cy="204" r="4" fill="#C6BCAB"/><text x="106" y="192" fill="#C6BCAB">Spring Boot</text>
+            <circle cx="152" cy="424" r="3.2" fill="#9A9184"/><text x="86" y="444" fill="#9A9184">Tomcat</text>
+            <circle cx="460" cy="414" r="3.2" fill="#9A9184"/><text x="470" y="432" fill="#9A9184">Oracle</text>
+            <circle cx="300" cy="134" r="3.2" fill="#9A9184"/><text x="258" y="120" fill="#9A9184">Cloudera</text>
+            <circle cx="300" cy="534" r="3.2" fill="#9A9184"/><text x="284" y="556" fill="#9A9184">MDM</text>
+            <circle cx="92" cy="282" r="2.6" fill="#6E675B"/><text x="16" y="270" fill="#6E675B">code review</text>
+            <circle cx="486" cy="552" r="2.6" fill="#6E675B"/><text x="406" y="574" fill="#6E675B">mentoring</text>
+            <circle cx="488" cy="164" r="2.6" fill="#6E675B"/><text x="356" y="152" fill="#6E675B">technical leadership</text>
+          </g>
+          <rect width="574" height="700" fill="#12110F" opacity="0.30"/>
+          <text x="32" y="666" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="8.5" letter-spacing="1.8" fill="#524C42">NINE MOTES CONDENSED FROM DUST — RELEASES ON EXIT</text>
+        </svg>
+      </div>
+
+      <div class="rd">
+        <div class="des"><span>CX–01·a · notable present</span><span>ESC to close</span></div>
+        <div class="cat">SNCF · 2016—2024</div>
+        <h2><em>Client referential</em>MDM replacement</h2>
+
+        <p class="prose">The Oracle MDM cost twice: an expensive licence, and a team employed full-time to correct the data it produced. Replacing it meant rebuilding a mature product's behaviour with no specification to work from — documentation was absent or years stale, so the incumbent's real rules had to be recovered from the system itself.</p>
+
+        <p class="prose">The house standard was Spring on a dedicated external Tomcat, on ageing on-premise infrastructure. I argued for Spring Boot with embedded Tomcat instead — the better fit, and the furthest the client would go. With a mostly junior team on a critical system, a from-scratch rebuild on a current stack was also the one chance they'd get to learn one.</p>
+
+        <dl class="tbl">
+          <div class="row"><dt>Role</dt><dd>Technical lead</dd></div>
+          <div class="row"><dt>Team</dt><dd>11 — six developers, two QA, two lead developers, and me</dd></div>
+          <div class="row"><dt>Built</dt><dd>Replaced a commercial Oracle MDM at the core of SNCF's client referential with a Spring Boot application, alongside a Java and Cloudera upgrade of the surrounding platform.</dd></div>
+          <div class="row"><dt>Skills</dt><dd class="sk">
+            <b>Java</b> · <b>Spring Boot</b> · Tomcat · Oracle · Cloudera · MDM ·<br>
+            technical leadership · code review · mentoring
+          </dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+  <p class="gloss">The record sets like a catalogue entry that happens to contain an argument: rust designation line at the top, small-caps apparatus around the edges, and <b>16.5px serif prose on a 58-character measure</b> in the middle holding warm paper-white against graphite. Skills carry into the scene as designated motes, so the reader can match a name in the table to a body in the chart.</p>
+</section>
+
+<!-- =====================================================================
+     D — SHALLOW
+     ================================================================== -->
+<section class="entry">
+  <div class="entry-hd">
+    <span class="des">Entry CX–01·b</span>
+    <span class="nm">A bare record</span>
+    <span class="rt">State variant · no notable</span>
+  </div>
+  <div class="plate">
+    <div style="display:grid;grid-template-columns:1fr 546px">
+      <div>
+        <svg viewBox="0 0 574 560" role="img" aria-label="Bare entry charted: no satellite, five motes condensed.">
+          <rect width="574" height="560" fill="#12110F"/>
+          <ellipse cx="290" cy="270" rx="320" ry="270" fill="url(#d4dust)"/>
+          <rect width="574" height="560" fill="url(#d4stip)" opacity="0.5"/>
+          <circle cx="84" cy="410" r="6.5" fill="#5C3423"/>
+          <circle cx="84" cy="410" r="15" fill="none" stroke="#3B3730" stroke-width="1"/>
+          <text x="84" y="444" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="8.5" letter-spacing="2" fill="#6E675B">CX–01</text>
+          <path d="M99 402 C 156 376, 204 330, 246 282" fill="none" stroke="#2A2723" stroke-width="0.9"/>
+
+          <!-- bare: no satellite, no satellite orbit ring -->
+          <circle cx="288" cy="256" r="17" fill="#EDE6D9"/>
+          <circle cx="288" cy="256" r="38" fill="none" stroke="#A65E3C" stroke-width="1.4"/>
+
+          <g fill="none" stroke="#2A2723" stroke-width="0.9">
+            <ellipse cx="288" cy="256" rx="122" ry="106" transform="rotate(-20 288 256)"/>
+            <ellipse cx="288" cy="256" rx="170" ry="144" transform="rotate(28 288 256)"/>
+          </g>
+          <g font-family="Iowan Old Style,Palatino,Georgia,serif" font-size="10.5">
+            <circle cx="398" cy="196" r="4" fill="#C6BCAB"/><text x="410" y="192" fill="#C6BCAB">Java</text>
+            <circle cx="190" cy="158" r="4" fill="#C6BCAB"/><text x="112" y="146" fill="#C6BCAB">Cloudera</text>
+            <circle cx="150" cy="350" r="3.2" fill="#9A9184"/><text x="66" y="370" fill="#9A9184">on-premise</text>
+            <circle cx="428" cy="338" r="3.2" fill="#9A9184"/><text x="438" y="356" fill="#9A9184">Tomcat</text>
+            <circle cx="288" cy="90" r="3.2" fill="#9A9184"/><text x="246" y="76" fill="#9A9184">migration</text>
+          </g>
+          <rect width="574" height="560" fill="#12110F" opacity="0.30"/>
+          <text x="32" y="526" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="8.5" letter-spacing="1.8" fill="#524C42">FIVE MOTES CONDENSED · NO SATELLITE ON THIS BODY</text>
+        </svg>
+      </div>
+
+      <div class="rd">
+        <div class="des"><span>CX–01·b · bare record</span><span>ESC to close</span></div>
+        <div class="cat">SNCF · 2016—2024</div>
+        <h2><em>Platform</em>upgrade programme</h2>
+
+        <!-- Built promoted; the catalogue treats a bare record as a valid class -->
+        <p class="prose">Major Java upgrades, Cloudera upgrades, accumulated technical debt, ageing on-premise stack.</p>
+
+        <div style="border-left:2px solid var(--rust-lo);padding-left:15px;margin:24px 0 2px">
+          <p style="font-size:13.5px;line-height:1.7;color:var(--ink-lo);margin:0;max-width:50ch;font-style:italic">
+            Bare in this catalogue means competent delivery with no contested decision. A record carries a written argument only where there was an argument to record.
+          </p>
+        </div>
+
+        <dl class="tbl">
+          <div class="row"><dt>Role</dt><dd>Technical lead</dd></div>
+          <div class="row"><dt>Team</dt><dd>11</dd></div>
+          <div class="row"><dt>Built</dt><dd>Major Java upgrades and Cloudera upgrades across the surrounding platform, against accumulated technical debt on an ageing on-premise stack.</dd></div>
+          <div class="row"><dt>Skills</dt><dd class="sk">
+            <b>Java</b> · <b>Cloudera</b> · Tomcat · on-premise · migration
+          </dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+  <p class="gloss">The catalogue idiom earns its keep here: <b>a bare record is a recognised class in any catalogue</b>, not a failed one, and the legend on Chart I has already taught the reader that. The word "bare" is doing deliberate work — it describes the record rather than apologising for it, and the field table is byte-for-byte the same shape as CX–01·a.</p>
+</section>
+
+</div>
+</body>
+</html>

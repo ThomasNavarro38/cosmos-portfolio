@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Key screen — The Fallback</title>
+
+<!-- ============================================================================
+     KEY SCREEN — THE FALLBACK  (FR-22)
+     Cosmos Portfolio · ux-cosmos-portfolio-2026-09-01
+
+     This file renders the SAME surface twice, at two widths, inside two framed
+     viewports on this presentation page. The two renderings are the deliverable;
+     the pale scaffolding around them (the frame captions and the rationale
+     notes) is presentation furniture and is NOT part of the product.
+
+     TOKENS — DESIGN.md frontmatter, DARK register only (M2 ships dark only).
+     Contrast corrections from DESIGN.md §2 are applied, NOT the stale mock
+     values they were derived from:
+       - field labels + editorial rule raised ink-quiet -> ink-label (#8A8A94)
+       - every Mote/annotation label at ink-label or above
+     No hex is used outside :root. No shadow. No radius. No hue. No bold.
+
+     WHAT THIS SURFACE IS NOT — enforced throughout:
+       - not an error state, not a degraded view, not a downgrade path
+       - carries NO "your browser does not support", NO "best viewed on desktop",
+         NO beta badge, NO work-in-progress note, in any register (FR-20)
+       - content-complete: every Client, every Project, every field, every
+         Notable, no truncation, no "read more", no accordion that hides prose
+     ========================================================================= -->
+
+<style>
+/* ---------------------------------------------------------------------------
+   1. TOKENS — DESIGN.md frontmatter, dark register
+   ------------------------------------------------------------------------ */
+:root{
+  /* surfaces */
+  --surface-base:#08080A;
+  --surface-raised:#0D0D10;
+  --surface-edge:#1D1D22;
+
+  /* stroke ladder */
+  --stroke-dust:#1D1D22;
+  --stroke-rest:#2C2C33;
+  --stroke-near:#45454E;
+  --stroke-active:#B6B6BE;
+  --stroke-focus:#F2F2F4;
+
+  /* ink ladder */
+  --ink-faint:#2C2C33;
+  --ink-quiet:#5E5E68;
+  --ink-label:#8A8A94;
+  --ink-prose:#B6B6BE;
+  --ink-lift:#F2F2F4;
+
+  --sans:"Helvetica Neue",Helvetica,Arial,sans-serif;
+
+  /* spacing scale — 4,8,12,20,28,40,52,56. There is no 16 and no 24. */
+  --hair:4px; --xs:8px; --sm:12px; --md:20px;
+  --lg:28px; --xl:40px; --xxl:52px; --xxxl:56px;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--surface-base);
+  color:var(--ink-label);
+  font-family:var(--sans);
+  font-size:13.5px; line-height:1.65; font-weight:300;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------------------------------------------------------------------------
+   2. PRESENTATION SCAFFOLD — this page only, never the product
+   ------------------------------------------------------------------------ */
+.sheet{max-width:1320px;margin:0 auto;padding:64px 32px 160px}
+.sheet-hd{max-width:66ch;margin-bottom:72px}
+.sheet-hd .tag{
+  font-size:9.5px;letter-spacing:.4em;text-transform:uppercase;
+  color:var(--ink-label);margin-bottom:var(--md);
+}
+.sheet-hd h1{
+  font-size:24px;font-weight:200;letter-spacing:.02em;
+  color:var(--ink-lift);margin:0 0 22px;
+}
+.sheet-hd p{font-size:15px;line-height:1.8;color:var(--ink-prose);margin:0 0 var(--md);font-weight:300}
+
+.vp{margin-bottom:104px}
+.vp-hd{margin-bottom:var(--md);display:flex;gap:var(--lg);align-items:baseline;flex-wrap:wrap}
+.vp-hd .id{font-size:9.5px;letter-spacing:.4em;text-transform:uppercase;color:var(--ink-label)}
+.vp-hd .dim{font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-quiet)}
+.vp-frame{border:1px solid var(--surface-edge);overflow:hidden;background:var(--surface-base)}
+.vp-frame.phone{max-width:390px}
+.vp-note{
+  margin-top:var(--sm);font-size:12px;line-height:1.75;color:var(--ink-label);
+  max-width:72ch;font-weight:300;
+}
+.vp-note b{color:var(--ink-prose);font-weight:400}
+
+/* =========================================================================
+   3. THE FALLBACK ITSELF
+   Everything below `.fb` is product. It is scoped so both renderings can
+   sit on one page; in the build it is the document root.
+   ====================================================================== */
+.fb{background:var(--surface-base);color:var(--ink-prose)}
+
+/* --- corner chrome: exactly two lines, opposite corners, inset 40px ------ */
+.fb-chrome{
+  display:flex;justify-content:space-between;align-items:baseline;gap:var(--md);
+  padding:var(--xl) var(--xl) 0;
+}
+.fb-chrome span{
+  font-size:9.5px;font-weight:300;letter-spacing:.34em;text-transform:uppercase;
+  color:var(--ink-label);line-height:1.4;
+}
+.fb-chrome a{color:var(--ink-label);text-decoration:none;border-bottom:1px solid var(--stroke-near)}
+.fb-chrome a:hover,.fb-chrome a:focus-visible{color:var(--ink-lift);border-bottom-color:var(--stroke-focus)}
+
+.fb-body{padding:var(--xxl) var(--xl) 120px}
+
+/* --- section headings --------------------------------------------------- */
+.fb h2{
+  font-size:9.5px;font-weight:300;letter-spacing:.4em;text-transform:uppercase;
+  color:var(--ink-label);margin:0 0 var(--lg);
+}
+.fb h3{
+  font-size:11px;font-weight:300;letter-spacing:.36em;text-transform:uppercase;
+  color:var(--ink-lift);margin:0;
+}
+
+/* --- THE PLATE: the flat star chart ------------------------------------- */
+.plate{border:1px solid var(--surface-edge);background:var(--surface-base)}
+.plate svg{display:block;width:100%;height:auto}
+
+/* --- the legend: two rows, structural, no caption explaining a mark ------ */
+.legend{
+  display:flex;gap:var(--xl);flex-wrap:wrap;
+  margin-top:var(--sm);padding-top:var(--sm);
+}
+.legend div{display:flex;align-items:center;gap:var(--sm)}
+.legend svg{display:block;flex:0 0 auto}
+.legend span{
+  font-size:9.5px;font-weight:300;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--ink-label);
+}
+
+/* --- THE INDEX: the same chart as a reading order ----------------------- */
+.index{width:100%;border-collapse:collapse;margin-top:0}
+.index caption{
+  font-size:9.5px;font-weight:300;letter-spacing:.4em;text-transform:uppercase;
+  color:var(--ink-label);text-align:left;padding-bottom:var(--lg);
+}
+.index th,.index td{
+  text-align:left;vertical-align:baseline;
+  border-top:1px solid var(--surface-edge);
+  padding:var(--sm) var(--lg) var(--sm) 0;font-weight:300;
+}
+.index thead th{
+  font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--ink-label);border-top:0;padding-top:0;
+}
+.index td{font-size:13.5px;line-height:1.65;color:var(--ink-prose)}
+.index td.c-mark{width:34px;padding-right:var(--md)}
+.index td.c-client{
+  font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-label);
+  white-space:nowrap;
+}
+.index td.c-year{
+  font-size:9.5px;letter-spacing:.24em;color:var(--ink-label);white-space:nowrap;
+}
+.index a{color:var(--ink-prose);text-decoration:none;border-bottom:1px solid var(--stroke-rest)}
+.index a:hover,.index a:focus-visible{color:var(--ink-lift);border-bottom-color:var(--stroke-focus)}
+.index tr.deep a{color:var(--ink-lift)}
+.index .mark svg{display:block}
+
+/* --- THE RECORDS -------------------------------------------------------- */
+.records{margin-top:96px}
+
+.record{
+  background:var(--surface-raised);
+  border-left:1px solid var(--surface-edge);
+  padding:var(--xxxl) var(--xxxl) 60px;
+  margin-bottom:var(--xl);
+}
+.record .kicker{
+  font-size:9.5px;font-weight:300;letter-spacing:.4em;text-transform:uppercase;
+  color:var(--ink-label);margin:0 0 22px;
+}
+.record h3.title{
+  font-size:23px;font-weight:200;line-height:1.35;letter-spacing:.01em;
+  color:var(--ink-lift);margin:0 0 var(--xl);max-width:22ch;
+  text-transform:none;
+}
+
+/* the reading position — a Notable on Deep, the editorial rule on Shallow */
+.notable p{
+  font-size:16px;line-height:1.85;font-weight:300;letter-spacing:0;
+  color:var(--ink-prose);margin:0 0 var(--md);max-width:56ch;
+}
+.notable p:last-child{margin-bottom:0}
+/* The lifted constraint: brighter ink and NOTHING ELSE.
+   Not bold, not labelled, not indented, not boxed, not its own paragraph. */
+.lift{color:var(--ink-lift);font-weight:300}
+
+.rule{
+  font-size:13.5px;line-height:1.8;font-weight:300;letter-spacing:0;
+  color:var(--ink-label);            /* raised from mock ink-quiet — DESIGN.md §2 */
+  margin:0;max-width:48ch;
+}
+
+/* the record table — Role, Team, Built. No Skills row here. */
+.fields{margin:var(--xxl) 0 0}
+.frow{display:flex;gap:var(--lg);padding:var(--sm) 0;border-top:1px solid var(--surface-edge)}
+.frow dt{
+  flex:0 0 74px;font-size:9.5px;font-weight:300;letter-spacing:.24em;
+  text-transform:uppercase;color:var(--ink-label);padding-top:var(--hair);line-height:1.4;
+}
+.frow dd{
+  margin:0;font-size:13.5px;line-height:1.65;font-weight:300;
+  color:var(--ink-prose);max-width:56ch;
+}
+
+/* the skill field — see the SKILLS RESOLUTION comment at §5 below */
+.field{margin-top:var(--lg)}
+.field-hd{
+  font-size:9.5px;font-weight:300;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--ink-label);margin:0 0 var(--sm);
+}
+.field-svg{display:block;width:100%;height:auto;max-width:560px}
+
+/* ---------------------------------------------------------------------------
+   4. FOCUS VISIBILITY — square-cornered 1px stroke-focus outline at 3px offset.
+   Never suppressed, never opacity-reduced. (DESIGN.md §7.3, EXPERIENCE.md §11.3)
+   ------------------------------------------------------------------------ */
+.fb a:focus-visible,.fb :focus-visible{
+  outline:1px solid var(--stroke-focus);
+  outline-offset:3px;
+  border-radius:0;
+}
+
+/* ---------------------------------------------------------------------------
+   5. THE PHONE RENDERING
+   Scoped by a class rather than a media query ONLY so both widths can be shown
+   side by side on this one presentation page. In the build this is
+   `@media (max-width:640px)` on the same rules, and nothing else changes.
+   ------------------------------------------------------------------------ */
+.w-phone .fb-chrome{padding:var(--md) var(--md) 0;flex-direction:column;gap:var(--xs)}
+.w-phone .fb-body{padding:var(--lg) var(--md) 72px}
+.w-phone .record{padding:var(--lg) var(--md) var(--xl);margin-bottom:var(--md)}
+.w-phone .record h3.title{font-size:19px;margin-bottom:var(--lg)}
+.w-phone .notable p{font-size:15px;line-height:1.8}
+.w-phone .fields{margin-top:var(--xl)}
+/* Field rows stack on the phone: a 74px label column beside a 13.5px value
+   leaves ~200px of measure, which breaks `Built` into a ragged column. */
+.w-phone .frow{flex-direction:column;gap:var(--hair)}
+.w-phone .frow dt{flex:none}
+.w-phone .records{margin-top:var(--xxl)}
+.w-phone .legend{gap:var(--md);flex-direction:column}
+.w-phone .index caption{padding-bottom:var(--md)}
+
+/* On the phone the index is not a table layout — a five-column table at 390px
+   is unreadable. Same markup, same semantics, different display. */
+.w-phone .index,.w-phone .index tbody,.w-phone .index tr,.w-phone .index td{display:block}
+.w-phone .index thead{
+  position:absolute;width:1px;height:1px;overflow:hidden;
+  clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;
+}
+.w-phone .index tr{
+  border-top:1px solid var(--surface-edge);
+  padding:var(--sm) 0 var(--sm) 34px;position:relative;
+}
+.w-phone .index td{border-top:0;padding:0}
+.w-phone .index td.c-mark{position:absolute;left:0;top:var(--sm);width:24px;padding:0}
+.w-phone .index td.c-client{display:inline;margin-right:var(--sm)}
+.w-phone .index td.c-year{display:inline}
+.w-phone .index td.c-title{display:block;margin:var(--hair) 0 2px}
+.w-phone .index td.c-role{font-size:12px;color:var(--ink-label);letter-spacing:.04em}
+</style>
+</head>
+<body>
+
+<div class="sheet">
+
+<div class="sheet-hd">
+  <div class="tag">Key screen</div>
+  <h1>The Fallback</h1>
+  <p>The flat star chart. It is served to every phone and to any machine that cannot run the scene, and it is one click from the scene for anyone who would rather read a list. It carries every Client, every Project, every field and every Notable, at full length.</p>
+  <p>Both widths are rendered below, as two framed viewports. The layout genuinely differs between them — the plate reprojects, the index changes from a table to a stacked list, and the record's field rows stack. Nothing is dropped at either width.</p>
+</div>
+
+
+<!-- =========================================================================
+     VIEWPORT 1 — DESKTOP, 1240px
+     A desktop machine with no WebGL gets this too, so it is a desktop layout
+     in its own right and not a stretched phone page.
+     ====================================================================== -->
+<section class="vp">
+  <div class="vp-hd">
+    <span class="id">Viewport A — desktop</span>
+    <span class="dim">1240 × ∞ · no WebGL</span>
+  </div>
+  <div class="vp-frame">
+
+  <div class="fb">
+
+    <!-- Two lines of chrome, opposite corners. Never three. The right-hand line
+         carries the single active instruction — here, the route back to the
+         scene. It is a route, not an explanation of where the visitor is. -->
+    <div class="fb-chrome">
+      <span>Thomas Navarro</span>
+      <span><a href="#scene">the scene</a> &nbsp;·&nbsp; <a href="#colophon">colophon</a></span>
+    </div>
+
+    <div class="fb-body">
+
+      <!-- ===============================================================
+           THE PLATE — flat star chart, all 6 Clients, all 10 Projects
+           ===============================================================
+           PROJECTION (DESIGN.md D-G4 was a genuine gap; this is the decision):
+
+           The 3D scene composes with a force simulation and a camera. Neither
+           exists here, so the plate uses the one ordering the content already
+           has and the scene deliberately spends elsewhere: TIME. The horizontal
+           axis is time, running backward left to right — present at the left
+           edge, earliest at the right — which is FR-16's direction preserved as
+           a spatial axis rather than as a scroll direction. Each Client is a
+           row; its Projects sit on that row at their date. This is why
+           EXPERIENCE.md §2 can call the Fallback the better surface for date
+           navigation: on the plate, date is position, and position is legible
+           at a glance in a way a camera travelling through time is not.
+
+           The rows are ordered by the Client's most recent Project, so reading
+           order down the plate is the Rail's order — present to past — and a
+           visitor who has seen the scene finds the same sequence here.
+
+           There is no axis, no graticule, no tick, no gridline. The row
+           baselines ARE the orbit hairlines, drawn at stroke-rest, and the year
+           marks sit as four quiet labels along the top with no rule beneath
+           them. Annotation stays at one label per object.
+           =============================================================== -->
+
+      <h2>Ten projects, six clients</h2>
+
+      <div class="plate">
+        <svg viewBox="0 0 1160 470" role="img"
+             aria-label="Flat star chart. Six client rows ordered present to past, ten projects placed along a horizontal time axis running backward from left to right. Projects that carry a notable are drawn with a concentric ring; projects without one are a plain circle. The same ten projects are listed as text immediately below.">
+
+          <rect width="1160" height="470" fill="#08080A"/>
+
+          <!-- The Dust medium survives onto the plate: it is what makes ten
+               objects read as space rather than as sparse. Never fog. -->
+          <defs>
+            <radialGradient id="fbdust" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#2C2C33" stop-opacity="0.42"/>
+              <stop offset="100%" stop-color="#2C2C33" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <ellipse cx="330" cy="150" rx="420" ry="200" fill="url(#fbdust)"/>
+          <ellipse cx="880" cy="360" rx="330" ry="170" fill="url(#fbdust)"/>
+
+          <g fill="#1D1D22">
+            <circle cx="132" cy="60" r="0.8"/><circle cx="470" cy="42" r="0.7"/>
+            <circle cx="898" cy="72" r="0.9"/><circle cx="1092" cy="196" r="0.7"/>
+            <circle cx="66" cy="286" r="0.8"/><circle cx="612" cy="440" r="0.8"/>
+            <circle cx="1010" cy="424" r="0.7"/><circle cx="284" cy="404" r="0.6"/>
+            <circle cx="756" cy="216" r="0.7"/><circle cx="196" cy="182" r="0.6"/>
+          </g>
+
+          <!-- Time marks. Four labels, no rule, no ticks. Present at the left. -->
+          <g font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+             font-size="9.5" font-weight="300" letter-spacing="2.3" fill="#8A8A94">
+            <text x="286" y="34">2024</text>
+            <text x="524" y="34">2021</text>
+            <text x="762" y="34">2018</text>
+            <text x="1000" y="34">2015</text>
+          </g>
+
+          <!-- ============ ROW 1 — SNCF ============ -->
+          <!-- Row baseline: the orbit, drawn at stroke-rest on the uniform
+               hairline. It runs only as far as the Client's own span. -->
+          <line x1="150" y1="96" x2="640" y2="96" stroke="#2C2C33" stroke-width="0.7"/>
+          <!-- The Client Star. Filled core dot at ~15% radius: this is what
+               makes a Star read as emitting rather than as an outline. -->
+          <circle cx="150" cy="96" r="13" fill="none" stroke="#F2F2F4" stroke-width="0.9"/>
+          <circle cx="150" cy="96" r="2" fill="#F2F2F4"/>
+          <text x="150" y="70" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="11" font-weight="300" letter-spacing="4" fill="#F2F2F4">SNCF</text>
+
+          <!-- P — Client referential. DEEP: concentric ring at stroke-near,
+               radius 2.2 x body. The ring is the whole signal on this surface;
+               there is no 3D Moon on a flat chart. -->
+          <circle cx="278" cy="96" r="8" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="278" cy="96" r="17.6" fill="none" stroke="#45454E" stroke-width="0.7"/>
+          <line x1="278" y1="120" x2="278" y2="140" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="278" y="153" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10" font-weight="300" letter-spacing="1.2" fill="#F2F2F4">Client referential</text>
+
+          <!-- P — Platform upgrade. SHALLOW: circle only. No ring, no moon. -->
+          <circle cx="392" cy="96" r="7" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <line x1="392" y1="103" x2="392" y2="140" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="392" y="153" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10" font-weight="300" letter-spacing="1.2" fill="#B6B6BE">Platform upgrade</text>
+
+          <!-- ============ ROW 2 — CLIENT-02 ============ -->
+          <line x1="196" y1="196" x2="612" y2="196" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="196" cy="196" r="11" fill="none" stroke="#B6B6BE" stroke-width="0.8"/>
+          <circle cx="196" cy="196" r="1.7" fill="#B6B6BE"/>
+          <text x="196" y="174" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="11" font-weight="300" letter-spacing="4" fill="#B6B6BE">CLIENT-02</text>
+
+          <circle cx="330" cy="196" r="8.5" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="330" cy="196" r="18.7" fill="none" stroke="#45454E" stroke-width="0.7"/>
+          <line x1="330" y1="221" x2="330" y2="240" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="330" y="253" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10" font-weight="300" letter-spacing="1.2" fill="#F2F2F4">Project 02·A</text>
+
+          <circle cx="462" cy="196" r="6.5" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <line x1="462" y1="203" x2="462" y2="240" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="462" y="253" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10" font-weight="300" letter-spacing="1.2" fill="#B6B6BE">Project 02·B</text>
+
+          <circle cx="578" cy="196" r="9.5" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <line x1="578" y1="206" x2="578" y2="240" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="578" y="253" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10" font-weight="300" letter-spacing="1.2" fill="#B6B6BE">Project 02·C</text>
+
+          <!-- ============ ROW 3 — CLIENT-03 ============ -->
+          <line x1="404" y1="296" x2="716" y2="296" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="404" cy="296" r="10" fill="none" stroke="#B6B6BE" stroke-width="0.8"/>
+          <circle cx="404" cy="296" r="1.5" fill="#B6B6BE"/>
+          <text x="404" y="275" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="11" font-weight="300" letter-spacing="4" fill="#B6B6BE">CLIENT-03</text>
+
+          <circle cx="530" cy="296" r="9" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="530" cy="296" r="19.8" fill="none" stroke="#45454E" stroke-width="0.7"/>
+          <line x1="530" y1="322" x2="530" y2="340" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="530" y="353" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10" font-weight="300" letter-spacing="1.2" fill="#F2F2F4">Project 03·A</text>
+
+          <circle cx="672" cy="296" r="7" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <line x1="672" y1="303" x2="672" y2="340" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="672" y="353" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10" font-weight="300" letter-spacing="1.2" fill="#B6B6BE">Project 03·B</text>
+
+          <!-- ============ ROW 4 — CLIENT-04 ============ -->
+          <line x1="672" y1="386" x2="836" y2="386" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="672" cy="386" r="9" fill="none" stroke="#B6B6BE" stroke-width="0.8"/>
+          <circle cx="672" cy="386" r="1.4" fill="#B6B6BE"/>
+          <text x="672" y="366" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="11" font-weight="300" letter-spacing="4" fill="#B6B6BE">CLIENT-04</text>
+
+          <circle cx="790" cy="386" r="8" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="790" cy="386" r="17.6" fill="none" stroke="#45454E" stroke-width="0.7"/>
+          <line x1="790" y1="410" x2="790" y2="428" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="790" y="441" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10" font-weight="300" letter-spacing="1.2" fill="#F2F2F4">Project 04·A</text>
+
+          <!-- ============ ROW 5 — CLIENT-05 ============ -->
+          <line x1="856" y1="196" x2="1000" y2="196" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="856" cy="196" r="8" fill="none" stroke="#B6B6BE" stroke-width="0.8"/>
+          <circle cx="856" cy="196" r="1.2" fill="#B6B6BE"/>
+          <text x="856" y="177" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="11" font-weight="300" letter-spacing="4" fill="#B6B6BE">CLIENT-05</text>
+
+          <circle cx="960" cy="196" r="7" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <line x1="960" y1="203" x2="960" y2="240" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="960" y="253" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10" font-weight="300" letter-spacing="1.2" fill="#B6B6BE">Project 05·A</text>
+
+          <!-- ============ ROW 6 — CLIENT-06 ============ -->
+          <line x1="930" y1="296" x2="1064" y2="296" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="930" cy="296" r="7.5" fill="none" stroke="#B6B6BE" stroke-width="0.8"/>
+          <circle cx="930" cy="296" r="1.1" fill="#B6B6BE"/>
+          <text x="930" y="278" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="11" font-weight="300" letter-spacing="4" fill="#B6B6BE">CLIENT-06</text>
+
+          <circle cx="1030" cy="296" r="6.5" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <line x1="1030" y1="303" x2="1030" y2="340" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="1030" y="353" text-anchor="middle" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10" font-weight="300" letter-spacing="1.2" fill="#B6B6BE">Project 06·A</text>
+
+          <!-- NO VIGNETTE ON THE PLATE.
+               DESIGN.md §5 gives the vignette three jobs, all of which are the
+               camera's: establish a centre, stop the corners reading as a cut
+               rectangle, and pre-figure M3 lens optics. This plate has no
+               camera and no centre — it has a time axis, and every corner
+               carries content. A 0.9-opacity edge here would push the outermost
+               Client, CLIENT-05/06, below the contrast floor for no gain. The
+               plate keeps the Dust and drops the vignette. -->
+        </svg>
+      </div>
+
+      <!-- The legend. Two entries, both structural, no sentence explaining a
+           mark. This is not the forbidden "a ring means it opens" caption —
+           that caption named the wrong meaning AND named an interaction. This
+           names what the ring IS, which is the one thing a stranger cannot
+           derive from the plate alone and which the M2 gate turns on. -->
+      <div class="legend">
+        <div>
+          <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+            <circle cx="20" cy="20" r="8" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+            <circle cx="20" cy="20" r="17.6" fill="none" stroke="#45454E" stroke-width="0.7"/>
+          </svg>
+          <span>Carries a notable</span>
+        </div>
+        <div>
+          <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+            <circle cx="20" cy="20" r="8" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          </svg>
+          <span>Does not</span>
+        </div>
+      </div>
+
+      <!-- ===============================================================
+           THE INDEX — a real table. The plate is a picture of this.
+           ===============================================================
+           The plate carries the ring; the table carries the SAME signal in the
+           same structural channel, drawn per row in the marker column, plus a
+           real text value in the Notable column that a screen reader reads
+           aloud. Three redundant channels on one flat surface — ring, row
+           marker, text — which is what makes EXPERIENCE.md §11.6 satisfiable:
+           a screen-reader user must be able to answer "which entries are worth
+           reading?" and here they can, from the table alone.
+           =============================================================== -->
+
+      <table class="index" style="margin-top:96px">
+        <caption>The same ten, in reading order</caption>
+        <thead>
+          <tr>
+            <th scope="col"><span class="mark">Notable</span></th>
+            <th scope="col">Client</th>
+            <th scope="col">Project</th>
+            <th scope="col">Role</th>
+            <th scope="col">Years</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="deep">
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="Carries a notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+                <circle cx="10" cy="10" r="8.8" fill="none" stroke="#45454E" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">SNCF</td>
+            <td class="c-title"><a href="#r-sncf-referential">Client referential — MDM replacement</a></td>
+            <td class="c-role">Technical lead</td>
+            <td class="c-year">2024</td>
+          </tr>
+          <tr>
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="No notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">SNCF</td>
+            <td class="c-title"><a href="#r-sncf-platform">Platform upgrade programme</a></td>
+            <td class="c-role">Technical lead</td>
+            <td class="c-year">2023</td>
+          </tr>
+          <tr class="deep">
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="Carries a notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+                <circle cx="10" cy="10" r="8.8" fill="none" stroke="#45454E" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-02</td>
+            <td class="c-title"><a href="#r-02a">Project 02·A</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2022</td>
+          </tr>
+          <tr>
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="No notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-02</td>
+            <td class="c-title"><a href="#r-02b">Project 02·B</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2021</td>
+          </tr>
+          <tr>
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="No notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-02</td>
+            <td class="c-title"><a href="#r-02c">Project 02·C</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2020</td>
+          </tr>
+          <tr class="deep">
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="Carries a notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+                <circle cx="10" cy="10" r="8.8" fill="none" stroke="#45454E" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-03</td>
+            <td class="c-title"><a href="#r-03a">Project 03·A</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2020</td>
+          </tr>
+          <tr>
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="No notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-03</td>
+            <td class="c-title"><a href="#r-03b">Project 03·B</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2018</td>
+          </tr>
+          <tr class="deep">
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="Carries a notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+                <circle cx="10" cy="10" r="8.8" fill="none" stroke="#45454E" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-04</td>
+            <td class="c-title"><a href="#r-04a">Project 04·A</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2017</td>
+          </tr>
+          <tr>
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="No notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-05</td>
+            <td class="c-title"><a href="#r-05a">Project 05·A</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2016</td>
+          </tr>
+          <tr>
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="No notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-06</td>
+            <td class="c-title"><a href="#r-06a">Project 06·A</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2015</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- ===============================================================
+           THE RECORDS — every entry in full, in the plate's own order.
+           Two are set out here in full; the remaining eight follow the
+           identical template and are represented by the index above.
+           =============================================================== -->
+
+      <div class="records">
+        <h2>The records</h2>
+
+        <!-- ------------------------------------------------------------
+             DEEP — SNCF, Client referential
+             ------------------------------------------------------------ -->
+        <article class="record" id="r-sncf-referential">
+          <p class="kicker">SNCF</p>
+          <h3 class="title">Client referential — MDM replacement</h3>
+
+          <!-- THE READING POSITION. One block. The constraint sentence is
+               lifted by INK ONLY — not bold, not labelled, not indented, not
+               boxed, not given its own paragraph. It stays inside the flow. -->
+          <div class="notable">
+            <p>The Oracle MDM cost twice: an expensive licence, and a team employed full-time to correct the data it produced. Replacing it meant rebuilding a mature product's behaviour with no specification to work from — <span class="lift">documentation was absent or years stale</span>, so the incumbent's real rules had to be recovered from the system itself.</p>
+
+            <!-- CONTENT PASS REQUIRED — DESIGN.md D-G2 / §7.7.
+                 The ratified typesetting lifts ONE SENTENCE. This Notable's
+                 constraint is a mid-sentence clause, so the lift above is a
+                 clause and stops mid-flow, which weakens the four-second
+                 constraint scan the lift exists to serve. The author's prose is
+                 reproduced verbatim here and is NOT rewritten. The fix is a
+                 content-pass re-cut of that sentence — for example, ending the
+                 sentence after "to work from" and opening the next with the
+                 constraint — so the lift lands on a full sentence. It must NOT
+                 be resolved by adding a label, a bold weight, or a box. -->
+
+            <p>The house standard was Spring on a dedicated external Tomcat, on ageing on-premise infrastructure. I argued for Spring Boot with embedded Tomcat instead — the better fit, and the furthest the client would go. With a mostly junior team on a critical system, a from-scratch rebuild on a current stack was also the one chance they'd get to learn one.</p>
+          </div>
+
+          <dl class="fields">
+            <div class="frow"><dt>Role</dt><dd>Technical lead</dd></div>
+            <div class="frow"><dt>Team</dt><dd>11 — six developers, two QA, two lead developers, and me</dd></div>
+            <div class="frow"><dt>Built</dt><dd>Replaced a commercial Oracle MDM at the core of SNCF's client referential with a Spring Boot application, alongside a Java and Cloudera upgrade of the surrounding platform.</dd></div>
+          </dl>
+
+          <!-- ===========================================================
+               SKILLS RESOLUTION — the question the brief asked me to answer
+               ===========================================================
+               In the scene, Skills are condensing Dust and are explicitly NOT a
+               text list (FR-10). DESIGN.md §3 deletes the `Skills` field row,
+               and that deletion is correct AND it is stale as a rule for THIS
+               surface. Read the reason it was deleted: "any field table that
+               lists technologies has reintroduced the DUPLICATION the Dust
+               mechanic exists to remove." The prohibition is on duplication.
+               The Fallback has no Dust and no Motes, so there is nothing here
+               to duplicate — and content parity is absolute (EXPERIENCE.md §10:
+               every Project, every field). Suppressing Skills on the Fallback
+               would enforce the letter of a rule while breaking the parity
+               requirement that outranks it, and would leave the phone visitor —
+               for whom this IS the entire product — unable to answer "where is
+               the stack?", which is the exact question the Dust exists to
+               answer in the scene.
+
+               So Skills appear. But NOT as the mock's `Skills` field row, which
+               would be the deleted row smuggled back in: the row set Java and
+               Spring Boot in a heavier weight, which is bold as an emphasis
+               channel (forbidden, §3) and is a tier signal carried by weight.
+
+               The resolution: Skills are the ONE thing on this surface drawn
+               rather than typeset. They keep the Dust's own geometry — dot plus
+               label, always together, tiered by DOT RADIUS AND ORBIT DISTANCE
+               and never by ink below the floor (§7.4) — flattened onto the
+               plate's projection instead of an orbit. Three tiers become three
+               distances from the baseline; every label sits at ink-label or
+               above; no label is a link, because a Skill is not a destination.
+               It is the still frame of the Condensation the desktop visitor
+               watches, which is why it belongs under the record rather than in
+               the field table: it is a second display of the same mechanic, not
+               a fourth row.
+
+               It sits BELOW the field table deliberately. The reading order the
+               panel's vertical rhythm argues for is argument first, record
+               second; the stack is third and must not compete with either.
+               =========================================================== -->
+          <div class="field">
+            <p class="field-hd" id="sk-sncf-ref">Condensed</p>
+            <svg class="field-svg" viewBox="0 0 560 132" role="img"
+                 aria-labelledby="sk-sncf-ref"
+                 aria-label="Nine skills: Java, Spring Boot, Tomcat, Oracle, Cloudera, MDM, technical leadership, code review, mentoring.">
+              <!-- the medium the motes condense out of -->
+              <line x1="0" y1="44" x2="560" y2="44" stroke="#1D1D22" stroke-width="0.7"/>
+              <line x1="0" y1="82" x2="560" y2="82" stroke="#1D1D22" stroke-width="0.7"/>
+              <line x1="0" y1="116" x2="560" y2="116" stroke="#1D1D22" stroke-width="0.7"/>
+
+              <g font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                 font-size="9.5" font-weight="300" letter-spacing="1.5">
+
+                <!-- tier 1 — 2.6px dot, innermost distance -->
+                <circle cx="8" cy="44" r="2.6" fill="#B6B6BE"/>
+                <text x="20" y="47" fill="#B6B6BE">Java</text>
+                <circle cx="80" cy="44" r="2.6" fill="#B6B6BE"/>
+                <text x="92" y="47" fill="#B6B6BE">Spring Boot</text>
+                <circle cx="196" cy="44" r="2.6" fill="#B6B6BE"/>
+                <text x="208" y="47" fill="#B6B6BE">technical leadership</text>
+
+                <!-- tier 2 — 2.1px dot, middle distance -->
+                <circle cx="8" cy="82" r="2.1" fill="#8A8A94"/>
+                <text x="20" y="85" fill="#8A8A94">Tomcat</text>
+                <circle cx="94" cy="82" r="2.1" fill="#8A8A94"/>
+                <text x="106" y="85" fill="#8A8A94">Oracle</text>
+                <circle cx="176" cy="82" r="2.1" fill="#8A8A94"/>
+                <text x="188" y="85" fill="#8A8A94">Cloudera</text>
+                <circle cx="272" cy="82" r="2.1" fill="#8A8A94"/>
+                <text x="284" y="85" fill="#8A8A94">MDM</text>
+
+                <!-- tier 3 — 1.8px dot, outermost distance. Still ink-label:
+                     tier is carried by radius and distance, never by dropping
+                     the label below the contrast floor. -->
+                <circle cx="8" cy="116" r="1.8" fill="#8A8A94"/>
+                <text x="20" y="119" fill="#8A8A94">code review</text>
+                <circle cx="118" cy="116" r="1.8" fill="#8A8A94"/>
+                <text x="130" y="119" fill="#8A8A94">mentoring</text>
+              </g>
+            </svg>
+          </div>
+        </article>
+
+        <!-- ------------------------------------------------------------
+             SHALLOW — SNCF, Platform upgrade programme
+             The Deep record with a DIFFERENT block in the reading position.
+             Not the Deep record minus a block. Identical structure, identical
+             order, identical field table. Nothing is missing; something else
+             is present.
+             ------------------------------------------------------------ -->
+        <article class="record" id="r-sncf-platform">
+          <p class="kicker">SNCF</p>
+          <h3 class="title">Platform upgrade programme</h3>
+
+          <!-- THE READING POSITION on a Shallow entry. Same slot, same rhythm.
+               One line, in the author's voice, at editorial-rule 13.5/1.8 on a
+               48ch measure, in ink-label — RAISED from the mock's ink-quiet per
+               the DESIGN.md §2 contrast correction. It is the site's thesis and
+               must not be the least readable line on the surface.
+               No skeleton, no placeholder, no "no notable", no gap. -->
+          <p class="rule">Entries carry a written argument only where there was an argument to have.</p>
+
+          <dl class="fields">
+            <div class="frow"><dt>Role</dt><dd>Technical lead</dd></div>
+            <div class="frow"><dt>Team</dt><dd>11</dd></div>
+            <div class="frow"><dt>Built</dt><dd>Major Java upgrades and Cloudera upgrades across the surrounding platform, against significant accumulated technical debt on an ageing on-premise stack with dated supervision tooling.</dd></div>
+          </dl>
+
+          <div class="field">
+            <p class="field-hd" id="sk-sncf-plat">Condensed</p>
+            <svg class="field-svg" viewBox="0 0 560 94" role="img"
+                 aria-labelledby="sk-sncf-plat"
+                 aria-label="Five skills: Java, Cloudera, Tomcat, on-premise, migration.">
+              <line x1="0" y1="44" x2="560" y2="44" stroke="#1D1D22" stroke-width="0.7"/>
+              <line x1="0" y1="82" x2="560" y2="82" stroke="#1D1D22" stroke-width="0.7"/>
+              <g font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                 font-size="9.5" font-weight="300" letter-spacing="1.5">
+                <circle cx="8" cy="44" r="2.6" fill="#B6B6BE"/>
+                <text x="20" y="47" fill="#B6B6BE">Java</text>
+                <circle cx="80" cy="44" r="2.6" fill="#B6B6BE"/>
+                <text x="92" y="47" fill="#B6B6BE">Cloudera</text>
+                <circle cx="8" cy="82" r="2.1" fill="#8A8A94"/>
+                <text x="20" y="85" fill="#8A8A94">Tomcat</text>
+                <circle cx="88" cy="82" r="2.1" fill="#8A8A94"/>
+                <text x="100" y="85" fill="#8A8A94">on-premise</text>
+                <circle cx="192" cy="82" r="2.1" fill="#8A8A94"/>
+                <text x="204" y="85" fill="#8A8A94">migration</text>
+              </g>
+            </svg>
+          </div>
+        </article>
+
+        <!-- The remaining eight records follow this identical template and are
+             present in full on the built surface. They are not rendered in this
+             key screen because their content is not drafted — inventory-draft.md
+             records ~8 more projects across ~5-6 clients as not yet written, and
+             this mock does not invent client names or project details. -->
+
+      </div><!-- /records -->
+
+    </div><!-- /fb-body -->
+  </div><!-- /fb -->
+
+  </div>
+  <p class="vp-note"><b>The plate is the chart; the table is the same chart in reading order.</b> Time is the horizontal axis, running backward left to right, which is the scene's scroll direction turned into position — this is why the Fallback is the better surface for navigating by date. The ring carries the Deep/Shallow signal on the plate; the same ring is drawn per row in the table's marker column and named as a real column value, so a screen reader answers the M2 gate's second clause from the table alone.</p>
+</section>
+
+
+<!-- =========================================================================
+     VIEWPORT 2 — PHONE, 390px
+     For every mobile visitor, including the cold-forward visitor who taps a
+     link from Slack with no context, THIS IS THE ENTIRE PRODUCT.
+     ====================================================================== -->
+<section class="vp">
+  <div class="vp-hd">
+    <span class="id">Viewport B — phone</span>
+    <span class="dim">390 × ∞ · the whole product</span>
+  </div>
+  <div class="vp-frame phone">
+
+  <div class="fb w-phone">
+
+    <div class="fb-chrome">
+      <span>Thomas Navarro</span>
+      <span><a href="#scene">the scene</a> &nbsp;·&nbsp; <a href="#colophon">colophon</a></span>
+    </div>
+
+    <div class="fb-body">
+
+      <!-- ===============================================================
+           THE PLATE, REPROJECTED — not the desktop plate scaled down.
+           ===============================================================
+           At 390px the desktop plate fails on both axes at once: six rows
+           against a 12-year span puts ~30px between adjacent Projects, and a
+           10px label needs ~110px. Zooming a wide plate into a horizontal
+           scroller would hide half the content behind a gesture, which breaks
+           "every project visible at once" and puts the Deep/Shallow read behind
+           an interaction on the one surface where it must be free.
+
+           So the projection TRANSPOSES. Time runs DOWN — present at the top,
+           earliest at the bottom, which is also the page's own scroll direction
+           and so agrees with FR-16 rather than fighting it. The Client is a
+           vertical stem, its Projects are Bodies on that stem, and the labels
+           run horizontally into the width the phone actually has. A tall plate
+           is free on a phone; a wide one is not.
+
+           Same tokens, same hairline, same ring, same one-label-per-object.
+           A different projection of the same chart, not a smaller one.
+           =============================================================== -->
+
+      <h2>Ten projects, six clients</h2>
+
+      <div class="plate">
+        <svg viewBox="0 0 350 720" role="img"
+             aria-label="Flat star chart, transposed. Six client stems running down the page from present to past, ten projects placed along them. Projects that carry a notable are drawn with a concentric ring. The same ten are listed as text below.">
+
+          <rect width="350" height="720" fill="#08080A"/>
+          <ellipse cx="120" cy="200" rx="220" ry="240" fill="url(#fbdust)"/>
+          <ellipse cx="230" cy="560" rx="190" ry="200" fill="url(#fbdust)"/>
+          <g fill="#1D1D22">
+            <circle cx="300" cy="86" r="0.8"/><circle cx="40" cy="240" r="0.7"/>
+            <circle cx="320" cy="410" r="0.8"/><circle cx="60" cy="620" r="0.7"/>
+            <circle cx="210" cy="140" r="0.6"/><circle cx="150" cy="690" r="0.7"/>
+          </g>
+
+          <!-- ===== SNCF ===== -->
+          <line x1="40" y1="52" x2="40" y2="150" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="40" cy="52" r="11" fill="none" stroke="#F2F2F4" stroke-width="0.9"/>
+          <circle cx="40" cy="52" r="1.7" fill="#F2F2F4"/>
+          <text x="60" y="42" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="11" font-weight="300" letter-spacing="4" fill="#F2F2F4">SNCF</text>
+          <text x="60" y="60" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="9.5" font-weight="300" letter-spacing="2.3" fill="#8A8A94">2023 – 2024</text>
+
+          <!-- DEEP -->
+          <circle cx="40" cy="100" r="7" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="40" cy="100" r="15.4" fill="none" stroke="#45454E" stroke-width="0.7"/>
+          <line x1="56" y1="100" x2="76" y2="100" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="84" y="103" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10.5" font-weight="300" letter-spacing="1.2" fill="#F2F2F4">Client referential</text>
+
+          <!-- SHALLOW -->
+          <circle cx="40" cy="146" r="6.5" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <line x1="47" y1="146" x2="76" y2="146" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="84" y="149" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10.5" font-weight="300" letter-spacing="1.2" fill="#B6B6BE">Platform upgrade</text>
+
+          <!-- ===== CLIENT-02 ===== -->
+          <line x1="40" y1="212" x2="40" y2="356" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="40" cy="212" r="9.5" fill="none" stroke="#B6B6BE" stroke-width="0.8"/>
+          <circle cx="40" cy="212" r="1.4" fill="#B6B6BE"/>
+          <text x="60" y="209" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="11" font-weight="300" letter-spacing="4" fill="#B6B6BE">CLIENT-02</text>
+          <text x="60" y="227" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="9.5" font-weight="300" letter-spacing="2.3" fill="#8A8A94">2020 – 2022</text>
+
+          <circle cx="40" cy="262" r="7.5" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="40" cy="262" r="16.5" fill="none" stroke="#45454E" stroke-width="0.7"/>
+          <line x1="57" y1="262" x2="76" y2="262" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="84" y="265" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10.5" font-weight="300" letter-spacing="1.2" fill="#F2F2F4">Project 02·A</text>
+
+          <circle cx="40" cy="310" r="6" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <line x1="46" y1="310" x2="76" y2="310" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="84" y="313" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10.5" font-weight="300" letter-spacing="1.2" fill="#B6B6BE">Project 02·B</text>
+
+          <circle cx="40" cy="352" r="8" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <line x1="48" y1="352" x2="76" y2="352" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="84" y="355" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10.5" font-weight="300" letter-spacing="1.2" fill="#B6B6BE">Project 02·C</text>
+
+          <!-- ===== CLIENT-03 ===== -->
+          <line x1="40" y1="416" x2="40" y2="512" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="40" cy="416" r="9" fill="none" stroke="#B6B6BE" stroke-width="0.8"/>
+          <circle cx="40" cy="416" r="1.3" fill="#B6B6BE"/>
+          <text x="60" y="413" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="11" font-weight="300" letter-spacing="4" fill="#B6B6BE">CLIENT-03</text>
+          <text x="60" y="431" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="9.5" font-weight="300" letter-spacing="2.3" fill="#8A8A94">2018 – 2020</text>
+
+          <circle cx="40" cy="464" r="7.5" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="40" cy="464" r="16.5" fill="none" stroke="#45454E" stroke-width="0.7"/>
+          <line x1="57" y1="464" x2="76" y2="464" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="84" y="467" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10.5" font-weight="300" letter-spacing="1.2" fill="#F2F2F4">Project 03·A</text>
+
+          <circle cx="40" cy="508" r="6.5" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <line x1="47" y1="508" x2="76" y2="508" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="84" y="511" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10.5" font-weight="300" letter-spacing="1.2" fill="#B6B6BE">Project 03·B</text>
+
+          <!-- ===== CLIENT-04 ===== -->
+          <line x1="40" y1="562" x2="40" y2="606" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="40" cy="562" r="8.5" fill="none" stroke="#B6B6BE" stroke-width="0.8"/>
+          <circle cx="40" cy="562" r="1.3" fill="#B6B6BE"/>
+          <text x="60" y="559" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="11" font-weight="300" letter-spacing="4" fill="#B6B6BE">CLIENT-04</text>
+          <text x="60" y="577" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="9.5" font-weight="300" letter-spacing="2.3" fill="#8A8A94">2017</text>
+
+          <circle cx="40" cy="606" r="7" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="40" cy="606" r="15.4" fill="none" stroke="#45454E" stroke-width="0.7"/>
+          <line x1="56" y1="606" x2="76" y2="606" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="84" y="609" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10.5" font-weight="300" letter-spacing="1.2" fill="#F2F2F4">Project 04·A</text>
+
+          <!-- ===== CLIENT-05 ===== -->
+          <line x1="40" y1="652" x2="40" y2="678" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="40" cy="652" r="7.5" fill="none" stroke="#B6B6BE" stroke-width="0.8"/>
+          <circle cx="40" cy="652" r="1.1" fill="#B6B6BE"/>
+          <text x="60" y="649" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="11" font-weight="300" letter-spacing="4" fill="#B6B6BE">CLIENT-05</text>
+          <circle cx="40" cy="678" r="6" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          <line x1="46" y1="678" x2="76" y2="678" stroke="#2C2C33" stroke-width="0.6"/>
+          <text x="84" y="681" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="10.5" font-weight="300" letter-spacing="1.2" fill="#B6B6BE">Project 05·A</text>
+
+          <!-- ===== CLIENT-06 ===== -->
+          <line x1="40" y1="708" x2="40" y2="712" stroke="#2C2C33" stroke-width="0.7"/>
+          <circle cx="40" cy="708" r="7" fill="none" stroke="#B6B6BE" stroke-width="0.8"/>
+          <circle cx="40" cy="708" r="1" fill="#B6B6BE"/>
+          <text x="60" y="705" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="11" font-weight="300" letter-spacing="4" fill="#B6B6BE">CLIENT-06</text>
+          <text x="60" y="716" font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                font-size="9.5" font-weight="300" letter-spacing="1.2" fill="#B6B6BE">Project 06·A · 2015</text>
+        </svg>
+      </div>
+
+      <div class="legend">
+        <div>
+          <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+            <circle cx="20" cy="20" r="8" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+            <circle cx="20" cy="20" r="17.6" fill="none" stroke="#45454E" stroke-width="0.7"/>
+          </svg>
+          <span>Carries a notable</span>
+        </div>
+        <div>
+          <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+            <circle cx="20" cy="20" r="8" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+          </svg>
+          <span>Does not</span>
+        </div>
+      </div>
+
+      <!-- Same table markup, same semantics. The header row is visually hidden
+           and each row becomes a block with the ring marker in a fixed left
+           gutter — the ring stays the signal at every width. -->
+      <table class="index" style="margin-top:var(--xxl)">
+        <caption>The same ten, in reading order</caption>
+        <thead>
+          <tr>
+            <th scope="col">Notable</th><th scope="col">Client</th>
+            <th scope="col">Project</th><th scope="col">Role</th><th scope="col">Years</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="deep">
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="Carries a notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+                <circle cx="10" cy="10" r="8.8" fill="none" stroke="#45454E" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">SNCF</td>
+            <td class="c-title"><a href="#p-sncf-referential">Client referential — MDM replacement</a></td>
+            <td class="c-role">Technical lead</td>
+            <td class="c-year">2024</td>
+          </tr>
+          <tr>
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="No notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">SNCF</td>
+            <td class="c-title"><a href="#p-sncf-platform">Platform upgrade programme</a></td>
+            <td class="c-role">Technical lead</td>
+            <td class="c-year">2023</td>
+          </tr>
+          <tr class="deep">
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="Carries a notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+                <circle cx="10" cy="10" r="8.8" fill="none" stroke="#45454E" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-02</td>
+            <td class="c-title"><a href="#p-02a">Project 02·A</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2022</td>
+          </tr>
+          <tr>
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="No notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-02</td>
+            <td class="c-title"><a href="#p-02b">Project 02·B</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2021</td>
+          </tr>
+          <tr>
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="No notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-02</td>
+            <td class="c-title"><a href="#p-02c">Project 02·C</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2020</td>
+          </tr>
+          <tr class="deep">
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="Carries a notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+                <circle cx="10" cy="10" r="8.8" fill="none" stroke="#45454E" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-03</td>
+            <td class="c-title"><a href="#p-03a">Project 03·A</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2020</td>
+          </tr>
+          <tr>
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="No notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-03</td>
+            <td class="c-title"><a href="#p-03b">Project 03·B</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2018</td>
+          </tr>
+          <tr class="deep">
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="Carries a notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+                <circle cx="10" cy="10" r="8.8" fill="none" stroke="#45454E" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-04</td>
+            <td class="c-title"><a href="#p-04a">Project 04·A</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2017</td>
+          </tr>
+          <tr>
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="No notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-05</td>
+            <td class="c-title"><a href="#p-05a">Project 05·A</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2016</td>
+          </tr>
+          <tr>
+            <td class="c-mark mark">
+              <svg width="20" height="20" viewBox="0 0 20 20" role="img" aria-label="No notable">
+                <circle cx="10" cy="10" r="4" fill="none" stroke="#2C2C33" stroke-width="0.7"/>
+              </svg>
+            </td>
+            <td class="c-client">Client-06</td>
+            <td class="c-title"><a href="#p-06a">Project 06·A</a></td>
+            <td class="c-role">—</td>
+            <td class="c-year">2015</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="records">
+        <h2>The records</h2>
+
+        <article class="record" id="p-sncf-referential">
+          <p class="kicker">SNCF</p>
+          <h3 class="title">Client referential — MDM replacement</h3>
+
+          <!-- The Notable is NOT truncated on the phone. No "read more", no
+               clamp, no accordion. All 150 words, at 15px/1.8 — one step down
+               from 16px because the measure is ~34ch here rather than 56ch, and
+               DESIGN.md §3 makes the MEASURE the hard constraint, not the size.
+               A 16px line at 34ch reads worse than a 15px one; legibility
+               outranks the ramp (NFR-7). -->
+          <div class="notable">
+            <p>The Oracle MDM cost twice: an expensive licence, and a team employed full-time to correct the data it produced. Replacing it meant rebuilding a mature product's behaviour with no specification to work from — <span class="lift">documentation was absent or years stale</span>, so the incumbent's real rules had to be recovered from the system itself.</p>
+            <p>The house standard was Spring on a dedicated external Tomcat, on ageing on-premise infrastructure. I argued for Spring Boot with embedded Tomcat instead — the better fit, and the furthest the client would go. With a mostly junior team on a critical system, a from-scratch rebuild on a current stack was also the one chance they'd get to learn one.</p>
+          </div>
+
+          <dl class="fields">
+            <div class="frow"><dt>Role</dt><dd>Technical lead</dd></div>
+            <div class="frow"><dt>Team</dt><dd>11 — six developers, two QA, two lead developers, and me</dd></div>
+            <div class="frow"><dt>Built</dt><dd>Replaced a commercial Oracle MDM at the core of SNCF's client referential with a Spring Boot application, alongside a Java and Cloudera upgrade of the surrounding platform.</dd></div>
+          </dl>
+
+          <!-- Skills reflow to two columns of dots and labels. Same tiering by
+               dot radius, same ink floor, no truncation of the nine. -->
+          <div class="field">
+            <p class="field-hd" id="sk-p-sncf-ref">Condensed</p>
+            <svg class="field-svg" viewBox="0 0 300 226" role="img"
+                 aria-labelledby="sk-p-sncf-ref"
+                 aria-label="Nine skills: Java, Spring Boot, technical leadership, Tomcat, Oracle, Cloudera, MDM, code review, mentoring.">
+              <g font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                 font-size="9.5" font-weight="300" letter-spacing="1.5">
+                <line x1="0" y1="14" x2="300" y2="14" stroke="#1D1D22" stroke-width="0.7"/>
+                <circle cx="6" cy="14" r="2.6" fill="#B6B6BE"/><text x="18" y="17" fill="#B6B6BE">Java</text>
+                <line x1="0" y1="42" x2="300" y2="42" stroke="#1D1D22" stroke-width="0.7"/>
+                <circle cx="6" cy="42" r="2.6" fill="#B6B6BE"/><text x="18" y="45" fill="#B6B6BE">Spring Boot</text>
+                <line x1="0" y1="70" x2="300" y2="70" stroke="#1D1D22" stroke-width="0.7"/>
+                <circle cx="6" cy="70" r="2.6" fill="#B6B6BE"/><text x="18" y="73" fill="#B6B6BE">technical leadership</text>
+                <line x1="0" y1="102" x2="300" y2="102" stroke="#1D1D22" stroke-width="0.7"/>
+                <circle cx="6" cy="102" r="2.1" fill="#8A8A94"/><text x="18" y="105" fill="#8A8A94">Tomcat</text>
+                <line x1="0" y1="130" x2="300" y2="130" stroke="#1D1D22" stroke-width="0.7"/>
+                <circle cx="6" cy="130" r="2.1" fill="#8A8A94"/><text x="18" y="133" fill="#8A8A94">Oracle</text>
+                <line x1="0" y1="158" x2="300" y2="158" stroke="#1D1D22" stroke-width="0.7"/>
+                <circle cx="6" cy="158" r="2.1" fill="#8A8A94"/><text x="18" y="161" fill="#8A8A94">Cloudera</text>
+                <line x1="0" y1="186" x2="300" y2="186" stroke="#1D1D22" stroke-width="0.7"/>
+                <circle cx="6" cy="186" r="2.1" fill="#8A8A94"/><text x="18" y="189" fill="#8A8A94">MDM</text>
+                <line x1="0" y1="214" x2="300" y2="214" stroke="#1D1D22" stroke-width="0.7"/>
+                <circle cx="6" cy="214" r="1.8" fill="#8A8A94"/><text x="18" y="217" fill="#8A8A94">code review</text>
+                <circle cx="152" cy="214" r="1.8" fill="#8A8A94"/><text x="164" y="217" fill="#8A8A94">mentoring</text>
+              </g>
+            </svg>
+          </div>
+        </article>
+
+        <article class="record" id="p-sncf-platform">
+          <p class="kicker">SNCF</p>
+          <h3 class="title">Platform upgrade programme</h3>
+
+          <p class="rule">Entries carry a written argument only where there was an argument to have.</p>
+
+          <dl class="fields">
+            <div class="frow"><dt>Role</dt><dd>Technical lead</dd></div>
+            <div class="frow"><dt>Team</dt><dd>11</dd></div>
+            <div class="frow"><dt>Built</dt><dd>Major Java upgrades and Cloudera upgrades across the surrounding platform, against significant accumulated technical debt on an ageing on-premise stack with dated supervision tooling.</dd></div>
+          </dl>
+
+          <div class="field">
+            <p class="field-hd" id="sk-p-sncf-plat">Condensed</p>
+            <svg class="field-svg" viewBox="0 0 300 130" role="img"
+                 aria-labelledby="sk-p-sncf-plat"
+                 aria-label="Five skills: Java, Cloudera, Tomcat, on-premise, migration.">
+              <g font-family="Helvetica Neue,Helvetica,Arial,sans-serif"
+                 font-size="9.5" font-weight="300" letter-spacing="1.5">
+                <line x1="0" y1="14" x2="300" y2="14" stroke="#1D1D22" stroke-width="0.7"/>
+                <circle cx="6" cy="14" r="2.6" fill="#B6B6BE"/><text x="18" y="17" fill="#B6B6BE">Java</text>
+                <line x1="0" y1="42" x2="300" y2="42" stroke="#1D1D22" stroke-width="0.7"/>
+                <circle cx="6" cy="42" r="2.6" fill="#B6B6BE"/><text x="18" y="45" fill="#B6B6BE">Cloudera</text>
+                <line x1="0" y1="74" x2="300" y2="74" stroke="#1D1D22" stroke-width="0.7"/>
+                <circle cx="6" cy="74" r="2.1" fill="#8A8A94"/><text x="18" y="77" fill="#8A8A94">Tomcat</text>
+                <line x1="0" y1="102" x2="300" y2="102" stroke="#1D1D22" stroke-width="0.7"/>
+                <circle cx="6" cy="102" r="2.1" fill="#8A8A94"/><text x="18" y="105" fill="#8A8A94">on-premise</text>
+                <line x1="0" y1="130" x2="300" y2="130" stroke="#1D1D22" stroke-width="0.7"/>
+                <circle cx="6" cy="130" r="2.1" fill="#8A8A94"/><text x="18" y="133" fill="#8A8A94">migration</text>
+              </g>
+            </svg>
+          </div>
+        </article>
+
+      </div><!-- /records -->
+    </div><!-- /fb-body -->
+  </div><!-- /fb -->
+
+  </div>
+  <p class="vp-note"><b>The projection transposes rather than scaling.</b> Time runs down the page — present at the top — so the plate agrees with the phone's own scroll direction and gets the axis it has room for. Each Client becomes a stem, labels run horizontally into the width, and the ring is drawn at the same 2.2 ratio it has on the desktop plate. The index becomes a stacked list with the ring in a fixed left gutter; field rows stack their labels above their values; the Notable is set at 15px because the measure narrowed, and not one word of it is cut.</p>
+</section>
+
+</div>
+</body>
+</html>

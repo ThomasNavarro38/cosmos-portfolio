@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reverse Light — Brainstorm Log</title>
+<style>
+:root{
+  --void:#04060f;
+  --void-2:#070b1a;
+  --deep:#0a1024;
+  --ink:#e8ecf8;
+  --ink-dim:#9aa6c8;
+  --ink-faint:#67729a;
+  --blue:#6ea8ff;
+  --violet:#a98cff;
+  --cyan:#63e0e6;
+  --amber:#ffb45c;
+  --amber-hot:#ffd9a0;
+  --user:#7fd7ff;
+  --coach:#b39bff;
+  --rule:rgba(140,160,220,.16);
+  --panel:rgba(120,150,230,.045);
+  --mono:ui-monospace,"SF Mono","Cascadia Mono","Segoe UI Mono","Roboto Mono",Menlo,Consolas,monospace;
+  --sans:"Segoe UI",-apple-system,BlinkMacSystemFont,Inter,Roboto,Helvetica,Arial,sans-serif;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  --maxw:940px;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+html,body{max-width:100%;overflow-x:hidden}
+body{
+  margin:0;
+  background:var(--void);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:16px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+
+/* ---------- sky ---------- */
+#sky{position:fixed;inset:0;z-index:0;pointer-events:none}
+#stars{display:block;width:100%;height:100%}
+.nofx #stars{opacity:.5}
+.veil{
+  position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:
+    radial-gradient(1100px 700px at 78% 8%, rgba(90,120,255,.16), transparent 62%),
+    radial-gradient(900px 640px at 12% 34%, rgba(150,90,255,.13), transparent 64%),
+    radial-gradient(1000px 800px at 50% 96%, rgba(255,150,60,.10), transparent 66%);
+  mix-blend-mode:screen;
+}
+.grain{
+  position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.5;
+  background-image:radial-gradient(rgba(255,255,255,.035) .5px, transparent .5px);
+  background-size:3px 3px;
+}
+
+/* ---------- shell ---------- */
+.page{position:relative;z-index:3}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 clamp(18px,5vw,40px)}
+section{position:relative;padding:clamp(64px,11vh,120px) 0}
+
+/* ---------- progress / clock ---------- */
+.hud{
+  position:fixed;top:0;left:0;right:0;z-index:40;
+  display:flex;align-items:center;gap:14px;
+  padding:10px clamp(14px,4vw,28px);
+  font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-faint);
+  background:linear-gradient(to bottom,rgba(4,6,15,.9),rgba(4,6,15,0));
+  pointer-events:none;
+}
+.hud .rail{flex:1;height:1px;background:var(--rule);position:relative;overflow:hidden}
+.hud .rail i{position:absolute;inset:0 100% 0 0;background:linear-gradient(90deg,var(--blue),var(--violet),var(--amber));transition:right .12s linear}
+.hud .clock{color:var(--ink-dim);min-width:8ch;text-align:right}
+@media (max-width:560px){.hud .tag{display:none}}
+
+/* ---------- typography ---------- */
+.eyebrow{
+  font-family:var(--mono);font-size:11px;letter-spacing:.28em;text-transform:uppercase;
+  color:var(--ink-faint);margin:0 0 14px;
+}
+h1{
+  font-family:var(--serif);
+  font-size:clamp(44px,10vw,104px);
+  line-height:.95;letter-spacing:-.025em;font-weight:400;margin:0 0 .3em;
+}
+h1 .flip{
+  display:inline-block;
+  background:linear-gradient(180deg,var(--ink),var(--blue) 55%,var(--violet));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+h2{
+  font-family:var(--serif);font-weight:400;
+  font-size:clamp(28px,5.2vw,48px);line-height:1.06;letter-spacing:-.02em;
+  margin:0 0 .35em;
+}
+h3{font-size:15px;letter-spacing:.02em;margin:0 0 8px;font-weight:600}
+p{margin:0 0 1.1em;color:var(--ink-dim)}
+.lede{font-size:clamp(17px,2.3vw,21px);line-height:1.55;color:var(--ink);max-width:60ch}
+.sub{max-width:64ch}
+a{color:var(--blue)}
+
+/* ---------- hero ---------- */
+.hero{min-height:100svh;display:flex;flex-direction:column;justify-content:center;padding-top:70px}
+.hero .meta{
+  display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:34px;
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);
+}
+.hero .meta b{color:var(--ink-dim);font-weight:500}
+.scrollcue{
+  margin-top:52px;font-family:var(--mono);font-size:11px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--ink-faint);display:flex;align-items:center;gap:12px;
+}
+.scrollcue .arrow{width:1px;height:44px;background:linear-gradient(var(--ink-faint),transparent);display:block}
+
+/* ---------- reveal ---------- */
+.rv{opacity:0;transform:translateY(26px);transition:opacity .9s cubic-bezier(.2,.7,.3,1),transform .9s cubic-bezier(.2,.7,.3,1)}
+.rv.in{opacity:1;transform:none}
+.nojs .rv,.nofx .rv{opacity:1;transform:none;transition:none}
+
+/* ---------- section header ---------- */
+.sechead{border-top:1px solid var(--rule);padding-top:26px;margin-bottom:38px}
+.sechead .idx{
+  font-family:var(--mono);font-size:11px;letter-spacing:.24em;text-transform:uppercase;
+  display:flex;justify-content:space-between;gap:16px;color:var(--ink-faint);margin-bottom:20px;
+}
+.sechead .idx .k{color:var(--blue)}
+
+/* ---------- 1. assumption reversal ---------- */
+.flipcard{
+  border:1px solid var(--rule);border-radius:3px;overflow:hidden;
+  background:linear-gradient(180deg,rgba(110,168,255,.05),rgba(110,168,255,.01));
+  margin-bottom:14px;
+}
+.flipcard .was,.flipcard .now{padding:16px 20px}
+.flipcard .was{
+  color:var(--ink-faint);font-family:var(--mono);font-size:12.5px;letter-spacing:.02em;
+  border-bottom:1px solid var(--rule);
+  background:rgba(0,0,0,.22);
+  text-decoration:line-through;text-decoration-color:rgba(255,120,120,.5);text-decoration-thickness:1px;
+}
+.flipcard .was::before{
+  content:"assumed";display:block;font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--ink-faint);opacity:.7;margin-bottom:6px;text-decoration:none;
+}
+.flipcard .now{position:relative;color:var(--ink);font-size:15.5px}
+.flipcard .now::before{
+  content:"reversed";display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.24em;
+  text-transform:uppercase;color:var(--blue);margin-bottom:6px;
+}
+.flipcard.is-hero{
+  border-color:rgba(127,215,255,.4);
+  box-shadow:0 0 0 1px rgba(127,215,255,.1),0 18px 60px -30px rgba(110,190,255,.6);
+}
+
+/* ---------- 2. swarm logic ---------- */
+.swarm{position:relative}
+.rules{list-style:none;margin:0;padding:0;counter-reset:r}
+.rules li{
+  counter-increment:r;position:relative;padding:16px 0 16px 62px;
+  border-bottom:1px solid var(--rule);
+}
+.rules li::before{
+  content:"RULE " counter(r);position:absolute;left:0;top:19px;
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--violet);
+}
+.rules li::after{
+  content:"";position:absolute;left:6px;top:44px;bottom:-1px;width:1px;
+  background:linear-gradient(var(--rule),transparent);
+}
+.rules li:last-child{border-bottom:none}
+.rules li:last-child::after{display:none}
+.rules b{color:var(--ink);font-weight:600}
+.rules span{display:block;color:var(--ink-dim);font-size:14.5px;margin-top:4px}
+
+.nodes{
+  display:flex;flex-wrap:wrap;gap:10px;margin:26px 0 0;padding:22px;
+  border:1px dashed var(--rule);border-radius:4px;background:var(--panel);
+}
+.node{
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;
+  padding:7px 13px;border-radius:100px;border:1px solid var(--rule);
+  color:var(--ink-dim);background:rgba(0,0,0,.25);white-space:nowrap;
+}
+.node.body{border-color:rgba(110,168,255,.4);color:var(--blue)}
+.node.meteor{border-color:rgba(255,180,92,.4);color:var(--amber)}
+.nodes .cap{
+  flex-basis:100%;font-family:var(--mono);font-size:10px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--ink-faint);margin-bottom:2px;
+}
+
+/* ---------- 3. TRIZ ---------- */
+.triz{display:grid;gap:16px}
+.contra{
+  display:grid;grid-template-columns:1fr auto 1fr;align-items:stretch;gap:0;
+  border:1px solid var(--rule);border-radius:3px;overflow:hidden;background:var(--panel);
+}
+.contra .side{padding:18px 20px;font-size:14.5px;color:var(--ink-dim)}
+.contra .side .lbl{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--ink-faint);display:block;margin-bottom:7px;
+}
+.contra .a{background:linear-gradient(90deg,rgba(110,168,255,.09),transparent)}
+.contra .b{background:linear-gradient(-90deg,rgba(255,120,160,.09),transparent);text-align:right}
+.contra .b .lbl{color:rgba(255,150,180,.75)}
+.contra .a .lbl{color:rgba(140,190,255,.8)}
+.contra .vs{
+  display:flex;align-items:center;justify-content:center;padding:0 14px;
+  font-family:var(--mono);font-size:11px;color:var(--ink-faint);
+  border-left:1px solid var(--rule);border-right:1px solid var(--rule);
+  background:rgba(0,0,0,.3);
+}
+.resolve{
+  margin-top:-1px;border:1px solid rgba(99,224,230,.28);border-top:none;
+  border-radius:0 0 3px 3px;padding:16px 20px;
+  background:linear-gradient(180deg,rgba(99,224,230,.07),transparent);
+  font-size:15px;color:var(--ink);
+}
+.resolve .lbl{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--cyan);display:block;margin-bottom:7px;
+}
+.trizblock{margin-bottom:22px}
+@media (max-width:640px){
+  .contra{grid-template-columns:1fr}
+  .contra .b{text-align:left;background:linear-gradient(90deg,rgba(255,120,160,.09),transparent)}
+  .contra .vs{border:none;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);padding:7px}
+}
+
+/* ---------- 4. values archaeology (strata) ---------- */
+.strata{border-left:2px solid var(--rule);margin-left:6px}
+.layer{position:relative;padding:0 0 0 30px;margin-bottom:0}
+.layer .depth{
+  position:absolute;left:-2px;top:0;width:2px;height:100%;
+  background:linear-gradient(var(--amber),transparent);opacity:.35;
+}
+.layer .band{
+  padding:20px 22px;border:1px solid var(--rule);
+  margin-bottom:10px;border-radius:3px;
+}
+.layer .band .d{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--ink-faint);margin-bottom:8px;
+}
+.layer .band p{margin:0;font-size:15px}
+.layer.l1 .band{background:linear-gradient(90deg,rgba(110,168,255,.05),transparent)}
+.layer.l2 .band{background:linear-gradient(90deg,rgba(169,140,255,.06),transparent)}
+.layer.l3 .band{background:linear-gradient(90deg,rgba(255,180,92,.07),transparent)}
+.layer.l3 .band p{color:var(--ink);font-size:16px}
+
+/* ---------- attribution ---------- */
+.by{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
+  padding:3px 9px;border-radius:100px;border:1px solid var(--rule);
+  vertical-align:middle;white-space:nowrap;
+}
+.by::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
+.by.u{color:var(--user);border-color:rgba(127,215,255,.34);background:rgba(127,215,255,.07)}
+.by.c{color:var(--coach);border-color:rgba(179,155,255,.3);background:rgba(179,155,255,.06)}
+.attrline{margin:0 0 12px}
+
+/* ---------- meteor feature ---------- */
+.meteorbox{
+  position:relative;overflow:hidden;
+  border:1px solid rgba(255,180,92,.3);border-radius:4px;
+  padding:clamp(26px,5vw,42px);margin:34px 0 8px;
+  background:
+    radial-gradient(700px 240px at 100% 0%, rgba(255,180,92,.13), transparent 70%),
+    linear-gradient(180deg, rgba(255,180,92,.05), rgba(0,0,0,.25));
+}
+.meteorbox .streak{
+  position:absolute;top:-40px;right:-40px;width:340px;height:1.5px;
+  background:linear-gradient(90deg,transparent,var(--amber-hot));
+  transform:rotate(34deg);transform-origin:right center;opacity:.7;
+  filter:blur(.3px);
+}
+.meteorbox .streak::after{
+  content:"";position:absolute;right:0;top:-2px;width:5px;height:5px;border-radius:50%;
+  background:var(--amber-hot);box-shadow:0 0 18px 5px rgba(255,190,110,.7);
+}
+.meteorbox blockquote{
+  margin:0 0 18px;font-family:var(--serif);
+  font-size:clamp(22px,4.4vw,36px);line-height:1.18;color:var(--ink);letter-spacing:-.015em;
+}
+.meteorbox blockquote em{color:var(--amber-hot);font-style:normal}
+.meteorbox .why{max-width:58ch;color:var(--ink-dim);margin:0}
+
+/* ---------- collapse / synthesis ---------- */
+#collapse{padding-top:clamp(70px,14vh,150px)}
+.funnel{display:grid;gap:12px;margin:0 auto;max-width:760px}
+.frag{
+  border:1px solid var(--rule);border-radius:3px;padding:15px 20px;
+  background:rgba(255,180,92,.035);
+  font-size:15px;color:var(--ink-dim);
+  transform-origin:50% 100%;
+  transition:transform 1s cubic-bezier(.4,0,.2,1),opacity 1s;
+}
+.frag b{color:var(--amber-hot);font-weight:600}
+.funnel .frag:nth-child(1){width:100%}
+.funnel .frag:nth-child(2){width:94%;margin-left:3%}
+.funnel .frag:nth-child(3){width:88%;margin-left:6%}
+.funnel .frag:nth-child(4){width:82%;margin-left:9%}
+
+.singularity{
+  position:relative;height:clamp(210px,34vh,300px);
+  display:flex;align-items:center;justify-content:center;margin:44px 0 30px;
+}
+.disc{
+  width:clamp(120px,26vw,176px);aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle at 50% 50%, #000 0 41%, rgba(255,200,130,.95) 42%, rgba(255,150,60,.5) 49%, transparent 62%);
+  box-shadow:0 0 70px 14px rgba(255,160,70,.24), inset 0 0 34px rgba(0,0,0,1);
+  position:relative;
+}
+.disc::before,.disc::after{
+  content:"";position:absolute;inset:-16%;border-radius:50%;
+  border:1px solid rgba(255,180,100,.2);
+  transform:rotateX(74deg);
+}
+.disc::after{inset:-34%;border-color:rgba(255,180,100,.1)}
+.spin .disc::before{animation:orbit 18s linear infinite}
+.spin .disc::after{animation:orbit 32s linear infinite reverse}
+@keyframes orbit{to{transform:rotateX(74deg) rotate(360deg)}}
+.stillness{
+  text-align:center;font-family:var(--mono);font-size:11px;letter-spacing:.32em;
+  text-transform:uppercase;color:var(--amber);opacity:.75;
+}
+
+.direction{
+  border:1px solid rgba(255,180,92,.26);border-radius:4px;
+  padding:clamp(24px,4.6vw,38px);margin-top:34px;
+  background:linear-gradient(180deg,rgba(255,180,92,.06),transparent);
+}
+.direction .lbl{
+  font-family:var(--mono);font-size:10px;letter-spacing:.28em;text-transform:uppercase;
+  color:var(--amber);margin-bottom:14px;
+}
+.direction p{
+  font-family:var(--serif);font-size:clamp(19px,3.2vw,27px);line-height:1.35;
+  color:var(--ink);margin:0;letter-spacing:-.01em;
+}
+
+/* ---------- moscow ---------- */
+.moscow{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.col{border:1px solid var(--rule);border-radius:3px;padding:20px;background:var(--panel)}
+.col h3{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;
+  margin:0 0 14px;padding-bottom:10px;border-bottom:1px solid var(--rule);
+}
+.col.must{border-color:rgba(110,168,255,.34);background:linear-gradient(180deg,rgba(110,168,255,.06),transparent)}
+.col.must h3{color:var(--blue)}
+.col.should h3{color:var(--violet)}
+.col.wont h3{color:#8b93b5}
+.col.wont{opacity:.66}
+.col ul{list-style:none;margin:0;padding:0}
+.col li{
+  font-size:14px;color:var(--ink-dim);padding:6px 0 6px 18px;position:relative;line-height:1.45;
+}
+.col li::before{
+  content:"";position:absolute;left:0;top:12px;width:6px;height:1px;background:currentColor;opacity:.5;
+}
+.col.wont li{text-decoration:line-through;text-decoration-color:rgba(255,255,255,.2)}
+
+/* ---------- build order ---------- */
+.build{list-style:none;margin:0;padding:0;position:relative}
+.build::before{
+  content:"";position:absolute;left:26px;top:24px;bottom:24px;width:1px;
+  background:linear-gradient(var(--blue),var(--violet),var(--amber));opacity:.4;
+}
+.build li{position:relative;padding:0 0 18px 68px;min-height:54px}
+.build .m{
+  position:absolute;left:0;top:0;width:53px;height:53px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:13px;letter-spacing:.04em;
+  border:1px solid var(--rule);background:var(--void-2);color:var(--ink-dim);z-index:1;
+}
+.build li:nth-child(1) .m{border-color:rgba(110,168,255,.55);color:var(--blue)}
+.build li:nth-child(2) .m{border-color:rgba(130,150,255,.45);color:#8fa5ff}
+.build li:nth-child(3) .m{border-color:rgba(169,140,255,.45);color:var(--violet)}
+.build li:nth-child(4) .m{border-color:rgba(255,180,92,.5);color:var(--amber)}
+.build li:nth-child(5) .m{border-color:rgba(255,210,140,.45);color:var(--amber-hot)}
+.build .t{font-size:16px;color:var(--ink);font-weight:600;padding-top:11px}
+.build .d{font-size:14px;color:var(--ink-dim);margin-top:3px}
+
+/* ---------- inventory strip ---------- */
+.counts{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule);border-radius:3px;overflow:hidden;margin-top:6px;
+}
+.counts div{background:var(--void);padding:18px 16px}
+.counts .n{font-family:var(--serif);font-size:clamp(26px,5vw,38px);line-height:1;color:var(--ink)}
+.counts .l{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--ink-faint);margin-top:8px;
+}
+
+/* ---------- footer ---------- */
+footer{
+  border-top:1px solid var(--rule);padding:40px 0 70px;margin-top:40px;
+  font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-faint);display:flex;flex-wrap:wrap;gap:10px 28px;justify-content:space-between;
+}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .rv{opacity:1;transform:none;transition:none}
+  .spin .disc::before,.spin .disc::after{animation:none}
+  .frag{transition:none}
+}
+</style>
+</head>
+<body class="nojs">
+
+<div id="sky" aria-hidden="true"><canvas id="stars"></canvas></div>
+<div class="veil" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<div class="hud" aria-hidden="true">
+  <span class="tag">Reverse Light</span>
+  <span class="rail"><i id="railfill"></i></span>
+  <span class="clock" id="clock">now</span>
+</div>
+
+<main class="page">
+
+<!-- ===== HERO — the present ===== -->
+<section class="hero">
+  <div class="wrap">
+    <p class="eyebrow rv">Brainstorming session &nbsp;·&nbsp; 2026-08-30 &nbsp;·&nbsp; complete</p>
+    <h1 class="rv">Reverse&nbsp;Light<br><span class="flip">a cosmos that runs backward</span></h1>
+    <p class="lede sub rv">A scrollytelling portfolio where scrolling down travels into the past, the layout is grown from a JSON file rather than placed by hand, and the whole universe finally collapses into a black hole that <em>is</em> the contact form.</p>
+    <div class="meta rv">
+      <span><b>Mode</b> &nbsp;partner</span>
+      <span><b>Techniques</b> &nbsp;4</span>
+      <span><b>Ideas</b> &nbsp;120</span>
+      <span><b>Outcome</b> &nbsp;converged</span>
+    </div>
+    <p class="lede sub rv" style="margin-top:38px;max-width:56ch;color:var(--ink-dim);font-size:16px">The brief: a living document of a career — a structure that grows as Thomas does, still useful and still updatable in five years.</p>
+    <div class="scrollcue rv"><span class="arrow"></span> Scroll to go backward</div>
+  </div>
+</section>
+
+<!-- ===== TECHNIQUE 1 — ASSUMPTION REVERSAL ===== -->
+<section id="t1">
+  <div class="wrap">
+    <div class="sechead rv">
+      <div class="idx"><span class="k">Technique 01</span><span>Assumption Reversal · 42 ideas</span></div>
+      <h2>Every default, turned over.</h2>
+      <p class="sub">The session opened by naming what a portfolio site is <em>supposed</em> to do — then refusing each assumption in turn. Four of the reversals survived to become structural commitments.</p>
+    </div>
+
+    <div class="flipcard is-hero rv">
+      <div class="was">Time runs forward. A career reads oldest to newest.</div>
+      <div class="now">Time runs <strong>BACKWARD</strong>. Scrolling down reverses time — present to past. You meet the person as they are now, then travel outward through what made them. <span class="by u">by user</span></div>
+    </div>
+
+    <div class="flipcard rv">
+      <div class="was">Free exploration is the generous choice — let the visitor roam.</div>
+      <div class="now">A <strong>guided trajectory on rails</strong> by default. Free flight exists, but only on request. Curation is the gift; wandering is the escape hatch. <span class="by u">by user</span></div>
+    </div>
+
+    <div class="flipcard rv">
+      <div class="was">Each phase links to the next through a wormhole, ending in a contact form bolted on.</div>
+      <div class="now">After the reversed big bang the system <strong>collapses into a black hole</strong> — and that black hole becomes the contact form. The ending isn't appended; it's where all the mass ends up. <span class="by u">by user</span></div>
+    </div>
+
+    <div class="flipcard rv">
+      <div class="was">"Realistic" means astronomically accurate — true scale, true distance.</div>
+      <div class="now">Realistic means <strong>textures, lighting, material quality</strong>. Believable to the eye, not to an astronomer. Real distances were explicitly dropped. <span class="by u">by user</span></div>
+    </div>
+
+    <div class="flipcard rv">
+      <div class="was">A collapsing universe should feel dramatic, ominous, final.</div>
+      <div class="now">The emotional arc is <strong>awe, then calm</strong>. The universe dies and it feels peaceful. Not violent. Not ominous. <span class="by u">by user</span></div>
+    </div>
+
+    <p class="attrline rv" style="margin-top:26px;color:var(--ink-faint);font-size:13.5px">Also fixed here, before the reversals began: three phases — education, professional, contact <span class="by u">by user</span> · a JSON data structure embedded directly in the project, no CMS and no backend <span class="by u">by user</span> · gravity-driven pacing kept as nice-to-have, contingent on complexity staying low <span class="by u">by user</span>.</p>
+  </div>
+</section>
+
+<!-- ===== TECHNIQUE 2 — SWARM LOGIC ===== -->
+<section id="t2">
+  <div class="wrap swarm">
+    <div class="sechead rv">
+      <div class="idx"><span class="k">Technique 02</span><span>Swarm Logic · 80 ideas cumulative</span></div>
+      <h2>No layout. Only rules.</h2>
+      <p class="sub">Nothing in the cosmos gets placed. Every body finds its own position by obeying a small set of local rules — which is also what makes the site maintainable by someone who admits he will not maintain it.</p>
+    </div>
+
+    <ol class="rules rv">
+      <li>
+        <b>Force-directed layout</b>
+        <span>Positions emerge from attraction and repulsion between entries. Nothing is authored by coordinate. <span class="by c">by coach</span></span>
+      </li>
+      <li>
+        <b>Mass-damped scroll</b>
+        <span>Heavier bodies resist. Scroll velocity is felt differently depending on what you are passing. <span class="by c">by coach</span></span>
+      </li>
+      <li>
+        <b>Disable repulsion to collapse</b>
+        <span>The ending is not a separate scene. Switch off one force and the same simulation falls inward on its own. <span class="by c">by coach</span></span>
+      </li>
+    </ol>
+
+    <p class="rv" style="margin-top:24px">Those three rules were named by the coach as the <strong style="color:var(--ink)">spine</strong> of the system — one simulation serving layout, pacing, and finale.</p>
+
+    <div class="meteorbox rv">
+      <span class="streak" aria-hidden="true"></span>
+      <p class="eyebrow" style="margin-bottom:18px">The remark that turned out to be architecture <span class="by u">by user</span></p>
+      <blockquote>Odd items — certs, talks, languages, OSS, gaps — are <em>meteors</em>. Transient objects, not placed bodies.</blockquote>
+      <p class="why">Said offhand. It became the schema. The coach's reading: <strong style="color:var(--ink)">absence of fields classifies</strong>. No parent and no duration means transient — a meteor. Nothing needs a type flag, nothing needs special-casing, and a new kind of entry can arrive years later without touching the renderer. This is the mechanism that makes the document <em>living</em>, and the synthesis later named it the single most consequential moment of the session.</p>
+    </div>
+
+    <div class="nodes rv">
+      <span class="cap">The swarm, classified by what it lacks</span>
+      <span class="node body">education · has parent + duration</span>
+      <span class="node body">company · has parent + duration</span>
+      <span class="node body">project · has parent + duration</span>
+      <span class="node meteor">certification · meteor</span>
+      <span class="node meteor">talk · meteor</span>
+      <span class="node meteor">language · meteor</span>
+      <span class="node meteor">open source · meteor</span>
+      <span class="node meteor">gap · meteor</span>
+    </div>
+
+    <div class="flipcard rv" style="margin-top:26px">
+      <div class="was">Give the author fine control — let positions be overridden where the layout looks wrong.</div>
+      <div class="now"><strong>ONE KNOB.</strong> An entry, plus a single weight / relevance number. No position overrides at all — Thomas self-identifies as lazy about maintenance, and overrides would rot the system from the inside. <span class="by u">by user</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== TECHNIQUE 3 — TRIZ ===== -->
+<section id="t3">
+  <div class="wrap">
+    <div class="sechead rv">
+      <div class="idx"><span class="k">Technique 03</span><span>TRIZ Contradiction · 120 ideas cumulative</span></div>
+      <h2>Two forces that could not both win.</h2>
+      <p class="sub">TRIZ began by naming what may never be traded away. Naming the invariants did something unplanned: it made everything <em>not</em> on the list explicitly disposable.</p>
+    </div>
+
+    <div class="trizblock rv">
+      <div class="contra">
+        <div class="side a"><span class="lbl">Non-negotiable</span>Realism in materials and lighting. Immersion. Visitor awe. <span class="by u">by user</span></div>
+        <div class="vs">×</div>
+        <div class="side b"><span class="lbl">Now sacrificeable</span>Load time. Mobile parity. Breadth of content. Build time. <span class="by c">by coach</span></div>
+      </div>
+      <div class="resolve"><span class="lbl">Resolution</span>Everything outside the invariant list becomes a budget to spend, not a constraint to honour. The tradeable set was fixed before any of it had to be traded.</div>
+    </div>
+
+    <div class="trizblock rv">
+      <div class="contra">
+        <div class="side a"><span class="lbl">Requires</span>A quality bar in 3D that Thomas refuses to lower. <span class="by u">by user</span></div>
+        <div class="vs">×</div>
+        <div class="side b"><span class="lbl">Lacks</span>The hand-authoring skill to reach that bar. Named plainly, out loud. <span class="by u">by user</span></div>
+      </div>
+      <div class="resolve"><span class="lbl">TRIZ separation</span>Separate <strong>where realism is authored</strong> from <strong>where it is displayed</strong>. Realism can be bought, borrowed, or baked — it does not have to be modelled. <span class="by c">by coach</span></div>
+    </div>
+
+    <div class="trizblock rv">
+      <div class="contra">
+        <div class="side a"><span class="lbl">Wants</span>Interactive, explorable, responsive to the visitor.</div>
+        <div class="vs">×</div>
+        <div class="side b"><span class="lbl">Wants</span>Cinematic fidelity in the opening and the collapse.</div>
+      </div>
+      <div class="resolve"><span class="lbl">Route C — hybrid, accepted</span>Real-time 3D for the interactive middle: spheres, NASA textures, drei shaders. Pre-rendered Blender for the two bookends — the opening shot and the final collapse. <span class="by u">by user</span> &nbsp;It felt like relief, not cheating.</div>
+    </div>
+
+    <div class="trizblock rv">
+      <div class="contra">
+        <div class="side a"><span class="lbl">Method rejected</span>Model it. Sculpt it. Author every surface by hand.</div>
+        <div class="vs">→</div>
+        <div class="side b"><span class="lbl">Method chosen</span>Assemble it from public-domain physical truth.</div>
+      </div>
+      <div class="resolve"><span class="lbl">Realism strategy</span>NASA / ESA public-domain texture maps, drei built-ins, and post-processing film artifacts. Not modelling. <span class="by c">by coach</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== TECHNIQUE 4 — VALUES ARCHAEOLOGY ===== -->
+<section id="t4">
+  <div class="wrap">
+    <div class="sechead rv">
+      <div class="idx"><span class="k">Technique 04</span><span>Values Archaeology · digging downward</span></div>
+      <h2>What is this actually for?</h2>
+      <p class="sub">The last technique dug beneath the mechanics to find the value the whole thing serves — and corrected a misreading that had quietly shaped the session up to that point.</p>
+    </div>
+
+    <div class="strata rv">
+      <div class="layer l1">
+        <span class="depth" aria-hidden="true"></span>
+        <div class="band">
+          <div class="d">Surface stratum — the artifact</div>
+          <p>A cosmos you scroll through. Bodies, rails, textures, a collapse.</p>
+        </div>
+      </div>
+      <div class="layer l2">
+        <div class="band">
+          <div class="d">Mid stratum — the assumed motive</div>
+          <p>The coach had been reading the project as <strong style="color:var(--ink)">inward-facing</strong> — a personal monument, an exercise in craft for its own sake. <span class="by c">correction by coach</span></p>
+        </div>
+      </div>
+      <div class="layer l3">
+        <div class="band">
+          <div class="d">Bedrock — the core value</div>
+          <p>The site is <strong>for others</strong>. So they know what Thomas worked on and what his skills are — delivered in a fun way, with awe. Not introspective. <strong>Communication is the job; awe is the delivery mechanism.</strong> <span class="by u">by user</span></p>
+        </div>
+      </div>
+    </div>
+
+    <p class="rv" style="margin-top:26px;max-width:64ch">The consequence was immediate and binding: <strong style="color:var(--ink)">content legibility</strong> — the skills, the work, plainly readable — became a hard requirement standing alongside awe, not beneath it. A readable information layer entered the MUST list on the strength of this dig alone.</p>
+  </div>
+</section>
+
+<!-- ===== CONVERGENCE — MOSCOW ===== -->
+<section id="moscow">
+  <div class="wrap">
+    <div class="sechead rv">
+      <div class="idx"><span class="k">Convergence</span><span>MoSCoW · by coach</span></div>
+      <h2>What survives contact with a scope.</h2>
+      <p class="sub">120 ideas, sorted once, honestly.</p>
+    </div>
+    <div class="moscow">
+      <div class="col must rv">
+        <h3>Must</h3>
+        <ul>
+          <li>Backward scroll</li>
+          <li>Collapse ending</li>
+          <li>Rails navigation</li>
+          <li>JSON source of truth</li>
+          <li>Force-directed layout</li>
+          <li>Three mapping rules</li>
+          <li>Weight knob</li>
+          <li>Readable info layer</li>
+          <li>NASA + drei + postFX</li>
+          <li>Pre-rendered collapse</li>
+          <li>Flat star chart</li>
+        </ul>
+      </div>
+      <div class="col should rv">
+        <h3>Should</h3>
+        <ul>
+          <li>Free flight</li>
+          <li>Nebula gaps</li>
+          <li>Meteor taxonomy</li>
+          <li>Mass-damped scroll</li>
+          <li>Annotations</li>
+          <li>Progressive load</li>
+          <li>Date readout</li>
+        </ul>
+      </div>
+      <div class="col wont rv">
+        <h3>Won't</h3>
+        <ul>
+          <li>Mobile 3D</li>
+          <li>Real distances</li>
+          <li>Position overrides</li>
+          <li>CMS</li>
+        </ul>
+      </div>
+    </div>
+    <div class="counts rv">
+      <div><div class="n">42</div><div class="l">after reversal</div></div>
+      <div><div class="n">80</div><div class="l">after swarm</div></div>
+      <div><div class="n">120</div><div class="l">after TRIZ</div></div>
+      <div><div class="n">11</div><div class="l">musts</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== BUILD ORDER ===== -->
+<section id="build">
+  <div class="wrap">
+    <div class="sechead rv">
+      <div class="idx"><span class="k">Build order</span><span>M1 → M5 · accepted by user</span></div>
+      <h2>Greybox first. No vertical slice.</h2>
+      <p class="sub">The coach's open question after MoSCoW was what milestone one should contain. The answer was to go straight into it — structure before beauty, deliberately.</p>
+    </div>
+    <ol class="build rv">
+      <li>
+        <span class="m">M1</span>
+        <div class="t">Greybox</div>
+        <div class="d">Schema, force-directed layout, rails, backward scroll. The system moving correctly before it looks like anything.</div>
+      </li>
+      <li>
+        <span class="m">M2</span>
+        <div class="t">Information layer</div>
+        <div class="d">The legibility requirement made real — skills and work readable, per the core value.</div>
+      </li>
+      <li>
+        <span class="m">M3</span>
+        <div class="t">Realism pass</div>
+        <div class="d">NASA texture maps, drei built-ins, post-processing film artifacts. Bought and baked, not modelled.</div>
+      </li>
+      <li>
+        <span class="m">M4</span>
+        <div class="t">Collapse ending</div>
+        <div class="d">Repulsion off, gravity in. Pre-rendered Blender bookend. The black hole becomes the contact form.</div>
+      </li>
+      <li>
+        <span class="m">M5</span>
+        <div class="t">Fun layer</div>
+        <div class="d">Free flight, nebula gaps, meteors, mass damping, date readout — everything that earns delight once the spine holds.</div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- ===== SYNTHESIS — THE COLLAPSE ===== -->
+<section id="collapse">
+  <div class="wrap">
+    <div class="sechead rv">
+      <div class="idx"><span class="k">Synthesis</span><span>Everything falls inward</span></div>
+      <h2>Four observations, one direction.</h2>
+    </div>
+
+    <div class="funnel">
+      <div class="frag rv" data-frag>
+        <b>01</b> &nbsp;The offhand <b>"meteor"</b> remark was the schema architecture. Classification by field-absence is what makes the document <em>living</em>.
+      </div>
+      <div class="frag rv" data-frag>
+        <b>02</b> &nbsp;<b>Backward time</b> is one decision serving three masters at once: aesthetic conceit, recruiter-correct ordering, and a non-arbitrary home for the contact form.
+      </div>
+      <div class="frag rv" data-frag>
+        <b>03</b> &nbsp;The admitted <b>3D skill gap</b> sits in a discipline this project barely uses — space needs spheres, textures and light, all of it free and public-domain.
+      </div>
+      <div class="frag rv" data-frag>
+        <b>04</b> &nbsp;Choosing <b>calm over drama</b> defused the ominous-black-hole risk before anyone had named it as a risk.
+      </div>
+    </div>
+
+    <div class="singularity spin rv" aria-hidden="true"><div class="disc"></div></div>
+    <p class="stillness rv">stillness</p>
+
+    <div class="direction rv">
+      <div class="lbl">Chosen direction</div>
+      <p>A backward-time scrollytelling cosmos — force-directed from JSON, rails with optional free flight, NASA/drei/postFX realism with Blender bookends — collapsing into the contact form. Build M1 through M5. Greybox first.</p>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <footer>
+    <span>Brainstorming · partner mode · status complete</span>
+    <span>Cosmos scrollytelling portfolio</span>
+    <span>2026-08-30 → 2026-08-31</span>
+  </footer>
+</div>
+
+</main>
+
+<script>
+(function(){
+  var root = document.body;
+  root.classList.remove('nojs');
+
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) root.classList.add('nofx');
+
+  /* ---------- starfield ---------- */
+  var cv = document.getElementById('stars');
+  if (cv && cv.getContext) {
+    var ctx = cv.getContext('2d');
+    var stars = [], meteors = [], W = 0, H = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var COOL = ['#cfe0ff','#a9c4ff','#ffffff','#d8c9ff','#bfe9ee'];
+
+    function seed(){
+      W = cv.clientWidth; H = cv.clientHeight;
+      cv.width = Math.max(1, W * dpr); cv.height = Math.max(1, H * dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      var n = Math.round(Math.min(520, (W * H) / 2100));
+      stars = [];
+      for (var i = 0; i < n; i++){
+        var d = Math.random();
+        stars.push({
+          x: Math.random()*W, y: Math.random()*H,
+          r: d*d*1.5 + 0.25,
+          z: 0.25 + d*0.75,
+          a: 0.25 + Math.random()*0.65,
+          p: Math.random()*Math.PI*2,
+          s: 0.5 + Math.random()*1.6,
+          c: COOL[(Math.random()*COOL.length)|0]
+        });
+      }
+    }
+
+    function drawStatic(){
+      ctx.clearRect(0,0,W,H);
+      for (var i=0;i<stars.length;i++){
+        var s = stars[i];
+        ctx.globalAlpha = s.a;
+        ctx.fillStyle = s.c;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 6.2832); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    var off = 0, t = 0, raf = null;
+
+    function frame(){
+      t += 0.016;
+      ctx.clearRect(0,0,W,H);
+      for (var i=0;i<stars.length;i++){
+        var s = stars[i];
+        /* parallax: deeper stars drift less. offset is negative-scrolled = travelling back */
+        var y = s.y + off * s.z * 0.16;
+        y = ((y % (H+80)) + (H+80)) % (H+80) - 40;
+        var tw = s.a * (0.62 + 0.38 * Math.sin(t * s.s + s.p));
+        ctx.globalAlpha = tw;
+        ctx.fillStyle = s.c;
+        ctx.beginPath(); ctx.arc(s.x, y, s.r, 0, 6.2832); ctx.fill();
+        if (s.r > 1.1){
+          ctx.globalAlpha = tw * 0.14;
+          ctx.beginPath(); ctx.arc(s.x, y, s.r*4.5, 0, 6.2832); ctx.fill();
+        }
+      }
+      /* meteors — transient objects, not placed bodies */
+      if (meteors.length < 2 && Math.random() < 0.0035){
+        meteors.push({ x: Math.random()*W*1.2 - W*0.1, y: -30, v: 5 + Math.random()*5, life: 1 });
+      }
+      for (var m = meteors.length-1; m >= 0; m--){
+        var q = meteors[m];
+        q.x -= q.v * 0.85; q.y += q.v; q.life -= 0.006;
+        if (q.life <= 0 || q.y > H + 80){ meteors.splice(m,1); continue; }
+        var g = ctx.createLinearGradient(q.x, q.y, q.x + 62, q.y - 73);
+        g.addColorStop(0, 'rgba(255,205,150,' + (0.75*q.life).toFixed(3) + ')');
+        g.addColorStop(1, 'rgba(255,205,150,0)');
+        ctx.globalAlpha = 1; ctx.strokeStyle = g; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(q.x + 62, q.y - 73); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(frame);
+    }
+
+    seed();
+    if (reduce){ drawStatic(); } else { raf = requestAnimationFrame(frame); }
+
+    var rt;
+    window.addEventListener('resize', function(){
+      clearTimeout(rt);
+      rt = setTimeout(function(){ seed(); if (reduce) drawStatic(); }, 160);
+    }, {passive:true});
+
+    /* expose scroll offset to the field */
+    window.__setSkyOffset = function(v){ off = v; };
+  }
+
+  /* ---------- reveal ---------- */
+  var rvs = [].slice.call(document.querySelectorAll('.rv'));
+  if ('IntersectionObserver' in window && !reduce){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if (e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.06 });
+    rvs.forEach(function(el, i){ el.style.transitionDelay = Math.min(i % 6, 5) * 55 + 'ms'; io.observe(el); });
+  } else {
+    rvs.forEach(function(el){ el.classList.add('in'); });
+  }
+
+  /* ---------- scroll: rail, reverse clock, collapse ---------- */
+  var fill = document.getElementById('railfill');
+  var clock = document.getElementById('clock');
+  var frags = [].slice.call(document.querySelectorAll('[data-frag]'));
+  var collapse = document.getElementById('collapse');
+  var ticking = false;
+
+  /* reverse-time readout: present at the top, deep past at the bottom */
+  var EPOCHS = ['now','2026','2024','2022','2019','2016','2013','t = 0','singularity'];
+
+  function onScroll(){
+    var y = window.pageYOffset || document.documentElement.scrollTop;
+    var max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    var p = Math.min(1, Math.max(0, y / max));
+
+    if (fill) fill.style.right = (100 - p * 100).toFixed(2) + '%';
+    if (clock) clock.textContent = EPOCHS[Math.min(EPOCHS.length - 1, Math.floor(p * EPOCHS.length))];
+    if (window.__setSkyOffset) window.__setSkyOffset(-y);
+
+    /* gravitational convergence: fragments draw inward as the collapse section centres */
+    if (collapse && frags.length && !reduce){
+      var r = collapse.getBoundingClientRect();
+      var vh = window.innerHeight;
+      var k = 1 - Math.min(1, Math.max(0, (r.top + r.height * 0.35) / vh));
+      for (var i = 0; i < frags.length; i++){
+        var sc = 1 - k * 0.085 * (i + 1) / frags.length;
+        var tx = (i % 2 ? 1 : -1) * (1 - k) * 22;
+        frags[i].style.transform = 'translateX(' + tx.toFixed(1) + 'px) scale(' + sc.toFixed(4) + ')';
+      }
+    }
+    ticking = false;
+  }
+
+  window.addEventListener('scroll', function(){
+    if (!ticking){ ticking = true; requestAnimationFrame(onScroll); }
+  }, {passive:true});
+  window.addEventListener('resize', onScroll, {passive:true});
+  onScroll();
+})();
+</script>
+</body>
+</html>
