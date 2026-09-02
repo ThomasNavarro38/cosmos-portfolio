@@ -29,6 +29,8 @@ No output means the pairing holds. Filter out `UNMET OPTIONAL`: the tree carries
 | `npm run build` | Production build into `dist/` |
 | `npm run preview` | Serve the built output |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run validate` | Validate `src/data/career.json` against its schema; non-zero exit on any violation |
+| `npm test` | Run the test suite (`node --test`), including the schema's own guards |
 
 `npm run dev` serves on Vite's default `http://localhost:5173`. `npm run build` produces a fully static `dist/` — no Node process, no server, deployable to any file host (NFR-6).
 
@@ -47,3 +49,5 @@ Architecture-decision IDs (`AD-1`, `AD-3`, `AD-7`, `AD-12`) cited in the directo
 ## Dependencies
 
 All versions are pinned exactly, with no `^` or `~` range prefixes. The stack pairing was verified, not guessed; changing any pin means re-verifying the pairing.
+
+`zod` (4.5.4) gates the authored career data — see `src/data/README.md`. `@types/node` is pinned to the `24.13.x` line matching the Node 24 build target, and exists so the Node-executed validation sources typecheck; nothing in the browser bundle imports it.
