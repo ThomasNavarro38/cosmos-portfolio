@@ -20,6 +20,12 @@ resume.txt
 .claude/
 .impeccable/
 
+# Mutation-guard scratch copies. The suite writes these beside the module under
+# test so their relative imports resolve, and removes them in an `after` hook —
+# but an interrupted run leaves them behind, in a directory `tsconfig.json`
+# includes.
+src/**/.mutant-*.ts
+
 # Logs
 *.log
 npm-debug.log*

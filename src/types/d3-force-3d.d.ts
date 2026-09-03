@@ -1,6 +1,8 @@
 // `d3-force-3d` ships no type declarations and has no @types package. This
-// ambient module keeps the strict typecheck honest at the call sites Story 1.5
-// introduces; widen it as the solver actually uses more of the surface.
+// ambient module keeps the strict typecheck honest at the call sites Story 1.4
+// introduces; widen it as the solver actually uses more of the surface. An
+// over-wide shim asserts a contract nothing checks, so a declaration here should
+// have a caller in `src/derive/solve.ts`.
 declare module 'd3-force-3d' {
   export interface SimulationNode {
     x?: number;
@@ -91,10 +93,17 @@ declare module 'd3-force-3d' {
     links?: L[],
   ): ForceLink<N, L>;
 
+  // The positional argument accepts an accessor as well as a constant
+  // (`x.js:9`), which is how a node is pulled toward its own target rather than
+  // toward a single shared one. A bare `forceX()` targets zero.
+  export type AxisTarget<N extends SimulationNode> =
+    | number
+    | ((node: N, i: number, nodes: N[]) => number);
+
   export interface ForceAxis<N extends SimulationNode> extends Force<N> {
     strength(strength: number | ((node: N, i: number, nodes: N[]) => number)): this;
   }
-  export function forceX<N extends SimulationNode>(x?: number): ForceAxis<N>;
-  export function forceY<N extends SimulationNode>(y?: number): ForceAxis<N>;
-  export function forceZ<N extends SimulationNode>(z?: number): ForceAxis<N>;
+  export function forceX<N extends SimulationNode>(x?: AxisTarget<N>): ForceAxis<N>;
+  export function forceY<N extends SimulationNode>(y?: AxisTarget<N>): ForceAxis<N>;
+  export function forceZ<N extends SimulationNode>(z?: AxisTarget<N>): ForceAxis<N>;
 }
