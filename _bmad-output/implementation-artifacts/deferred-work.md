@@ -55,3 +55,27 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-3-the-three-mapping-rules-and-classification-by-absence.md`
   summary: Assert that the authored Project record is carried through the graph unmodified.
   evidence: `ProjectEntity.project` is documented as "the validated authored record, carried whole — content parity is absolute", the strongest claim in the interface, yet the only assertion touching it reads `entity.project.company`. The Shallow-forms test explicitly strips `project` out before comparing. A `deepEqual` against the parsed input would actually pin the claim.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-a-deterministic-force-solve.md`
+  summary: `ORBIT_MIN_SEPARATION` makes crowding worse at the only counts where it activates.
+  evidence: `const angle = slot * Math.max(step, ORBIT_MIN_SEPARATION)` has no modulo, so once the floor binds the angles stop closing the circle and wrap onto earlier slots. Measured at radius 1: count 18 gives a minimum chord of 0.3316 (floor just binding), count 19 gives 0.0168 — twenty times worse than the 0.331 the plain even spread would have given. The floor only binds at >=18 Projects for one Client, which is out of reach at the stated ~15-16 Bodies across ~5-6 Clients, so this is latent rather than live. Fix is a modulo plus a throw when `count * ORBIT_MIN_SEPARATION > 2*pi`.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-a-deterministic-force-solve.md`
+  summary: `inclination` is unbounded, so a large Client's orbits fold back through the plane.
+  evidence: `(slot - (count - 1) / 2) * ORBIT_PITCH` exceeds +/-pi/2 once a Client holds more than about 8 Projects, at which point `Math.cos(inclination)` turns negative and the Project mirrors to the opposite side of its Star at the correct radius. The radius contract still holds, so the radius assertions cannot see it. Clamp into (-pi/2, pi/2) or scale by `count`. Latent at the expected scale.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-a-deterministic-force-solve.md`
+  summary: Nothing asserts the Rail is still in chronological order after the solve.
+  evidence: Time order is the Rail's defining property (EXPERIENCE.md 6.2, "a continuous trajectory through ~5-6 Client stops, running backward through time"), and `RAIL_STRENGTH`/`STAR_CHARGE` are documented as provisional and due for greybox tuning. A tuner who lowers `RAIL_STRENGTH` or raises `STAR_CHARGE` can permute Stars along the axis with the suite green — `assertOrbitOwnership` only catches ownership. An assertion that solved Star positions are monotonic in Rail order would close it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-a-deterministic-force-solve.md`
+  summary: The ownership invariant is vacuous below two Clients, which is the committed data's shape.
+  evidence: `assertOrbitOwnership`'s inner loop needs a second Client to compare against, so a one-Client graph performs no structural check at all. `career.json` holds exactly one Client today, so a green suite is not evidence the real data is checked. Worth stating in the module doc rather than fixing, until the inventory grows.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-a-deterministic-force-solve.md`
+  summary: `ProjectEntity.mass` is derived but reaches nothing in the solve.
+  evidence: The spec's Code Map calls `mass` and `railDistance` "the two solved-layout inputs already derived", but `mass` appears in `solve.ts` only in a doc comment. Either it legitimately belongs to the renderer as Body scale — in which case the README should say so, since an unused derived input reads as an oversight — or the solve should consume it as a `forceManyBody` strength or per-Body `collide` radius. Resolve when Story 1.5 defines what the artifact carries.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-4-a-deterministic-force-solve.md`
+  summary: The unstopped-simulation mutation guard leaks a live d3 timer and a global on the failure path.
+  evidence: `an unstopped simulation really does drift` stores nodes on `globalThis.__solveNodes` and deletes the key only on the success path, and the mutant's simulation is never stopped — so an assertion failure leaves both the global and a running `d3-timer` for the remainder of the suite, competing for the event loop. Wrap the cleanup in `try/finally` and stop the leaked simulation explicitly. Harmless while the test passes.

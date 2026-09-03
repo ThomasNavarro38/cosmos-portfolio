@@ -13,6 +13,8 @@ Pure pipeline: validate → derive → solve. No DOM, no React, no Three. The si
 | `rules.ts` | Exactly the three mapping rules (FR-3), and nothing else. |
 | `entities.test.ts` | Graph shape, the three Shallow forms, ID stability under a re-order, ID collision, Company-is-not-a-Body. |
 | `rules.test.ts` | Every rules row of the edge-case matrix: ordering, band ceiling, ongoing, single-entry, default weight. |
+| `solve.ts` | The deterministic force solve: Client Stars along the Rail, Projects in orbit around their own Star. |
+| `solve.test.ts` | Determinism, orbit ownership, the non-finite guard, and mutation guards that pin each determinism guarantee. |
 
 ```sh
 npm test        # every *.test.ts under src/, this suite included
@@ -92,6 +94,33 @@ Every entity ID derives from authored content and survives a re-order of `career
 **An ID collision throws.** Two entries sharing `client` + `project` derive one ID for two Projects, which would silently collapse a destination or overwrite one entity with another. Appending an index to disambiguate would reintroduce exactly the positional dependence AD-5 forbids, so failing loudly — naming the colliding pair — is the only option that keeps both guarantees. Slugging is case-folding, so two spellings of one client name collide rather than emitting two Stars for one Client.
 
 **Client names fold by slug, and the first spelling wins.** `slugify` lowercases and collapses every run of non-alphanumerics to a hyphen, so `SNCF`/`sncf` and `Acme Corp`/`Acme-Corp` all resolve to one Client. This is deliberate: divergent spellings of one client are a data-entry reality, and emitting two Stars for one organisation would be the worse failure. The `ClientEntity.name` is the spelling that appeared first in the file, so the authored order decides the label — the one place order is allowed to matter, and it reaches no ID. The collision *throw* is scoped to Projects, where a shared `client` + `project` pair means two distinct engagements would occupy one destination; two spellings of one client are the opposite case, one organisation reached two ways. To keep two genuinely distinct clients apart, give them names that differ by more than case or punctuation.
+
+## The solve
+
+`solveLayout(graph, { randomSource })` turns the entity graph into positions: one per Client Star, one per Project. Client Stars sit along the Rail in time order, oldest first — the Rail runs backward through time — and each Client's Projects orbit their own Star. Nothing else positions anything: no renderer computes a coordinate, and the running site never solves for placement — it reads the committed artifact. (The Colophon re-runs the solver in the browser as a demonstration, per AD-17; that re-solve informs nothing the scene draws.)
+
+**Determinism is the contract.** Identical input yields byte-identical output, and the suite proves it by solving twice in one process. Four things make that true, and each is pinned by a test that mutates the real source and fails if the guarantee is removed:
+
+- **Randomness is injected.** `randomSource` is a required option, never defaulted. The installed `d3-force-3d@3.0.6` does seed a fresh generator per simulation, so relying on its default would in fact be reproducible — but only by an internal detail of a dependency, and a test exercising it would prove the default is seeded rather than that our wiring is right. Injecting makes the guarantee ours.
+- **The simulation is stopped before it is driven.** `forceSimulation` starts an internal timer *at construction*, so an unstopped simulation can be advanced by the event loop between our own ticks. `.stop()` runs immediately, before any force is registered. This — not the generator — is the real non-determinism risk in a build script.
+- **Input is sorted before it is used.** d3 places nodes by a phyllotaxis spiral indexed on array order, and accumulates forces in that same order, so authored order would otherwise reach the output through both placement and float accumulation. Clients sort by start month then ID, Projects by ID. The emitted record is keyed in Rail order too, so even `JSON.stringify` is stable under a re-ordered `career.json`.
+- **The tick count is fixed.** `TICK_COUNT` ticks, always — never an energy threshold, which would make the iteration count depend on float accumulation and diverge on a rounding difference.
+
+Coordinates are rounded to `PRECISION` decimals on the way out, which absorbs last-bit drift between Node patch versions. **This is a same-environment guarantee**: per AD-17 the Colophon's live browser re-solve may legitimately settle differently from the Node build solve, and nothing here claims otherwise.
+
+A non-finite coordinate throws, naming the entity. Unguarded it would serialize to `null` in the emitted artifact and read as plausible data rather than as a bug — the same failure mode the `asOf` guard exists to prevent.
+
+## `weight` is applied after the solve, not during it
+
+`railDistance` is an exact orbital radius applied around the parent Star once the simulation has settled, rather than a force parameter the simulation negotiates. Settled at Story 1.4 by decision, closing the question the architecture spine left open.
+
+A force parameter would leave the final radius emergent — only approximately the authored `weight`, and perturbable by float accumulation and by the jiggle d3 applies to coincident nodes. An exact post-solve radius cannot drift, which is the smaller determinism surface. It also matches the shape `deriveRailDistance` already had: a pure function of `weight` alone, with no simulation coupling.
+
+The cost is that orbits are placed rather than relaxed, so keeping Projects apart is the transform's job, not the simulation's. Two Projects sharing a radius are separated by `ORBIT_MIN_SEPARATION` radians, and successive orbits are pitched out of the orbital plane.
+
+**Orbit ownership is structural, not incidental.** Every Project must sit nearer its own Star than any other, or a pointer raycast resolves to the wrong system. A Project at radius `r` is `r` from its own Star and `gap - r` from its neighbour's in the worst direction, so ownership needs `gap > 2r` for the wider of two adjacent systems. `SYSTEM_CLEARANCE` sets the Rail gap from the widest orbit present rather than from a constant — a fixed gap holds only for the weights authored today, since `railDistance` is `10 / weight` and a `weight` of `0.05` opens a 200-unit orbit that reaches past any constant. The invariant is asserted at the end of every solve, and a Body it cannot place fails the solve rather than being skipped.
+
+What it does **not** check: that two Client Stars have not settled on top of each other, and that a Project is not nearer another Client's *Project*. It is also vacuous below two Clients — a one-Client graph, which is `career.json`'s shape today, has nothing to compare against — so a green suite is not by itself evidence that the committed data is structurally checked.
 
 ## Single-entry sets
 
