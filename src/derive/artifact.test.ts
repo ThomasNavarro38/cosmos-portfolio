@@ -405,6 +405,61 @@ test('re-ordering career.json changes not one byte of the artifact', () => {
   assert.equal(reversed, forward, 'authored order must not reach the artifact');
 });
 
+/**
+ * Two Clients whose most recent Projects end in the same month, so they share a
+ * recency rank and therefore an identical `timeAxis`. Authored in the order
+ * `Zeta`, `Alpha` so that authored order and ID order disagree — sorting on
+ * `timeAxis` alone leaves the two interchangeable, and only the ID tie-break
+ * decides which is emitted first.
+ */
+function tiedEntries(): Record<string, unknown>[] {
+  return [
+    { ...baseEntry(), client: 'Zeta', project: 'Z', duration: { start: '2019-01', end: '2021-01' } },
+    {
+      ...baseEntry(),
+      client: 'Alpha',
+      project: 'A',
+      duration: { start: '2018-01', end: '2021-01' },
+    },
+  ];
+}
+
+test('the tied fixture genuinely ties, or the tie-break assertion is vacuous', () => {
+  // The same guard the opposing fixture carries, for the same reason: if a future
+  // edit gave these two Clients different end months, the assertion below would
+  // still pass while exercising nothing but the ordinary `timeAxis` comparison.
+  const graph = graphOf(...tiedEntries());
+  assert.equal(graph.clients.length, 2, 'the fixture must derive exactly two Clients');
+  const [first, second] = graph.clients;
+  assert.ok(first !== undefined && second !== undefined);
+  assert.equal(
+    first.timeAxis,
+    second.timeAxis,
+    'the fixture must give both Clients the same timeAxis, or nothing tests the tie-break',
+  );
+  assert.notEqual(first.id, second.id, 'and they must be distinguishable by ID');
+});
+
+test('Clients tied on timeAxis are emitted in ID order, whatever the authored order', () => {
+  // `entities.ts` ranks equal recency identically by design, and every ongoing
+  // engagement clamps to the same `asOf` month — so ties are reachable, not
+  // hypothetical. Without the ID tie-break at `artifact.ts`, `Array.prototype.sort`
+  // leaves tied entries in input order, and re-ordering `career.json` would change
+  // the artifact's bytes for no data change. Deleting that tie-break left the
+  // whole suite green until this test existed.
+  const entries = tiedEntries();
+  const forward = serializeArtifact(artifactOf(...entries));
+  const reversed = serializeArtifact(artifactOf(...[...entries].reverse()));
+  assert.equal(reversed, forward, 'a tie must not let authored order reach the artifact');
+
+  const ids = artifactOf(...entries).clients.map((client) => client.id);
+  assert.deepEqual(
+    ids,
+    [...ids].sort(),
+    `tied Clients must be emitted in ID order: ${ids.join(', ')}`,
+  );
+});
+
 test('the committed artifact matches what the pipeline produces now', () => {
   // The acceptance criterion, as a test: `npm run solve` twice leaves
   // `git status --porcelain generated/` silent. Catches a committed artifact
@@ -509,6 +564,46 @@ test('the gate fails when the artifact is missing, naming it and the solve scrip
   assert.ok(
     failures.some((line) => /npm run solve/.test(line)),
     `the failure must name the script that produces it: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate rejects an artifact that is not valid JSON', () => {
+  // The branch carries user-facing guidance no test read until now: replacing it
+  // with `catch { return []; }` left the whole suite green, so a truncated
+  // artifact would have passed the gate and failed in the browser instead.
+  const failures = checkArtifact(writeTemp('{ "schemaVersion": 1,'));
+  assert.notDeepEqual(failures, [], 'unparseable JSON must fail the gate');
+  assert.ok(
+    failures.some((line) => /not valid JSON/.test(line)),
+    `the failure must say the artifact is not valid JSON: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate rejects an artifact whose banner is gone', () => {
+  // The banner is the file's only warning against hand-editing, and an AC puts
+  // it on line one. Validating the *parsed* document cannot see it: `stripBanner`
+  // removes the field before the schema runs, so a banner-less artifact was
+  // "present and valid" until the gate learned to read the bytes.
+  const withoutBanner = JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8')) as Record<string, unknown>;
+  delete withoutBanner['$banner'];
+  const failures = checkArtifact(writeTemp(JSON.stringify(withoutBanner, null, 2)));
+  assert.notDeepEqual(failures, [], 'an artifact with no banner must fail the gate');
+  assert.ok(
+    failures.some((line) => /banner/.test(line)),
+    `the failure must name the missing banner: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate rejects an artifact carrying CRLF newlines', () => {
+  // `.gitattributes` justifies `eol=lf` by this file being diffed, and an AC
+  // says its bytes carry no carriage return. On Windows an editor save is enough
+  // to convert it, and the parse discards the difference entirely.
+  const crlf = readFileSync(ARTIFACT_PATH, 'utf8').replace(/\n/g, '\r\n');
+  const failures = checkArtifact(writeTemp(crlf));
+  assert.notDeepEqual(failures, [], 'a CRLF artifact must fail the gate');
+  assert.ok(
+    failures.some((line) => /CRLF/.test(line)),
+    `the failure must name the line endings: ${failures.join('\n')}`,
   );
 });
 
@@ -724,10 +819,24 @@ function runIndex(...args: string[]): { status: number; stderr: string; stdout: 
 }
 
 test('the CLI exits 0 and rewrites the artifact identically', () => {
+  // This is the one test that runs the emitter against its real output path —
+  // `index.ts`'s path argument is the *input* seam, so no argument can redirect
+  // the write. The bytes are restored in a `finally` because the failure this
+  // test exists to catch is precisely the one that leaves them wrong: without it
+  // a regression writes a bad artifact, the assertion throws, and the next run
+  // silently repairs the file and passes, erasing the evidence.
   const before = readFileSync(ARTIFACT_PATH, 'utf8');
-  const result = runIndex();
-  assert.equal(result.status, 0, `expected exit 0, got ${result.status}\n${result.stderr}`);
-  assert.equal(readFileSync(ARTIFACT_PATH, 'utf8'), before, 'a re-solve must not change the bytes');
+  try {
+    const result = runIndex();
+    assert.equal(result.status, 0, `expected exit 0, got ${result.status}\n${result.stderr}`);
+    assert.equal(
+      readFileSync(ARTIFACT_PATH, 'utf8'),
+      before,
+      'a re-solve must not change the bytes',
+    );
+  } finally {
+    writeFileSync(ARTIFACT_PATH, before);
+  }
 });
 
 test('the CLI exits 1 and writes nothing on invalid data', () => {

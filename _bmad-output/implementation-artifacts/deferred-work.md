@@ -91,3 +91,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-5-the-versioned-layout-artifact.md`
   summary: The build gate detects shape drift but not content drift between `career.json` and the committed artifact.
   evidence: A shape-valid artifact whose `content` no longer matches the authored data passes `npm run gate` cleanly. Editing `career.json` without re-solving therefore ships stale data on a fresh clone, caught only by `npm test`. A content hash of the authored file carried in the artifact would close it.
+
+## Deferred from: code review of spec-1-5-the-versioned-layout-artifact (2026-09-04)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-5-the-versioned-layout-artifact.md`
+  summary: A single-entry set lands at the top of the mote ladder, and no test pins which tier it should be.
+  evidence: `normalize` returns `1` on a zero-width range, so with one authored entry `massRange` is `{min: 4, max: 4}`, `dense` is true, and the sole Project emits `mote-dense` — verified live in the committed artifact. The convention is defensible for mass and recency ("the sole entry is the longest and the most recent") but is a different claim for a density projection, where the natural single-entry answer is arguably the sparse floor. `rules.test.ts`'s single-entry test asserts only that the tier is in the declared set, never which one, so either reading passes. Worth a stated decision and a test pinning the chosen value before the inventory grows past one entry.

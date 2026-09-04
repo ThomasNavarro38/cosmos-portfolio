@@ -38,7 +38,7 @@ No output means the pairing holds. Filter out `UNMET OPTIONAL`: the tree carries
 
 **The solve is not part of the build.** `src/derive/` turns `src/data/career.json` into `generated/layout.generated.json`, and that artifact is committed. Re-solving is a deliberate, out-of-band act — `npm run solve`, which `npm run build` never invokes (AD-1); the build only consumes what is already committed, and the runtime never solves.
 
-What `npm run build` does instead is **gate**: it validates the committed artifact against its schema and fails, naming the failing path and the script that produces it, if the artifact is missing or stale-shaped. So a data change committed without a re-solve fails the build rather than shipping a stale layout. The gate is asserted transitively — the suite walks the whole npm script graph and fails if `build` can reach `solve` by any path at any depth.
+What `npm run build` does instead is **gate**: it validates the committed artifact against its schema and fails, naming the failing path and the script that produces it, if the artifact is missing, unparseable, stale-shaped, or no longer carries the generated-file banner and LF newlines the emitter writes. The gate reads the artifact and nothing else, so it catches a malformed or hand-edited document but **not** content drift: an artifact whose payload no longer matches `career.json` is still shape-valid and passes. Editing the data without re-solving is caught by `npm test`, not by the build. The gate is asserted transitively — the suite walks the whole npm script graph and fails if `build` can reach `solve` by any path at any depth.
 
 ## Layout
 
