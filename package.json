@@ -8,7 +8,9 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run gate && vite build",
+    "gate": "node src/derive/index.ts --check",
+    "solve": "node src/derive/index.ts",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "validate": "node src/data/validate.ts",

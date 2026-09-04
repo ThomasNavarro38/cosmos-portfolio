@@ -40,9 +40,17 @@ function labelFor(raw: unknown, path: readonly PropertyKey[]): string {
   return `entry #${index}`;
 }
 
-/** The field the issue is about, as a dotted path below the entry itself. */
+/**
+ * The field the issue is about, as a dotted path below the entry itself.
+ *
+ * A `projects[i]` issue drops the first two segments, since `labelFor` has
+ * already named the entry. Anything else is a top-level field — `asOf`, or an
+ * unrecognized key — and keeps its whole path: dropping two segments there would
+ * leave an empty field and print a bare "must be an ISO 8601 year-month" with
+ * nothing saying which value was wrong.
+ */
 function fieldFor(path: readonly PropertyKey[]): string | undefined {
-  const rest = path.slice(2);
+  const rest = path[0] === 'projects' && typeof path[1] === 'number' ? path.slice(2) : path;
   return rest.length > 0 ? rest.join('.') : undefined;
 }
 
@@ -228,7 +236,14 @@ function main(): void {
     process.exit(1);
   }
 
-  const read = readCareerFile(CAREER_JSON);
+  // An optional path argument, defaulting to the committed file. Without it the
+  // only way to exercise the CLI's exit codes against invalid data is to corrupt
+  // `src/data/career.json` in place and restore it — and `node --test` runs
+  // suites in parallel, so a sibling suite reading the file mid-corruption fails
+  // for a reason that has nothing to do with what it tests. That hazard already
+  // bit once. The argument is a test seam, not a feature: nothing documents it,
+  // and `npm run validate` passes none.
+  const read = readCareerFile(process.argv[2] ?? CAREER_JSON);
   if (!read.ok) {
     console.error(read.message);
     process.exit(1);

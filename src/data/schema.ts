@@ -111,8 +111,24 @@ export const ProjectSchema = z.strictObject({
   weight: z.number().positive().default(1),
 });
 
-/** The whole authored file: one list of Projects. */
+/**
+ * The whole authored file: one list of Projects, and the month they are measured
+ * against.
+ *
+ * `asOf` is the reference month an ongoing engagement's span and recency are
+ * computed to. It is **authored**, not clocked and not passed on a command line.
+ * A clock read would churn the committed artifact every month for no authored
+ * change, defeating the deliberate-solve rule; a CLI argument would live in
+ * nobody's file, so the artifact could not be reproduced without knowing what
+ * someone typed. Authored here it sits beside the entries it measures, gets this
+ * schema's validation for free, and bumping it is the same one-line gesture as
+ * adding an entry.
+ *
+ * Required rather than optional: a default would be a second place the reference
+ * month is written down, and the two would drift.
+ */
 export const CareerSchema = z.strictObject({
+  asOf: IsoYearMonth,
   projects: z.array(ProjectSchema),
 });
 

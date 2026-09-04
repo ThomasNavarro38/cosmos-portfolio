@@ -42,6 +42,23 @@ So the schema uses `z.strictObject`, not `z.object`. Zod's default `object` *str
 
 Deliberately **not** enforced: empty `skills`, an empty `projects` array, and year plausibility bounds. Each fails visibly and immediately rather than silently, and each is a judgement call that could fight real data during authoring. They are accepted by design, not by oversight.
 
+## The reference month
+
+`career.json` carries one top-level field beside `projects`:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `asOf` | string | **Required.** ISO `YYYY-MM`. The month an ongoing engagement is measured against. |
+
+An engagement with `end: null` is ongoing, so its span and its recency have to be measured *to* something. That something is authored here rather than read from the clock or passed on a command line, and the choice is load-bearing:
+
+- **A clock read** would make `generated/layout.generated.json` churn every month for no authored change — every Body's mass and band shifting because time passed. The artifact is committed and diffed on purpose; monthly churn defeats that.
+- **A CLI argument** would live in nobody's file. The artifact could not be reproduced without knowing what someone typed, which is the opposite of a committed contract.
+
+Authored, the reference month sits beside the entries it measures, gets this schema's validation for free, and bumping it is the same deliberate one-line gesture as adding an entry. Because `CareerSchema` is a `strictObject`, declaring it in the schema is the only way it *can* be authored at all.
+
+**Bump it when you re-solve after real time has passed**, and commit the new artifact with it. Raising `asOf` lengthens every ongoing span and can move a Body's band — which is a real change to the layout, and should show up in a diff as one.
+
 ## The Project field set
 
 Exactly ten fields. No entry has a field another lacks — there are no hero-entry and minor-entry variants.
@@ -78,7 +95,7 @@ They are equivalent in *meaning*, but not identical in *parsed shape*: an absent
 1. Add one object to the `projects` array in `career.json`, filling all ten fields — or nine, omitting `weight` to accept the default of `1`.
 2. Leave `notable` out (or empty) if the decision behind the work is not yet articulated. The entry ships Shallow and can be promoted later at no cost.
 3. Run `npm run validate`. A typo, a repeated key, a missing `duration`, an inverted span, or a non-ISO date fails here rather than silently downstream.
-4. Re-run the solve when it exists (Story 1.5). The solve is deliberate and out-of-band; `npm run build` never invokes it.
+4. Run `npm run solve` and **commit `generated/layout.generated.json`** alongside the data change. The solve is deliberate and out-of-band: `npm run build` gates on the committed artifact and never invokes the solve, so a data change without a re-solve fails the build rather than shipping a stale layout.
 
 Run `npm test` too if you touched the schema rather than only the data.
 

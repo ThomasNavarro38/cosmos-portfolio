@@ -42,7 +42,7 @@ function baseEntry(): Record<string, unknown> {
 
 /** Parses fixtures through the real schema, then derives. */
 function derive(...entries: Record<string, unknown>[]) {
-  return deriveEntities(CareerSchema.parse({ projects: entries }), { asOf: AS_OF });
+  return deriveEntities(CareerSchema.parse({ asOf: AS_OF, projects: entries }), { asOf: AS_OF });
 }
 
 /** Every Project entity in the graph, flattened. */
@@ -298,6 +298,7 @@ test('a malformed asOf throws rather than deriving NaN', () => {
   // Unvalidated, a bad reference month makes every ongoing span NaN, which
   // serializes to null in the emitted artifact — plausible-looking and wrong.
   const parsed = CareerSchema.parse({
+    asOf: AS_OF,
     projects: [{ ...baseEntry(), duration: { start: '2020-01', end: null } }],
   });
   for (const bad of ['garbage', '2026-13', '2026-9', '', '2026']) {

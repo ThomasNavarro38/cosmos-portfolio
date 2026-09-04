@@ -16,8 +16,17 @@
  * elsewhere; nothing here claims otherwise. Rounding to a fixed precision
  * absorbs last-bit drift, it does not make the guarantee cross-platform.
  *
- * This module emits nothing. Writing `generated/layout.generated.json` and its
- * schema is Story 1.5.
+ * This module emits nothing. `index.ts` writes `generated/layout.generated.json`
+ * against the schema in `artifact-schema.ts`; the split is what lets
+ * `solve.test.ts` assert this module touches no filesystem.
+ *
+ * **The Rail's order is not the Fallback's.** `inRailOrder` below sorts Client
+ * Stars by earliest `duration.start`. The artifact's `timeAxis` measures
+ * *recency*, and for a portfolio holding a long early engagement beside a short
+ * late one the two orderings genuinely separate. Neither is wrong; what would be
+ * wrong is an artifact claiming they coincide. The artifact carries the recency
+ * ordering, `artifact.test.ts` pins that over a fixture where they differ, and
+ * nothing here should be changed to chase agreement.
  */
 
 import {

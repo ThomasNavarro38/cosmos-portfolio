@@ -30,11 +30,15 @@ No output means the pairing holds. Filter out `UNMET OPTIONAL`: the tree carries
 | `npm run preview` | Serve the built output |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run validate` | Validate `src/data/career.json` against its schema; non-zero exit on any violation |
+| `npm run solve` | Run the pipeline and write `generated/layout.generated.json`. Deliberate and out-of-band |
+| `npm run gate` | Validate the committed artifact without solving. What `npm run build` runs first |
 | `npm test` | Run the test suite (`node --test`), including the schema's own guards |
 
 `npm run dev` serves on Vite's default `http://localhost:5173`. `npm run build` produces a fully static `dist/` — no Node process, no server, deployable to any file host (NFR-6).
 
-**The solve is not part of the build.** `src/derive/` turns `src/data/career.json` into `generated/layout.generated.json`, and that artifact is committed. Re-solving is a deliberate, out-of-band act — a separate npm script that `npm run build` never invokes (AD-1); the build only consumes what is already committed, and the runtime never solves. That script arrives with Story 1.5, which owns artifact emission.
+**The solve is not part of the build.** `src/derive/` turns `src/data/career.json` into `generated/layout.generated.json`, and that artifact is committed. Re-solving is a deliberate, out-of-band act — `npm run solve`, which `npm run build` never invokes (AD-1); the build only consumes what is already committed, and the runtime never solves.
+
+What `npm run build` does instead is **gate**: it validates the committed artifact against its schema and fails, naming the failing path and the script that produces it, if the artifact is missing or stale-shaped. So a data change committed without a re-solve fails the build rather than shipping a stale layout. The gate is asserted transitively — the suite walks the whole npm script graph and fails if `build` can reach `solve` by any path at any depth.
 
 ## Layout
 
