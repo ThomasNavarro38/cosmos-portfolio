@@ -15,20 +15,26 @@
  */
 
 import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { deriveEntities } from './entities.ts';
 import {
+  MOTE_TIERS,
   RESTING_BANDS,
   deriveLuminanceBand,
   deriveMass,
+  deriveMoteTier,
   deriveRailDistance,
+  deriveTimeAxis,
   durationInMonths,
   recencyOf,
   type LuminanceBand,
 } from './rules.ts';
 
 const AS_OF = '2026-09';
+const RULES_TS = fileURLToPath(new URL('./rules.ts', import.meta.url));
 
 function baseEntry(): Record<string, unknown> {
   return {
@@ -45,7 +51,7 @@ function baseEntry(): Record<string, unknown> {
 }
 
 function derive(...entries: Record<string, unknown>[]) {
-  return deriveEntities(CareerSchema.parse({ projects: entries }), { asOf: AS_OF });
+  return deriveEntities(CareerSchema.parse({ asOf: AS_OF, projects: entries }), { asOf: AS_OF });
 }
 
 /** Every Project entity, flattened, in authored order. */
@@ -60,30 +66,147 @@ function brightness(band: LuminanceBand): number {
 
 // --- Exactly three rules ----------------------------------------------------
 
-test('the module exports exactly three mapping rules', async () => {
-  // A fourth is a spec violation, not a feature. `derive*` is the naming the
-  // three rules share; helpers are named for what they compute, not what they
-  // map, so this count stays meaningful as the module grows support code.
+test('the module exports exactly three mapping rules and two projections', async () => {
+  // A fourth *rule* is a spec violation, not a feature. The whole export surface
+  // is asserted rather than a `derive`-prefixed subset: a prefix filter only
+  // enforces a naming convention, and a fourth mapping named `opacityFromTeamSize`
+  // would pass it untouched. Anything new here must be added deliberately.
   const module: Record<string, unknown> = await import('./rules.ts');
 
-  // Assert the whole export surface, not a `derive`-prefixed subset. A prefix
-  // filter only enforces a naming convention: a fourth mapping named
-  // `opacityFromTeamSize` or `moteTierFor` would pass it untouched, and those
-  // are exactly the names the next epics would reach for. Anything new here
-  // must be added deliberately, which is the point.
   const RULES = ['deriveLuminanceBand', 'deriveMass', 'deriveRailDistance'];
-  const HELPERS = ['RESTING_BANDS', 'durationInMonths', 'recencyOf'];
+  const PROJECTIONS = ['deriveMoteTier', 'deriveTimeAxis'];
+  const HELPERS = ['MOTE_TIERS', 'RESTING_BANDS', 'durationInMonths', 'recencyOf'];
 
   assert.deepEqual(
     Object.keys(module).sort(),
-    [...RULES, ...HELPERS].sort(),
-    'the module exports exactly the three rules plus its named helpers',
+    [...RULES, ...PROJECTIONS, ...HELPERS].sort(),
+    'the module exports exactly the three rules, the two projections, and its named helpers',
   );
-  assert.deepEqual(
-    Object.keys(module).filter((name) => name.startsWith('derive')).sort(),
-    RULES,
-    'and exactly three of them are mapping rules',
+});
+
+test('the projections structurally cannot read an authored field', () => {
+  // FR-3 permits exactly three mappings from authored data to appearance.
+  // `deriveMoteTier` and `deriveTimeAxis` are projections of values the three
+  // rules already produced, and this is what makes that a *property* rather than
+  // an intention: their actual parameter lists are read off the source, and
+  // naming a `Project`, a `Duration`, or an authored field fails the suite.
+  //
+  // This replaced a count of `derive`-prefixed exports, which enforced a naming
+  // convention rather than the property. A projection that took a `Project` and
+  // read `notable` off it would have passed that count untouched.
+  const source = readFileSync(RULES_TS, 'utf8');
+  const AUTHORED_FIELDS = [
+    'client', 'project', 'company', 'role', 'built',
+    'team_size', 'duration', 'notable', 'skills', 'weight',
+  ];
+
+  for (const name of ['deriveMoteTier', 'deriveTimeAxis']) {
+    const match = new RegExp(`export function ${name}\\(([^)]*)\\)`).exec(source);
+    assert.ok(match !== null, `${name} must be an exported function with a readable signature`);
+    const params = match[1] ?? '';
+
+    assert.doesNotMatch(params, /\bProject\b/, `${name} must not take a Project`);
+    assert.doesNotMatch(params, /\bDuration\b/, `${name} must not take a Duration`);
+    for (const field of AUTHORED_FIELDS) {
+      assert.doesNotMatch(
+        params,
+        new RegExp(`\\b${field}\\b`),
+        `${name} names the authored field "${field}" — that would be a fourth rule`,
+      );
+    }
+  }
+});
+
+// --- The projections --------------------------------------------------------
+
+test('a Deep Body is denser than a Shallow one of the same mass', () => {
+  // UX-DR11 forbids brightness and size from carrying the Deep signal, because
+  // FR-3 has bound them to recency and duration. The mote field is the channel
+  // left to carry it.
+  const range = { min: 1, max: 4 };
+  for (const mass of [1, 2, 3]) {
+    assert.ok(
+      MOTE_TIERS.indexOf(deriveMoteTier(mass, range, true)) >
+        MOTE_TIERS.indexOf(deriveMoteTier(mass, range, false)),
+      `at mass ${mass} a Deep Body must be denser than a Shallow one`,
+    );
+  }
+});
+
+test('a more massive Body is never sparser', () => {
+  const range = { min: 1, max: 4 };
+  for (const isDeep of [true, false]) {
+    const tiers = [1, 1.5, 2, 2.5, 3, 3.5, 4].map((mass) =>
+      MOTE_TIERS.indexOf(deriveMoteTier(mass, range, isDeep)),
+    );
+    for (let i = 1; i < tiers.length; i += 1) {
+      assert.ok(
+        (tiers[i] ?? 0) >= (tiers[i - 1] ?? 0),
+        `the tier must never thin as mass rises (isDeep=${isDeep}): ${tiers.join(',')}`,
+      );
+    }
+  }
+});
+
+test('the mote tier never leaves the declared set, including at the ceiling', () => {
+  const range = { min: 1, max: 4 };
+  for (const mass of [-5, 0, 1, 4, 99]) {
+    for (const isDeep of [true, false]) {
+      const tier = deriveMoteTier(mass, range, isDeep);
+      assert.ok(MOTE_TIERS.includes(tier), `mass ${mass} produced ${tier}`);
+    }
+  }
+  // The densest Deep Body must not overflow past the top of the ladder.
+  assert.equal(deriveMoteTier(4, range, true), 'mote-dense');
+});
+
+test('the mote tier holds through the graph, not only through the projection', () => {
+  const graph = derive(
+    { ...baseEntry(), client: 'Deep', project: 'D', notable: 'A real decision.' },
+    { ...baseEntry(), client: 'Shallow', project: 'S', notable: '' },
   );
+  const all = allProjects(graph);
+  const deep = all.find((p) => p.isDeep);
+  const shallow = all.find((p) => !p.isDeep);
+  assert.ok(deep !== undefined && shallow !== undefined);
+  assert.ok(
+    MOTE_TIERS.indexOf(deep.moteTier) > MOTE_TIERS.indexOf(shallow.moteTier),
+    'two entries of equal span must differ in mote tier by their depth alone',
+  );
+});
+
+test('timeAxis and luminanceBand are projections of one number', () => {
+  // Both take `(recency, range)` — the identical ordinal rank — so they cannot
+  // separate. This asserts it at the rule level; `artifact.test.ts` asserts it
+  // over a fixture whose start order deliberately opposes its recency order,
+  // which is where the previous implementation's inversion actually showed.
+  const range = { min: 0, max: 4 };
+  const axes = [0, 1, 2, 3, 4].map((rank) => deriveTimeAxis(rank, range));
+  const bands = [0, 1, 2, 3, 4].map((rank) => brightness(deriveLuminanceBand(rank, range)));
+
+  for (let i = 1; i < axes.length; i += 1) {
+    assert.ok((axes[i] ?? 0) > (axes[i - 1] ?? 0), 'the axis rises strictly with recency');
+    assert.ok((bands[i] ?? 0) >= (bands[i - 1] ?? 0), 'and the band never dims as it does');
+  }
+});
+
+test('timeAxis stays within 0..1 and puts the oldest at 0', () => {
+  const range = { min: 0, max: 9 };
+  for (const rank of [0, 4, 9]) {
+    const value = deriveTimeAxis(rank, range);
+    assert.ok(value >= 0 && value <= 1, `rank ${rank} gave ${value}`);
+  }
+  assert.equal(deriveTimeAxis(0, range), 0, 'the oldest entry sits at the origin of the axis');
+  assert.equal(deriveTimeAxis(9, range), 1, 'and the most recent at the far end');
+});
+
+test('a single-entry set gives a finite timeAxis and tier, not NaN', () => {
+  // `career.json` holds one entry today, so a zero-width range is real.
+  const [only] = allProjects(derive(baseEntry()));
+  assert.ok(only !== undefined);
+  assert.ok(Number.isFinite(only.timeAxis), `timeAxis must be a number, got ${only.timeAxis}`);
+  assert.ok(only.timeAxis >= 0 && only.timeAxis <= 1);
+  assert.ok(MOTE_TIERS.includes(only.moteTier));
 });
 
 // --- Matrix row: mass ordering ----------------------------------------------
@@ -382,7 +505,7 @@ test('the reference month is injected, never read from the clock', () => {
     { ...baseEntry(), client: 'Long', project: 'L', duration: { start: '2010-01', end: '2024-01' } },
     { ...baseEntry(), client: 'Ongoing', project: 'O', duration: { start: '2024-01', end: null } },
   ];
-  const parsed = CareerSchema.parse({ projects: entries });
+  const parsed = CareerSchema.parse({ asOf: AS_OF, projects: entries });
 
   const early = deriveEntities(parsed, { asOf: '2026-01' });
   const late = deriveEntities(parsed, { asOf: '2030-01' });

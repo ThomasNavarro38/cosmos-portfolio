@@ -67,7 +67,7 @@ function baseEntry(): Record<string, unknown> {
 
 /** Parses fixtures through the real schema, then derives the graph. */
 function graphOf(...entries: Record<string, unknown>[]): EntityGraph {
-  return deriveEntities(CareerSchema.parse({ projects: entries }), { asOf: AS_OF });
+  return deriveEntities(CareerSchema.parse({ asOf: AS_OF, projects: entries }), { asOf: AS_OF });
 }
 
 /** A graph with several Clients, several Projects, and a spread of weights. */
@@ -817,25 +817,29 @@ test('the injected source is actually drawn from, not merely accepted', async ()
 // --- Story boundaries --------------------------------------------------------
 
 test('the solve emits no file and reads none', () => {
-  // Emitting `generated/layout.generated.json` is Story 1.5. A solve that wrote
-  // one here would dirty `generated/` and pre-empt that story's schema. It also
-  // reads nothing: the graph arrives as an argument, which is what makes it pure.
+  // Emitting `generated/layout.generated.json` belongs to `index.ts`. A solve
+  // that wrote one here would put I/O inside the module whose purity lets the
+  // determinism guarantees above be asserted at all. It reads nothing either:
+  // the graph arrives as an argument, which is what makes it pure.
   const source = readFileSync(SOLVE_TS, 'utf8');
   assert.doesNotMatch(source, /node:fs|writeFileSync|readFileSync|createWriteStream/, 'no I/O');
   assert.doesNotMatch(source, /process\s*\.\s*(env|argv|cwd)/, 'no ambient process state');
 });
 
-test('no npm script wires the solve into the build', () => {
-  // AD-1: solving is deliberate and build-time, and `build` must never invoke
-  // it. Adding the `solve` script is Story 1.5's, so it must not exist yet.
+test('the build script does not name the solve', () => {
+  // AD-1's first level, kept here because this is the module the build must
+  // never reach. The *transitive* walk — which follows `npm run` indirection and
+  // npm's implicit pre/post hooks through any depth — lives in
+  // `artifact.test.ts` beside the scripts it gates, and is strictly stronger
+  // than this line. This one stays because it is the cheapest possible statement
+  // of the rule at the point it matters, and it costs nothing.
   const manifest = JSON.parse(
     readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'),
   ) as { scripts: Record<string, string> };
 
-  assert.equal(manifest.scripts['solve'], undefined, 'the solve script belongs to Story 1.5');
   assert.doesNotMatch(
     manifest.scripts['build'] ?? '',
-    /solve/,
+    /\bsolve\b/,
     'the build must never invoke the solve',
   );
 });

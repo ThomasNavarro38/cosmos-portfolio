@@ -41,8 +41,11 @@ function baseEntry(): Record<string, unknown> {
   };
 }
 
+/** The reference month every fixture is measured against. Required by the schema. */
+const AS_OF = '2026-09';
+
 function fileWith(...entries: Record<string, unknown>[]): unknown {
-  return { projects: entries };
+  return { asOf: AS_OF, projects: entries };
 }
 
 /** Asserts some failure line matches, reporting all of them when none does. */
@@ -353,7 +356,9 @@ test('a repeated key is rejected, naming the key and the entry', () => {
 
 test('the collapse a duplicate key would cause is real', () => {
   // Pins the reason the guard exists: without it, this parses and validates.
-  const parsed = JSON.parse(`{"projects":[${DUP_ENTRY},"notable":""}]}`) as unknown;
+  const parsed = JSON.parse(
+    `{"asOf":"${AS_OF}","projects":[${DUP_ENTRY},"notable":""}]}`,
+  ) as unknown;
   const entry = (parsed as { projects: { notable: unknown }[] }).projects[0];
   assert.equal(entry?.notable, '', 'JSON.parse keeps the last occurrence');
   assert.deepEqual(validateCareer(parsed), [], 'the schema alone accepts the collapsed result');
@@ -392,9 +397,9 @@ test('braces and colons inside string values do not confuse the scan', () => {
  * in-process tests never see it — changing `process.exit(1)` to `process.exit(0)`
  * leaves them all green. These run the real script as a subprocess.
  */
-function runValidate(): { status: number; stderr: string; stdout: string } {
+function runValidate(path?: string): { status: number; stderr: string; stdout: string } {
   try {
-    const stdout = execFileSync(process.execPath, [VALIDATE_TS], {
+    const stdout = execFileSync(process.execPath, path === undefined ? [VALIDATE_TS] : [VALIDATE_TS, path], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       // Without a bound, a child that hangs blocks the whole suite indefinitely.
@@ -413,26 +418,66 @@ test('the CLI exits 0 on the committed data', () => {
 });
 
 test('the CLI exits 1 and writes to stderr on invalid data', () => {
-  // Runs the real script against a temporarily corrupted career.json, then
-  // restores it. The file is restored in a finally block and re-asserted below.
-  const original = readFileSync(CAREER_JSON, 'utf8');
-  try {
-    const broken = JSON.parse(original) as { projects: Record<string, unknown>[] };
-    const first = broken.projects[0];
-    assert.ok(first !== undefined);
-    first['notabel'] = first['notable'];
-    delete first['notable'];
-    writeFileSync(CAREER_JSON, JSON.stringify(broken, null, 2));
+  // Runs the real script against a corrupted *copy*, handed over by path.
+  //
+  // The earlier form of this test corrupted `src/data/career.json` in place and
+  // restored it in a `finally`. That is a real hazard rather than a tidiness
+  // point: `node --test` runs suites in parallel, and `entities.test.ts` and
+  // `solve.test.ts` both read the committed file — so either could observe the
+  // corrupted window and fail for a reason unrelated to what it tests. It bit
+  // once already. No test writes into `src/` now.
+  const broken = JSON.parse(readFileSync(CAREER_JSON, 'utf8')) as {
+    projects: Record<string, unknown>[];
+  };
+  const first = broken.projects[0];
+  assert.ok(first !== undefined);
+  first['notabel'] = first['notable'];
+  delete first['notable'];
 
-    const result = runValidate();
-    assert.equal(result.status, 1, `expected exit 1, got ${result.status}`);
-    assert.match(result.stderr, /notabel/, 'the failure must reach stderr');
-    assert.match(result.stderr, /SNCF/, 'the failing entry must be named on stderr');
-  } finally {
-    writeFileSync(CAREER_JSON, original);
+  const result = runValidate(writeTemp(JSON.stringify(broken, null, 2)));
+  assert.equal(result.status, 1, `expected exit 1, got ${result.status}`);
+  assert.match(result.stderr, /notabel/, 'the failure must reach stderr');
+  assert.match(result.stderr, /SNCF/, 'the failing entry must be named on stderr');
+});
+
+test('no test writes into src/, so the suites can run in parallel', () => {
+  // The property the path argument exists to preserve, pinned rather than
+  // trusted. A future test reaching for `writeFileSync(CAREER_JSON, ...)` again
+  // reintroduces a cross-suite failure that reproduces only under parallelism.
+  const source = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.doesNotMatch(
+    code,
+    /writeFileSync\s*\(\s*CAREER_JSON/,
+    'the committed career.json must never be written by a test',
+  );
+});
+
+// --- Matrix rows: the reference month ---------------------------------------
+
+test('a missing top-level `asOf` fails naming the field', () => {
+  // `strictObject` rejects unknown top-level keys, so declaring `asOf` in the
+  // schema is the only way it can be authored at all — and required rather than
+  // optional, so the reference month has exactly one home.
+  const failures = validateCareer({ projects: [baseEntry()] });
+  assertFails(failures, /asOf/, 'the missing reference month must be named');
+});
+
+test('a malformed `asOf` fails naming the field and the ISO requirement', () => {
+  for (const value of ['2026-13', '2026', 'September 2026', '2026-9', '']) {
+    const failures = validateCareer({ asOf: value, projects: [baseEntry()] });
+    assertFails(failures, /asOf/, `"${value}" must be rejected, naming the field`);
+    assertFails(failures, /ISO 8601/, `"${value}" must name the ISO requirement`);
   }
+});
 
-  assert.equal(readFileSync(CAREER_JSON, 'utf8'), original, 'career.json must be restored');
+test('the committed career.json carries an `asOf`', () => {
+  // Authored beside the entries it measures, so a re-solve is reproducible from
+  // the file alone — no clock, no command-line argument, nothing typed.
+  const read = readCareerFile(CAREER_JSON);
+  assert.ok(read.ok);
+  const parsed = CareerSchema.parse(read.data);
+  assert.match(parsed.asOf, /^\d{4}-(0[1-9]|1[0-2])$/, 'the reference month is an ISO year-month');
 });
 
 // --- Structural guarantees ---------------------------------------------------
@@ -458,7 +503,7 @@ test('the schema defines exactly the ten Project fields', () => {
 });
 
 test('an unknown top-level key is rejected', () => {
-  const raw = { projects: [baseEntry()], clients: [] };
+  const raw = { asOf: AS_OF, projects: [baseEntry()], clients: [] };
   assertFails(validateCareer(raw), /clients/, 'unknown top-level keys must be named');
 });
 

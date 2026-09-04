@@ -15,6 +15,11 @@ Pure pipeline: validate → derive → solve. No DOM, no React, no Three. The si
 | `rules.test.ts` | Every rules row of the edge-case matrix: ordering, band ceiling, ongoing, single-entry, default weight. |
 | `solve.ts` | The deterministic force solve: Client Stars along the Rail, Projects in orbit around their own Star. |
 | `solve.test.ts` | Determinism, orbit ownership, the non-finite guard, and mutation guards that pin each determinism guarantee. |
+| `artifact-schema.ts` | The emitted document's shape, as a versioned Zod schema. The contract every later epic reads. |
+| `artifact.ts` | Pure assembly: graph + solve → the artifact, plus its serialization and the banner. No I/O. |
+| `index.ts` | The pipeline CLI. `npm run solve` writes the artifact; `--check` is the build gate and never solves. |
+| `artifact-schema.test.ts` | What the schema *rejects*: a later story's field, a version mismatch, a truncated payload. |
+| `artifact.test.ts` | Content parity field-by-field, the `timeAxis`↔`luminanceBand` binding, and the AD-1 script-graph walk. |
 
 ```sh
 npm test        # every *.test.ts under src/, this suite included
@@ -32,6 +37,8 @@ Slugging lowercases and collapses non-alphanumeric runs to hyphens. A name writt
 ## The reference month
 
 `deriveEntities(career, { asOf })` takes the month an ongoing engagement is measured against, as `YYYY-MM`. It is injected rather than read from the clock: a derivation calling `new Date()` is impure and would churn the committed artifact every month for no authored change. A malformed `asOf` throws — unvalidated it would make every ongoing span `NaN`, which serializes to `null` in the emitted artifact and reads as plausible data rather than as a bug.
+
+**The value comes from `career.json`'s top-level `asOf`**, and from nowhere else. Three options were on the table and two were rejected: a clock read makes the committed artifact churn monthly for no authored change, defeating the whole point of committing it; a CLI argument lives in nobody's file, so the artifact could not be reproduced without knowing what someone typed. Authoring it puts the reference month beside the entries it measures, gets `strictObject` validation for free, and makes bumping it the same deliberate one-line gesture as adding an entry. `index.ts` reads it off the parsed file and passes it straight through.
 
 An authored `end` is clamped to `asOf` for recency. The schema bounds `end` to a fixed authoring horizon, but any `end` between the reference month and that horizon would otherwise outrank an ongoing engagement — dimming the work being done right now, which is exactly what the ongoing-is-most-recent rule exists to prevent.
 
@@ -77,7 +84,7 @@ Promotion stays free — populate the string and nothing else changes. The tests
 
 `duration.end: null` means ongoing, and the schema ratifies no ranking for it. **This is a decision, not a derivation:** an ongoing engagement is current, so it sorts as maximally recent. The alternative — treating `null` as unknown and sorting it last — would dim the work being done right now.
 
-Ongoing spans are measured to an injected reference month, `DeriveOptions.asOf`, rather than to `new Date()`. A derivation that reads the clock is not pure, and the committed artifact would churn every month for no authored change. Story 1.5 pins the value it emits with.
+Ongoing spans are measured to an injected reference month, `DeriveOptions.asOf`, rather than to `new Date()`. A derivation that reads the clock is not pure, and the committed artifact would churn every month for no authored change. The value is authored as `career.json`'s top-level `asOf` — see **The reference month** above.
 
 ## Naming
 
@@ -109,6 +116,53 @@ Every entity ID derives from authored content and survives a re-order of `career
 Coordinates are rounded to `PRECISION` decimals on the way out, which absorbs last-bit drift between Node patch versions. **This is a same-environment guarantee**: per AD-17 the Colophon's live browser re-solve may legitimately settle differently from the Node build solve, and nothing here claims otherwise.
 
 A non-finite coordinate throws, naming the entity. Unguarded it would serialize to `null` in the emitted artifact and read as plausible data rather than as a bug — the same failure mode the `asOf` guard exists to prevent.
+
+## The artifact
+
+`generated/layout.generated.json` is the one committed document every later epic reads and no later epic re-derives. It carries the schema version, the reference month, and every Client with its Star's position, its Projects, their derived properties, and the whole authored record for each.
+
+```sh
+npm run solve    # runs the pipeline and writes the artifact
+npm run build    # gates on the committed artifact, and never solves
+```
+
+**The build never solves** (AD-1). `build` runs `gate`, which is `node src/derive/index.ts --check`: it reads the committed artifact, validates it, and exits non-zero if it is missing or fails its schema, naming the failing path and the script that produces it. Deliberateness is a property of the scripts, not of anyone's memory — so `artifact.test.ts` walks the script graph transitively, following `npm run` indirection and npm's implicit `pre`/`post` hooks, and fails if `build` can reach `solve` by any path at any depth.
+
+The gate and the emitter live in **one file** rather than two scripts, so the artifact's path and its schema are named in exactly one place. A gate validating a different path from the one the emitter writes would pass while gating nothing. It also keeps the gate under `tsconfig.json`'s `include: ["src"]` — a `scripts/` directory would escape typecheck entirely.
+
+### The banner
+
+JSON has no comment syntax, and AD-13 requires the file to carry a generated-file warning. So the banner rides as a `$banner` **field**, emitted first so it is line one of the file, and stripped by `stripBanner` before validation. The schema neither declares nor accepts it: declaring it would put a human-readable warning into the machine contract every consumer types against, and accepting it silently would let an arbitrary unvalidated field ride along. It is a property of the file's serialization, not of the document.
+
+Bytes are LF and end with a newline. `.gitattributes` normalizes the repository to LF and justifies it by this artifact being diffed on purpose — `os.EOL` would emit CRLF on Windows and produce a whole-file diff on every solve run from a different machine.
+
+### The version is a literal, and the schema is closed
+
+`SCHEMA_VERSION` is `z.literal` in the schema, not a range: an artifact declaring any other version fails validation rather than being read on a guess. Every level is a `strictObject`, so a consumer writing an undeclared field fails the gate.
+
+`dwell`, `shots`, and `destinations` are **deliberately absent** rather than declared-and-empty. A required field nothing populates would make the emitted artifact fail its own gate until Story 1.7 lands, which is exactly what the gate exists to prevent. Stories 1.6 and 1.7 each add their fields and bump the version.
+
+### Content parity is structural
+
+Each Project's `content` is `ProjectSchema` itself, and `artifact.ts` carries `entity.project` whole by reference. Neither restates the field list. That is what makes FR-22 hold as the authored record grows: a field added to `ProjectSchema` appears in the artifact automatically and cannot be forgotten, where a hand-written projection would go stale silently and the truncation would surface only when a surface tried to render the missing field.
+
+### `moteTier` and `timeAxis` are projections, not a fourth rule
+
+FR-3 permits exactly three mappings from authored data to appearance, and both of these read values the three rules already resolved: `moteTier` from `mass` and `isDeep`, `timeAxis` from the recency rank `luminanceBand` maps. No authored field reaches a visual property through either.
+
+That is enforced structurally rather than trusted. `rules.test.ts` reads the two functions' **actual parameter lists** off the source and fails if either names a `Project`, a `Duration`, or an authored field — a test of the property itself, not of a naming convention. A projection taking a `Project` and reading `notable` off it would pass a `derive*`-prefix count untouched.
+
+`isDeep` splits the mote ladder rather than shifting along it: a Shallow Body takes one of the two sparser tiers, a Deep Body one of the two denser ones. So a Deep Body is denser than a Shallow one of the same mass at *every* mass. An offset-and-clamp would saturate at the top of the range, and the Deep signal would vanish for exactly the entries most likely to carry it — while UX-DR11 forbids brightness and size from carrying it, because FR-3 has bound them to recency and duration.
+
+### `timeAxis` measures recency, and the Rail does not
+
+This is the one thing in the artifact most worth reading carefully.
+
+The scene and the Fallback project the same data two ways, so the one thing they must never do is order Bodies differently. `timeAxis` therefore ranks **the same quantity `luminanceBand` does** — `recencyOf`, which is `duration.end` clamped to `asOf` — so a brighter Body is always further along the Fallback's axis. A Client takes the **maximum** of its Projects' `timeAxis`, never the minimum: a Client is as recent as the most recent work done for it, which is what a reader means by where an engagement sits in time.
+
+**The Rail's own sort key is `duration.start`, and it stays that way.** `solve.ts`'s `inRailOrder` sorts Client Stars by earliest start month, and for a portfolio holding a long early engagement beside a short late one the two orderings genuinely separate — Alpha running 2010-01 → 2025-01 beside Beta running 2012-01 → 2013-01 puts Alpha first on the Rail and last on the time axis. Neither ordering is wrong. What would be wrong is an artifact claiming they coincide, so the document carries the recency ordering and says so.
+
+This is bound **by test, not by comment.** An earlier implementation of this story derived `timeAxis` from `duration.start` while `luminanceBand` ranked recency, and passed 191 tests with the two inverted, because every fixture happened to have a start order agreeing with its recency order. `artifact.test.ts` fixes a set where the two deliberately oppose, and asserts the orderings are identical over it. There is also one ranking function — `recencyRanks`, exported from `entities.ts` — rather than two implementations mirroring each other: replacing its key with `duration.start` fails the suite.
 
 ## `weight` is applied after the solve, not during it
 

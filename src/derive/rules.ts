@@ -1,11 +1,20 @@
 /**
- * The three mapping rules, and nothing else.
+ * The three mapping rules, and nothing else — plus two projections of what they
+ * already produced.
  *
  * FR-3 binds Body appearance to the career data through exactly three rules:
  * mass from `duration`, luminance band from recency, distance from the Rail from
  * `weight`. A fourth rule here is a spec violation, not a feature — if a
  * consumer needs another visual property, the answer is a schema-plus-derivation
  * change agreed first, never a fourth mapping quietly added alongside these.
+ *
+ * `deriveMoteTier` and `deriveTimeAxis` are **not** a fourth rule. Each reads a
+ * value the three rules have already resolved onto the graph — `mass` and
+ * `isDeep`, and the recency rank `deriveLuminanceBand` maps — so no authored
+ * field reaches a visual property through them. That is a structural property,
+ * not an intention: neither signature can name a `Project`, a `Duration`, or an
+ * authored field, and `rules.test.ts` reads the actual parameter lists and fails
+ * if either ever does.
  *
  * Every function is pure: no I/O, no clock, no module state, no imports beyond
  * types. Each rule takes the value it maps plus the range that value sits in,
@@ -152,4 +161,76 @@ export function deriveLuminanceBand(recency: number, range: Range): LuminanceBan
 export function deriveRailDistance(weight: Project['weight']): number {
   const BASE_DISTANCE = 10;
   return BASE_DISTANCE / weight;
+}
+
+// --- Projections: not rules, and structurally unable to become one ----------
+
+/**
+ * How dense a Body's mote field is, as a closed tier.
+ *
+ * Ordered sparsest first. A closed set rather than a float for the same reason
+ * `LuminanceBand` is one: a numeric density would let a renderer scale it to
+ * whatever it liked, and the tiers are a classification the derive layer owns.
+ */
+export type MoteTier = 'mote-sparse' | 'mote-medium' | 'mote-dense';
+
+/** The mote tiers, sparsest first. Order is load-bearing; the tests index it. */
+export const MOTE_TIERS = ['mote-sparse', 'mote-medium', 'mote-dense'] as const;
+
+/**
+ * Mote tier from `mass` and `isDeep` — both already on the graph.
+ *
+ * A projection, not a fourth mapping. It reads no authored field: `mass` is
+ * rule 1's output and `isDeep` is the classification-by-absence Story 1.3 owns,
+ * so nothing new reaches appearance through here. It exists in this story
+ * because AD-14 requires the artifact to carry the tier and no other story in
+ * the epic derives it — 1.6 is destinations, 1.7 is Dwell and Shots.
+ *
+ * **`isDeep` splits the ladder rather than shifting along it.** A Shallow Body
+ * takes one of the two sparser tiers; a Deep Body takes one of the two denser
+ * ones. So a Deep Body is *always* denser than a Shallow one of the same mass,
+ * at every mass including the top of the range — which an offset-and-clamp would
+ * not give: at the densest mass both would saturate on the top tier and the Deep
+ * signal would vanish for exactly the entries most likely to carry it. UX-DR11
+ * forbids brightness and size from carrying that signal, because FR-3 has bound
+ * them to recency and duration, so the mote field is the channel left, and it
+ * has to carry it everywhere rather than almost everywhere.
+ *
+ * The two bands overlap on the middle tier, which is deliberate: three tiers
+ * cannot give two classes disjoint pairs, and the alternative — a fourth tier —
+ * would let a renderer read the depth off the tier value alone and re-classify
+ * from it. `isDeep` is on the entity for that.
+ *
+ * `mass` is normalized against the set's mass range rather than read absolutely,
+ * so the tiers stay meaningful as `deriveMass`' provisional endpoints are tuned
+ * against the greybox later.
+ */
+export function deriveMoteTier(mass: number, range: Range, isDeep: boolean): MoteTier {
+  // Two tiers per class: Shallow spans indices 0..1, Deep spans 1..2. `< 0.5`
+  // rather than a floor over a scaled span, so the split point is stated once.
+  const dense = normalize(mass, range) >= 0.5;
+  const index = (isDeep ? 1 : 0) + (dense ? 1 : 0);
+  // `noUncheckedIndexedAccess`: `index` is 0..2 by construction, but the type
+  // system cannot see it, and a non-null assertion would hide a real bug later.
+  return MOTE_TIERS[index] ?? 'mote-sparse';
+}
+
+/**
+ * Where a Body sits on the Fallback's time axis, as `0..1`. Oldest `0`.
+ *
+ * **This measures recency — the same quantity `deriveLuminanceBand` ranks — and
+ * never `duration.start`.** It takes the identical `(recency, range)` pair, an
+ * ordinal position in the set's recency ordering, so the two are projections of
+ * one number and cannot separate: a brighter Body is always further along the
+ * axis. The scene and the Fallback render the same data two ways, and ordering
+ * their Bodies differently is the divergence AD-14 exists to prevent, so the
+ * binding is pinned by a test over a fixture whose `duration.start` order
+ * deliberately opposes its recency order.
+ *
+ * A `0..1` float rather than a closed set, because unlike luminance this is a
+ * position on an axis rather than a step on a ladder — the Fallback lays entries
+ * out continuously, and there is no reserved range to keep a value out of.
+ */
+export function deriveTimeAxis(recency: number, range: Range): number {
+  return normalize(recency, range);
 }

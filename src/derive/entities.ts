@@ -15,10 +15,13 @@ import type { Career, Project } from '../data/schema.ts';
 import {
   deriveLuminanceBand,
   deriveMass,
+  deriveMoteTier,
   deriveRailDistance,
+  deriveTimeAxis,
   durationInMonths,
   recencyOf,
   type LuminanceBand,
+  type MoteTier,
 } from './rules.ts';
 
 /** A Project entity: the authored record plus everything derived from it. */
@@ -39,6 +42,21 @@ export interface ProjectEntity {
   readonly luminanceBand: LuminanceBand;
   /** Rule 3 of 3: from `weight`. Greater weight sits closer in. */
   readonly railDistance: number;
+  /**
+   * A projection of `mass` and `isDeep`, not a fourth rule. The mote field is
+   * the channel left to carry the Deep signal, since UX-DR11 forbids brightness
+   * and size from carrying it.
+   */
+  readonly moteTier: MoteTier;
+  /**
+   * Where this Body sits on the Fallback's time axis, `0..1`, oldest `0`.
+   *
+   * A projection of the *same* recency rank `luminanceBand` maps — never of
+   * `duration.start`. Sorting a set by `timeAxis` and by `luminanceBand` gives
+   * one ordering, which is what keeps the Fallback's timeline from contradicting
+   * the scene's brightness.
+   */
+  readonly timeAxis: number;
   /** The validated authored record, carried whole — content parity is absolute. */
   readonly project: Project;
 }
@@ -49,6 +67,23 @@ export interface ClientEntity {
   readonly id: string;
   /** The authored client name, as written. */
   readonly name: string;
+  /**
+   * Where this Client sits on the Fallback's time axis: the **greatest** of its
+   * Projects' `timeAxis`, never the least.
+   *
+   * A Client is as recent as the most recent work done for it, which is what a
+   * reader means by where an engagement sits in time. Taking the minimum would
+   * place a Client by its oldest Project, so a long early engagement would
+   * outrank a short late one on the Fallback.
+   *
+   * Note this is deliberately **not** the Rail's own sort key: `solve.ts` orders
+   * Client Stars by earliest `duration.start`, and the two orderings genuinely
+   * separate for a portfolio holding a long early engagement beside a short late
+   * one. The artifact must not claim they coincide — whichever ordering the
+   * Fallback reproduces has to be the one it actually carries, so this is bound
+   * to `luminanceBand` by test and left free of the Rail.
+   */
+  readonly timeAxis: number;
   /** In authored order within this Client. Never empty. */
   readonly projects: readonly ProjectEntity[];
 }
@@ -65,9 +100,36 @@ export interface DeriveOptions {
    *
    * Injected rather than read from the clock: a derivation that calls
    * `new Date()` is not pure, and the committed artifact would churn every month
-   * for no authored change. Story 1.5 pins the value it emits with.
+   * for no authored change. The value comes from `career.json`'s top-level
+   * `asOf` — authored beside the entries it measures, so the emitted artifact is
+   * reproducible from the file alone, with nothing read from the clock and
+   * nothing typed on a command line.
    */
   readonly asOf: string;
+}
+
+/**
+ * The recency ordering of a set of Projects, as ranks — oldest `0`.
+ *
+ * Exported because the artifact assembles `timeAxis` from this same ranking, and
+ * a second implementation there would be a mirror held by comment alone. The two
+ * did drift once: `timeAxis` was computed from a start-month ordering while
+ * `luminanceBand` ranked recency, and the suite stayed green because nothing
+ * bound them. There is one ranking function, and both callers use it.
+ *
+ * Equal recency shares a rank, so two entries ending in the same month land in
+ * the same band and at the same point on the time axis regardless of their order
+ * in the file. The returned `range` is what the two rules normalize against.
+ */
+export function recencyRanks(
+  projects: readonly Project[],
+  asOf: string,
+): { readonly rankOf: ReadonlyMap<string, number>; readonly range: { min: number; max: number } } {
+  const distinct = [...new Set(projects.map((p) => recencyOf(p.duration, asOf)))].sort();
+  return {
+    rankOf: new Map(distinct.map((month, index) => [month, index])),
+    range: { min: 0, max: distinct.length - 1 },
+  };
 }
 
 /**
@@ -168,12 +230,21 @@ export function deriveEntities(career: Career, options: DeriveOptions): EntityGr
     max: Math.max(...spans),
   };
 
+  // `deriveMoteTier` normalizes `mass` against the set's *mass* range, not the
+  // span range, so it is computed through the rule rather than assumed to be the
+  // same shape. `deriveMass` is monotonic in months, so the endpoints do land on
+  // the extreme spans — but that is a property of today's rule, and reading it
+  // off the rule's own output means a tuning change to `deriveMass` cannot
+  // silently skew the tiers.
+  const massRange = {
+    min: deriveMass(spanRange.min, spanRange),
+    max: deriveMass(spanRange.max, spanRange),
+  };
+
   // Recency is a ranking, not an age: ordinal position in the recency ordering,
-  // oldest 0. Equal recency shares a rank, so two entries ending in the same
-  // month land in the same band regardless of their order in the file.
-  const distinctRecencies = [...new Set(projects.map((p) => recencyOf(p.duration, asOf)))].sort();
-  const rankOf = new Map(distinctRecencies.map((month, index) => [month, index]));
-  const recencyRange = { min: 0, max: distinctRecencies.length - 1 };
+  // oldest 0. One shared function, because `timeAxis` ranks the same quantity
+  // and a second implementation would drift from this one silently.
+  const { rankOf, range: recencyRange } = recencyRanks(projects, asOf);
 
   // --- The graph ---
   const byClient = new Map<string, { name: string; projects: ProjectEntity[] }>();
@@ -193,13 +264,21 @@ export function deriveEntities(career: Career, options: DeriveOptions): EntityGr
       throw new Error(`no recency rank derived for "${project.client} — ${project.project}"`);
     }
 
+    const isDeep = isDeepProject(project);
+    const mass = deriveMass(months, spanRange);
+
     const entity: ProjectEntity = {
       id: projectIdOf(project.client, project.project),
       clientId,
-      isDeep: isDeepProject(project),
-      mass: deriveMass(months, spanRange),
+      isDeep,
+      mass,
       luminanceBand: deriveLuminanceBand(rank, recencyRange),
       railDistance: deriveRailDistance(project.weight),
+      moteTier: deriveMoteTier(mass, massRange, isDeep),
+      // The same `(rank, recencyRange)` pair `luminanceBand` was mapped from,
+      // one line above. Not a re-derivation from `duration` — that is precisely
+      // the divergence this binding exists to make impossible.
+      timeAxis: deriveTimeAxis(rank, recencyRange),
       project,
     };
 
@@ -214,6 +293,11 @@ export function deriveEntities(career: Career, options: DeriveOptions): EntityGr
   const clients: ClientEntity[] = [...byClient].map(([id, { name, projects: owned }]) => ({
     id,
     name,
+    // The **maximum**, not the minimum. A Client is as recent as the most recent
+    // work done for it. Taking the minimum would place a Client by its oldest
+    // Project, so a long early engagement would outrank a short late one on the
+    // Fallback — and `artifact.test.ts` fixes a set where exactly that differs.
+    timeAxis: Math.max(...owned.map((entity) => entity.timeAxis)),
     projects: owned,
   }));
 

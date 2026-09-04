@@ -79,3 +79,15 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-4-a-deterministic-force-solve.md`
   summary: The unstopped-simulation mutation guard leaks a live d3 timer and a global on the failure path.
   evidence: `an unstopped simulation really does drift` stores nodes on `globalThis.__solveNodes` and deletes the key only on the success path, and the mutant's simulation is never stopped — so an assertion failure leaves both the global and a running `d3-timer` for the remainder of the suite, competing for the event loop. Wrap the cleanup in `try/finally` and stop the leaked simulation explicitly. Harmless while the test passes.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-5-the-versioned-layout-artifact.md`
+  summary: An artifact with an empty `clients` array validates clean and passes the build gate.
+  evidence: `career.json` may author `projects: []`, which yields `clients: []`. Every consumer then renders nothing with no error anywhere. A `.min(1)` on the schema, or a guard in `buildArtifact`, would make the empty case loud.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-5-the-versioned-layout-artifact.md`
+  summary: `content.weight` defaults to 1 during artifact validation, so a truncated payload passes the parity check for that one field.
+  evidence: `ArtifactProjectSchema.content` reuses `ProjectSchema`, whose `weight` carries `.default(1)`. An artifact whose `content` omits `weight` therefore validates clean, softening FR-22 parity for exactly one of the ten fields. The emitter is well covered; this matters only for a hand-edited or externally produced artifact reaching the gate.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-5-the-versioned-layout-artifact.md`
+  summary: The build gate detects shape drift but not content drift between `career.json` and the committed artifact.
+  evidence: A shape-valid artifact whose `content` no longer matches the authored data passes `npm run gate` cleanly. Editing `career.json` without re-solving therefore ships stale data on a fresh clone, caught only by `npm test`. A content hash of the authored file carried in the artifact would close it.
