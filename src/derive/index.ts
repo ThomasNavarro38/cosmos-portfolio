@@ -24,7 +24,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { readCareerFile, validateCareer } from '../data/validate.ts';
-import { buildArtifact, serializeArtifact, stripBanner } from './artifact.ts';
+import { BANNER, buildArtifact, serializeArtifact, stripBanner } from './artifact.ts';
 import { validateArtifact } from './artifact-schema.ts';
 import { deriveEntities } from './entities.ts';
 import { solveLayout } from './solve.ts';
@@ -164,6 +164,25 @@ export function checkArtifact(path: string = ARTIFACT_PATH): string[] {
       'the committed layout artifact failed its schema:',
       ...failures,
       'Run `npm run solve` and commit the result.',
+    ];
+  }
+
+  // Two properties of the *bytes*, which the parse above discards: the banner
+  // sits on line one and the newlines are LF. A document that validates but lost
+  // either is one something other than `solve` wrote — exactly what the banner
+  // warns against — so the gate checks them rather than leaving them to the
+  // suite, which `build` never runs. They come last because a malformed or
+  // wrong-shaped artifact should report that, not its formatting.
+  if (!text.startsWith(`{ ${JSON.stringify('$banner')}: ${JSON.stringify(BANNER)},`)) {
+    return [
+      `the layout artifact at ${path} does not carry its generated-file banner on line one.`,
+      'Do not hand-edit it — run `npm run solve` to regenerate.',
+    ];
+  }
+  if (text.includes('\r')) {
+    return [
+      `the layout artifact at ${path} carries CRLF newlines; it is committed with LF.`,
+      'Do not hand-edit it — run `npm run solve` to regenerate.',
     ];
   }
   return [];

@@ -4,7 +4,7 @@ type: 'feature'
 created: '2026-09-04'
 status: 'done'
 baseline_commit: '2ce1f693c5c73ef7fae274b27308bfb35f419847'
-review_loop_iteration: 1
+review_loop_iteration: 3
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-1-context.md'
 ---
@@ -99,6 +99,22 @@ context:
 - Given that same set, when `recencyRanks` is changed to rank on `duration.start`, then `npm test` fails — the binding is pinned by mutation, not asserted in prose.
 - Given a Client, when its `timeAxis` is compared to its Projects', then it equals the greatest of them.
 - Given the artifact schema, when inspected, then it declares no `dwell`, `shots`, or `destinations` field — those belong to stories 1.7 and 1.6.
+
+### Review Findings
+
+Review iteration 3 (2026-09-04). Four layers ran as subagents against the diff from `2ce1f69`; every finding below was independently reproduced before triage, and six subagent claims were dismissed as false or overstated.
+
+- [x] [Review][Decision] `npm test` writes the committed artifact, and a corrupted artifact is silently repaired — **resolved: copy/restore in the test.** `artifact.test.ts:765` calls `runIndex()` with no arguments, running the real CLI, which writes `ARTIFACT_PATH`; the seam at `index.ts:200` is the *input* path, so no argument can redirect the write. The test now reads the bytes first and rewrites them in a `finally`, chosen over adding a CLI output argument so the emitter's public surface stays as the story specified it. The `finally` is what makes it hold: the regression this test exists to catch is the one that leaves the artifact wrong, so restoring only on the success path would still lose the evidence. Verified by reproduction — before: run 1 failed 3 and run 2 passed 188/188 with the corruption erased; after: run 1 and run 2 both fail 6 identically and the corruption survives. Note a deleted artifact was never silently recreated; that case already failed honestly and stably at 182/6.
+- [x] [Review][Decision] The Client `timeAxis` tie-break is unverified and the tie is reachable by construction — **resolved: the tie fixture was added.** Deleting the tie-break at `artifact.ts:97` left the suite at 188/188; no fixture gave two Clients an equal `timeAxis`. `entities.ts:120` ranks equal recency identically by design, and every ongoing engagement clamps to the same `asOf` month, so ties are reachable rather than hypothetical — and once they occur, re-ordering `career.json` changes the artifact's bytes for no data change. `tiedEntries()` authors `Zeta` before `Alpha` with a shared `duration.end`, so authored order and ID order disagree and only the tie-break decides the emitted order. It carries its own opposition-style guard, matching `opposedEntries()`: if a future edit stops the two Clients tying, the guard fails rather than letting the ordering assertion pass vacuously. Verified by mutation — deleting the tie-break now fails the ordering test while the guard stays green, confirming the failure is the tie-break and not a broken fixture.
+- [x] [Review][Patch] Build gate accepts an artifact with no banner [src/derive/index.ts:148] — fixed: `checkArtifact` now asserts the banner on line one, after schema validation so a malformed artifact still reports its real failure
+- [x] [Review][Patch] Build gate accepts a CRLF artifact [src/derive/index.ts:148] — fixed: the gate rejects any artifact carrying a carriage return
+- [x] [Review][Patch] Malformed-JSON gate branch is unpinned [src/derive/index.ts:151] — fixed: a test now drives `checkArtifact` with unparseable JSON; `catch { return []; }` no longer passes the suite
+- [x] [Review][Patch] README overstates what the build gate catches [README.md:41] — fixed: the paragraph now states the gate catches malformed and hand-edited artifacts but not content drift, which `npm test` catches
+- [x] [Review][Patch] `moteTier` graph range is unpinned [src/derive/entities.ts:239] — fixed: a graph-level test holds depth equal and varies span; the `massRange`→`spanRange` mutation that passed 188/188 now fails on exactly this test
+- [x] [Review][Defer] An empty `clients` array validates clean [src/derive/artifact-schema.ts:110] — deferred, pre-existing
+- [x] [Review][Defer] `content.weight` defaults past the FR-22 parity check [src/derive/artifact-schema.ts:127] — deferred, pre-existing
+- [x] [Review][Defer] The gate detects shape drift but not content drift [src/derive/index.ts:148] — deferred, pre-existing
+- [x] [Review][Defer] A single-entry set lands at the top of the mote ladder [src/derive/rules.ts:208] — deferred, pre-existing
 
 ## Spec Change Log
 

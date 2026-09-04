@@ -175,6 +175,37 @@ test('the mote tier holds through the graph, not only through the projection', (
   );
 });
 
+test('the mote tier separates by mass through the graph, not only by depth', () => {
+  // The sibling test above holds span equal and varies depth, so it passes under
+  // any normalization range. This one holds depth equal and varies span, which is
+  // what pins `massRange` in `entities.ts`: normalizing `mass` against the *span*
+  // range instead collapses every Body onto the sparsest tier, and every other
+  // mote assertion stays green because none of them compares two different masses.
+  const graph = derive(
+    {
+      ...baseEntry(),
+      client: 'Short',
+      project: 'S',
+      duration: { start: '2020-01', end: '2020-02' },
+    },
+    {
+      ...baseEntry(),
+      client: 'Long',
+      project: 'L',
+      duration: { start: '2010-01', end: '2020-02' },
+    },
+  );
+  const all = allProjects(graph);
+  const short = all.find((p) => p.id.includes('short'));
+  const long = all.find((p) => p.id.includes('long'));
+  assert.ok(short !== undefined && long !== undefined, 'both entries must derive');
+  assert.equal(short.isDeep, long.isDeep, 'depth is held equal so only mass can separate them');
+  assert.ok(
+    MOTE_TIERS.indexOf(long.moteTier) > MOTE_TIERS.indexOf(short.moteTier),
+    `the longer engagement must land on a denser tier: ${short.moteTier} vs ${long.moteTier}`,
+  );
+});
+
 test('timeAxis and luminanceBand are projections of one number', () => {
   // Both take `(recency, range)` — the identical ordinal rank — so they cannot
   // separate. This asserts it at the rule level; `artifact.test.ts` asserts it
