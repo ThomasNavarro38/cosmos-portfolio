@@ -16,24 +16,27 @@
 
 import { z } from 'zod';
 import { ProjectSchema } from '../data/schema.ts';
+import { DWELL_TEMPOS } from './dwell.ts';
 import { MOTE_TIERS, RESTING_BANDS } from './rules.ts';
+import { SHOT_FRAMINGS } from './shots.ts';
 
 /**
  * The artifact's shape version. A **literal** in the schema, not a range: an
  * artifact declaring any other version fails validation rather than being read
  * on a guess.
  *
- * It started at 1 and is **2** now that Story 1.6 added `destinations`: the
- * contract's shape changed, so the number it declares changed with it. An
- * artifact still carrying `1` has no destination set and must fail rather than
- * be read by a consumer that expects one.
+ * It started at 1, became **2** when Story 1.6 added `destinations`, and is **3**
+ * now that Story 1.7 has added `dwell` and `shots`: each time the contract's
+ * shape changed, the number it declares changed with it. An artifact still
+ * carrying `2` has no Dwell tempo and no Shot framing, and must fail rather than
+ * be read by a consumer that expects them.
  *
- * `dwell` and `shots` remain deliberately *absent* rather than
- * declared-and-empty — a required field nothing populates would make the emitted
- * artifact fail its own gate until Story 1.7 lands, which is precisely what the
- * gate exists to prevent. Story 1.7 adds them and bumps this number again.
+ * Both new fields are **required**, not declared-and-empty. That was only
+ * possible once something populated them — a required field nothing emits would
+ * have made the artifact fail its own gate, which is precisely what the gate
+ * exists to prevent, and is why they were deliberately absent until now.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /** ISO 8601 year-month, matching the authored form exactly. */
 const IsoYearMonth = z
@@ -104,6 +107,51 @@ const DestinationSchema = z.strictObject({
   kind: z.enum(['client', 'project']),
 });
 
+/**
+ * One Client stop's Dwell: the entity it holds at, and the tempo class it is
+ * held for.
+ *
+ * Closed at exactly two fields. **A tempo class, never a duration** — the union
+ * cannot express a millisecond, a second, or a frame count, so a consumer
+ * structurally cannot read a number out of it and no future emitter can put one
+ * in. The numbers get tuned on the greybox at M1; a duration declared here would
+ * be one tuned in this file instead.
+ *
+ * A **list keyed by entity ID**, not a record. A record cannot carry the same
+ * key twice, so the duplicate a broken emitter would produce would be silently
+ * collapsed rather than caught — and the gate's job is to name the offending ID.
+ * The list is keyed all the same: `subject` is what a consumer looks a Client up
+ * by, never an array position.
+ */
+const DwellSchema = z.strictObject({
+  subject: z.string().min(1),
+  tempo: z.enum(DWELL_TEMPOS),
+});
+
+/**
+ * One Shot: the entity it frames, and how — angle, distance, framing.
+ *
+ * Closed at exactly four fields, and **no world coordinate anywhere** (FR-17).
+ * `strictObject` is what makes that structural rather than a convention: an
+ * emitter that started writing `x`, `y`, `z`, or a `position` fails the gate
+ * rather than having it silently accepted, and re-settling the simulation
+ * therefore leaves every Shot framing its intended subject.
+ *
+ * `angle` and `distance` are relative to the subject, so the pair names a way of
+ * looking rather than a place to stand. `framing` is a closed class for the same
+ * reason `luminanceBand` is: a free string would let a consumer invent framing
+ * rules the derive layer never sanctioned.
+ *
+ * One per Client — the Rail stops at Clients (AD-4a) — and a hand-authored Shot
+ * later displaces exactly one default by looking `subject` up on that key.
+ */
+const ShotSchema = z.strictObject({
+  subject: z.string().min(1),
+  angle: z.number().finite(),
+  distance: z.number().finite().positive(),
+  framing: z.enum(SHOT_FRAMINGS),
+});
+
 /** One Client in the artifact: a Rail stop, its Star's position, its Projects. */
 const ArtifactClientSchema = z.strictObject({
   id: z.string().min(1),
@@ -135,6 +183,16 @@ export const ArtifactSchema = z.strictObject({
   // against the `clients` tree is asserted by the build gate, not by this
   // schema, which can only see one entry's shape at a time.
   destinations: z.array(DestinationSchema),
+  // How long the journey rests at each Rail stop, as a tempo class — one entry
+  // per Client and none for a Project, because the Rail stops at Clients
+  // (AD-4a). Declared here because the schema is closed: an undeclared field is
+  // not emitted at all, and Epic 2 would then pick a pacing of its own.
+  dwell: z.array(DwellSchema),
+  // The default composition for each Rail stop: an entity ID plus angle,
+  // distance, and framing, with no world coordinate anywhere (FR-17). Its
+  // cardinality against the `clients` tree is asserted by the build gate, not by
+  // this schema, which can only see one entry's shape at a time.
+  shots: z.array(ShotSchema),
 });
 
 /** The emitted artifact, as a type. */
@@ -148,6 +206,12 @@ export type ArtifactProject = z.infer<typeof ArtifactProjectSchema>;
 
 /** One entry in the emitted destination set. */
 export type Destination = z.infer<typeof DestinationSchema>;
+
+/** One Client stop's Dwell: the entity it holds at, and its tempo class. */
+export type Dwell = z.infer<typeof DwellSchema>;
+
+/** One Shot: the entity it frames, and how. Never a world coordinate. */
+export type Shot = z.infer<typeof ShotSchema>;
 
 /** A solved position, as the artifact carries it. */
 export type ArtifactPosition = z.infer<typeof PositionSchema>;

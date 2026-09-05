@@ -17,6 +17,10 @@ Pure pipeline: validate → derive → solve. No DOM, no React, no Three. The si
 | `solve.test.ts` | Determinism, orbit ownership, the non-finite guard, and mutation guards that pin each determinism guarantee. |
 | `destinations.ts` | The one destination set: every Client and every Project, once each, in content-derived order. |
 | `destinations.test.ts` | Cardinality, ID order under a re-order, and mutation guards that fail if the walk drops a Project or emits Clients only. |
+| `dwell.ts` | Dwell as a **tempo class**, one per Client, from the count of Deep Projects in its system. Never a duration. |
+| `dwell.test.ts` | The Deep/Shallow separation, the count ceiling, and mutation guards that fail if the tempo ignores the Deep count or counts volume instead. |
+| `shots.ts` | The default Shot: one per Client — entity ID, angle, distance, framing — with the distance computed to contain the system's widest orbit. |
+| `shots.test.ts` | Containment against the widest orbit, reframing when a Project is added, and mutation guards that fail if a distance stops containing it. |
 | `artifact-schema.ts` | The emitted document's shape, as a versioned Zod schema. The contract every later epic reads. |
 | `artifact.ts` | Pure assembly: graph + solve → the artifact, plus its serialization and the banner. No I/O. |
 | `index.ts` | The pipeline CLI. `npm run solve` writes the artifact; `--check` is the build gate and never solves. |
@@ -121,7 +125,7 @@ A non-finite coordinate throws, naming the entity. Unguarded it would serialize 
 
 ## The artifact
 
-`generated/layout.generated.json` is the one committed document every later epic reads and no later epic re-derives. It carries the schema version, the reference month, and every Client with its Star's position, its Projects, their derived properties, and the whole authored record for each.
+`generated/layout.generated.json` is the one committed document every later epic reads and no later epic re-derives. It carries the schema version, the reference month, every Client with its Star's position, its Projects, their derived properties and the whole authored record for each — plus the three Client-and-entity lists no consumer may re-derive: `destinations`, `dwell`, and `shots`.
 
 ```sh
 npm run solve    # runs the pipeline and writes the artifact
@@ -142,9 +146,9 @@ Bytes are LF and end with a newline. `.gitattributes` normalizes the repository 
 
 `SCHEMA_VERSION` is `z.literal` in the schema, not a range: an artifact declaring any other version fails validation rather than being read on a guess. Every level is a `strictObject`, so a consumer writing an undeclared field fails the gate.
 
-The version is **2**. It started at 1; Story 1.6 added `destinations`, which changed the contract's shape, so the number it declares changed with it. An artifact still carrying `1` has no destination set and fails the gate rather than being read by a consumer that expects one.
+The version is **3**. It started at 1; Story 1.6 added `destinations` and Story 1.7 added `dwell` and `shots`. Each time the contract's shape changed, the number it declares changed with it. An artifact still carrying `2` has no Dwell tempo and no Shot framing, and fails the gate rather than being read by a consumer that expects them.
 
-`dwell` and `shots` are still **deliberately absent** rather than declared-and-empty. A required field nothing populates would make the emitted artifact fail its own gate until Story 1.7 lands, which is exactly what the gate exists to prevent. Story 1.7 adds them and bumps the version again.
+Both new fields are **required**, not declared-and-empty — which was only possible once something populated them. A required field nothing emits would have made the artifact fail its own gate, which is exactly what the gate exists to prevent, and is why they were deliberately absent until Story 1.7.
 
 ### Content parity is structural
 
@@ -191,6 +195,50 @@ One entry per Client and per Project, exactly once each. Each carries an `id` an
 It counts from the artifact's `clients` tree, **never from a fresh derive** — the gate never solves (AD-1). So a destination set agreeing with a *stale* entity tree still passes: that is the pre-existing content-drift limitation this file already documents, and `npm test` is what catches it. The gate's job here is the divergence the story names — the list disagreeing with the entities it addresses.
 
 The assertion sits **after** schema validation and **before** the byte checks. A malformed artifact must report its real failure rather than a cardinality one derived from a half-parsed tree, and a structural fault must not be reported as a formatting one. That ordering is itself pinned by a test, because it is invisible on a passing document.
+
+## Dwell and Shots are Client-granular
+
+**The Rail stops at Clients, never at Projects** (AD-4a). Both `dwell` and `shots` carry exactly one entry per Client and **no entry naming a Project** — a per-Project entry would describe a stop the journey never makes. This is the story's whole reason for existing: built at the shape the PRD's original wording implies, the Rail would stop at ~15 Bodies instead of ~5 Clients, and nothing would say so until the camera existed in Epic 2. So the gate says so now, naming the offending ID.
+
+A Project is not skipped by this. It is reached by being **framed at its Client's stop** — which is why a Shot's distance must contain the Client's widest orbit. A Project framed out of shot is unreachable from the Rail.
+
+### Dwell is a tempo class, never a duration
+
+`deriveDwell(client)` maps the count of **Deep** Projects in a Client's system onto a closed ladder — `dwell-brief`, `dwell-steady`, `dwell-held`, shortest first. A system holding something worth reading is held longer, which preserves FR-18's intent (pacing carries selectivity) at the only granularity the Rail still has.
+
+**A class, not a number, and the reason is the consumer that does not exist yet.** The AC permits "a ratio or tempo class". A ratio invites Epic 2 to multiply it by a base duration picked here, blind — and that base is precisely the number the story defers to greybox tuning at M1. A closed set hands Epic 2 the classification and keeps the milliseconds where they belong. It is the same idiom `luminanceBand` and `moteTier` already established for "a classification the derive layer owns", and the union makes a duration *unrepresentable* rather than merely discouraged.
+
+The count **clamps** at the longest class. An unclamped index reads `undefined` out of the tuple and would emit a value the schema then rejects with no indication of which Client produced it — the same `?? fallback` idiom `deriveMoteTier` uses, for the same reason.
+
+**Depth, never volume.** Total Project count was a rejected alternative: it rewards volume, contradicting SM-C3 — a Client with three thin engagements is not held longer than one with a single engagement worth reading. Total engagement duration was rejected too: it is already spent on `mass` via FR-3, and reusing it would make a long dull engagement feel important. `dwell.test.ts` fixes a set where volume and depth genuinely oppose, so a volume-counting derivation fails the suite.
+
+**Derived, never authored.** No Dwell value appears in `career.json` and none may. The derivation reads `isDeep` off the entity and never re-classifies from `notable` — `entities.ts` is the single derivation point for that.
+
+### The default Shot frames the whole system
+
+`buildShots(graph)` emits one Shot per Client: an entity ID (`subject`) plus `angle`, `distance`, and `framing`. **No Shot definition contains a world coordinate** (FR-17), and `strictObject` is what makes that structural rather than conventional — an emitter that started writing `x`, `y`, `z`, or a `position` fails the gate. That is what lets re-settling the simulation leave every Shot framing its intended subject.
+
+`angle` and `distance` are relative to the subject, so the pair names *a way of looking* rather than a place to stand. `framing` is a closed class for the same reason `luminanceBand` is; `frame-system` is its one member today, because the Rail has one kind of stop.
+
+**Distance contains the widest orbit.** `railDistance` **is** the orbital radius — `solve.ts` applies it as an exact post-solve radius around the parent Star — so the widest orbit is the greatest `railDistance` in the system. It is read off the entity and never recovered from a solved position, which would be the same number computed a second, lossier way. A margin puts the camera strictly outside it; a floor keeps a heavily weighted system from framing the camera inside its own Star, and only ever raises the distance, so containment always holds.
+
+**The widest-orbit rule is restated here, not imported.** `solve.ts`'s `systemRadiusOf` states the same rule, and is deliberately left alone: it is module-private, and it uses the radius for Rail *spacing*. The solver is free to change how it spaces the Rail without changing what a camera must contain, and exporting it would make the artifact assembler depend on solver internals to answer a framing question. The rule is two lines over `ProjectEntity`, which both modules already read.
+
+### Adding a Project reframes one Shot and edits none
+
+A Project added to an existing Client with only `weight` set widens **that Client's** Shot automatically, gets no Shot of its own, and leaves every other Shot byte-identical. That is FR-17a's amended reading and NFR-5's promise — one entry plus one number — and `shots.test.ts` asserts all three clauses on a fixture where the added Project genuinely widens its system.
+
+### The override is a shape, not a mechanism
+
+No Shot is authored in `career.json` today and this story authors none. What it guarantees is that adding one later **displaces exactly one default**: the emitted list is keyed by entity ID, and the merge point is a lookup on that key. A hand-authored Shot for one entity therefore changes nothing for any other, and its absence changes nothing at all.
+
+**Nothing in the pipeline may key a Shot by array position.** An index-keyed merge would silently re-target every override the first time a Client was added or renamed.
+
+### The cardinality assertion at the gate
+
+`checkStops` asserts both lists against the artifact's own Client set, and `npm run build` fails naming the offending ID: an entry naming no Client, an entry naming a **Project** (the granularity error), a subject listed twice, a Client with no entry, or a Client ID the tree carries twice. It also asserts the one Shot property none of those cardinality checks can see: that a Shot's `distance` is **strictly greater** than the widest `railDistance` among its own subject's Projects. A Shot naming the right Client with a distance that frames its widest Project out of view satisfies every check above, and that Project is then unreachable from the Rail. The widest orbit is read off the artifact's own tree, never re-derived. Both lists are also asserted before the bytes are written, so the *first* divergent emission fails rather than being committed and rejected afterwards.
+
+It counts from the artifact's `clients` tree, **never from a fresh derive** — the gate never solves (AD-1). The assertion sits after schema validation and before the byte checks, for the same reasons the destination check does, and that ordering is pinned by a test because it is invisible on a passing document.
 
 ## `weight` is applied after the solve, not during it
 

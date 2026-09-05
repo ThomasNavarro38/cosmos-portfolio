@@ -31,8 +31,9 @@ import { fileURLToPath } from 'node:url';
 import { CareerSchema, type Career } from '../data/schema.ts';
 import { BANNER, buildArtifact, serializeArtifact, stripBanner } from './artifact.ts';
 import { SCHEMA_VERSION, validateArtifact, type Artifact } from './artifact-schema.ts';
+import { DWELL_TEMPOS } from './dwell.ts';
 import { deriveEntities, type EntityGraph } from './entities.ts';
-import { ARTIFACT_PATH, checkArtifact, checkDestinations, checkEmittedArtifact, runPipeline } from './index.ts';
+import { ARTIFACT_PATH, checkArtifact, checkDestinations, checkEmittedArtifact, checkStops, runPipeline } from './index.ts';
 import { solveLayout, type SolvedLayout } from './solve.ts';
 
 const AS_OF = '2026-09';
@@ -793,6 +794,325 @@ test('the gate would catch the drift it is asserted against, mutation by mutatio
   }
 });
 
+// --- Matrix rows: the Dwell and Shot lists at the gate ----------------------
+
+/**
+ * The same committed-shaped fixture, typed for the two Client-granular lists.
+ *
+ * A temp copy, never the committed artifact: seeding a deliberately broken
+ * document into `generated/` and undoing it in a `finally` leaves a window where
+ * an interrupt strands the repo dirty, and the breakage surfaces in whichever
+ * sibling reads the artifact next.
+ */
+function stopFixture(): {
+  doc: {
+    dwell: { subject: string; tempo: string }[];
+    shots: { subject: string; angle: number; distance: number; framing: string }[];
+    clients: { id: string; projects: { id: string; railDistance: number }[] }[];
+  };
+  write: () => string;
+} {
+  const doc = JSON.parse(JSON.stringify(artifactOf(...opposedEntries()))) as {
+    dwell: { subject: string; tempo: string }[];
+    shots: { subject: string; angle: number; distance: number; framing: string }[];
+    clients: { id: string; projects: { id: string; railDistance: number }[] }[];
+  };
+  return { doc, write: () => writeTemp(serializeArtifact(doc as unknown as Artifact)) };
+}
+
+test('the stop fixture passes before it is broken, or every mutation below is vacuous', () => {
+  const { write } = stopFixture();
+  assert.deepEqual(checkArtifact(write()), [], 'the unbroken fixture must pass its own gate');
+});
+
+test('the gate fails when a Client has no Dwell entry, naming it', () => {
+  const { doc, write } = stopFixture();
+  const dropped = doc.dwell[0];
+  assert.ok(dropped !== undefined, 'the fixture must carry a Dwell entry to drop');
+  doc.dwell = doc.dwell.filter((entry) => entry.subject !== dropped.subject);
+
+  const failures = checkArtifact(write());
+  assert.notDeepEqual(failures, [], 'a dropped Dwell entry must fail the gate');
+  assert.ok(
+    failures.some((line) => line.includes(dropped.subject) && /no dwell entry/.test(line)),
+    `the unpaced Client must be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate fails when a Client has no Shot, naming it', () => {
+  const { doc, write } = stopFixture();
+  const dropped = doc.shots[0];
+  assert.ok(dropped !== undefined);
+  doc.shots = doc.shots.filter((shot) => shot.subject !== dropped.subject);
+
+  const failures = checkArtifact(write());
+  assert.ok(
+    failures.some((line) => line.includes(dropped.subject) && /no shots entry/.test(line)),
+    `the unframed Client must be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate fails when a Dwell or Shot entry is listed twice, naming the duplicate', () => {
+  for (const field of ['dwell', 'shots'] as const) {
+    const { doc, write } = stopFixture();
+    const first = doc[field][0];
+    assert.ok(first !== undefined);
+    // Cast through `unknown` because the two lists have different entry shapes;
+    // the mutation is the same one either way.
+    (doc[field] as unknown[]).push({ ...first });
+
+    const failures = checkArtifact(write());
+    assert.ok(
+      failures.some((line) => line.includes(first.subject) && /more than once/.test(line)),
+      `the duplicated ${field} subject must be named: ${failures.join('\n')}`,
+    );
+  }
+});
+
+test('the gate fails when a Dwell or Shot names an ID no Client carries', () => {
+  const { doc, write } = stopFixture();
+  const template = doc.shots[0];
+  assert.ok(template !== undefined);
+  doc.dwell = [...doc.dwell, { subject: 'client:nobody', tempo: 'dwell-brief' }];
+  doc.shots = [...doc.shots, { ...template, subject: 'client:nobody' }];
+
+  const failures = checkArtifact(write());
+  assert.ok(
+    failures.some((line) => line.includes('client:nobody')),
+    `the invented ID must be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate fails when a Project is given a Dwell or a Shot of its own', () => {
+  // AD-4a, and the failure this story exists to prevent: built per-Project the
+  // Rail stops at ~15 Bodies instead of ~5 Clients, and nothing would say so
+  // until the camera existed. A Project subject is reported as the *granularity*
+  // error it is, not as an unknown ID.
+  const { doc, write } = stopFixture();
+  const project = doc.clients[0]?.projects[0];
+  const template = doc.shots[0];
+  assert.ok(project !== undefined && template !== undefined);
+  doc.dwell = [...doc.dwell, { subject: project.id, tempo: 'dwell-brief' }];
+  doc.shots = [...doc.shots, { ...template, subject: project.id }];
+
+  const failures = checkArtifact(write());
+  assert.notDeepEqual(failures, [], 'a per-Project entry must fail the gate');
+  assert.ok(
+    failures.some((line) => line.includes(project.id) && /Rail stops at Clients/.test(line)),
+    `the offending Project must be named as a granularity error: ${failures.join('\n')}`,
+  );
+});
+
+test('the CLI exits 1 on an artifact whose Dwell list drifted', () => {
+  // The AC is about `npm run build`, whose only observable behaviour is the exit
+  // code — and `checkStops` in-process never shows it.
+  const doc = stripBanner(JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8'))) as Artifact;
+  const drifted = { ...doc, dwell: [] } as unknown as Artifact;
+
+  const result = runIndex('--check', writeTemp(serializeArtifact(drifted)));
+  assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
+  assert.match(result.stderr, /dwell/i, 'the failure must reach stderr');
+  assert.match(result.stderr, /client:sncf/, 'and must name the unpaced Client');
+});
+
+test('the CLI exits 1 on an artifact whose Shot list drifted', () => {
+  const doc = stripBanner(JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8'))) as Artifact;
+  const drifted = { ...doc, shots: [] } as unknown as Artifact;
+
+  const result = runIndex('--check', writeTemp(serializeArtifact(drifted)));
+  assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
+  assert.match(result.stderr, /shots/i, 'the failure must reach stderr');
+  assert.match(result.stderr, /client:sncf/, 'and must name the unframed Client');
+});
+
+test('the gate fails when a Shot no longer contains its own system’s widest orbit', () => {
+  // The one Shot property the gate could not see. Every check above is about
+  // *which* Clients are named; a Shot naming the right Client with a distance
+  // that frames its widest Project out of view passes all of them, and the
+  // Project is then unreachable from the Rail. Read off the document's own tree
+  // — no re-derive, no re-solve (AD-1).
+  const { doc, write } = stopFixture();
+  const shot = doc.shots[0];
+  assert.ok(shot !== undefined);
+  const client = doc.clients.find((candidate) => candidate.id === shot.subject);
+  assert.ok(client !== undefined, 'the fixture Shot must resolve to a Client');
+  const widest = Math.max(...client.projects.map((project) => project.railDistance));
+  assert.ok(shot.distance > widest, 'the unmutated fixture must already contain its widest orbit');
+
+  // Pulled just inside the widest orbit — still positive, still finite, so the
+  // schema accepts it and only this check can reject it.
+  doc.shots = doc.shots.map((entry) =>
+    entry.subject === shot.subject ? { ...entry, distance: widest / 2 } : entry,
+  );
+
+  const failures = checkArtifact(write());
+  assert.notDeepEqual(failures, [], 'a Shot framing its own system out of view must fail the gate');
+  assert.ok(
+    failures.some((line) => line.includes(shot.subject) && line.includes(String(widest))),
+    `the offending subject and its widest orbit must both be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the CLI exits 1 on an artifact whose Shot no longer contains its widest orbit', () => {
+  // `writeTemp`, never the real artifact path — the iteration-2 requirement.
+  const doc = stripBanner(JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8'))) as Artifact;
+  const drifted = {
+    ...doc,
+    shots: doc.shots.map((shot) => ({ ...shot, distance: 1 })),
+  } as unknown as Artifact;
+
+  const result = runIndex('--check', writeTemp(serializeArtifact(drifted)));
+  assert.equal(result.status, 1, `expected exit 1, got ${result.status}
+${result.stderr}`);
+  assert.match(result.stderr, /client:sncf/, 'the failure must name the badly framed Client');
+  assert.match(result.stderr, /orbits at/, 'and must state the orbit it fails to contain');
+});
+
+test('the gate would catch the Dwell and Shot drift it is asserted against, mutation by mutation', () => {
+  // Pins the assertion itself. A `checkStops` returning `[]` unconditionally —
+  // or a `checkArtifact` that never called it — would leave every assertion
+  // above green if any of them checked only that *some* line came back.
+  const base = JSON.parse(JSON.stringify(artifactOf(...opposedEntries()))) as Artifact;
+  assert.deepEqual(checkStops(base), [], 'the unmutated artifact must pass');
+
+  const project = base.clients[0]?.projects[0];
+  assert.ok(project !== undefined);
+
+  const mutations: [string, (doc: Artifact) => Artifact][] = [
+    ['a dropped Dwell entry', (d) => ({ ...d, dwell: d.dwell.slice(1) })],
+    ['a dropped Shot', (d) => ({ ...d, shots: d.shots.slice(1) })],
+    ['an emptied Dwell list', (d) => ({ ...d, dwell: [] })],
+    ['an emptied Shot list', (d) => ({ ...d, shots: [] })],
+    ['a duplicated Dwell entry', (d) => ({ ...d, dwell: [...d.dwell, d.dwell[0]!] })],
+    ['a duplicated Shot', (d) => ({ ...d, shots: [...d.shots, d.shots[0]!] })],
+    ['an invented Dwell subject', (d) => ({ ...d, dwell: [...d.dwell, { ...d.dwell[0]!, subject: 'client:nobody' }] })],
+    ['an invented Shot subject', (d) => ({ ...d, shots: [...d.shots, { ...d.shots[0]!, subject: 'client:nobody' }] })],
+    ['a Project given a Dwell', (d) => ({ ...d, dwell: [...d.dwell, { ...d.dwell[0]!, subject: project.id }] })],
+    ['a Project given a Shot', (d) => ({ ...d, shots: [...d.shots, { ...d.shots[0]!, subject: project.id }] })],
+    // An entity-tree mutation rather than a list one: two Clients sharing an ID
+    // collapse to a single key, and the collapsed tree then agrees with lists
+    // naming that ID once. `entities.ts` throws on this at derive time, but the
+    // gate never derives (AD-1).
+    ['a Client ID carried twice', (d) => ({ ...d, clients: [...d.clients, { ...d.clients[0]! }] })],
+    // Containment: the subject set, the cardinality and the schema all stay
+    // valid — only the distance moves inside the orbit it must contain.
+    ['a Shot framed inside its widest orbit', (d) => ({
+      ...d,
+      shots: d.shots.map((shot) => ({ ...shot, distance: Number.MIN_VALUE })),
+    })],
+    ['a Shot framed exactly at its widest orbit', (d) => ({
+      ...d,
+      shots: d.shots.map((shot) => {
+        const client = d.clients.find((candidate) => candidate.id === shot.subject);
+        // Exactly at the orbit is not containment: the Project sits on the
+        // frame edge. `>` rather than `>=` is what this pins.
+        const widest = Math.max(...(client?.projects ?? []).map((project) => project.railDistance));
+        return { ...shot, distance: widest };
+      }),
+    })],
+  ];
+
+  for (const [label, mutate] of mutations) {
+    assert.notDeepEqual(
+      checkStops(mutate(base)),
+      [],
+      `${label} must be rejected — an assertion that accepts it is asserting nothing`,
+    );
+  }
+});
+
+test('the pre-write guard rejects an artifact whose Dwell or Shot list diverged', () => {
+  // `checkEmittedArtifact` is the seam `runPipeline` runs before serializing.
+  // Its branches are unreachable with any authored `career.json` — the emitter
+  // builds both lists from the graph the check counts against — so the only way
+  // to exercise them is to hand it the document a future emitter bug would
+  // produce. That is the bug this guard exists to stop reaching disk.
+  const sound = artifactOf(...opposedEntries());
+  assert.deepEqual(checkEmittedArtifact(sound), [], 'a soundly emitted artifact must pass');
+
+  for (const field of ['dwell', 'shots'] as const) {
+    const dropped = { ...sound, [field]: sound[field].slice(0, -1) } as Artifact;
+    const failures = checkEmittedArtifact(dropped);
+    assert.ok(failures.length > 0, `a dropped ${field} entry must not reach serialization`);
+    assert.ok(
+      failures.some((line) => /disagrees with its Clients/.test(line)),
+      `and it must be reported as a ${field} divergence, not a schema failure`,
+    );
+  }
+});
+
+test('the gate asserts the Dwell and Shot lists after the schema and before the bytes', () => {
+  // The source scan, kept alongside the behavioural tests rather than in place
+  // of them. It catches a reordering the fixtures happen not to separate; the
+  // running tests catch one they do.
+  const source = readFileSync(INDEX_TS, 'utf8');
+  const body = source.slice(
+    source.indexOf('export function checkArtifact'),
+    source.indexOf('function main('),
+  );
+  assert.ok(body.length > 0, 'the scan must find the function');
+
+  const schemaAt = body.indexOf('parseArtifact');
+  const stopsAt = body.indexOf('checkStops');
+  const bytesAt = body.indexOf('startsWith');
+  assert.ok(schemaAt >= 0 && stopsAt >= 0 && bytesAt >= 0, 'all three checks must be present');
+  assert.ok(schemaAt < stopsAt, 'the schema is validated before the stop lists');
+  assert.ok(stopsAt < bytesAt, 'and the stop lists before the byte checks');
+});
+
+test('a schema-malformed artifact reports its schema failure, not a stop-list one', () => {
+  // The same ordering claim the destination set carries, observed by **running**
+  // the gate. An artifact broken in both ways at once is the only input that can
+  // tell the two orderings apart.
+  const { doc, write } = stopFixture();
+  doc.dwell = doc.dwell.slice(1);
+  const project = doc.clients[0]?.projects[0] as Record<string, unknown> | undefined;
+  assert.ok(project !== undefined);
+  delete project['timeAxis'];
+
+  const failures = checkArtifact(write());
+  assert.ok(
+    failures.some((line) => /failed its schema/.test(line)),
+    `the schema failure must be the one reported: ${failures.join('\n')}`,
+  );
+  assert.equal(
+    failures.some((line) => /disagrees with its Clients/.test(line)),
+    false,
+    'the stop-list complaint must not pre-empt the schema one',
+  );
+});
+
+test('a stop-divergent artifact reports the divergence, not a byte failure', () => {
+  const { doc, write } = stopFixture();
+  doc.shots = doc.shots.slice(1);
+  const crlf = readFileSync(write(), 'utf8').replace(/\n/g, '\r\n');
+
+  const failures = checkArtifact(writeTemp(crlf));
+  assert.ok(
+    failures.some((line) => /disagrees with its Clients/.test(line)),
+    `the structural failure must be the one reported: ${failures.join('\n')}`,
+  );
+  assert.equal(
+    failures.some((line) => /CRLF/.test(line)),
+    false,
+    'the byte complaint must not pre-empt the structural one',
+  );
+});
+
+test('the stop check still never solves', () => {
+  // Counted from the artifact's own `clients` tree. A gate that re-derived the
+  // graph to compare against would make the committed document a cache rather
+  // than a contract (AD-1).
+  const source = readFileSync(INDEX_TS, 'utf8');
+  const body = source.slice(source.indexOf('export function checkStops'), source.indexOf('export function checkArtifact'));
+  assert.ok(body.length > 0, 'the scan must find the function');
+  assert.doesNotMatch(
+    body,
+    /runPipeline|writeFileSync|solveLayout|buildArtifact|deriveEntities|buildDwell|buildShots|deriveDwell/,
+    'the gate may not solve, derive, or write',
+  );
+});
+
 test('a schema-malformed artifact reports its schema failure, not a cardinality one', () => {
   // The ordering, observed by **running** the gate rather than by reading the
   // source. An artifact broken in both ways at once is the only input that can
@@ -1062,23 +1382,114 @@ test('the assembler computes nothing a rule could own', () => {
 
 // --- The version and the closed schema --------------------------------------
 
-test('the artifact declares no dwell and no shots field, but does carry destinations', () => {
-  // `dwell` and `shots` belong to Story 1.7. Deliberately absent rather than
-  // declared-and-empty: a required field nothing populates would make the
-  // emitted artifact fail its own gate until 1.7 lands.
-  //
-  // `destinations` was on that list at version 1 and is emitted now — the
-  // assertion inverts rather than being deleted, so a regression that dropped
-  // the field again fails here as loudly as one that added `dwell` early.
+test('the artifact carries destinations, dwell and shots at this version', () => {
+  // `dwell` and `shots` were on the forbidden list until Story 1.7, exactly as
+  // `destinations` was until 1.6. Each assertion **inverts rather than being
+  // deleted**, so a regression that dropped a field again fails here as loudly
+  // as adding one early once did.
   const contents = serializeArtifact(artifactOf(...opposedEntries()));
-  for (const forbidden of ['dwell', 'shots']) {
-    assert.doesNotMatch(
-      contents,
-      new RegExp(`"${forbidden}"`, 'i'),
-      `"${forbidden}" belongs to a later story and must not appear in this version`,
+  for (const emitted of ['destinations', 'dwell', 'shots']) {
+    assert.match(contents, new RegExp(`"${emitted}"`), `the ${emitted} list ships at this version`);
+  }
+});
+
+test('the emitted dwell and shots lists are Client-granular, and name no Project', () => {
+  // AD-4a, carried into the emitted document: the Rail stops at Clients. Built
+  // per-Project the Rail stops at ~15 Bodies instead of ~5 Clients, and the
+  // error stays invisible until the camera exists.
+  const artifact = artifactOf(
+    ...opposedEntries(),
+    { ...baseEntry(), client: 'Alpha', project: 'Second', weight: 2 },
+  );
+  const clientIds = artifact.clients.map((client) => client.id);
+  const projectIds = allProjects(artifact).map((project) => project.id);
+  assert.ok(projectIds.length > clientIds.length, 'the fixture must hold more Projects than Clients');
+
+  for (const [label, subjects] of [
+    ['dwell', artifact.dwell.map((entry) => entry.subject)],
+    ['shots', artifact.shots.map((shot) => shot.subject)],
+  ] as const) {
+    assert.deepEqual(
+      [...subjects].sort(),
+      [...clientIds].sort(),
+      `${label} must carry exactly one entry per Client`,
+    );
+    for (const id of projectIds) {
+      assert.equal(subjects.includes(id), false, `"${id}" is a Project and must have no ${label} entry`);
+    }
+  }
+});
+
+test('no emitted Shot carries a world coordinate', () => {
+  // FR-17, asserted against the serialized bytes as well as the object, because
+  // that is what a consumer reads.
+  const artifact = artifactOf(...opposedEntries());
+  for (const shot of artifact.shots) {
+    assert.deepEqual(
+      Object.keys(shot).sort(),
+      ['angle', 'distance', 'framing', 'subject'],
+      'exactly the four declared fields',
     );
   }
-  assert.match(contents, /"destinations"/, 'the destination set ships at this version');
+
+  // The `shots` block of the file, isolated so a coordinate elsewhere in the
+  // document — every Body legitimately carries one — cannot mask one here.
+  const contents = serializeArtifact(artifact);
+  const block = contents.slice(contents.indexOf('"shots"'));
+  assert.ok(block.length > 0, 'the scan must find the shots block');
+  assert.doesNotMatch(block, /"[xyz]"|"position"|"target"|"lookAt"/, 'no world coordinate in any Shot');
+});
+
+test('every emitted Shot distance contains its Client’s widest orbit', () => {
+  // The acceptance criterion, asserted on the *artifact* rather than only on the
+  // module: the containment has to survive assembly, not merely hold inside
+  // `buildShots`.
+  const artifact = artifactOf(
+    ...opposedEntries(),
+    { ...baseEntry(), client: 'Alpha', project: 'Wide', weight: 0.05 },
+  );
+  const byId = new Map(artifact.clients.map((client) => [client.id, client]));
+
+  for (const shot of artifact.shots) {
+    const client = byId.get(shot.subject);
+    assert.ok(client !== undefined, `"${shot.subject}" must resolve to a Client`);
+    const widest = Math.max(...client.projects.map((project) => project.railDistance));
+    assert.ok(
+      shot.distance > widest,
+      `"${shot.subject}" orbits out to ${widest} but is framed at ${shot.distance}`,
+    );
+  }
+});
+
+test('a Deep-bearing Client is held longer than a Shallow-only one in the emitted artifact', () => {
+  const shallowEntry = { ...baseEntry(), client: 'Plain', project: 'P', notable: '' };
+  const artifact = artifactOf(
+    { ...baseEntry(), client: 'Rich', project: 'R', notable: 'Problem, constraint, decision.' },
+    shallowEntry,
+  );
+  const tempoOf = (name: string): string => {
+    const client = artifact.clients.find((candidate) => candidate.name === name);
+    assert.ok(client !== undefined);
+    const entry = artifact.dwell.find((candidate) => candidate.subject === client.id);
+    assert.ok(entry !== undefined, `"${client.id}" must have a Dwell entry`);
+    return entry.tempo;
+  };
+
+  // Direction, not difference. `notEqual` passed on a pair that was merely
+  // distinct, so it would have held just as well with the two tempos swapped —
+  // and the AC says the Deep-bearing stop ranks *strictly longer*, which only a
+  // comparison against the shortest-first order of `DWELL_TEMPOS` can state.
+  const rankOf = (name: string): number => {
+    const rank = DWELL_TEMPOS.indexOf(tempoOf(name) as (typeof DWELL_TEMPOS)[number]);
+    assert.ok(rank >= 0, `"${tempoOf(name)}" must be one of the declared tempo classes`);
+    return rank;
+  };
+
+  assert.ok(
+    rankOf('Rich') > rankOf('Plain'),
+    `the Deep-bearing stop must rank strictly longer, but "${tempoOf('Rich')}" does not outrank "${tempoOf('Plain')}"`,
+  );
+  assert.doesNotMatch(tempoOf('Rich'), /\d/, 'and the tempo is a class, never a duration');
 });
 
 // --- The CLI contract -------------------------------------------------------
