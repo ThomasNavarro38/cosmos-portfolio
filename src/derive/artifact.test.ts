@@ -953,6 +953,57 @@ test('the gate fails when a Shot no longer contains its own system’s widest or
   );
 });
 
+test('a duplicate Client ID cannot hide a Shot that frames its widest orbit out of view', () => {
+  // `widestOrbit` is keyed by Client ID, so a second Client carrying an ID the
+  // first already used would overwrite the orbit the containment check reads.
+  // Framed against the *narrower* of the two, a Shot that frames the wider
+  // system's outermost Project out of view reads as sound. `Math.max` on the
+  // write is what keeps the widest one deciding.
+  const { doc } = stopFixture();
+  const client = doc.clients[0];
+  assert.ok(client !== undefined);
+  const widest = Math.max(...client.projects.map((project) => project.railDistance));
+
+  // A twin under the same ID, orbiting far closer than the original.
+  const twin = JSON.parse(JSON.stringify(client)) as typeof client;
+  twin.projects = twin.projects.map((project) => ({ ...project, railDistance: 0.5 }));
+  doc.clients = [client, twin];
+  // Framed to contain the twin but not the original — the exact document the
+  // overwrite would have passed.
+  doc.shots = doc.shots.map((shot) =>
+    shot.subject === client.id ? { ...shot, distance: 1 } : shot,
+  );
+
+  const failures = checkStops(doc as unknown as Artifact);
+  assert.ok(
+    failures.some((line) => line.includes(client.id) && line.includes(String(widest))),
+    `containment must be judged against the widest orbit under the ID: ${failures.join('; ')}`,
+  );
+});
+
+test('a Client collapsed by a duplicate ID is still reported as an unpaced stop', () => {
+  // The missing-entry loop walks distinct IDs, so two Clients sharing one need
+  // only a single entry to satisfy it. The Rail stops at each Client in the
+  // tree, so the tree's own length is what each list must match.
+  const { doc } = stopFixture();
+  const client = doc.clients[0];
+  assert.ok(client !== undefined);
+  const before = doc.clients.length;
+  // The twin is *added* to the tree, so every other Client keeps its entry and
+  // the only divergence is the collapsed pair.
+  doc.clients = [...doc.clients, JSON.parse(JSON.stringify(client)) as typeof client];
+
+  const failures = checkStops(doc as unknown as Artifact);
+  for (const label of ['dwell', 'shots']) {
+    assert.ok(
+      failures.some(
+        (line) => line.includes(`${before + 1} Clients but ${before}`) && line.includes(label),
+      ),
+      `the ${label} list must be held to the tree's Client count: ${failures.join('; ')}`,
+    );
+  }
+});
+
 test('the CLI exits 1 on an artifact whose Shot no longer contains its widest orbit', () => {
   // `writeTemp`, never the real artifact path — the iteration-2 requirement.
   const doc = stripBanner(JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8'))) as Artifact;

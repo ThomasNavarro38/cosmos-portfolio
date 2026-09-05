@@ -147,7 +147,13 @@ const DwellSchema = z.strictObject({
  */
 const ShotSchema = z.strictObject({
   subject: z.string().min(1),
-  angle: z.number().finite(),
+  // Bounded to a quarter-turn either side of the orbital plane, because that is
+  // what an elevation *is*: `-PI/2` looks straight up from beneath, `PI/2`
+  // straight down from overhead, and every framing worth having lies between.
+  // Unbounded, the field accepts a wrapped radian value or a degrees-valued
+  // number — `30` reads as a plausible elevation and is nearly five full turns —
+  // and a consumer would take either as sanctioned by the derive layer.
+  angle: z.number().finite().gte(-Math.PI / 2).lte(Math.PI / 2),
   distance: z.number().finite().positive(),
   framing: z.enum(SHOT_FRAMINGS),
 });
