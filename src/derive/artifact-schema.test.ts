@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { buildArtifact } from './artifact.ts';
 import { ArtifactSchema, SCHEMA_VERSION, validateArtifact, type Artifact } from './artifact-schema.ts';
+import { DWELL_TEMPOS } from './dwell.ts';
 import { deriveEntities } from './entities.ts';
 import { solveLayout } from './solve.ts';
 
@@ -113,8 +114,8 @@ test('SCHEMA_VERSION is a literal in the schema, so a mismatch fails', () => {
   }
 });
 
-test('the version is 2 now that destinations landed, and changing the shape means changing it', () => {
-  assert.equal(SCHEMA_VERSION, 2, 'Story 1.6 added `destinations`, so the shape version is 2');
+test('the version is 3 now that dwell and shots landed, and changing the shape means changing it', () => {
+  assert.equal(SCHEMA_VERSION, 3, 'Story 1.7 added `dwell` and `shots`, so the shape version is 3');
   assert.equal(valid().schemaVersion, SCHEMA_VERSION, 'the emitter declares it');
 
   // Read off the source: the literal must be in the schema, not merely compared
@@ -133,11 +134,17 @@ test('an unknown field is rejected at every level of the document', () => {
   // consumer that starts writing a field nobody declared must fail the gate
   // rather than have it silently accepted.
   const cases: [string, (doc: Record<string, unknown>) => void][] = [
-    ['top level', (doc) => { doc['dwell'] = {}; }],
+    // `dwell` and `shots` are declared at this version, so an undeclared field
+    // has to be something else — the point is the closure, not these two names.
+    ['top level', (doc) => { doc['cameras'] = {}; }],
     ['a Client', (doc) => {
       const clients = doc['clients'] as Record<string, unknown>[];
       const client = clients[0];
       assert.ok(client !== undefined);
+      // Deliberately `shots`, which *is* declared at the top level and is
+      // nonetheless undeclared here: the Rail's framing is a property of the
+      // document, never of a Client entry, and `strictObject` at every level is
+      // what keeps a consumer from writing one there.
       client['shots'] = [];
     }],
     ['a Project', (doc) => {
@@ -167,43 +174,170 @@ test('an unknown field is rejected at every level of the document', () => {
   }
 });
 
-test('the schema declares no dwell and no shots field', () => {
-  // Story 1.7 owns those, and it bumps SCHEMA_VERSION when it adds them.
-  // Deliberately absent rather than declared-and-empty: a required field nothing
-  // populates would make the emitted artifact fail its own gate today.
+test('the schema declares dwell and shots, and a version-3 artifact without either is rejected', () => {
+  // The inverse of the version-2 absence assertion, which said these belonged to
+  // a later story. Story 1.7 declared them, so the assertion **inverts rather
+  // than being deleted**: a regression that dropped either field again must fail
+  // here as loudly as adding one early once did. `destinations` made exactly the
+  // same move at version 2.
   //
-  // `destinations` was on this list at version 1 and has moved off it — Story
-  // 1.6 declared it, so the assertion inverts rather than being deleted. The
-  // suite below proves the field is now both present and required.
+  // `ArtifactSchema` is a `strictObject`, so an undeclared field would not
+  // merely be optional — it would be *rejected*, and the Rail would have no
+  // pacing and no framing to read at all.
   const code = readFileSync(SCHEMA_TS, 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '');
-  for (const forbidden of ['dwell', 'shots']) {
-    assert.doesNotMatch(
+  for (const declared of ['dwell', 'shots']) {
+    assert.match(
       code,
-      new RegExp(`\\b${forbidden}\\s*:`, 'i'),
-      `"${forbidden}" belongs to a later story and must not be declared at this version`,
+      new RegExp(`\\b${declared}\\s*:`),
+      `"${declared}" must be declared at this version`,
     );
   }
 
-  // And the schema genuinely rejects them, not merely omits them — which is what
-  // makes the mutation guard real rather than a source grep.
-  const withDwell = copy(valid());
-  withDwell['dwell'] = { 'client:sncf': 'steady' };
-  assert.notDeepEqual(
-    validateArtifact(withDwell),
-    [],
-    'a schema accepting `dwell` must fail this suite',
+  const artifact = valid();
+  for (const field of ['dwell', 'shots'] as const) {
+    assert.ok(Array.isArray(artifact[field]), `the emitter populates \`${field}\``);
+    assert.ok(artifact[field].length > 0, 'with at least the one Client in the fixture');
+
+    const without = copy(artifact);
+    delete without[field];
+    assertFails(
+      validateArtifact(without),
+      new RegExp(field),
+      `a version-3 artifact with no \`${field}\` must fail, not be read as having none`,
+    );
+  }
+});
+
+test('a dwell entry carries a subject and a tempo, and nothing else', () => {
+  const reference = valid().dwell[0];
+  assert.ok(reference !== undefined);
+  assert.deepEqual(Object.keys(reference).sort(), ['subject', 'tempo'], 'the declared entry shape');
+
+  for (const extra of ['ms', 'milliseconds', 'duration', 'seconds', 'position', 'index']) {
+    const broken = copy(valid()) as { dwell: Record<string, unknown>[] };
+    const entry = broken.dwell[0];
+    assert.ok(entry !== undefined);
+    entry[extra] = 1;
+    assert.notDeepEqual(
+      validateArtifact(broken),
+      [],
+      `a dwell entry carrying "${extra}" must be rejected — the tempo is a class, not a duration`,
+    );
+  }
+
+  for (const field of ['subject', 'tempo']) {
+    const broken = copy(valid()) as { dwell: Record<string, unknown>[] };
+    const entry = broken.dwell[0];
+    assert.ok(entry !== undefined);
+    delete entry[field];
+    assertFails(
+      validateArtifact(broken),
+      new RegExp(`dwell\\.0\\.${field}`),
+      `a dwell entry missing "${field}" must be named`,
+    );
+  }
+});
+
+test('tempo accepts only the declared classes, and never a number', () => {
+  // The Boundaries: no millisecond, second, or frame-count number in the emitted
+  // Dwell. The union makes that unrepresentable rather than merely discouraged —
+  // the numbers get tuned on the greybox at M1.
+  for (const bad of [400, '400', 'slow', 'long', '', null, 0]) {
+    const broken = copy(valid()) as { dwell: Record<string, unknown>[] };
+    const entry = broken.dwell[0];
+    assert.ok(entry !== undefined);
+    entry['tempo'] = bad;
+    assertFails(validateArtifact(broken), /dwell\.0\.tempo/, `a tempo of ${String(bad)} must be rejected`);
+  }
+
+  for (const tempo of DWELL_TEMPOS) {
+    const ok = copy(valid()) as { dwell: Record<string, unknown>[] };
+    const entry = ok.dwell[0];
+    assert.ok(entry !== undefined);
+    entry['tempo'] = tempo;
+    assert.deepEqual(validateArtifact(ok), [], `"${tempo}" is a declared tempo`);
+  }
+});
+
+test('a Shot carries four fields and no world coordinate — the schema rejects one', () => {
+  // FR-17's hard rule, enforced structurally by `strictObject` rather than by
+  // convention: a Shot carrying a coordinate would survive a re-settle by
+  // pointing somewhere the subject no longer is.
+  const reference = valid().shots[0];
+  assert.ok(reference !== undefined);
+  assert.deepEqual(
+    Object.keys(reference).sort(),
+    ['angle', 'distance', 'framing', 'subject'],
+    'the declared entry shape',
   );
+
+  for (const smuggled of ['x', 'y', 'z', 'position', 'target', 'lookAt', 'up', 'index']) {
+    const broken = copy(valid()) as { shots: Record<string, unknown>[] };
+    const entry = broken.shots[0];
+    assert.ok(entry !== undefined);
+    entry[smuggled] = 0;
+    assert.notDeepEqual(
+      validateArtifact(broken),
+      [],
+      `a Shot carrying "${smuggled}" must be rejected — no Shot definition contains a world coordinate`,
+    );
+  }
+
+  for (const field of ['subject', 'angle', 'distance', 'framing']) {
+    const broken = copy(valid()) as { shots: Record<string, unknown>[] };
+    const entry = broken.shots[0];
+    assert.ok(entry !== undefined);
+    delete entry[field];
+    assertFails(
+      validateArtifact(broken),
+      new RegExp(`shots\\.0\\.${field}`),
+      `a Shot missing "${field}" must be named`,
+    );
+  }
+});
+
+test('a Shot distance is finite and positive, its angle finite, its framing declared', () => {
+  for (const bad of [0, -1, null, 'x', Number.NaN, Number.POSITIVE_INFINITY]) {
+    const broken = copy(valid()) as { shots: Record<string, unknown>[] };
+    const entry = broken.shots[0];
+    assert.ok(entry !== undefined);
+    entry['distance'] = bad;
+    assertFails(validateArtifact(broken), /shots\.0\.distance/, `a distance of ${String(bad)} must fail`);
+  }
+
+  for (const bad of [null, 'x', Number.NaN, Number.POSITIVE_INFINITY]) {
+    const broken = copy(valid()) as { shots: Record<string, unknown>[] };
+    const entry = broken.shots[0];
+    assert.ok(entry !== undefined);
+    entry['angle'] = bad;
+    assertFails(validateArtifact(broken), /shots\.0\.angle/, `an angle of ${String(bad)} must fail`);
+  }
+
+  for (const bad of ['frame-everything', 'wide', '', null, 0]) {
+    const broken = copy(valid()) as { shots: Record<string, unknown>[] };
+    const entry = broken.shots[0];
+    assert.ok(entry !== undefined);
+    entry['framing'] = bad;
+    assertFails(validateArtifact(broken), /shots\.0\.framing/, `a framing of ${String(bad)} must be rejected`);
+  }
+
+  const blank = copy(valid()) as { shots: Record<string, unknown>[] };
+  const entry = blank.shots[0];
+  assert.ok(entry !== undefined);
+  entry['subject'] = '';
+  assertFails(validateArtifact(blank), /shots\.0\.subject/, 'an empty subject names no entity');
 });
 
 // --- The destination set is declared, and required --------------------------
 
-test('the schema declares destinations, and a version-2 artifact without it is rejected', () => {
-  // The inverse of the version-1 absence assertion. `ArtifactSchema` is a
-  // `strictObject`, so an undeclared `destinations` would not merely be optional
-  // — it would be *rejected*, and both future input paths would infer their own
-  // reachable set instead (AD-15).
+test('the schema declares destinations, and a version-3 artifact without it is rejected', () => {
+  // The inverse of the version-1 absence assertion, kept as the version rose:
+  // a regression that dropped `destinations` must still fail here. `ArtifactSchema`
+  // is a `strictObject`, so an undeclared `destinations` would not merely be
+  // optional — it would be *rejected*, and both future input paths would infer
+  // their own reachable set instead (AD-15).
   const code = readFileSync(SCHEMA_TS, 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '');
@@ -218,7 +352,7 @@ test('the schema declares destinations, and a version-2 artifact without it is r
   assertFails(
     validateArtifact(without),
     /destinations/,
-    'a version-2 artifact with no destination set must fail, not be read as having none',
+    'a version-3 artifact with no destination set must fail, not be read as having none',
   );
 });
 
@@ -282,7 +416,7 @@ test('every declared field is required, so a truncated document fails', () => {
   const topLevel = Object.keys(artifact);
   assert.deepEqual(
     topLevel.sort(),
-    ['asOf', 'clients', 'destinations', 'schemaVersion'],
+    ['asOf', 'clients', 'destinations', 'dwell', 'schemaVersion', 'shots'],
     'the declared top-level shape',
   );
 

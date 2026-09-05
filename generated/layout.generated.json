@@ -1,5 +1,5 @@
 { "$banner": "GENERATED FILE — do not edit by hand. Produced by src/derive/index.ts from src/data/career.json; run `npm run solve` to regenerate. Hand edits are overwritten by the next solve and are not validated by the build gate.",
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "asOf": "2026-09",
   "clients": [
     {
@@ -63,6 +63,20 @@
     {
       "id": "project:sncf/client-referential-mdm-replacement",
       "kind": "project"
+    }
+  ],
+  "dwell": [
+    {
+      "subject": "client:sncf",
+      "tempo": "dwell-steady"
+    }
+  ],
+  "shots": [
+    {
+      "subject": "client:sncf",
+      "angle": 0.5235987755982988,
+      "distance": 15,
+      "framing": "frame-system"
     }
   ]
 }

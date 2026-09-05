@@ -68,11 +68,11 @@ export type PipelineResult =
  * Every check an assembled artifact must pass **before its bytes are written**.
  * Returns the failure lines, empty on success.
  *
- * Two of them: the document against its own declared schema, and the destination
- * set against the entities it addresses. Neither is redundant with the gate —
- * without them the *first* bad emission would be the one committed, and the gate
- * would only ever reject it afterwards, when the artifact on disk is already
- * wrong.
+ * Three of them: the document against its own declared schema, the destination
+ * set against the entities it addresses, and the Dwell and Shot lists against
+ * the Client set they pace and frame. None is redundant with the gate — without
+ * them the *first* bad emission would be the one committed, and the gate would
+ * only ever reject it afterwards, when the artifact on disk is already wrong.
  *
  * Extracted from `runPipeline` rather than inlined there because of what it
  * costs to test. Both branches are unreachable from `runPipeline` with any
@@ -93,6 +93,11 @@ export function checkEmittedArtifact(artifact: Artifact): string[] {
   const destinationFailures = checkDestinations(artifact);
   if (destinationFailures.length > 0) {
     return ['the emitted destination set disagrees with its entities:', ...destinationFailures];
+  }
+
+  const stopFailures = checkStops(artifact);
+  if (stopFailures.length > 0) {
+    return ['the emitted Dwell or Shot list disagrees with its Clients:', ...stopFailures];
   }
 
   return [];
@@ -238,6 +243,126 @@ export function checkDestinations(artifact: Artifact): string[] {
 }
 
 /**
+ * Asserts a validated artifact's `dwell` and `shots` against its own Client set.
+ * Returns the failure lines, empty on success.
+ *
+ * Both lists are Client-granular (AD-4a): the Rail stops at Clients, so exactly
+ * one entry per Client, and **no entry naming a Project**. Five ways either list
+ * can diverge, and each names the offending ID rather than reporting a count
+ * alone — "5 dwell entries, 6 clients" against a document holding fifteen Bodies
+ * is not a diagnosis:
+ *
+ * - an entry naming no entity in the tree (invented),
+ * - an entry naming a Project rather than a Client (the wrong granularity —
+ *   the failure this story exists to prevent, and the one that would otherwise
+ *   stay invisible until the camera existed),
+ * - the same subject listed twice (two tempos or two framings for one stop),
+ * - a Client no entry names (a stop with no pacing, or framed by nothing),
+ * - a Client ID carried twice by the tree, which collapses in a keyed lookup and
+ *   would then agree with a list naming it once,
+ * - a Shot whose distance does not contain its own system's widest orbit, which
+ *   frames a Project out of view and makes it unreachable from the Rail.
+ *
+ * It walks the artifact only — no derive, no solve (AD-1). What the *emitter*
+ * produces is pinned by `dwell.test.ts` and `shots.test.ts`; this is the
+ * internal consistency check the build can actually make.
+ */
+export function checkStops(artifact: Artifact): string[] {
+  const failures: string[] = [];
+
+  // The Clients the document itself carries, and the Projects it must never
+  // pace or frame — collected separately so a Project subject is reported as
+  // the *granularity* error it is rather than as an unknown ID.
+  const clients = new Set<string>();
+  const projects = new Set<string>();
+  // The greatest `railDistance` among each Client's Projects — read off the
+  // document's own tree, never re-derived and never re-solved (AD-1). This is
+  // the number a Shot's distance must contain for the whole system to be in
+  // frame; `shots.ts` computes it from the same field at emit time.
+  const widestOrbit = new Map<string, number>();
+
+  for (const client of artifact.clients) {
+    if (clients.has(client.id)) {
+      // A `Set` collapses a collision silently, and the collapsed tree would
+      // then agree with a list naming that ID once — a passing gate on a
+      // document carrying two Clients the Rail can only stop at as one.
+      // `entities.ts` throws on a collision at derive time, but the gate never
+      // derives (AD-1).
+      failures.push(`"${client.id}" is carried by two Clients in the artifact, so one of them has no stop of its own.`);
+    }
+    clients.add(client.id);
+    let widest = 0;
+    for (const project of client.projects) {
+      projects.add(project.id);
+      if (project.railDistance > widest) widest = project.railDistance;
+    }
+    widestOrbit.set(client.id, widest);
+  }
+
+  // One walk over both lists rather than two near-identical ones: the checks are
+  // the same four, and a second copy would drift from this one the first time
+  // either changed.
+  const lists: [string, readonly { readonly subject: string }[]][] = [
+    ['dwell', artifact.dwell],
+    ['shots', artifact.shots],
+  ];
+
+  for (const [label, entries] of lists) {
+    const seen = new Set<string>();
+    for (const entry of entries) {
+      if (projects.has(entry.subject)) {
+        failures.push(
+          `"${entry.subject}" is a Project but has a ${label} entry — ` +
+            `the Rail stops at Clients, so ${label} is Client-granular.`,
+        );
+      } else if (!clients.has(entry.subject)) {
+        failures.push(
+          `"${entry.subject}" has a ${label} entry but no Client in the artifact carries that ID.`,
+        );
+      }
+      if (seen.has(entry.subject)) {
+        failures.push(`"${entry.subject}" appears more than once in ${label}.`);
+      }
+      seen.add(entry.subject);
+    }
+
+    for (const id of clients) {
+      if (!seen.has(id)) {
+        failures.push(`the Client "${id}" is in the artifact but has no ${label} entry.`);
+      }
+    }
+  }
+
+  // Containment is a `shots`-only property, so it sits outside the shared walk
+  // rather than being smuggled into it behind a label test. Only a subject that
+  // resolved to a Client is checked: an invented or Project subject was already
+  // reported above, and a second failure line for the same entry would read as
+  // two problems.
+  for (const shot of artifact.shots) {
+    const widest = widestOrbit.get(shot.subject);
+    if (widest === undefined) continue;
+    if (!(shot.distance > widest)) {
+      failures.push(
+        `"${shot.subject}" is framed at distance ${shot.distance} but its widest Project orbits at ` +
+          `${widest} — a Project framed out of shot is unreachable from the Rail.`,
+      );
+    }
+  }
+
+  // Appended last, and only when something above already named an offending ID,
+  // so the count reads as a summary of those failures rather than as a
+  // substitute for them. On a passing document it is not reported at all.
+  if (failures.length > 0) {
+    failures.push(
+      `the artifact carries ${clients.size} Clients, ${artifact.dwell.length} dwell entries, ` +
+        `and ${artifact.shots.length} shots.`,
+    );
+  }
+
+  return failures;
+}
+
+/**
  * Reads and validates the committed artifact. Returns the failure lines, empty
  * on success.
  *
@@ -307,6 +432,28 @@ export function checkArtifact(path: string = ARTIFACT_PATH): string[] {
     return [
       'the committed layout artifact has a destination set that disagrees with its entities:',
       ...cardinality,
+      'Run `npm run solve` and commit the result.',
+    ];
+  }
+
+  // The Dwell and Shot lists against the Client set in the *same document*. The
+  // schema can only see one entry's shape at a time — it cannot tell that a
+  // Client is missing a tempo, named twice, invented, or that a Project has been
+  // given a stop of its own. The last of those is the failure AD-4a is about:
+  // built per-Project the Rail stops at ~15 Bodies instead of ~5 Clients, and
+  // the error stays invisible until the camera exists.
+  //
+  // Counted from the artifact's own `clients` tree, never from a fresh derive —
+  // the gate never solves (AD-1).
+  //
+  // After the destination check, so the two structural checks report in the
+  // order their fields were added; before the byte checks, so a structural fault
+  // is not reported as a formatting one.
+  const stops = checkStops(schema.artifact);
+  if (stops.length > 0) {
+    return [
+      'the committed layout artifact has a Dwell or Shot list that disagrees with its Clients:',
+      ...stops,
       'Run `npm run solve` and commit the result.',
     ];
   }
