@@ -745,22 +745,20 @@ test('the gate fails when a destination claims the wrong kind for its ID', () =>
 
 test('the CLI exits 1 on an artifact whose destination set drifted', () => {
   // The AC is about `npm run build`, whose only observable behaviour is the exit
-  // code — and `checkArtifact` in-process never shows it. This drives the real
-  // `--check` branch against the committed file, and restores the bytes in a
-  // `finally` for the same reason `the CLI exits 0` does.
-  const before = readFileSync(ARTIFACT_PATH, 'utf8');
-  try {
-    const doc = JSON.parse(before) as { $banner: string; destinations: unknown[] };
-    doc.destinations = [];
-    writeFileSync(ARTIFACT_PATH, `${JSON.stringify(doc, null, 2)}\n`.replace(/^\{\n {2}(?="\$banner")/, '{ '));
+  // code — and `checkArtifact` in-process never shows it. So this drives the
+  // real `--check` branch, but against a temp copy rather than the committed
+  // file: seeding a deliberately broken artifact into `generated/` and undoing
+  // it in a `finally` leaves a window where a Ctrl-C or a killed CI job strands
+  // the repo dirty, and the breakage would surface in whichever sibling reads
+  // the artifact next. `--check` takes the same optional path the solve branch
+  // does, for exactly this reason.
+  const doc = stripBanner(JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8'))) as Artifact;
+  const drifted = { ...doc, destinations: [] } as unknown as Artifact;
 
-    const result = runIndex('--check');
-    assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
-    assert.match(result.stderr, /destination/i, 'the failure must reach stderr');
-    assert.match(result.stderr, /client:sncf/, 'and must name the unreachable entity');
-  } finally {
-    writeFileSync(ARTIFACT_PATH, before);
-  }
+  const result = runIndex('--check', writeTemp(serializeArtifact(drifted)));
+  assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
+  assert.match(result.stderr, /destination/i, 'the failure must reach stderr');
+  assert.match(result.stderr, /client:sncf/, 'and must name the unreachable entity');
 });
 
 test('the gate would catch the drift it is asserted against, mutation by mutation', () => {
@@ -779,6 +777,11 @@ test('the gate would catch the drift it is asserted against, mutation by mutatio
     ['an emptied set', (d) => ({ ...d, destinations: [] })],
     ['Clients only', (d) => ({ ...d, destinations: d.destinations.filter((e) => e.kind === 'client') })],
     ['Projects only', (d) => ({ ...d, destinations: d.destinations.filter((e) => e.kind === 'project') })],
+    // Not a destination-set mutation but an entity-tree one: two Clients sharing
+    // an ID collapse to a single key in the gate's map, and the collapsed tree
+    // then agrees with a set naming that ID once. `entities.ts` throws on this
+    // at derive time, but the gate never derives (AD-1).
+    ['a Client ID carried twice', (d) => ({ ...d, clients: [...d.clients, { ...d.clients[0]! }] })],
   ];
 
   for (const [label, mutate] of mutations) {

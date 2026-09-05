@@ -103,3 +103,17 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-6-one-emitted-destination-set.md`
   summary: An artifact carrying zero Clients and zero destinations passes the gate as internally consistent.
   evidence: `ArtifactSchema.clients` and `.destinations` are both unconstrained arrays, so an empty document validates and `checkDestinations` finds 0 entities against 0 destinations — agreement by vacuity. Nothing is then reachable by any input path, which is the exact condition the destination set exists to prevent. Related to the already-deferred empty-`clients` finding from spec 1-5; a `.min(1)` on both, or a gate assertion that the set is non-empty, would close them together.
+
+## Deferred from: code review of spec-1-6-one-emitted-destination-set (2026-09-05)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-6-one-emitted-destination-set.md`
+  summary: `checkDestinations` reports one duplicate-failure line per repeat, not one per offending ID.
+  evidence: `seen.add` runs after the duplicate check, so N copies of an ID yield N-1 identical lines; verified live with a triplicated ID. A duplicate that also carries a wrong `kind` emits two lines for one entry, because the `kind` comparison precedes the `seen` check and neither short-circuits. Output noise on an already-failing gate — the verdict is never wrong. A `reported` set, or collecting duplicates and naming each ID once, would close it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-6-one-emitted-destination-set.md`
+  summary: `checkEmittedArtifact`'s schema-before-destinations ordering is pinned by no test.
+  evidence: `checkArtifact` received a dedicated ordering test in review iteration 1 — an artifact simultaneously schema-malformed and destination-divergent, asserting the schema failure is what surfaces. The pre-write twin `checkEmittedArtifact` [src/derive/index.ts:87] has the identical early-return structure and no equivalent coverage; it is exercised only with a sound artifact and a dropped-destination one. Both paths still reject a bad artifact, so only the failure message could regress.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-6-one-emitted-destination-set.md`
+  summary: The graph-mutation test is vacuous on its own fixture; the guarantee is held by the type system instead.
+  evidence: `'the walk does not mutate the graph it was handed'` [src/derive/destinations.test.ts:358] builds from `nominalEntries()`, whose derived graph is already in ID order, so `buildDestinations`'s in-place `.sort(byId)` would be a no-op and `JSON.stringify(graph)` is unchanged either way — confirmed by making the sorts in-place via casts (226/226 still green). `EntityGraph.clients` and `ClientEntity.projects` are typed `readonly`, so the natural non-cast version is a compile error and the compiler is what actually holds the invariant. A fixture whose graph order opposes ID order would make the test observe what its comment claims.
