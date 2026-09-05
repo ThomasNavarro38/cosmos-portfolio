@@ -182,7 +182,7 @@ One entry per Client and per Project, exactly once each. Each carries an `id` an
 
 **Derived, never authored.** The set adds no field to `career.json`. It is a restatement of the graph `entities.ts` already produced, and every ID in it was minted by `clientIdOf` or `projectIdOf` — never re-slugified here, because a second ID derivation is a second place for the contract to drift.
 
-**Ordered by ID, so a re-ordered `career.json` emits byte-identical bytes** (AD-5). Clients sort by ID and each Client's Projects follow immediately after it, also by ID — a Rail stop is reached before the Bodies orbiting it. Deliberately *not* the `clients` array's own `timeAxis` ordering: that is content-derived too, but it is the Fallback's timeline, and binding the input walk to it would make a tuning change to `deriveTimeAxis` silently re-order the keyboard.
+**Grouped by Client and ID-ordered within each group, so a re-ordered `career.json` emits byte-identical bytes** (AD-5). Clients sort by ID and each Client's Projects follow immediately after it, also by ID — the sequence is therefore not a flat ID sort of the whole set, and `destinations.test.ts` pins it element by element — a Rail stop is reached before the Bodies orbiting it. Deliberately *not* the `clients` array's own `timeAxis` ordering: that is content-derived too, but it is the Fallback's timeline, and binding the input walk to it would make a tuning change to `deriveTimeAxis` silently re-order the keyboard.
 
 ### The cardinality assertion at the gate
 

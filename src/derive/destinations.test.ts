@@ -144,6 +144,29 @@ test('a destination is labelled by what the ID resolves to', () => {
   }
 });
 
+test('each Client is emitted immediately before its own Projects, and no other', () => {
+  // The grouping, pinned as an exact sequence. The precedence test below asserts
+  // only that a Project lands *somewhere* after its Star, which a flat
+  // all-Clients-then-all-Projects emission satisfies for every pair — and that
+  // list is a keyboard walk visiting every Rail stop before any Body, the exact
+  // input-path defect this set exists to prevent (AD-15). Nothing else observes
+  // order: `checkDestinations` builds a Map and a Set and never reads a
+  // position, and the committed single-Client data cannot tell the two
+  // orderings apart. Only a multi-Client fixture compared element by element
+  // can, so this is that comparison.
+  assert.deepEqual(
+    destinationsOf(...nominalEntries()).map((d) => d.id),
+    [
+      clientIdOf('Alpha'),
+      projectIdOf('Alpha', 'One'),
+      projectIdOf('Alpha', 'Three'),
+      clientIdOf('Beta'),
+      projectIdOf('Beta', 'Two'),
+    ],
+    'each Star, then the Bodies orbiting it, before the next Star',
+  );
+});
+
 test('a Client is emitted before its own Projects', () => {
   // A Rail stop is reached before the Bodies orbiting it. A walk that visited a
   // Project before its Star would cross a system boundary the scene does not

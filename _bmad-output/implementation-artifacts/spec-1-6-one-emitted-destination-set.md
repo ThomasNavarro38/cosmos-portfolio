@@ -3,7 +3,7 @@ title: 'One emitted destination set'
 type: 'feature'
 created: '2026-09-04'
 status: 'done'
-review_loop_iteration: 0
+review_loop_iteration: 2
 baseline_commit: '6f2e6ae4680f59a2f7ab763131d40681ca2ada3b'
 context: []
 ---
@@ -94,6 +94,15 @@ Review iteration 1 (2026-09-05). Three layers ran as subagents against the diff 
 - [x] [Review][Patch] The mutation guard re-implemented its assertion inline [src/derive/destinations.test.ts] — fixed: it exercised a hand-rolled `sameSet` predicate rather than the `assert.deepEqual` assertions it claimed to guard.
 - [x] [Review][Patch] A Project filter rebuilt an ID prefix by string surgery [src/derive/destinations.test.ts] — fixed: `client.id.replace('client:', 'project:')` was a second local restatement of the convention `projectIdOf` owns, which the module's own doc comment forbids.
 - [x] [Review][Defer] An artifact with zero Clients and zero destinations passes the gate as internally consistent — deferred to `deferred-work.md`; related to the already-deferred empty-`clients` finding from Story 1.5.
+
+Review iteration 2 (2026-09-05). Four layers ran as subagents against the same `6f2e6ae` diff; every finding below was independently reproduced by mutation before triage. No acceptance-criteria violation was found — all eight ACs, all six I/O matrix rows, and every Always/Never constraint verify, and iteration 1's seven findings were re-confirmed resolved. Of 60 raw findings, three are patchable, three deferred, and the rest dismissed as false, cosmetic, or already-tracked.
+
+- [x] [Review][Patch] The interleaved walk order is pinned by no test — a flat clients-then-projects emission ships green [src/derive/destinations.test.ts:147]. `buildDestinations` emits each Client immediately followed by its own Projects, and both `destinations.ts:47-49` and `README.md:185` state that grouping as the contract — the array *is* the keyboard traversal order (AD-15). But the only order test asserts `bodyAt > stopAt`, i.e. precedence, not adjacency. Verified by mutation: replacing the body with an all-Clients-then-all-Projects emission leaves `npm test` at 226/226, `npm run typecheck` at 0, and the gate printing "present and valid" — the committed single-Client data cannot discriminate the two orderings, and `checkDestinations` never reads array position. Fix: a `deepEqual` of the full ID sequence on the multi-Client `nominalEntries()` fixture, matching the exact-sequence idiom the 1-Client test at :176 already uses.
+- [x] [Review][Patch] The CLI drift test writes a deliberately broken artifact to the real repo path [src/derive/artifact.test.ts:746]. It sets `destinations: []` on `generated/layout.generated.json` and restores in a `finally`. Every sibling `runIndex` test writes back byte-identical content, so this is a new class of risk introduced by this diff: a Ctrl-C, crash, or killed CI job inside the window leaves the working tree dirty and every later run red, surfacing in an unrelated test rather than this one. Fix: point it at a temp copy via the `writeTemp` helper this file already uses, or pass an explicit path.
+- [x] [Review][Patch] The gate tolerates a duplicate ID inside the `clients` tree [src/derive/index.ts:174]. `entities` is a `Map`, so two Clients sharing an ID collapse to one key. Verified live: a document with two `client:a` entries and one matching destination returns `[]` — a passing gate on a tree carrying two entities and one addressable destination. `entities.ts` throws on collision at derive time, but the gate never derives (AD-1), so nothing in `--check` catches a hand-edited or future-emitter collision. Fix: detect a re-set key while building the map and name it.
+- [x] [Review][Defer] `checkDestinations` reports one duplicate line per repeat, not one per offending ID [src/derive/index.ts:194] — deferred, cosmetic. Verified: a triplicated ID prints the identical line twice, and a duplicate that also carries a wrong `kind` prints two lines for one entry. Output noise on an already-failing gate; the verdict is never wrong.
+- [x] [Review][Defer] `checkEmittedArtifact`'s check ordering is unpinned [src/derive/index.ts:87] — deferred, low impact. Its `checkArtifact` twin got a dedicated schema-before-destinations ordering test in iteration 1; the pre-write guard has the same early-return property and no equivalent coverage. Both paths still fail on a bad artifact — only the message differs.
+- [x] [Review][Defer] `'the walk does not mutate the graph it was handed'` is vacuous on its own fixture [src/derive/destinations.test.ts:358] — deferred, guarantee held elsewhere. `nominalEntries()` derives a graph already in ID order, so an in-place sort is a no-op and the assertion cannot observe it. `EntityGraph.clients` and `ClientEntity.projects` are `readonly`, so the compiler holds the real guarantee. A fixture whose graph order opposes ID order would make the test observe what its comment claims.
 
 ## Spec Change Log
 

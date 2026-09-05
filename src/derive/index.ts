@@ -172,9 +172,28 @@ export function checkDestinations(artifact: Artifact): string[] {
   // The entities the document itself carries, in the same `client`/`project`
   // vocabulary the destination entries use.
   const entities = new Map<string, 'client' | 'project'>();
+  // A `Map` keyed by ID collapses a collision silently, and the collapsed tree
+  // would then agree with a destination set naming that ID once — a passing gate
+  // on a document carrying two entities the input paths can only reach as one.
+  // `entities.ts` throws on a collision at derive time, but the gate never
+  // derives (AD-1), so a hand-edited or future-emitter document reaches here
+  // with nothing else standing in the way.
+  const claim = (id: string, kind: 'client' | 'project'): void => {
+    const held = entities.get(id);
+    if (held !== undefined) {
+      failures.push(
+        held === kind
+          ? `"${id}" is carried by two ${kind}s in the artifact, so one of them is unreachable.`
+          : `"${id}" is carried by two entities in the artifact — a ${held} and a ${kind}.`,
+      );
+      return;
+    }
+    entities.set(id, kind);
+  };
+
   for (const client of artifact.clients) {
-    entities.set(client.id, 'client');
-    for (const project of client.projects) entities.set(project.id, 'project');
+    claim(client.id, 'client');
+    for (const project of client.projects) claim(project.id, 'project');
   }
 
   const seen = new Set<string>();
@@ -328,7 +347,12 @@ function main(): void {
   const argv = process.argv.slice(2);
 
   if (argv.includes('--check')) {
-    const failures = checkArtifact();
+    // The same optional-path seam the solve branch below carries, for the same
+    // reason: a test driving the real `--check` against the committed artifact
+    // would have to corrupt it and restore it, and an interrupt inside that
+    // window leaves the working tree dirty and every later run red — failing in
+    // whichever sibling reads the file next, not in the test that broke it.
+    const failures = checkArtifact(argv.find((arg) => arg !== '--check') ?? ARTIFACT_PATH);
     if (failures.length > 0) {
       for (const line of failures) console.error(line);
       process.exit(1);
