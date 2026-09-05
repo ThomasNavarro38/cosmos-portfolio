@@ -298,7 +298,7 @@ test('a Shot carries four fields and no world coordinate — the schema rejects 
   }
 });
 
-test('a Shot distance is finite and positive, its angle finite, its framing declared', () => {
+test('a Shot distance is finite and positive, its angle a real elevation, its framing declared', () => {
   for (const bad of [0, -1, null, 'x', Number.NaN, Number.POSITIVE_INFINITY]) {
     const broken = copy(valid()) as { shots: Record<string, unknown>[] };
     const entry = broken.shots[0];
@@ -321,6 +321,27 @@ test('a Shot distance is finite and positive, its angle finite, its framing decl
     assert.ok(entry !== undefined);
     entry['framing'] = bad;
     assertFails(validateArtifact(broken), /shots\.0\.framing/, `a framing of ${String(bad)} must be rejected`);
+  }
+
+  // An elevation lives in a quarter-turn either side of the orbital plane. A
+  // finite number outside it is not a framing the derive layer sanctioned: `30`
+  // reads as a plausible degrees value and is nearly five full turns in radians,
+  // and a wrapped radian arrives looking equally reasonable.
+  for (const bad of [30, 42, Math.PI, Math.PI / 2 + 1e-9, -Math.PI / 2 - 1e-9]) {
+    const broken = copy(valid()) as { shots: Record<string, unknown>[] };
+    const entry = broken.shots[0];
+    assert.ok(entry !== undefined);
+    entry['angle'] = bad;
+    assertFails(validateArtifact(broken), /shots\.0\.angle/, `an angle of ${String(bad)} must fail`);
+  }
+
+  // The boundaries themselves are framings — straight down and straight up.
+  for (const good of [0, Math.PI / 6, Math.PI / 2, -Math.PI / 2]) {
+    const ok = copy(valid()) as { shots: Record<string, unknown>[] };
+    const entry = ok.shots[0];
+    assert.ok(entry !== undefined);
+    entry['angle'] = good;
+    assert.deepEqual(validateArtifact(ok), [], `an angle of ${String(good)} must be accepted`);
   }
 
   const blank = copy(valid()) as { shots: Record<string, unknown>[] };

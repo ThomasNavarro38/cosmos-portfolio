@@ -3,7 +3,7 @@ title: 'Client-granular Dwell and default Shot framing'
 type: 'feature'
 created: '2026-09-05'
 status: 'done'
-review_loop_iteration: 0
+review_loop_iteration: 1
 baseline_commit: 'fdc8d1ccaff0b19d2f06e8a1a6abac5a0ceea3a5'
 context: []
 ---
@@ -92,6 +92,18 @@ context: []
 - Given `npm test`, when it runs, then every suite executes and it exits 0.
 - Given `npm run typecheck`, when it runs, then it exits 0 under `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`.
 - Given `npm run solve` run twice, when `git status --porcelain generated/` is checked, then it is empty.
+
+### Review Findings
+
+_Code review 2026-09-05 — four layers (blind-hunter, edge-case-hunter, verification-gap, acceptance-auditor). Baseline verified: `npm test` 301/301, `npm run typecheck` 0, gate passes, artifact byte-identical to a re-solve. Acceptance Auditor found no AC violations; all ten ACs verified independently against the emitted artifact._
+
+- [x] [Review][Patch] `checkStops` overwrites `widestOrbit` on a duplicate Client ID, so containment is checked against the wrong system [src/derive/index.ts:299]
+- [x] [Review][Patch] `checkStops`'s missing-entry loop walks the deduplicated `clients` Set, so a collapsed duplicate is never reported as a missing stop [src/derive/index.ts:328]
+- [x] [Review][Patch] `ShotSchema.angle` is unbounded — `z.number().finite()` accepts 42 rad or a degrees-valued angle straight into Epic 2 [src/derive/artifact-schema.ts:150]
+- [x] [Review][Defer] `MIN_SHOT_DISTANCE` breaks the "wider system framed from further out" property below the floor; the suite asserts it more broadly than it holds [src/derive/shots.test.ts:196] — deferred, greybox-tunable per Design Notes
+- [x] [Review][Defer] The `byId` comparator is written out three times across the derive modules [src/derive/dwell.ts:147] — deferred, already self-recorded in deferred-work.md by this diff
+- [x] [Review][Defer] `src/derive/README.md` carries two identically-titled `### The cardinality assertion at the gate` sections [src/derive/README.md:237] — deferred, already self-recorded in deferred-work.md by this diff
+- [x] [Review][Defer] The gate checks the Shot half of the emitter's join (containment) but nothing about the Dwell half, though `isDeep` is present in the tree [src/derive/index.ts:341] — deferred, within AD-1's stated contract; the join is pinned by dwell.test.ts:266
 
 ## Spec Change Log
 

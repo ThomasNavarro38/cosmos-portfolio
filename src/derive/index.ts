@@ -296,7 +296,11 @@ export function checkStops(artifact: Artifact): string[] {
       projects.add(project.id);
       if (project.railDistance > widest) widest = project.railDistance;
     }
-    widestOrbit.set(client.id, widest);
+    // `Math.max` rather than a plain set: on a duplicate ID the second Client
+    // would otherwise overwrite the first's orbit, and the containment check
+    // below would then be made against a system that is not the widest one
+    // carried under that ID — a Project framed out of shot, reported as sound.
+    widestOrbit.set(client.id, Math.max(widestOrbit.get(client.id) ?? 0, widest));
   }
 
   // One walk over both lists rather than two near-identical ones: the checks are
@@ -330,6 +334,18 @@ export function checkStops(artifact: Artifact): string[] {
       if (!seen.has(id)) {
         failures.push(`the Client "${id}" is in the artifact but has no ${label} entry.`);
       }
+    }
+
+    // The loop above walks distinct IDs, so two Clients sharing one ID need only
+    // a single entry to satisfy it. The Rail stops at each Client in the tree,
+    // not at each distinct ID, so the tree's own length is what the list must
+    // match — otherwise a collapsed duplicate reports only the collision and
+    // never the stop that has no pacing or framing of its own.
+    if (entries.length !== artifact.clients.length) {
+      failures.push(
+        `the artifact carries ${artifact.clients.length} Clients but ${entries.length} ${label} ` +
+          `entries — every Client is one stop and needs exactly one.`,
+      );
     }
   }
 
