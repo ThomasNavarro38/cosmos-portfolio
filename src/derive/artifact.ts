@@ -15,6 +15,7 @@
 import type { ClientEntity, EntityGraph, ProjectEntity } from './entities.ts';
 import type { Position, SolvedLayout } from './solve.ts';
 import { SCHEMA_VERSION, type Artifact, type ArtifactClient, type ArtifactProject } from './artifact-schema.ts';
+import { buildDestinations } from './destinations.ts';
 
 /**
  * The position of one entity, or a failure naming it.
@@ -84,6 +85,11 @@ function clientOf(client: ClientEntity, layout: SolvedLayout): ArtifactClient {
  * consumer laying entries out in array order gets the same sequence as one
  * sorting on `timeAxis`, and neither is quietly reading the Rail.
  *
+ * The destination set comes from `buildDestinations`, not from a walk inlined
+ * here. The assembler arranges; it never computes what a module owns (AD-3), and
+ * a second enumeration of the reachable set is precisely the divergence Story
+ * 1.6 exists to make impossible.
+ *
  * @throws if the solve produced no position for an entity, naming it.
  */
 export function buildArtifact(
@@ -98,7 +104,12 @@ export function buildArtifact(
     })
     .map((client) => clientOf(client, layout));
 
-  return { schemaVersion: SCHEMA_VERSION, asOf, clients };
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    asOf,
+    clients,
+    destinations: [...buildDestinations(graph)],
+  };
 }
 
 /**

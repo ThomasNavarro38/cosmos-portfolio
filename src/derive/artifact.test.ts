@@ -32,7 +32,7 @@ import { CareerSchema, type Career } from '../data/schema.ts';
 import { BANNER, buildArtifact, serializeArtifact, stripBanner } from './artifact.ts';
 import { SCHEMA_VERSION, validateArtifact, type Artifact } from './artifact-schema.ts';
 import { deriveEntities, type EntityGraph } from './entities.ts';
-import { ARTIFACT_PATH, checkArtifact, runPipeline } from './index.ts';
+import { ARTIFACT_PATH, checkArtifact, checkDestinations, checkEmittedArtifact, runPipeline } from './index.ts';
 import { solveLayout, type SolvedLayout } from './solve.ts';
 
 const AS_OF = '2026-09';
@@ -653,6 +653,278 @@ test('the gate rejects an artifact declaring a different schemaVersion', () => {
   );
 });
 
+// --- Matrix rows: the destination set at the gate ---------------------------
+
+/**
+ * A committed-shaped artifact on the opposing fixture, as a mutable document,
+ * plus a writer that turns it back into a gate-readable file.
+ *
+ * The banner is re-attached because the gate reads the *bytes*: without it every
+ * assertion below would pass on the banner check rather than on the cardinality
+ * one, which is the failure it exists to detect.
+ */
+function gateFixture(): {
+  doc: { destinations: { id: string; kind: string }[]; clients: { id: string; projects: { id: string }[] }[] };
+  write: () => string;
+} {
+  const doc = JSON.parse(JSON.stringify(artifactOf(...opposedEntries()))) as {
+    destinations: { id: string; kind: string }[];
+    clients: { id: string; projects: { id: string }[] }[];
+  };
+  return { doc, write: () => writeTemp(serializeArtifact(doc as unknown as Artifact)) };
+}
+
+test('the gate fixture passes before it is broken, or every mutation below is vacuous', () => {
+  // The same guard the opposing fixture carries. If the fixture failed the gate
+  // for an unrelated reason — a lost banner, a stale shape — each assertion
+  // below would pass while testing nothing.
+  const { write } = gateFixture();
+  assert.deepEqual(checkArtifact(write()), [], 'the unbroken fixture must pass its own gate');
+});
+
+test('the gate fails when a destination is dropped, naming the unreachable entity', () => {
+  const { doc, write } = gateFixture();
+  const dropped = doc.destinations.find((d) => d.kind === 'project');
+  assert.ok(dropped !== undefined, 'the fixture must carry a Project destination to drop');
+  doc.destinations = doc.destinations.filter((d) => d.id !== dropped.id);
+
+  const failures = checkArtifact(write());
+  assert.notDeepEqual(failures, [], 'a dropped destination must fail the gate');
+  assert.ok(
+    failures.some((line) => line.includes(dropped.id)),
+    `the missing ID must be named: ${failures.join('\n')}`,
+  );
+  assert.ok(
+    failures.some((line) => /\b4\b.*\b3\b|\b3\b.*\b4\b/.test(line)),
+    `the count mismatch must be reported: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate fails when a destination is listed twice, naming the duplicate', () => {
+  const { doc, write } = gateFixture();
+  const first = doc.destinations[0];
+  assert.ok(first !== undefined);
+  doc.destinations = [...doc.destinations, { ...first }];
+
+  const failures = checkArtifact(write());
+  assert.notDeepEqual(failures, [], 'a duplicated destination must fail the gate');
+  assert.ok(
+    failures.some((line) => line.includes(first.id) && /more than once/.test(line)),
+    `the duplicated ID must be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate fails when a destination names an ID no entity carries', () => {
+  const { doc, write } = gateFixture();
+  doc.destinations = [...doc.destinations, { id: 'project:ghost/nowhere', kind: 'project' }];
+
+  const failures = checkArtifact(write());
+  assert.notDeepEqual(failures, [], 'an invented destination must fail the gate');
+  assert.ok(
+    failures.some((line) => line.includes('project:ghost/nowhere')),
+    `the unknown ID must be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate fails when a destination claims the wrong kind for its ID', () => {
+  // A Client is a Rail stop and a Project a Body in orbit; the two consumers
+  // treat them differently. A `kind` contradicting the ID would send one of them
+  // down the wrong path with an ID that resolves perfectly well.
+  const { doc, write } = gateFixture();
+  const client = doc.destinations.find((d) => d.kind === 'client');
+  assert.ok(client !== undefined);
+  client.kind = 'project';
+
+  const failures = checkArtifact(write());
+  assert.notDeepEqual(failures, [], 'a mislabelled destination must fail the gate');
+  assert.ok(
+    failures.some((line) => line.includes(client.id) && /resolves to a client/.test(line)),
+    `the mislabelled ID must be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the CLI exits 1 on an artifact whose destination set drifted', () => {
+  // The AC is about `npm run build`, whose only observable behaviour is the exit
+  // code — and `checkArtifact` in-process never shows it. This drives the real
+  // `--check` branch against the committed file, and restores the bytes in a
+  // `finally` for the same reason `the CLI exits 0` does.
+  const before = readFileSync(ARTIFACT_PATH, 'utf8');
+  try {
+    const doc = JSON.parse(before) as { $banner: string; destinations: unknown[] };
+    doc.destinations = [];
+    writeFileSync(ARTIFACT_PATH, `${JSON.stringify(doc, null, 2)}\n`.replace(/^\{\n {2}(?="\$banner")/, '{ '));
+
+    const result = runIndex('--check');
+    assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
+    assert.match(result.stderr, /destination/i, 'the failure must reach stderr');
+    assert.match(result.stderr, /client:sncf/, 'and must name the unreachable entity');
+  } finally {
+    writeFileSync(ARTIFACT_PATH, before);
+  }
+});
+
+test('the gate would catch the drift it is asserted against, mutation by mutation', () => {
+  // Pins the assertion itself. A `checkDestinations` that returned `[]`
+  // unconditionally — or a `checkArtifact` that never called it — would leave
+  // every assertion above green if any of them checked only that *some* line
+  // came back. Each mutation is applied to a document that otherwise passes, and
+  // each must be rejected by `checkDestinations` on its own.
+  const base = JSON.parse(JSON.stringify(artifactOf(...opposedEntries()))) as Artifact;
+  assert.deepEqual(checkDestinations(base), [], 'the unmutated artifact must pass');
+
+  const mutations: [string, (doc: Artifact) => Artifact][] = [
+    ['a dropped destination', (d) => ({ ...d, destinations: d.destinations.slice(1) })],
+    ['a duplicated destination', (d) => ({ ...d, destinations: [...d.destinations, d.destinations[0]!] })],
+    ['an invented destination', (d) => ({ ...d, destinations: [...d.destinations, { id: 'client:nobody', kind: 'client' as const }] })],
+    ['an emptied set', (d) => ({ ...d, destinations: [] })],
+    ['Clients only', (d) => ({ ...d, destinations: d.destinations.filter((e) => e.kind === 'client') })],
+    ['Projects only', (d) => ({ ...d, destinations: d.destinations.filter((e) => e.kind === 'project') })],
+  ];
+
+  for (const [label, mutate] of mutations) {
+    assert.notDeepEqual(
+      checkDestinations(mutate(base)),
+      [],
+      `${label} must be rejected — an assertion that accepts it is asserting nothing`,
+    );
+  }
+});
+
+test('a schema-malformed artifact reports its schema failure, not a cardinality one', () => {
+  // The ordering, observed by **running** the gate rather than by reading the
+  // source. An artifact broken in both ways at once is the only input that can
+  // tell the two orderings apart: a malformed document must report its real
+  // failure, because a cardinality complaint derived from a half-parsed tree
+  // sends the reader after the wrong problem.
+  const { doc, write } = gateFixture();
+
+  // Divergent *and* malformed: a Project loses `timeAxis` while the destination
+  // set loses an entry, so both checks have something to say.
+  doc.destinations = doc.destinations.slice(1);
+  const project = doc.clients[0]?.projects[0] as Record<string, unknown> | undefined;
+  assert.ok(project !== undefined);
+  delete project['timeAxis'];
+
+  const failures = checkArtifact(write());
+  assert.notDeepEqual(failures, [], 'a doubly-broken artifact must fail the gate');
+  assert.ok(
+    failures.some((line) => /failed its schema/.test(line)),
+    `the schema failure must be the one reported: ${failures.join('\n')}`,
+  );
+  assert.ok(
+    failures.some((line) => /clients\.0\.projects\.0\.timeAxis/.test(line)),
+    `and it must name the failing path: ${failures.join('\n')}`,
+  );
+  assert.equal(
+    failures.some((line) => /destination set/.test(line)),
+    false,
+    'the cardinality complaint must not pre-empt the schema one',
+  );
+});
+
+test('a destination-divergent artifact reports cardinality, not a byte failure', () => {
+  // The other half of the ordering, also by running it. This artifact is
+  // divergent *and* carries CRLF, so both the cardinality check and the byte
+  // check have something to say — a structural fault must not be reported as a
+  // formatting one.
+  const { doc, write } = gateFixture();
+  doc.destinations = doc.destinations.slice(1);
+  const crlf = readFileSync(write(), 'utf8').replace(/\n/g, '\r\n');
+
+  const failures = checkArtifact(writeTemp(crlf));
+  assert.notDeepEqual(failures, [], 'a doubly-broken artifact must fail the gate');
+  assert.ok(
+    failures.some((line) => /destination set/.test(line)),
+    `the cardinality failure must be the one reported: ${failures.join('\n')}`,
+  );
+  assert.equal(
+    failures.some((line) => /CRLF/.test(line)),
+    false,
+    'the byte complaint must not pre-empt the structural one',
+  );
+});
+
+test('the pre-write guard rejects an artifact whose destination set diverged', () => {
+  // `checkEmittedArtifact` is the seam `runPipeline` runs before serializing.
+  // Both its branches are unreachable with any authored `career.json` — the
+  // emitter builds the set from the graph the check counts against — so the
+  // only way to exercise them is to hand it the document a future emitter bug
+  // would produce. That is the bug this guard exists to stop reaching disk.
+  const sound = artifactOf(...opposedEntries());
+  assert.deepEqual(
+    checkEmittedArtifact(sound),
+    [],
+    'a soundly emitted artifact must pass, or every assertion below is vacuous',
+  );
+
+  const dropped = { ...sound, destinations: sound.destinations.slice(0, -1) };
+  const failures = checkEmittedArtifact(dropped as Artifact);
+  assert.ok(failures.length > 0, 'a dropped destination must not reach serialization');
+  assert.ok(
+    failures.some((line) => /disagrees with its entities/.test(line)),
+    'and it must be reported as a destination divergence, not a schema failure',
+  );
+});
+
+test('runPipeline consults the pre-write guard before it serializes', () => {
+  // The test above pins the guard; this one pins that the pipeline calls it.
+  // Without this, the whole block could be deleted from `runPipeline` with the
+  // suite still green — the emitter would write the broken artifact and the
+  // build gate would only reject it afterwards, which is the ordering the guard
+  // exists to prevent.
+  const source = readFileSync(INDEX_TS, 'utf8');
+  const body = source.slice(
+    source.indexOf('export function runPipeline'),
+    source.indexOf('export function checkArtifact'),
+  );
+  assert.ok(body.length > 0, 'the scan must find runPipeline');
+
+  // Anchored on the call, not the bare name: a doc comment mentioning the
+  // function would satisfy a name scan with the call itself deleted.
+  const guardAt = body.indexOf('checkEmittedArtifact(artifact)');
+  const serializeAt = body.indexOf('serializeArtifact');
+  assert.ok(guardAt >= 0, 'runPipeline must consult the pre-write guard');
+  assert.ok(serializeAt >= 0, 'and it must serialize');
+  assert.ok(guardAt < serializeAt, 'the guard runs before the bytes are produced');
+});
+
+test('the gate asserts the destination set after the schema and before the bytes', () => {
+  // The source scan, kept alongside the two behavioural tests above rather than
+  // in place of them. It catches a reordering that the fixtures happen not to
+  // separate; the running tests catch one they do.
+  const source = readFileSync(INDEX_TS, 'utf8');
+  const body = source.slice(
+    source.indexOf('export function checkArtifact'),
+    source.indexOf('function main('),
+  );
+  assert.ok(body.length > 0, 'the scan must find the function');
+
+  const schemaAt = body.indexOf('parseArtifact');
+  const destinationsAt = body.indexOf('checkDestinations');
+  const bytesAt = body.indexOf('startsWith');
+  assert.ok(schemaAt >= 0 && destinationsAt >= 0 && bytesAt >= 0, 'all three checks must be present');
+  assert.ok(schemaAt < destinationsAt, 'the schema is validated before the destination set');
+  assert.ok(destinationsAt < bytesAt, 'and the destination set before the byte checks');
+});
+
+test('the gate still never solves, now that it counts entities', () => {
+  // The counting is done from the artifact's own `clients` tree. A gate that
+  // re-derived the graph to compare against would make the committed document a
+  // cache rather than a contract (AD-1) — and would pass on an artifact whose
+  // entities had drifted from the data, which is a different check entirely.
+  const source = readFileSync(INDEX_TS, 'utf8');
+  const body = source.slice(
+    source.indexOf('export function checkDestinations'),
+    source.indexOf('function main('),
+  );
+  assert.ok(body.length > 0, 'the scan must find both functions');
+  assert.doesNotMatch(
+    body,
+    /runPipeline|writeFileSync|solveLayout|buildArtifact|deriveEntities|buildDestinations/,
+    'the gate may not solve, derive, or write',
+  );
+});
+
 test('the gate passes on the committed artifact and does not touch its bytes', () => {
   const before = readFileSync(ARTIFACT_PATH, 'utf8');
   assert.deepEqual(checkArtifact(), [], 'the committed artifact must pass its own gate');
@@ -787,18 +1059,23 @@ test('the assembler computes nothing a rule could own', () => {
 
 // --- The version and the closed schema --------------------------------------
 
-test('the artifact declares no dwell, shots, or destinations field', () => {
-  // Those belong to Stories 1.7 and 1.6. Deliberately absent rather than
+test('the artifact declares no dwell and no shots field, but does carry destinations', () => {
+  // `dwell` and `shots` belong to Story 1.7. Deliberately absent rather than
   // declared-and-empty: a required field nothing populates would make the
   // emitted artifact fail its own gate until 1.7 lands.
+  //
+  // `destinations` was on that list at version 1 and is emitted now — the
+  // assertion inverts rather than being deleted, so a regression that dropped
+  // the field again fails here as loudly as one that added `dwell` early.
   const contents = serializeArtifact(artifactOf(...opposedEntries()));
-  for (const forbidden of ['dwell', 'shots', 'destinations']) {
+  for (const forbidden of ['dwell', 'shots']) {
     assert.doesNotMatch(
       contents,
       new RegExp(`"${forbidden}"`, 'i'),
       `"${forbidden}" belongs to a later story and must not appear in this version`,
     );
   }
+  assert.match(contents, /"destinations"/, 'the destination set ships at this version');
 });
 
 // --- The CLI contract -------------------------------------------------------

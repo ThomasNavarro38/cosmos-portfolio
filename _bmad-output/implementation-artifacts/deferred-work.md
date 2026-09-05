@@ -97,3 +97,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-1-5-the-versioned-layout-artifact.md`
   summary: A single-entry set lands at the top of the mote ladder, and no test pins which tier it should be.
   evidence: `normalize` returns `1` on a zero-width range, so with one authored entry `massRange` is `{min: 4, max: 4}`, `dense` is true, and the sole Project emits `mote-dense` — verified live in the committed artifact. The convention is defensible for mass and recency ("the sole entry is the longest and the most recent") but is a different claim for a density projection, where the natural single-entry answer is arguably the sparse floor. `rules.test.ts`'s single-entry test asserts only that the tier is in the declared set, never which one, so either reading passes. Worth a stated decision and a test pinning the chosen value before the inventory grows past one entry.
+
+## Deferred from: code review of spec-1-6-one-emitted-destination-set (2026-09-04)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-1-6-one-emitted-destination-set.md`
+  summary: An artifact carrying zero Clients and zero destinations passes the gate as internally consistent.
+  evidence: `ArtifactSchema.clients` and `.destinations` are both unconstrained arrays, so an empty document validates and `checkDestinations` finds 0 entities against 0 destinations — agreement by vacuity. Nothing is then reachable by any input path, which is the exact condition the destination set exists to prevent. Related to the already-deferred empty-`clients` finding from spec 1-5; a `.min(1)` on both, or a gate assertion that the set is non-empty, would close them together.
