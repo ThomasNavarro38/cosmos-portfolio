@@ -15,6 +15,8 @@ Pure pipeline: validate → derive → solve. No DOM, no React, no Three. The si
 | `rules.test.ts` | Every rules row of the edge-case matrix: ordering, band ceiling, ongoing, single-entry, default weight. |
 | `solve.ts` | The deterministic force solve: Client Stars along the Rail, Projects in orbit around their own Star. |
 | `solve.test.ts` | Determinism, orbit ownership, the non-finite guard, and mutation guards that pin each determinism guarantee. |
+| `destinations.ts` | The one destination set: every Client and every Project, once each, in content-derived order. |
+| `destinations.test.ts` | Cardinality, ID order under a re-order, and mutation guards that fail if the walk drops a Project or emits Clients only. |
 | `artifact-schema.ts` | The emitted document's shape, as a versioned Zod schema. The contract every later epic reads. |
 | `artifact.ts` | Pure assembly: graph + solve → the artifact, plus its serialization and the banner. No I/O. |
 | `index.ts` | The pipeline CLI. `npm run solve` writes the artifact; `--check` is the build gate and never solves. |
@@ -140,7 +142,9 @@ Bytes are LF and end with a newline. `.gitattributes` normalizes the repository 
 
 `SCHEMA_VERSION` is `z.literal` in the schema, not a range: an artifact declaring any other version fails validation rather than being read on a guess. Every level is a `strictObject`, so a consumer writing an undeclared field fails the gate.
 
-`dwell`, `shots`, and `destinations` are **deliberately absent** rather than declared-and-empty. A required field nothing populates would make the emitted artifact fail its own gate until Story 1.7 lands, which is exactly what the gate exists to prevent. Stories 1.6 and 1.7 each add their fields and bump the version.
+The version is **2**. It started at 1; Story 1.6 added `destinations`, which changed the contract's shape, so the number it declares changed with it. An artifact still carrying `1` has no destination set and fails the gate rather than being read by a consumer that expects one.
+
+`dwell` and `shots` are still **deliberately absent** rather than declared-and-empty. A required field nothing populates would make the emitted artifact fail its own gate until Story 1.7 lands, which is exactly what the gate exists to prevent. Story 1.7 adds them and bumps the version again.
 
 ### Content parity is structural
 
@@ -163,6 +167,30 @@ The scene and the Fallback project the same data two ways, so the one thing they
 **The Rail's own sort key is `duration.start`, and it stays that way.** `solve.ts`'s `inRailOrder` sorts Client Stars by earliest start month, and for a portfolio holding a long early engagement beside a short late one the two orderings genuinely separate — Alpha running 2010-01 → 2025-01 beside Beta running 2012-01 → 2013-01 puts Alpha first on the Rail and last on the time axis. Neither ordering is wrong. What would be wrong is an artifact claiming they coincide, so the document carries the recency ordering and says so.
 
 This is bound **by test, not by comment.** An earlier implementation of this story derived `timeAxis` from `duration.start` while `luminanceBand` ranked recency, and passed 191 tests with the two inverted, because every fixture happened to have a start order agreeing with its recency order. `artifact.test.ts` fixes a set where the two deliberately oppose, and asserts the orderings are identical over it. There is also one ranking function — `recencyRanks`, exported from `entities.ts` — rather than two implementations mirroring each other: replacing its key with `duration.start` fails the suite.
+
+## The destination set
+
+The artifact carries **one** `destinations` list, and it is the only enumeration of what an input path may address. Both future consumers — the DOM index the keyboard walks and the pointer raycast target set (AD-15) — build from it and from nothing else. **There is no second enumeration anywhere**, and adding one is the failure this list exists to prevent, not an optimization.
+
+The two-consumer rule, stated as the invariant it is:
+
+> An entity **not** in `destinations` is reachable by no input path. An entity **in** `destinations` must be reachable by all of them.
+
+That is why the list is emitted rather than inferred. If the keyboard built its own reachable set and the pointer built another, the first divergence between them would ship as an entity reachable by mouse and invisible to the keyboard — a bug that renders correctly, passes every schema, and is discovered by someone who cannot use a mouse.
+
+One entry per Client and per Project, exactly once each. Each carries an `id` and a `kind` — `client` for a Rail stop, `project` for a Body in orbit — and **nothing else**. No coordinate, no render-order index, no array offset: a consumer resolves the entity by ID against the `clients` tree and reads `isDeep`, mass, band, and position from there. Re-derived onto the entry they would be a second copy of data the document already carries, and the two would disagree the first time either changed. The `kind` discriminant is a restatement of where the ID came from — the minimum that lets the two consumers tell a stop from a Body — not a fourth mapping rule.
+
+**Derived, never authored.** The set adds no field to `career.json`. It is a restatement of the graph `entities.ts` already produced, and every ID in it was minted by `clientIdOf` or `projectIdOf` — never re-slugified here, because a second ID derivation is a second place for the contract to drift.
+
+**Ordered by ID, so a re-ordered `career.json` emits byte-identical bytes** (AD-5). Clients sort by ID and each Client's Projects follow immediately after it, also by ID — a Rail stop is reached before the Bodies orbiting it. Deliberately *not* the `clients` array's own `timeAxis` ordering: that is content-derived too, but it is the Fallback's timeline, and binding the input walk to it would make a tuning change to `deriveTimeAxis` silently re-order the keyboard.
+
+### The cardinality assertion at the gate
+
+`checkArtifact` asserts the set against the artifact's own entity tree, and `npm run build` fails naming the offending ID: a destination naming no entity, an ID listed twice, an entity no destination names, or a `kind` contradicting what the ID resolves to. The list is also asserted before the bytes are written, so the *first* divergent emission fails rather than being committed and rejected afterwards.
+
+It counts from the artifact's `clients` tree, **never from a fresh derive** — the gate never solves (AD-1). So a destination set agreeing with a *stale* entity tree still passes: that is the pre-existing content-drift limitation this file already documents, and `npm test` is what catches it. The gate's job here is the divergence the story names — the list disagreeing with the entities it addresses.
+
+The assertion sits **after** schema validation and **before** the byte checks. A malformed artifact must report its real failure rather than a cardinality one derived from a half-parsed tree, and a structural fault must not be reported as a formatting one. That ordering is itself pinned by a test, because it is invisible on a passing document.
 
 ## `weight` is applied after the solve, not during it
 

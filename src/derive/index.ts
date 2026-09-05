@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { readCareerFile, validateCareer } from '../data/validate.ts';
 import { BANNER, buildArtifact, serializeArtifact, stripBanner } from './artifact.ts';
-import { validateArtifact } from './artifact-schema.ts';
+import { parseArtifact, validateArtifact, type Artifact } from './artifact-schema.ts';
 import { deriveEntities } from './entities.ts';
 import { solveLayout } from './solve.ts';
 
@@ -65,14 +65,48 @@ export type PipelineResult =
   | { readonly ok: false; readonly failures: readonly string[] };
 
 /**
+ * Every check an assembled artifact must pass **before its bytes are written**.
+ * Returns the failure lines, empty on success.
+ *
+ * Two of them: the document against its own declared schema, and the destination
+ * set against the entities it addresses. Neither is redundant with the gate —
+ * without them the *first* bad emission would be the one committed, and the gate
+ * would only ever reject it afterwards, when the artifact on disk is already
+ * wrong.
+ *
+ * Extracted from `runPipeline` rather than inlined there because of what it
+ * costs to test. Both branches are unreachable from `runPipeline` with any
+ * authored `career.json`: `buildArtifact` builds the destination set from the
+ * same graph `checkDestinations` counts against, so they agree by construction,
+ * and the schema check is likewise total over every shape the rules can emit.
+ * That is the point — these are the guards that catch a *future* emitter bug, so
+ * the only way to exercise them is to hand them the artifact such a bug would
+ * produce. A function is the seam that allows it; a test asserting `runPipeline`
+ * succeeds on good data would pin nothing at all.
+ */
+export function checkEmittedArtifact(artifact: Artifact): string[] {
+  const schemaFailures = validateArtifact(artifact);
+  if (schemaFailures.length > 0) {
+    return ['the emitted artifact failed its own schema:', ...schemaFailures];
+  }
+
+  const destinationFailures = checkDestinations(artifact);
+  if (destinationFailures.length > 0) {
+    return ['the emitted destination set disagrees with its entities:', ...destinationFailures];
+  }
+
+  return [];
+}
+
+/**
  * Runs the whole pipeline in memory and returns the bytes the artifact should
  * carry — or the failure lines, having written nothing.
  *
  * Nothing is written until every stage has passed, including the emitted
- * document validating against its own schema. **A partially written artifact is
- * worse than none:** the build gate would accept a truncated document, and the
- * failure would surface as a missing Body in a scene rather than as a failed
- * solve.
+ * document validating against its own schema and its destination set agreeing
+ * with the entities it addresses. **A partially written artifact is worse than
+ * none:** the build gate would accept a truncated document, and the failure
+ * would surface as a missing Body in a scene rather than as a failed solve.
  */
 export function runPipeline(careerPath: string = CAREER_JSON): PipelineResult {
   const read = readCareerFile(careerPath);
@@ -96,16 +130,11 @@ export function runPipeline(careerPath: string = CAREER_JSON): PipelineResult {
     const layout = solveLayout(graph, { randomSource: seededRandom(SOLVE_SEED) });
     const artifact = buildArtifact(graph, layout, career.asOf);
 
-    // The document validates against its own declared schema *before* it is
-    // written. Without this the gate would only ever check artifacts that had
-    // already been committed, so the first bad emission would be the one that
-    // proved the schema wrong.
-    const artifactFailures = validateArtifact(artifact);
-    if (artifactFailures.length > 0) {
-      return {
-        ok: false,
-        failures: ['the emitted artifact failed its own schema:', ...artifactFailures],
-      };
+    // Every pre-write check, in one place, so the test suite can drive the exact
+    // code this path runs. See `checkEmittedArtifact`.
+    const emissionFailures = checkEmittedArtifact(artifact);
+    if (emissionFailures.length > 0) {
+      return { ok: false, failures: emissionFailures };
     }
 
     contents = serializeArtifact(artifact);
@@ -118,6 +147,75 @@ export function runPipeline(careerPath: string = CAREER_JSON): PipelineResult {
   }
 
   return { ok: true, contents };
+}
+
+/**
+ * Asserts a validated artifact's `destinations` against its own `clients` tree.
+ * Returns the failure lines, empty on success.
+ *
+ * Four ways the list can diverge from the entities it addresses, and each names
+ * the offending ID rather than reporting a count alone — "5 destinations, 6
+ * entities" against a document holding fifteen Bodies is not a diagnosis:
+ *
+ * - a destination naming no entity in the tree (invented),
+ * - the same ID listed twice (a keyboard walk that visits one Body twice),
+ * - an entity no destination names (reachable by no input path at all),
+ * - a `kind` contradicting what the ID resolves to.
+ *
+ * It walks the artifact only — no derive, no solve (AD-1). The set the *emitter*
+ * produces is pinned by `destinations.test.ts`; this is the internal consistency
+ * check the build can actually make.
+ */
+export function checkDestinations(artifact: Artifact): string[] {
+  const failures: string[] = [];
+
+  // The entities the document itself carries, in the same `client`/`project`
+  // vocabulary the destination entries use.
+  const entities = new Map<string, 'client' | 'project'>();
+  for (const client of artifact.clients) {
+    entities.set(client.id, 'client');
+    for (const project of client.projects) entities.set(project.id, 'project');
+  }
+
+  const seen = new Set<string>();
+  for (const destination of artifact.destinations) {
+    const kind = entities.get(destination.id);
+    if (kind === undefined) {
+      failures.push(
+        `"${destination.id}" is a destination but no Client or Project in the artifact carries that ID.`,
+      );
+      continue;
+    }
+    if (kind !== destination.kind) {
+      failures.push(
+        `"${destination.id}" is listed as a "${destination.kind}" destination but resolves to a ${kind}.`,
+      );
+    }
+    if (seen.has(destination.id)) {
+      failures.push(`"${destination.id}" appears more than once in the destination set.`);
+    }
+    seen.add(destination.id);
+  }
+
+  for (const [id, kind] of entities) {
+    if (!seen.has(id)) {
+      failures.push(
+        `the ${kind} "${id}" is in the artifact but not in the destination set, so no input path can reach it.`,
+      );
+    }
+  }
+
+  // Appended last, and only when something above already named an offending ID,
+  // so the count reads as a summary of those failures rather than as a
+  // substitute for them. On a passing document it is not reported at all — a
+  // gate that printed "2 entities, 2 destinations" on success would be noise.
+  if (failures.length > 0) {
+    failures.push(
+      `the artifact carries ${entities.size} entities and ${artifact.destinations.length} destinations.`,
+    );
+  }
+
+  return failures;
 }
 
 /**
@@ -158,11 +256,38 @@ export function checkArtifact(path: string = ARTIFACT_PATH): string[] {
     ];
   }
 
-  const failures = validateArtifact(stripBanner(parsed));
-  if (failures.length > 0) {
+  // One parse, and the typed document comes back with it. Validating here and
+  // then re-parsing below to get something walkable would be two parses of one
+  // document — two chances for them to disagree — and the second would be a
+  // `.parse` that throws inside a function whose whole contract is returning
+  // failure lines.
+  const schema = parseArtifact(stripBanner(parsed));
+  if (!schema.ok) {
     return [
       'the committed layout artifact failed its schema:',
-      ...failures,
+      ...schema.failures,
+      'Run `npm run solve` and commit the result.',
+    ];
+  }
+
+  // The destination set against the entity tree in the *same document*. The
+  // schema can only see one entry's shape at a time — it cannot tell that a
+  // Project is missing from the list, named twice, or invented. This is the
+  // divergence AD-15 is about: two input paths building from one list is only a
+  // guarantee if the list actually addresses every entity and nothing else.
+  //
+  // Counted from the artifact's own `clients` tree, never from a fresh derive —
+  // the gate never solves (AD-1). A destination set agreeing with a *stale*
+  // entity tree still passes here; that is the pre-existing content-drift
+  // limitation, and `npm test` is what catches it.
+  //
+  // After the schema, so a malformed artifact reports its real failure; before
+  // the byte checks, so a structural fault is not reported as a formatting one.
+  const cardinality = checkDestinations(schema.artifact);
+  if (cardinality.length > 0) {
+    return [
+      'the committed layout artifact has a destination set that disagrees with its entities:',
+      ...cardinality,
       'Run `npm run solve` and commit the result.',
     ];
   }

@@ -113,8 +113,8 @@ test('SCHEMA_VERSION is a literal in the schema, so a mismatch fails', () => {
   }
 });
 
-test('the version starts at 1 and changing the shape means changing it', () => {
-  assert.equal(SCHEMA_VERSION, 1, 'this version of the shape is 1');
+test('the version is 2 now that destinations landed, and changing the shape means changing it', () => {
+  assert.equal(SCHEMA_VERSION, 2, 'Story 1.6 added `destinations`, so the shape version is 2');
   assert.equal(valid().schemaVersion, SCHEMA_VERSION, 'the emitter declares it');
 
   // Read off the source: the literal must be in the schema, not merely compared
@@ -167,14 +167,18 @@ test('an unknown field is rejected at every level of the document', () => {
   }
 });
 
-test('the schema declares no dwell, shots, or destinations field', () => {
-  // Stories 1.7 and 1.6 own those, and each bumps SCHEMA_VERSION when it adds
-  // them. Deliberately absent rather than declared-and-empty: a required field
-  // nothing populates would make the emitted artifact fail its own gate today.
+test('the schema declares no dwell and no shots field', () => {
+  // Story 1.7 owns those, and it bumps SCHEMA_VERSION when it adds them.
+  // Deliberately absent rather than declared-and-empty: a required field nothing
+  // populates would make the emitted artifact fail its own gate today.
+  //
+  // `destinations` was on this list at version 1 and has moved off it — Story
+  // 1.6 declared it, so the assertion inverts rather than being deleted. The
+  // suite below proves the field is now both present and required.
   const code = readFileSync(SCHEMA_TS, 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '');
-  for (const forbidden of ['dwell', 'shots', 'destinations']) {
+  for (const forbidden of ['dwell', 'shots']) {
     assert.doesNotMatch(
       code,
       new RegExp(`\\b${forbidden}\\s*:`, 'i'),
@@ -193,12 +197,94 @@ test('the schema declares no dwell, shots, or destinations field', () => {
   );
 });
 
+// --- The destination set is declared, and required --------------------------
+
+test('the schema declares destinations, and a version-2 artifact without it is rejected', () => {
+  // The inverse of the version-1 absence assertion. `ArtifactSchema` is a
+  // `strictObject`, so an undeclared `destinations` would not merely be optional
+  // — it would be *rejected*, and both future input paths would infer their own
+  // reachable set instead (AD-15).
+  const code = readFileSync(SCHEMA_TS, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  assert.match(code, /\bdestinations\s*:/, 'the destination set must be declared at this version');
+
+  const artifact = valid();
+  assert.ok(Array.isArray(artifact.destinations), 'and the emitter populates it');
+  assert.ok(artifact.destinations.length > 0, 'with at least the one entity in the fixture');
+
+  const without = copy(artifact);
+  delete without['destinations'];
+  assertFails(
+    validateArtifact(without),
+    /destinations/,
+    'a version-2 artifact with no destination set must fail, not be read as having none',
+  );
+});
+
+test('a destination carries an id and a kind, and nothing else', () => {
+  // A destination *names* an entity; a coordinate, a render-order index, or an
+  // array offset here would be a second copy of what the `clients` tree already
+  // carries, and the two would disagree the first time either changed.
+  const reference = valid().destinations[0];
+  assert.ok(reference !== undefined);
+  assert.deepEqual(Object.keys(reference).sort(), ['id', 'kind'], 'the declared entry shape');
+
+  for (const extra of ['position', 'index', 'offset', 'order', 'isDeep']) {
+    const broken = copy(valid()) as { destinations: Record<string, unknown>[] };
+    const entry = broken.destinations[0];
+    assert.ok(entry !== undefined);
+    entry[extra] = 0;
+    assert.notDeepEqual(
+      validateArtifact(broken),
+      [],
+      `a destination carrying "${extra}" must be rejected — a consumer resolves the entity by ID`,
+    );
+  }
+
+  for (const field of ['id', 'kind']) {
+    const broken = copy(valid()) as { destinations: Record<string, unknown>[] };
+    const entry = broken.destinations[0];
+    assert.ok(entry !== undefined);
+    delete entry[field];
+    assertFails(
+      validateArtifact(broken),
+      new RegExp(`destinations\\.0\\.${field}`),
+      `a destination missing "${field}" must be named`,
+    );
+  }
+});
+
+test('kind accepts only the two entity kinds, and an ID is never blank', () => {
+  for (const bad of ['star', 'body', 'Client', '', null, 0]) {
+    const broken = copy(valid()) as { destinations: Record<string, unknown>[] };
+    const entry = broken.destinations[0];
+    assert.ok(entry !== undefined);
+    entry['kind'] = bad;
+    assertFails(
+      validateArtifact(broken),
+      /destinations\.0\.kind/,
+      `a kind of ${String(bad)} must be rejected`,
+    );
+  }
+
+  const blank = copy(valid()) as { destinations: Record<string, unknown>[] };
+  const entry = blank.destinations[0];
+  assert.ok(entry !== undefined);
+  entry['id'] = '';
+  assertFails(validateArtifact(blank), /destinations\.0\.id/, 'an empty ID names no entity');
+});
+
 // --- Required fields --------------------------------------------------------
 
 test('every declared field is required, so a truncated document fails', () => {
   const artifact = valid();
   const topLevel = Object.keys(artifact);
-  assert.deepEqual(topLevel.sort(), ['asOf', 'clients', 'schemaVersion'], 'the declared top-level shape');
+  assert.deepEqual(
+    topLevel.sort(),
+    ['asOf', 'clients', 'destinations', 'schemaVersion'],
+    'the declared top-level shape',
+  );
 
   for (const field of topLevel) {
     const broken = copy(artifact);
