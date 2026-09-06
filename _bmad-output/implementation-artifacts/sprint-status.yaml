@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 09-06-2026 09:45
+last_updated: 09-06-2026 14:26
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -44,7 +44,7 @@ development_status:
   1-6-one-emitted-destination-set: done
   1-7-client-granular-dwell-and-default-shot-framing: done
   1-8-enforced-boundaries-and-the-maintenance-contract: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   epic-2: backlog
   2-1-the-dom-destination-index: backlog
@@ -95,3 +95,101 @@ development_status:
   6-4-first-paint-verified-on-target-hardware: backlog
   6-5-launch-readiness-pass: backlog
   epic-6-retrospective: optional
+action_items:
+  - id: "epic-1-retro-item-1-ci-test-automation"
+    epic: 1
+    action: "Put the test suite on an automated path: CI (or prebuild wiring plus
+      a git hook) running npm test, npm run typecheck and npm run gate on every push"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
+  - id: "epic-1-retro-item-2-validate-on-build-path"
+    epic: 1
+    action: "Validate career.json on the build path so npm run build cannot succeed
+      on data npm run validate rejects"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
+  - id: "epic-1-retro-item-3-bound-asof-and-source-digest"
+    epic: 1
+    action: "Bound asOf against duration.start in CareerSchema, and emit a sourceDigest
+      so the gate detects artifact/source drift"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
+  - id: "epic-1-retro-item-4-gate-content-checks"
+    epic: 1
+    action: "Add gate content checks: clientId back-reference, isDeep vs content.notable,
+      empty Client, coincident Bodies"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
+  - id: "epic-1-retro-item-5-bundle-assertion"
+    epic: 1
+    action: "Complete story 1.8 AC group 2: the CI bundle assertion over bundler output,
+      before Epic 2 chunk split"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
+  - id: "epic-1-retro-item-6-boundary-table-gaps"
+    epic: 1
+    action: "Close the boundary-table gaps: neverPackages on shell/ROOT_RULE/derive,
+      R3F on render-fallback, cross-renderer edge, narrow src/types exemption to .d.ts"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
+  - id: "epic-1-retro-item-7-boundary-parser-loud"
+    epic: 1
+    action: "Make the boundary parser fail loudly on require/createRequire and non-literal
+      dynamic import specifiers"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
+  - id: "epic-1-retro-item-8-constrain-empty-cases"
+    epic: 1
+    action: "Constrain the empty cases: min(1) on CareerSchema.projects and on artifact
+      clients, destinations, dwell, shots"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
+  - id: "epic-1-retro-item-9-client-slug-collision-warning"
+    epic: 1
+    action: "Warn on a Client slug collision between differing spellings, keeping
+      the deliberate fold"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
+  - id: "epic-1-retro-item-10-verification-gap-pass"
+    epic: 1
+    action: "Run a dedicated verification-gap pass over src/derive/*.test.ts; the
+      lens did not complete in the retro"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
+  - id: "epic-1-retro-item-11-multi-client-maintenance-test"
+    epic: 1
+    action: "Add a multi-Client maintenance case that appends a new Client and asserts
+      Client-granular consequences"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
+  - id: "epic-1-retro-item-12-packaging-enforcement"
+    epic: 1
+    action: "Packaging enforcement: check:pins script on the gate path, .npmrc engine-strict,
+      packageManager field"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
+  - id: "epic-1-retro-item-13-reconcile-zod"
+    epic: 1
+    action: "Reconcile zod with the epic spec and move it to devDependencies"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
+  - id: "epic-1-retro-item-14-housekeeping"
+    epic: 1
+    action: "Housekeeping: extract byId comparator and derive test fixture; fix checkEmittedArtifact
+      header; name the path in the gate success message; correct the Story 1.7+ comments"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
