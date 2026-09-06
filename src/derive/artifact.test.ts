@@ -23,7 +23,7 @@
 
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -33,6 +33,7 @@ import { BANNER, buildArtifact, serializeArtifact, stripBanner } from './artifac
 import { SCHEMA_VERSION, validateArtifact, type Artifact } from './artifact-schema.ts';
 import { DWELL_TEMPOS } from './dwell.ts';
 import { deriveEntities, type EntityGraph } from './entities.ts';
+import { BOUNDARY_RULES, SRC_ROOT } from './boundaries.ts';
 import { ARTIFACT_PATH, checkArtifact, checkDestinations, checkEmittedArtifact, checkStops, runPipeline } from './index.ts';
 import { solveLayout, type SolvedLayout } from './solve.ts';
 
@@ -1632,6 +1633,121 @@ function writeTemp(contents: string): string {
   writeFileSync(path, contents);
   return path;
 }
+
+
+// --- The import-boundary gate, wired ------------------------------------------
+
+/**
+ * A throwaway `src/`-shaped tree, with every governed directory present so the
+ * rule-coverage check never fires for a directory the fixture simply did not
+ * need. Mirrors `treeOf` in `boundaries.test.ts`; kept local because what is
+ * under test here is the *wiring*, not the checker.
+ */
+function sourceTree(files: Record<string, string>): string {
+  scratchCount += 1;
+  const root = join(tempDir(), `src-${scratchCount}`);
+  for (const [rel, contents] of Object.entries(files)) {
+    const path = join(root, ...rel.split('/'));
+    mkdirSync(join(path, '..'), { recursive: true });
+    writeFileSync(path, contents);
+  }
+  for (const rule of BOUNDARY_RULES) mkdirSync(join(root, rule.directory), { recursive: true });
+  return root;
+}
+
+test('the gate reports an import-boundary violation in the source root it is given', () => {
+  // The behavioural half of the wiring. Until review iteration 1 `checkArtifact`
+  // called `checkImportBoundaries()` argument-less, so this test could not be
+  // written at all: there was no way to hand the gate a tree, and every artifact
+  // fixture silently depended on the state of the working `src/`.
+  const clean = sourceTree({ 'derive/x.ts': 'export const x = 1;\n' });
+  assert.deepEqual(checkArtifact(ARTIFACT_PATH, clean), [], 'the committed artifact passes against a clean tree');
+
+  const violating = sourceTree({ 'shell/entry.ts': "import { s } from '../data/schema.ts';\n" });
+  const failures = checkArtifact(ARTIFACT_PATH, violating);
+  assert.ok(failures.length > 0, 'a boundary violation must fail the gate');
+  assert.match(failures[0] ?? '', /violates the import boundaries/, 'and say so in the header');
+  assert.ok(
+    failures.some((line) => /shell\/entry\.ts:1/.test(line) && line.includes('../data/schema.ts')),
+    `naming the file, the line and the specifier: ${failures.join(' | ')}`,
+  );
+});
+
+test('the gate defaults its source root to src/ itself, not to a directory inside it', () => {
+  // The seam above lets a test hand the gate a fixture tree. What no test above
+  // pins is the value the seam defaults to — and the shipped gate only ever uses
+  // the default: `main()` passes an artifact path and never a source root.
+  //
+  // Narrowing that default to a real subdirectory (`src/derive/`) leaves every
+  // other test green while the `src/data/` ban silently stops covering the five
+  // consumer directories. Verdicts cannot catch it — a healthy tree is clean at
+  // either root — so this pins reach instead: the default must see every
+  // governed directory, and a narrowed root demonstrably does not.
+  const seenFrom = (root: string): number =>
+    BOUNDARY_RULES.filter((rule) => existsSync(join(root, rule.directory))).length;
+
+  const narrowed = join(SRC_ROOT, 'derive');
+  assert.ok(
+    seenFrom(narrowed) < BOUNDARY_RULES.length,
+    'the narrowed root must see fewer governed directories, or this pin proves nothing',
+  );
+
+  // Plant a violation the real root must see and the narrowed root cannot, in a
+  // scratch tree rather than in the working `src/` — writing into the live tree
+  // races the suite's own module loading.
+  const planted = sourceTree({ 'shell/entry.ts': "import { s } from '../data/schema.ts';\n" });
+  assert.ok(
+    checkArtifact(ARTIFACT_PATH, planted).length > 0,
+    'a src/-rooted scan must catch a shell -> data import',
+  );
+  assert.deepEqual(
+    checkArtifact(ARTIFACT_PATH, join(planted, 'derive')),
+    [],
+    'and a derive-rooted scan must miss it — which is exactly what a narrowed default would do',
+  );
+
+  // So the default must be the wide root. Read it off the shipped signature
+  // rather than from a verdict, because on a clean tree both roots return [].
+  const source = readFileSync(INDEX_TS, 'utf8');
+  const signature = source.slice(
+    source.indexOf('export function checkArtifact'),
+    source.indexOf('{', source.indexOf('export function checkArtifact')),
+  );
+  assert.match(
+    signature,
+    /sourceRoot:\s*string\s*=\s*SRC_ROOT\s*\)/,
+    `the gate's default source root must be SRC_ROOT itself, got: ${signature.trim()}`,
+  );
+});
+
+test('deleting the boundary call from the gate is caught here, not only by boundaries.test.ts', () => {
+  // The mutation that motivated these two tests: at review iteration 1 the whole
+  // block could be deleted from `checkArtifact` with all 340 tests green, while
+  // `npm run gate` went on reporting success against a real AD-3 violation.
+  // `boundaries.test.ts` stays green either way because it never goes through
+  // the gate — so the call itself is asserted here.
+  const source = readFileSync(INDEX_TS, 'utf8');
+  const body = source.slice(source.indexOf('export function checkArtifact'), source.indexOf('function main('));
+  assert.ok(body.includes('checkImportBoundaries'), 'checkArtifact must call the boundary check');
+  assert.ok(
+    /checkImportBoundaries\(\s*sourceRoot\s*\)/.test(body),
+    'and pass the source root through, or the gate is untestable against a fixture',
+  );
+});
+
+test('the gate asserts the import boundaries after the stop lists and before the bytes', () => {
+  // The third row of the ordering scan the two sibling checks already carry. The
+  // comment in `index.ts` claimed this ordering was "pinned by a test" before one
+  // existed; this is that test.
+  const source = readFileSync(INDEX_TS, 'utf8');
+  const body = source.slice(source.indexOf('export function checkArtifact'), source.indexOf('function main('));
+  const stopsAt = body.indexOf('checkStops');
+  const boundariesAt = body.indexOf('checkImportBoundaries');
+  const bytesAt = body.indexOf('startsWith');
+  assert.ok(stopsAt >= 0 && boundariesAt >= 0 && bytesAt >= 0, 'all three must be present');
+  assert.ok(stopsAt < boundariesAt, 'a wrong-shaped artifact reports that, not a boundary violation');
+  assert.ok(boundariesAt < bytesAt, 'and a boundary violation is not a formatting fault');
+});
 
 after(() => {
   if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
