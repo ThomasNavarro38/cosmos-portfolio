@@ -1,0 +1,696 @@
+/**
+ * Covers every import-boundary row of the story's I/O & edge-case matrix, and
+ * pins each rule **by mutation**.
+ *
+ * A boundary test that only asserts the real tree is clean proves nothing: a
+ * `checkImportBoundaries` that returned `[]` unconditionally would pass it, and
+ * the gate would go on reporting success while gating nothing. So every rule gets
+ * a fixture tree that violates it, and the check must reject that tree — which is
+ * the same thing as saying the suite goes red if the rule is deleted.
+ *
+ * Fixtures live under `mkdtemp` and never in the real `src/`: `node --test` runs
+ * suites in parallel, so a test writing into `src/` would break a sibling suite
+ * for a reason unrelated to what it tests. It bit this repo once already
+ * (`src/data/validate.test.ts:443`).
+ */
+
+import { strict as assert } from 'node:assert';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { after, test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import {
+  BOUNDARY_RULES,
+  ROOT_RULE,
+  SRC_ROOT,
+  checkImportBoundaries,
+  findImports,
+  stripCommentsAndStrings,
+  targetDirectoryOf,
+} from './boundaries.ts';
+
+const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
+
+// --- Fixture trees ----------------------------------------------------------
+
+let scratch: string | undefined;
+let scratchCount = 0;
+
+/**
+ * Builds a throwaway `src/`-shaped tree from a `path → contents` map and returns
+ * its root, ready to hand to `checkImportBoundaries`.
+ *
+ * Every rule row is exercised against a tree built here rather than against the
+ * committed one, so a fixture can violate a boundary without the working tree
+ * ever holding a file that fails the gate.
+ */
+function treeOf(files: Record<string, string>): string {
+  scratch ??= mkdtempSync(join(tmpdir(), 'boundaries-'));
+  scratchCount += 1;
+  const root = join(scratch, `src-${scratchCount}`);
+  for (const [relative, contents] of Object.entries(files)) {
+    const path = join(root, ...relative.split('/'));
+    mkdirSync(join(path, '..'), { recursive: true });
+    writeFileSync(path, contents);
+  }
+  // Every governed directory exists in every fixture tree, so the rule-coverage
+  // check never fires for a directory a fixture simply did not need — a coverage
+  // failure would otherwise read as the boundary failure under test.
+  for (const rule of BOUNDARY_RULES) mkdirSync(join(root, rule.directory), { recursive: true });
+  return root;
+}
+
+after(() => {
+  if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
+});
+
+/** Asserts the check rejects `files`, and that some line names `expected`. */
+function assertRejects(files: Record<string, string>, expected: RegExp, why: string): string[] {
+  const failures = checkImportBoundaries(treeOf(files));
+  assert.ok(failures.length > 0, `${why}: expected a failure, got none`);
+  assert.ok(
+    failures.some((line) => expected.test(line)),
+    `${why}: no failure line matched ${expected}\n${failures.join('\n')}`,
+  );
+  return failures;
+}
+
+/** Asserts the check accepts `files` outright. */
+function assertAccepts(files: Record<string, string>, why: string): void {
+  const failures = checkImportBoundaries(treeOf(files));
+  assert.deepEqual(failures, [], `${why}\n${failures.join('\n')}`);
+}
+
+// --- Matrix row: the clean tree ---------------------------------------------
+
+test('the committed src/ tree passes', () => {
+  // The gate's own baseline. If this ever goes red the repo has a real violation,
+  // not a test problem — which is exactly the signal the story exists to produce.
+  assert.deepEqual(checkImportBoundaries(SRC_ROOT), []);
+});
+
+test('a clean fixture tree produces no failures and no count summary', () => {
+  assertAccepts(
+    {
+      'derive/index.ts': "import { s } from '../data/schema.ts';\n",
+      'shell/entry.ts': "import { t } from '../tokens/index.ts';\nconst r = await import('../render-scene/scene.ts');\n",
+      'tokens/index.ts': "export { colour } from './colour.ts';\n",
+      'tokens/colour.ts': 'export const colour = 1;\n',
+      'render-scene/scene.ts': "import { t } from '../tokens/index.ts';\nimport * as three from 'three';\n",
+      'render-fallback/list.ts': "import { t } from '../tokens/index.ts';\n",
+      'colophon/panel.ts': "const d = await import('../derive/index.ts');\n",
+      'data/schema.ts': "import { z } from 'zod';\n",
+    },
+    'a tree obeying every declared rule must pass',
+  );
+});
+
+// --- Matrix row: the src/data/ ban ------------------------------------------
+
+test('a static import of src/data/ from outside src/derive/ fails naming file, line and specifier', () => {
+  const failures = assertRejects(
+    { 'shell/entry.ts': "import { z } from 'zod';\nimport { CareerSchema } from '../data/schema.ts';\n" },
+    /shell\/entry\.ts:2/,
+    'the AD-3 ban is the architecture rule this whole check exists for',
+  );
+  assert.ok(
+    failures.some((line) => line.includes('../data/schema.ts')),
+    `the specifier must be named\n${failures.join('\n')}`,
+  );
+});
+
+test('the src/data/ ban covers all five consumer directories without exception', () => {
+  // The second acceptance criterion, stated as an enumeration rather than as one
+  // representative case: a rule table that happened to omit `colophon` would pass
+  // the test above and leave a hole in exactly the boundary that matters.
+  for (const directory of ['shell', 'render-scene', 'render-fallback', 'colophon', 'tokens']) {
+    assertRejects(
+      { [`${directory}/x.ts`]: "import { CareerSchema } from '../data/schema.ts';\n" },
+      new RegExp(`${directory}/x\\.ts:1`),
+      `src/${directory}/ must not reach src/data/`,
+    );
+  }
+});
+
+/**
+ * Every `never` edge the architecture declares, written out independently of
+ * `BOUNDARY_RULES`.
+ *
+ * Deliberately not derived from the table: a loop over the table's own rows can
+ * only prove the table agrees with itself, so deleting a `never` entry would
+ * delete the assertion that covers it and the suite would stay green. Spelling
+ * the edges out here means a shrinking table fails against a fixed expectation —
+ * which is the whole point of pinning a rule.
+ *
+ * Keep in step with the directory READMEs when a layer is added.
+ */
+const DECLARED_NEVER_EDGES: ReadonlyArray<readonly [string, string]> = [
+  // `src/data/` is authored source: it must not know about anything downstream.
+  ['data', 'derive'],
+  ['data', 'tokens'],
+  ['data', 'shell'],
+  ['data', 'render-scene'],
+  ['data', 'render-fallback'],
+  ['data', 'colophon'],
+  // Derivation is pure and runs ahead of the build.
+  ['derive', 'tokens'],
+  ['derive', 'shell'],
+  ['derive', 'render-scene'],
+  ['derive', 'render-fallback'],
+  ['derive', 'colophon'],
+  // The entry path reaches renderers dynamically, never the data or the solver.
+  ['shell', 'data'],
+  ['shell', 'derive'],
+  // A renderer reads the artifact, never the authored source or the solver.
+  ['render-scene', 'data'],
+  ['render-scene', 'derive'],
+  ['render-fallback', 'data'],
+  ['render-fallback', 'derive'],
+  ['colophon', 'data'],
+];
+
+test('every never edge the architecture declares is rejected', () => {
+  // Fixed expectations, not a loop over the table: deleting a `never` entry must
+  // turn this red. Verified by mutation — trimming either renderer row, the
+  // `data` row, or the `derive` row fails here.
+  for (const [from, to] of DECLARED_NEVER_EDGES) {
+    assertRejects(
+      { [`${from}/probe.ts`]: `import { x } from '../${to}/x.ts';\n` },
+      new RegExp(`${from}/probe\.ts:1`),
+      `src/${from}/ must not import src/${to}/`,
+    );
+  }
+});
+
+test('the rule table declares no fewer never edges than the architecture states', () => {
+  // Guards the direction the loop above cannot see: a row gaining a ban is fine,
+  // a row losing one is drift. Compared as sets so ordering never matters.
+  const declared = new Set(DECLARED_NEVER_EDGES.map(([from, to]) => `${from}->${to}`));
+  const encoded = new Set(
+    BOUNDARY_RULES.flatMap((rule) => (rule.never ?? []).map((to) => `${rule.directory}->${to}`)),
+  );
+  const missing = [...declared].filter((edge) => !encoded.has(edge));
+  assert.deepEqual(missing, [], `the rule table dropped declared bans: ${missing.join(', ')}`);
+});
+
+test('src/derive/ may import src/data/, and it is the only directory that may', () => {
+  assertAccepts(
+    { 'derive/entities.ts': "import { CareerSchema } from '../data/schema.ts';\n" },
+    'the one permitted edge must not be reported',
+  );
+});
+
+test('a dynamic import of src/data/ fails too', () => {
+  // `never` means never. A ban a dynamic import walked around would be no ban —
+  // and `import('../data/career.json')` is precisely how a renderer would try to
+  // reach the authored source without appearing to.
+  assertRejects(
+    { 'render-scene/scene.ts': "const c = await import('../data/career.json');\n" },
+    /render-scene\/scene\.ts:1/,
+    'a dynamic import must not escape the ban',
+  );
+});
+
+// --- Matrix rows: static where dynamic is required --------------------------
+
+test('a static import of a dynamic-only edge fails and names the required kind', () => {
+  const failures = assertRejects(
+    { 'shell/entry.ts': "import { Scene } from '../render-scene/scene.ts';\n" },
+    /shell\/entry\.ts:1/,
+    'shell/README.md:5 permits the renderers only dynamically (AD-7)',
+  );
+  assert.ok(
+    failures.some((line) => /dynamic/i.test(line)),
+    `the failure must say what kind is required\n${failures.join('\n')}`,
+  );
+});
+
+test('the same edge written as a dynamic import is accepted', () => {
+  assertAccepts(
+    { 'shell/entry.ts': "const scene = await import('../render-scene/scene.ts');\n" },
+    'the dynamic form is the one AD-7 requires, not a violation',
+  );
+});
+
+test('every dynamic-only edge the READMEs declare is enforced in both directions', () => {
+  for (const target of ['render-scene', 'render-fallback', 'colophon']) {
+    assertRejects(
+      { 'shell/entry.ts': `import { x } from '../${target}/x.ts';\n` },
+      /shell\/entry\.ts:1/,
+      `src/shell/ must reach src/${target}/ only dynamically`,
+    );
+    assertAccepts(
+      { 'shell/entry.ts': `const x = await import('../${target}/x.ts');\n` },
+      `the dynamic form of the src/shell/ → src/${target}/ edge is permitted`,
+    );
+  }
+  // The colophon's live re-run of the solver, which must not hoist the solver
+  // onto the entry path.
+  assertRejects(
+    { 'colophon/panel.ts': "import { runPipeline } from '../derive/index.ts';\n" },
+    /colophon\/panel\.ts:1/,
+    'colophon/README.md:5 permits src/derive/ only through a dynamic import',
+  );
+  assertAccepts(
+    { 'colophon/panel.ts': "const p = await import('../derive/index.ts');\n" },
+    'the live re-run is the permitted dynamic form',
+  );
+});
+
+// --- Matrix row: the tokens leaf --------------------------------------------
+
+test('src/tokens/ importing anything outside itself fails, in either direction', () => {
+  assertRejects(
+    { 'tokens/scale.ts': "import { state } from '../shell/state.ts';\n" },
+    /tokens\/scale\.ts:1/,
+    'tokens/README.md:5 declares the directory a leaf',
+  );
+  assertRejects(
+    { 'tokens/scale.ts': "import * as three from 'three';\n" },
+    /tokens\/scale\.ts:1/,
+    'a package is outside the leaf too',
+  );
+  assertRejects(
+    { 'derive/rules.ts': "import { colour } from '../tokens/index.ts';\n" },
+    /derive\/rules\.ts:1/,
+    'tokens/README.md:6 forbids src/derive/ from importing tokens — derivation knows nothing of appearance',
+  );
+});
+
+test('a token module may import a sibling token module', () => {
+  // "Leaves" is a statement about the layer, not a ban on the directory holding
+  // two files. A reading that forbade this would be un-shippable the first time
+  // the token set outgrew one module.
+  assertAccepts(
+    { 'tokens/index.ts': "export { colour } from './colour.ts';\n", 'tokens/colour.ts': 'export const colour = 1;\n' },
+    'an intra-directory re-export is inside the leaf',
+  );
+});
+
+// --- Matrix row: three in the Fallback --------------------------------------
+
+test('src/render-fallback/ importing three fails, and a deep import does not escape it', () => {
+  assertRejects(
+    { 'render-fallback/list.ts': "import { Vector3 } from 'three';\n" },
+    /render-fallback\/list\.ts:1/,
+    'render-fallback/README.md:5 says never Three — the no-WebGL surface must stay free of it',
+  );
+  assertRejects(
+    { 'render-fallback/list.ts': "import { x } from 'three/webgpu';\n" },
+    /render-fallback\/list\.ts:1/,
+    'a subpath import of a banned package is the same import',
+  );
+  assertAccepts(
+    { 'render-scene/scene.ts': "import { Vector3 } from 'three';\n" },
+    'the 3D surface is where Three belongs',
+  );
+});
+
+// --- Matrix row: the decoy --------------------------------------------------
+
+test('code inside a template interpolation is scanned, but the surrounding text is not', () => {
+  // A `${...}` span holds code, not text. Blanking it along with the literal
+  // would hide a real import behind a template — silence, which this module
+  // treats as worse than a false positive. The text around it stays inert.
+  const interpolated = findImports(
+    'const html = `<p>${await import("../data/career.json")}</p>`;',
+  );
+  assert.equal(interpolated.length, 1, 'an import inside an interpolation must be found');
+  assert.equal(interpolated[0]?.specifier, '../data/career.json');
+  assert.equal(interpolated[0]?.kind, 'dynamic');
+
+  const asText = findImports('const t = `hello import("../data/x.ts") world`;');
+  assert.deepEqual(asText, [], 'the same words as template text are not an import');
+
+  // Newlines in the blanked text survive, so a specifier inside or below a
+  // multi-line template is still named on its own line.
+  const multiline = findImports('const t = `a\n${await import("../data/z.ts")}\nb`;');
+  assert.equal(multiline[0]?.line, 2, 'a multi-line template must not shift line numbers');
+});
+
+test('a forbidden import inside a comment or a string literal reports no failure', () => {
+  assertAccepts(
+    {
+      'shell/entry.ts': [
+        "// import { CareerSchema } from '../data/schema.ts';",
+        "/* import { CareerSchema } from '../data/schema.ts'; */",
+        "/**\n * import { CareerSchema } from '../data/schema.ts';\n */",
+        `const doc = "import { CareerSchema } from '../data/schema.ts'";`,
+        "const tpl = `import { Scene } from '../render-scene/scene.ts'`;",
+        '',
+      ].join('\n'),
+    },
+    'a mention is not an import — the decoy row',
+  );
+});
+
+test('stripping preserves line numbers, so a real import after a decoy is named correctly', () => {
+  const failures = assertRejects(
+    {
+      'shell/entry.ts':
+        "// import { CareerSchema } from '../data/schema.ts';\n" +
+        '/* two\n   lines */\n' +
+        "import { CareerSchema } from '../data/schema.ts';\n",
+    },
+    /shell\/entry\.ts:4/,
+    'a comment must not shift the line a later violation is reported on',
+  );
+  assert.ok(
+    failures.filter((line) => /entry\.ts:/.test(line)).length === 1,
+    `exactly one violation, not the commented ones too\n${failures.join('\n')}`,
+  );
+});
+
+test('an import inside a comment does not hide a real one on the same line', () => {
+  assertRejects(
+    { 'shell/entry.ts': "import { x } from '../data/schema.ts'; // import y from '../data/y.ts'\n" },
+    /shell\/entry\.ts:1/,
+    'the comment is stripped, the code before it is not',
+  );
+});
+
+// --- The classifier ---------------------------------------------------------
+
+test('the scan separates static, dynamic, re-export, type-only and side-effect forms', () => {
+  const source = [
+    "import a from 'pkg-a';",
+    "import type { B } from './b.ts';",
+    "import './side-effect.css';",
+    "export { c } from '../c';",
+    "export * from '@scope/pkg/deep';",
+    "const d = await import('../render-scene/y.ts');",
+    "import json from './d.json' with { type: 'json' };",
+    'const u = import.meta.url;',
+    '',
+  ].join('\n');
+
+  const found = findImports(source);
+  const bySpecifier = new Map(found.map((f) => [f.specifier, f]));
+
+  for (const specifier of ['pkg-a', './b.ts', './side-effect.css', '../c', '@scope/pkg/deep', './d.json']) {
+    assert.equal(bySpecifier.get(specifier)?.kind, 'static', `"${specifier}" is a static import`);
+  }
+  assert.equal(bySpecifier.get('../render-scene/y.ts')?.kind, 'dynamic', 'import(...) is dynamic');
+  assert.equal(found.length, 7, `import.meta is not an import\n${JSON.stringify(found)}`);
+});
+
+test('a dynamic import is classified dynamic exactly once, never also static', () => {
+  // Double-classification would report a legal dynamic-only edge as a static
+  // violation — the gate failing the one form AD-7 requires.
+  const found = findImports("const s = await import('../render-scene/y.ts');\n");
+  assert.deepEqual(
+    found.map((f) => f.kind),
+    ['dynamic'],
+    'one import, one kind',
+  );
+});
+
+test('a template-literal dynamic specifier is read as written', () => {
+  const found = findImports('const s = await import(`../render-scene/y.ts`);\n');
+  assert.deepEqual(found, [{ specifier: '../render-scene/y.ts', line: 1, kind: 'dynamic' }]);
+});
+
+test('stripping blanks comments and string bodies without moving anything', () => {
+  const source = "const a = 'xy'; // z\nconst b = 1;\n";
+  const stripped = stripCommentsAndStrings(source);
+  assert.equal(stripped.length, source.length, 'offsets must survive stripping');
+  assert.equal(stripped.split('\n').length, source.split('\n').length, 'and so must line count');
+  assert.match(stripped, /const a = ' {2}';/, 'the quotes stay, the body goes');
+  assert.doesNotMatch(stripped, /z/, 'the comment is gone');
+});
+
+test('a nested comment marker inside a string, and a quote inside a comment, both survive', () => {
+  // The two cases a regex-per-construct pipeline gets wrong in opposite
+  // directions. Written as source that would violate a boundary if mis-stripped.
+  assertAccepts(
+    {
+      'shell/entry.ts': [
+        `const a = "/* not a comment */";`,
+        "// it's a quote inside a comment",
+        `const b = "// not a comment either";`,
+        '',
+      ].join('\n'),
+    },
+    'neither construct may swallow the other',
+  );
+  assertRejects(
+    {
+      'shell/entry.ts': [
+        `const a = "/* not a comment */";`,
+        "import { x } from '../data/schema.ts';",
+        '',
+      ].join('\n'),
+    },
+    /shell\/entry\.ts:2/,
+    'and a real import after them is still found, on its own line',
+  );
+});
+
+// --- Resolution --------------------------------------------------------------
+
+test('a specifier is resolved relative to the importing file, extension or not', () => {
+  const root = join('/repo', 'src');
+  const from = join(root, 'shell', 'entry.ts');
+  assert.equal(targetDirectoryOf(from, '../data/schema.ts', root), 'data');
+  assert.equal(targetDirectoryOf(from, '../data/schema', root), 'data', 'the extension is optional under bundler resolution');
+  assert.equal(targetDirectoryOf(from, './nested/deep/x.ts', root), 'shell', 'a nested path lands in its own directory');
+  assert.equal(targetDirectoryOf(from, '../../generated/layout.generated.json', root), undefined, 'outside src/');
+  assert.equal(targetDirectoryOf(from, 'three', root), undefined, 'a package is not a directory');
+  assert.equal(targetDirectoryOf(from, 'node:fs', root), undefined, 'nor is a builtin');
+});
+
+// --- Matrix row: the entry stub ----------------------------------------------
+
+test('a file sitting directly in src/ may not import src/data/ or src/derive/', () => {
+  // `main.tsx` and `App.tsx` are real, are what Vite builds from, and were
+  // skipped outright until review iteration 1 — so AD-3's hole sat exactly where
+  // a bundle would hoist the raw career JSON onto the entry chunk. No README
+  // governs the entry stub, but "no README" is not "no rule".
+  assertRejects(
+    { 'main.tsx': "import { CareerSchema } from './data/schema.ts';\n" },
+    /main\.tsx:1/,
+    'the entry stub must be governed, not skipped',
+  );
+  assertRejects(
+    { 'App.tsx': "import { runPipeline } from './derive/index.ts';\n" },
+    /App\.tsx:1/,
+    'and the derive ban reaches it too',
+  );
+});
+
+test('the entry stub may still import what the entry path legitimately reaches', () => {
+  // The other direction: inventing prohibitions no prose declares is the drift
+  // the rule table exists to prevent. The entry reaches the shell by design, and
+  // that is not a violation.
+  assertAccepts(
+    { 'main.tsx': "import { boot } from './shell/entry.ts';\n" },
+    'the entry stub reaches the shell by design',
+  );
+});
+
+// --- Matrix row: the decoy, extended -----------------------------------------
+
+test('a regex literal does not swallow the imports beneath it', () => {
+  // Verified live at review iteration 1: a regex holding `/*` read as an
+  // unclosed block comment and blanked the rest of the file, so every import
+  // below it vanished and the gate reported nothing. Silence is the worst
+  // failure this checker has, because it reads exactly like success.
+  const patterns = ['/[/*]/', "/'/", '/[a-z]+/'];
+  for (const pattern of patterns) {
+    const found = findImports(`const re = ${pattern};\nimport { s } from '../data/schema.ts';\n`);
+    assert.equal(found.length, 1, `${pattern} must not hide the import below it`);
+    assert.equal(found[0]?.specifier, '../data/schema.ts');
+  }
+});
+
+test('an unterminated backtick does not blank the rest of the file', () => {
+  // A template may legally cross lines, so the newline guard that contains a
+  // broken single-quoted string cannot contain this one. The unclosed run is
+  // treated as ordinary text instead, or one stray tick hides every import
+  // beneath it.
+  const found = findImports("const s = `oops;\nimport { s } from '../data/schema.ts';\n");
+  assert.equal(found.length, 1, 'a stray backtick must not hide the import below it');
+  assert.equal(found[0]?.specifier, '../data/schema.ts');
+});
+
+test('a regex introduced by a keyword is still a regex', () => {
+  // `previous` holds one character, so it sees the `n` ending `return` and reads
+  // division. The regex body is then scanned as code, and a `/*` inside it
+  // blanks the rest of the file — the same silent failure the character tracker
+  // was added to prevent, one token further out.
+  for (const keyword of ['return', 'await', 'yield', 'typeof', 'case']) {
+    const found = findImports(
+      `const f = () => ${keyword} /[/*]/;\nimport { s } from '../data/schema.ts';\n`,
+    );
+    assert.equal(found.length, 1, `${keyword} must introduce a regex, not a division`);
+    assert.equal(found[0]?.specifier, '../data/schema.ts');
+  }
+});
+
+test('an identifier merely ending in a keyword still divides', () => {
+  // The other direction: `returned / 2` is arithmetic. Matching on the trailing
+  // word rather than a suffix is what keeps this from blanking real code.
+  const found = findImports("const x = returned / 2;\nimport { s } from '../data/schema.ts';\n");
+  assert.equal(found.length, 1, 'division after an identifier must stay division');
+  assert.equal(found[0]?.specifier, '../data/schema.ts');
+});
+
+test('division is not mistaken for a regex, and a real regex is still stripped', () => {
+  // The tracker tells them apart by what precedes the slash. Wrong in the
+  // permissive direction it blanks forward and hides real imports; wrong in the
+  // other it lets an import spelled inside a pattern read as a real one.
+  const divided = findImports("const a = b / c;\nimport { s } from '../data/schema.ts';\n");
+  assert.equal(divided.length, 1, 'division must not start a regex');
+  const inRegex = findImports("const r = /from '..\\/data\\/schema.ts'/;\nexport const x = 1;\n");
+  assert.deepEqual(inRegex, [], 'a specifier spelled inside a regex is not an import');
+});
+
+// --- The count summary, with a coverage failure alongside --------------------
+
+test('the count summary counts import violations, not rule-coverage failures', () => {
+  // Both kinds of failure can appear together, and they are not the same kind.
+  // Before review iteration 1 the summary counted the array, so an ungoverned
+  // directory plus one real violation reported "2 import-boundary violations
+  // across 1 governed source file" — a line that contradicts itself.
+  const failures = checkImportBoundaries(
+    treeOf({
+      'audio/player.ts': 'export const p = 1;\n',
+      'shell/entry.ts': "import { s } from '../data/schema.ts';\n",
+    }),
+  );
+  const summary = failures[failures.length - 1];
+  assert.ok(summary !== undefined);
+  assert.match(summary, /^1 import-boundary violation across/, `one violation, not two\n${failures.join('\n')}`);
+  assert.ok(
+    failures.some((line) => line.includes('src/audio/')),
+    'and the coverage failure is still reported, just not counted as a violation',
+  );
+});
+
+test('a coverage failure alone produces no count summary at all', () => {
+  // Nothing violated a boundary, so a summary claiming otherwise would be a
+  // sentence with no true reading.
+  const failures = checkImportBoundaries(treeOf({ 'audio/player.ts': 'export const p = 1;\n' }));
+  assert.ok(failures.length > 0, 'the ungoverned directory is still reported');
+  assert.ok(
+    !failures.some((line) => /import-boundary violation/.test(line) && /across/.test(line)),
+    `no summary line belongs here\n${failures.join('\n')}`,
+  );
+});
+
+test('a vendored node_modules or an editor cache under src/ is not a layer', () => {
+  // Both walkers skip these, and they must agree: a directory the coverage check
+  // excuses but the file walker descends into would have its files judged
+  // against a rule nobody wrote. Failing the build with "add a row to
+  // BOUNDARY_RULES" for `src/node_modules/` is a demand nobody can satisfy by
+  // writing a README.
+  assertAccepts(
+    {
+      'node_modules/left-pad/index.ts': "import { s } from '../../data/schema.ts';\n",
+      '.cache/stale.ts': "import { s } from '../data/schema.ts';\n",
+      'derive/x.ts': 'export const x = 1;\n',
+    },
+    'neither a vendored dependency nor an editor cache is a governed layer',
+  );
+
+  // Nested inside a governed directory, which is the case that separates the
+  // two walkers: `checkRuleCoverage` only reads the top level and never sees
+  // this one, so the file walker's own skip is the only thing standing between
+  // a vendored dependency's imports and a boundary failure nobody can act on.
+  assertAccepts(
+    {
+      'shell/node_modules/dep/index.ts': "import { s } from '../../../data/schema.ts';\n",
+      'shell/.vite/chunk.ts': "import { s } from '../../data/schema.ts';\n",
+    },
+    'a dependency vendored under a governed directory is still not source',
+  );
+});
+
+test('every rule cites a README line that states the rule', () => {
+  // The rule table and the prose "cannot drift" is the table's own claim, and a
+  // `source` pointing at a line that does not say the rule is exactly that
+  // drift — the failure tells a reader to check a citation that will not
+  // confirm it. Asserted over the real files, so editing either side breaks it.
+  for (const rule of [...BOUNDARY_RULES, ROOT_RULE]) {
+    const [file, lineNumber] = rule.source.split(':');
+    assert.ok(file !== undefined && lineNumber !== undefined, `malformed source: ${rule.source}`);
+    const path = join(REPO_ROOT, ...file.split('/'));
+    const line = readFileSync(path, 'utf8').split('\n')[Number(lineNumber) - 1];
+    assert.ok(line !== undefined, `${rule.source} names a line that does not exist`);
+
+    // The cited line must be an import sentence, not merely a line that happens
+    // to mention the directory. Not every constrained directory is named on that
+    // one line: the `data` row cites the **Imported by** sentence, which states
+    // the ban that matters (only `derive/` may reach it), while the row's own
+    // `never` list carries the outbound direction stated on the line above. So
+    // this asserts the citation resolves to the import contract rather than that
+    // it enumerates the whole row.
+    assert.match(
+      line,
+      /\*\*(Imports|Imported by):\*\*|import/i,
+      `${rule.source} must cite an import sentence — it reads:\n  ${line.trim().slice(0, 200)}`,
+    );
+  }
+});
+
+// --- Rule coverage -----------------------------------------------------------
+
+test('a new directory under src/ with no rule fails the gate', () => {
+  // The failure mode a default would create: adding `src/audio/` and having the
+  // src/data/ ban silently not reach it, with the gate still green. A gate that
+  // reads as coverage while covering nothing is worse than no gate.
+  const failures = assertRejects(
+    { 'audio/player.ts': "import { CareerSchema } from '../data/schema.ts';\n" },
+    /src\/audio\//,
+    'an ungoverned directory must be named, not skipped',
+  );
+  assert.ok(
+    failures.some((line) => line.includes('BOUNDARY_RULES')),
+    `the failure must say how to fix it\n${failures.join('\n')}`,
+  );
+});
+
+test('every rule row names a directory that exists in the committed tree', () => {
+  // The other drift direction: a rule for a directory nobody kept would gate
+  // nothing while reading as a boundary that is enforced.
+  const failures = checkImportBoundaries(SRC_ROOT);
+  assert.deepEqual(failures, [], 'and the committed tree satisfies all of them');
+  for (const rule of BOUNDARY_RULES) {
+    assert.ok(
+      checkImportBoundaries(treeOf({ [`${rule.directory}/probe.ts`]: 'export const probe = 1;\n' })).length === 0,
+      `src/${rule.directory}/ must be a real, governed directory`,
+    );
+  }
+});
+
+// --- The failure-line convention ---------------------------------------------
+
+test('the count summary is appended last and only when something failed', () => {
+  const failures = checkImportBoundaries(
+    treeOf({
+      'shell/entry.ts': "import { a } from '../data/schema.ts';\nimport { b } from '../derive/index.ts';\n",
+    }),
+  );
+  const last = failures[failures.length - 1];
+  assert.ok(last !== undefined);
+  assert.match(last, /violations across/, 'the summary comes last');
+  assert.equal(failures.length, 3, 'two violations plus one summary');
+  assert.deepEqual(checkImportBoundaries(treeOf({ 'derive/x.ts': 'export const x = 1;\n' })), []);
+});
+
+// --- Purity ------------------------------------------------------------------
+
+test('boundaries.ts reads no clock, no random, no environment, and writes nothing', () => {
+  // Read through the module's own stripper, which is the thing under test
+  // elsewhere in this file — so a purity violation hidden in a comment is not
+  // reported as one.
+  const code = stripCommentsAndStrings(
+    readFileSync(fileURLToPath(new URL('./boundaries.ts', import.meta.url)), 'utf8'),
+  );
+  assert.doesNotMatch(code, /new\s+Date\b/, 'no clock read');
+  assert.doesNotMatch(code, /Math\s*\.\s*random/, 'no randomness');
+  assert.doesNotMatch(code, /process\s*\.\s*env/, 'no environment read');
+  assert.doesNotMatch(code, /writeFileSync|mkdirSync|rmSync/, 'the gate writes nothing');
+  assert.doesNotMatch(code, /\bfetch\b|XMLHttpRequest|WebSocket/, 'and reaches no network');
+});

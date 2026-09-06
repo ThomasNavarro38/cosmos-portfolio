@@ -2,7 +2,7 @@
 
 Pure pipeline: validate → derive → solve. No DOM, no React, no Three. The single derivation point — `isDeep`, mass, luminance band, Dwell tempo, mote tier, Shot framing and the destination set are computed here exactly once and resolved into the artifact. No renderer re-classifies or re-computes; when a consumer needs a value the artifact lacks, the fix is a schema-plus-derivation change here, never a local computation downstream.
 
-**Imports:** may import from `src/data/`. This is the only directory permitted to.
+**Imports:** may import from `src/data/`. This is the only directory permitted to. Never `src/tokens/` — derivation is pure and knows nothing of appearance — and never `src/shell/`, `src/render-scene/`, `src/render-fallback/` or `src/colophon/`: derivation runs ahead of the build and must not know what renders its output.
 **Imported by:** nothing at runtime — emits `generated/layout.generated.json` ahead of the build, via a separate npm script the build never invokes (AD-1). The artifact is committed; `npm run build` consumes it and the runtime never solves.
 
 ## Files
@@ -24,8 +24,11 @@ Pure pipeline: validate → derive → solve. No DOM, no React, no Three. The si
 | `artifact-schema.ts` | The emitted document's shape, as a versioned Zod schema. The contract every later epic reads. |
 | `artifact.ts` | Pure assembly: graph + solve → the artifact, plus its serialization and the banner. No I/O. |
 | `index.ts` | The pipeline CLI. `npm run solve` writes the artifact; `--check` is the build gate and never solves. |
+| `boundaries.ts` | The import-boundary rule table and the walker that evaluates it over `src/`. Runs from the gate; no dependency. |
 | `artifact-schema.test.ts` | What the schema *rejects*: a later story's field, a version mismatch, a truncated payload. |
 | `artifact.test.ts` | Content parity field-by-field, the `timeAxis`↔`luminanceBand` binding, and the AD-1 script-graph walk. |
+| `boundaries.test.ts` | One fixture tree per declared rule, each pinned by mutation: break the check and the suite goes red. |
+| `maintenance.test.ts` | NFR-5 (an entry costs one object plus one number) and FR-5 (promotion is free), plus the no-network ratchet. |
 
 ```sh
 npm test        # every *.test.ts under src/, this suite included
@@ -188,7 +191,7 @@ One entry per Client and per Project, exactly once each. Each carries an `id` an
 
 **Grouped by Client and ID-ordered within each group, so a re-ordered `career.json` emits byte-identical bytes** (AD-5). Clients sort by ID and each Client's Projects follow immediately after it, also by ID — the sequence is therefore not a flat ID sort of the whole set, and `destinations.test.ts` pins it element by element — a Rail stop is reached before the Bodies orbiting it. Deliberately *not* the `clients` array's own `timeAxis` ordering: that is content-derived too, but it is the Fallback's timeline, and binding the input walk to it would make a tuning change to `deriveTimeAxis` silently re-order the keyboard.
 
-### The cardinality assertion at the gate
+### The destination assertion at the gate
 
 `checkArtifact` asserts the set against the artifact's own entity tree, and `npm run build` fails naming the offending ID: a destination naming no entity, an ID listed twice, an entity no destination names, or a `kind` contradicting what the ID resolves to. The list is also asserted before the bytes are written, so the *first* divergent emission fails rather than being committed and rejected afterwards.
 
@@ -234,11 +237,54 @@ No Shot is authored in `career.json` today and this story authors none. What it 
 
 **Nothing in the pipeline may key a Shot by array position.** An index-keyed merge would silently re-target every override the first time a Client was added or renamed.
 
-### The cardinality assertion at the gate
+### The Dwell and Shot assertion at the gate
 
 `checkStops` asserts both lists against the artifact's own Client set, and `npm run build` fails naming the offending ID: an entry naming no Client, an entry naming a **Project** (the granularity error), a subject listed twice, a Client with no entry, or a Client ID the tree carries twice. It also asserts the one Shot property none of those cardinality checks can see: that a Shot's `distance` is **strictly greater** than the widest `railDistance` among its own subject's Projects. A Shot naming the right Client with a distance that frames its widest Project out of view satisfies every check above, and that Project is then unreachable from the Rail. The widest orbit is read off the artifact's own tree, never re-derived. Both lists are also asserted before the bytes are written, so the *first* divergent emission fails rather than being committed and rejected afterwards.
 
 It counts from the artifact's `clients` tree, **never from a fresh derive** — the gate never solves (AD-1). The assertion sits after schema validation and before the byte checks, for the same reasons the destination check does, and that ordering is pinned by a test because it is invisible on a passing document.
+
+## The import boundaries are enforced by the gate
+
+Every directory under `src/` carries a README declaring what it may import and what may import it. Until Story 1.8 those declarations were prose, and the architecture's load-bearing rule — **only `src/derive/` may import from `src/data/`** (AD-3) — was held by nothing but the fact that the five consumer directories held no source files yet. `boundaries.ts` moves the rules into the gate, so a violation fails `npm run build`.
+
+```sh
+npm run gate     # validates the artifact *and* the import boundaries
+```
+
+`checkArtifact` takes the source root as a parameter and threads it through, so the gate is drivable over a fixture tree rather than only over the working `src/` — and the call itself is pinned by tests in `artifact.test.ts`, since deleting it once left the whole suite green while `npm run gate` reported success against a real violation.
+
+`checkImportBoundaries` walks `src/**/*.{ts,tsx}`, strips comments and string literals, classifies every specifier as static or dynamic, and evaluates the rule table. It reports `file:line` plus the specifier and the README line that forbids the edge, with the count summary appended last and only when something failed — the same convention `checkDestinations` and `checkStops` use.
+
+Five kinds of rule are declared, one row per README:
+
+| Rule | Declared at | What it rejects |
+| --- | --- | --- |
+| `src/data/` is reachable only from `src/derive/` | `src/data/README.md:6` | Any import of `src/data/` from the five consumer directories, static **or** dynamic. |
+| Renderers and the Colophon are dynamic-only | `src/shell/README.md:5` | A static import that would hoist Three or the solver onto the entry path (AD-7). |
+| `src/derive/` from the Colophon is dynamic-only | `src/colophon/README.md:5` | A static import of the solver for the live re-run. |
+| `src/tokens/` is a leaf, and `src/derive/` never reads it | `src/tokens/README.md:5-6` | Any token import outside the directory; any `src/derive/` import of tokens. |
+| No Three in the Fallback | `src/render-fallback/README.md:5` | `three` and any subpath of it, on the no-WebGL surface. |
+| The entry stub reaches neither the data nor the solver | `README.md:45` | A `src/data/` or `src/derive/` import from a file sitting directly in `src/` — `main.tsx`, `App.tsx`. |
+
+**A dynamic import does not escape a `never` rule.** `import('../data/career.json')` is exactly how a renderer would reach the authored source without appearing to, so the ban covers both kinds; only a `dynamicOnly` edge distinguishes them, and there the dynamic form is what AD-7 *requires*.
+
+**The entry stub is governed too.** `main.tsx` and `App.tsx` sit directly in `src/`, carry no README of their own, and are what Vite actually builds from — so they are precisely where a `src/data/` import would hoist the raw career JSON onto the entry chunk. They were skipped outright until review iteration 1 of this story caught it. No README does not mean no rule.
+
+**A directory with no rule fails the gate.** Adding `src/audio/` without a row in `BOUNDARY_RULES` is a failure naming the directory, not a directory the ban silently does not reach. A permissive default would make an unreviewed new layer the one place the boundary does not hold, with the gate still green — which reads as coverage and is worse than no gate.
+
+**Why not ESLint, and why not the TypeScript AST.** Nothing lint-adjacent is installed, so either would be a network install: ESLint plus typescript-eslint plus a resolver is four to six direct dependencies with transitives, in a repo whose thesis is fifteen exactly-pinned versions whose pairing is load-bearing. And TS 7.0.2 is the native port — its main entry resolves to `lib/version.cjs` and exports only a version string, `createSourceFile` is gone, and AST access lives at `typescript/unstable/ast`. A decade-long gate must not rest on a surface the vendor labels unstable. The gate already owns build-failing enforcement, a walker idiom and a mutation-testing habit, so enforcement went where enforcement already lives. What is given up is editor-time feedback, deferred until the consumer directories hold code worth linting interactively.
+
+**Comment-stripping is single-pass, and offsets survive it.** A forbidden import inside `//`, `/* */`, or a string literal is a mention, not an import, and must not be reported. A regex-per-construct pipeline gets the nesting wrong in both directions — `// a /* b` and `'a // b'` each defeat it — so `stripCommentsAndStrings` scans once and replaces each stripped construct with blanks of the same width, newlines kept. Every surviving character therefore keeps its line, and a specifier is read back out of the *unstripped* source at the same offset. Regex literals are tracked as well, by the character preceding the slash: without that, `/[/*]/` reads as an unclosed block comment and blanks every import beneath it, and an unterminated backtick does the same to the rest of the file. Silence is this checker's worst failure, because it is indistinguishable from success.
+
+## The maintenance contract is pinned by test
+
+`maintenance.test.ts` holds the two promises the whole pipeline exists to keep, which no test held before Story 1.8.
+
+**NFR-5: adding an entry costs one object plus, at most, one number.** A fixture Project is appended to a temp copy of `career.json` carrying only `weight` beyond the nine required fields — and with no `weight` at all, since it defaults to `1`. The suite snapshots `src/` and `generated/` before and after, and asserts nothing on disk changed. The existing idempotency tests (`artifact.test.ts:390`, `:464`) compare emitted bytes in memory, which is the right test for determinism and cannot see a file a rule quietly rewrote. `runPipeline` returns contents without writing, which is what makes the filesystem assertion honest rather than a claim about a function with no opportunity to write.
+
+**FR-5: promotion is free.** A Shallow fixture gains a `notable`; `isDeep` flips, its Client's Dwell tempo lengthens by index into the shortest-first `DWELL_TEMPOS`, and every other emitted value — ID, position, mass, band, `railDistance`, `timeAxis`, the destination set and the Shot list — is asserted byte-identical. The fixture is built in the test rather than taken from `career.json`, whose single Project is already Deep. The four Shallow forms are compared over *derived* values rather than over bytes: they differ by exactly the authored `notable`, which `content` carries whole on purpose (FR-22), so a byte comparison would assert the opposite of what the artifact guarantees.
+
+**The no-network ratchet.** Nothing under `src/` may reach the network (NFR-6): the audit rejects `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `sendBeacon`, and an import of a Node network module. `src/` is clean today, so this costs nothing now and is the only thing that will stop the first `fetch` from landing in a static site with no backend. Test files are excluded, and only test files — a suite auditing network calls must be able to name them, and an audit flagging its own fixtures gets turned off within a week.
 
 ## `weight` is applied after the solve, not during it
 

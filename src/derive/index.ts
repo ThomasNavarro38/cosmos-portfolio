@@ -26,6 +26,7 @@ import { CareerSchema } from '../data/schema.ts';
 import { readCareerFile, validateCareer } from '../data/validate.ts';
 import { BANNER, buildArtifact, serializeArtifact, stripBanner } from './artifact.ts';
 import { parseArtifact, validateArtifact, type Artifact } from './artifact-schema.ts';
+import { SRC_ROOT, checkImportBoundaries } from './boundaries.ts';
 import { deriveEntities } from './entities.ts';
 import { solveLayout } from './solve.ts';
 
@@ -386,8 +387,13 @@ export function checkStops(artifact: Artifact): string[] {
  * the scripts, not of anyone's memory — a gate that regenerated a missing
  * artifact would make every solve implicit and the committed document a cache
  * rather than a contract.
+ *
+ * It also asserts the import boundaries over `src/`, which is not a property of
+ * the artifact at all. They live here because `gate` is the one command `build`
+ * runs, and a second entry point would be a second thing to remember on a rule
+ * whose whole failure mode is being forgotten.
  */
-export function checkArtifact(path: string = ARTIFACT_PATH): string[] {
+export function checkArtifact(path: string = ARTIFACT_PATH, sourceRoot: string = SRC_ROOT): string[] {
   let text: string;
   try {
     text = readFileSync(path, 'utf8');
@@ -471,6 +477,37 @@ export function checkArtifact(path: string = ARTIFACT_PATH): string[] {
       'the committed layout artifact has a Dwell or Shot list that disagrees with its Clients:',
       ...stops,
       'Run `npm run solve` and commit the result.',
+    ];
+  }
+
+  // The import boundaries the five directory READMEs declare, over `src/` — the
+  // one check here that reads something other than the artifact, and deliberately
+  // so. The boundary that matters most (AD-3: only `src/derive/` may import
+  // `src/data/`) held until now only because the consumer directories were empty,
+  // and Epic 2 writes the first code that could break it. Prose has never once
+  // enforced it; `npm run build` failing does.
+  //
+  // Inside `checkArtifact` rather than beside it, because `gate` is the one
+  // command `build` runs and a second entry point would be a second thing to
+  // remember. After the structural checks and before the byte checks: a
+  // wrong-shaped artifact must report that rather than a boundary violation, and
+  // a boundary violation is not a formatting fault. Both the ordering and the
+  // fact that this call happens at all are pinned by tests in `artifact.test.ts`,
+  // because neither is visible on a passing tree: at iteration 1 of this story's
+  // review, deleting this block left all 340 tests green while `npm run gate`
+  // went on reporting success against a real AD-3 violation.
+  //
+  // `sourceRoot` is threaded from the caller rather than defaulted here so the
+  // gate can be driven over a fixture tree. Called argument-less, every artifact
+  // test would silently depend on the working tree — a boundary violation left
+  // in `src/` would turn eight byte-check tests red while naming a boundary
+  // problem, and there would be no way to test this wiring at all.
+  const boundaries = checkImportBoundaries(sourceRoot);
+  if (boundaries.length > 0) {
+    return [
+      'the source tree violates the import boundaries its READMEs declare:',
+      ...boundaries,
+      'Each directory README states its own constraints; the rule table is in src/derive/boundaries.ts.',
     ];
   }
 

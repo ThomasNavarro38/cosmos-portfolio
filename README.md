@@ -6,7 +6,7 @@ A static portfolio built on a hand-rolled Vite + TypeScript + React scaffold. No
 
 The build targets **Node 24 LTS**. The requirement is declared twice: `.nvmrc` (for version managers) and `engines.node` in `package.json`.
 
-`engines` is advisory — npm does not enforce it without `engine-strict`. Building on a different Node major is not blocked, but it is unsupported; a hard enforcement gate arrives with the build gates in Story 1.8.
+`engines` is advisory — npm does not enforce it without `engine-strict`. Building on a different Node major is not blocked, but it is unsupported; a hard enforcement gate is deferred (see `_bmad-output/implementation-artifacts/deferred-work.md`, the packaging-enforcement set).
 
 ```sh
 nvm use      # reads .nvmrc
@@ -38,11 +38,11 @@ No output means the pairing holds. Filter out `UNMET OPTIONAL`: the tree carries
 
 **The solve is not part of the build.** `src/derive/` turns `src/data/career.json` into `generated/layout.generated.json`, and that artifact is committed. Re-solving is a deliberate, out-of-band act — `npm run solve`, which `npm run build` never invokes (AD-1); the build only consumes what is already committed, and the runtime never solves.
 
-What `npm run build` does instead is **gate**: it validates the committed artifact against its schema and fails, naming the failing path and the script that produces it, if the artifact is missing, unparseable, stale-shaped, or no longer carries the generated-file banner and LF newlines the emitter writes. The gate reads the artifact and nothing else, so it catches a malformed or hand-edited document but **not** content drift: an artifact whose payload no longer matches `career.json` is still shape-valid and passes. Editing the data without re-solving is caught by `npm test`, not by the build. The gate is asserted transitively — the suite walks the whole npm script graph and fails if `build` can reach `solve` by any path at any depth.
+What `npm run build` does instead is **gate**: it validates the committed artifact against its schema and fails, naming the failing path and the script that produces it, if the artifact is missing, unparseable, stale-shaped, or no longer carries the generated-file banner and LF newlines the emitter writes. Besides the artifact it reads one other thing — the source tree, for the import boundaries described under Layout below. What it does **not** read is `career.json`, so it catches a malformed or hand-edited document but **not** content drift: an artifact whose payload no longer matches `career.json` is still shape-valid and passes. Editing the data without re-solving is caught by `npm test`, not by the build. The gate is asserted transitively — the suite walks the whole npm script graph and fails if `build` can reach `solve` by any path at any depth.
 
 ## Layout
 
-`src/` follows the architecture's Structural Seed. Each directory carries a README naming its role and its import constraints; the boundary that matters most is that **only `src/derive/` may import from `src/data/`**. Story 1.8 turns that from a written rule into a lint rule that fails the build.
+`src/` follows the architecture's Structural Seed. Each directory carries a README naming its role and its import constraints; the boundary that matters most is that **only `src/derive/` may import from `src/data/`**. Those constraints are enforced, not conventional: `npm run gate` evaluates them over `src/` and `npm run build` fails naming the offending `file:line`. It covers the `src/data/` ban in all five consumer directories, the edges a README permits only through a dynamic import (`src/shell/` into the renderers and the Colophon, the Colophon into `src/derive/`), `src/tokens/` as a leaf, and Three staying out of `src/render-fallback/`. A directory added under `src/` with no rule of its own fails the gate rather than inheriting a permissive default. The entry stub is covered too: `src/main.tsx` and `src/App.tsx` sit directly in `src/` under no README of their own, and may import neither `src/data/` nor `src/derive/` — they are what Vite builds from, so a reach into either is exactly what would hoist the raw career JSON or the solver onto the entry chunk (AD-7).
 
 `generated/` is tracked on purpose — the solved layout artifact is committed and diffable. Do not add it to `.gitignore`. `public/` is likewise tracked; `preview.png` lands there in Epic 6.
 
