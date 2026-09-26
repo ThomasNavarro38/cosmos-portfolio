@@ -352,3 +352,23 @@ this file.
   first recorded in the 1.8 review) — never true as stated. Re-verified today:
   both the template and concat forms are caught. The narrower real gap is
   recorded above under "Import boundaries: coverage and scope".
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
+  summary: `shippedFilesUnder` now exists twice — in `src/derive/maintenance.test.ts:447` and `src/shell/state.test.ts:545` — because the boundary gate forbids `shell/` importing `derive/` and the helper is file-local to a test.
+  evidence: Verified: a probe module in `src/shell/` importing from `src/derive/` fails `boundaries.test.ts`, which walks `*.test.ts` too. Sharing it needs a fourth home for test utilities, which is beyond this story. If the two copies drift, the network audit and the setState audit walk different trees.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
+  summary: `resetNavigation` ships as a production export whose docstring says "exists for tests", so nothing prevents a component calling it and wiping the visitor's position.
+  evidence: The source scan cannot catch it because it is a named event, which is what the scan permits. A scan asserting `resetNavigation` appears in no non-test file under `src/` would close it in one line. Left alone here because KEEP-1 forbade redesigning the store and the amendments did not name it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
+  summary: `railPosition` has no DOM representation, so a screen-reader user cannot tell which Client the Rail stopped at after activating a Client entry.
+  evidence: `selectClient` writes `railPosition` on every Client click and `index-nav.tsx` reflects only `aria-pressed` on Projects. `aria-current` on the selected Client is the standard answer and the new `auditAria` fixture already treats it as permitted state. Story 2.6 owns Client-stop framing and is the natural home; flagged by two review layers.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
+  summary: `enterFreeFlight`/`enterRail` while a Project is focused leaves `focusOrigin` naming a mode that is no longer current, so the pair `(focusedProjectId, focusOrigin)` can read as contradictory to a consumer that checks only the second.
+  evidence: Probed directly: focusing then entering free flight yields `focusedProjectId: 'p-1'` with `focusOrigin: 'rail'`. This is intended per AD-16 (origin stored at entry, never inferred at release) and is documented, but Story 2.10 builds Escape precedence on exactly this field and should read it only in the release path.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
+  summary: The `getState()`-in-render-loop rule is argued in three places and enforced nowhere; no boundary rule forbids a reactive hook binding under `src/render-scene/`.
+  evidence: `state.test.ts` asserts only that `getState` is a function, which is a zustand API fact rather than a project invariant. The rule becomes checkable when the camera lands — a `neverPackages`-style rule banning `zustand/react` under `src/render-scene/` would make it real, and `render-scene/README.md:5` already declares it imports shell state.
