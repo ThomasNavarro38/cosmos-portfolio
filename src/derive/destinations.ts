@@ -53,6 +53,16 @@ export type { Destination };
  * timeline, and binding the input walk to it would make a tuning change to
  * `deriveTimeAxis` silently re-order the keyboard. ID order is stable under
  * every rule change.
+ *
+ * **Nor is it the Rail's order, and that is not a gap.** Story 2.1's DOM index
+ * walks the Rail, and the argument above still holds for this list: `destinations`
+ * answers *what is reachable*, and it answers it in the one ordering that is
+ * stable under every rule change. The Rail's ordering is a separate question with
+ * a separate answer, so it rides in its own channel — the artifact's `rail` field,
+ * emitted by `rail.ts` — rather than displacing this one. A consumer needing the
+ * Rail's sequence reads `rail`; a consumer needing the reachable set reads this.
+ * Re-ordering this list to the Rail's would collapse two contracts into one and
+ * make a solver tuning change re-order the reachable set.
  */
 export function buildDestinations(graph: EntityGraph): readonly Destination[] {
   const byId = (a: { id: string }, b: { id: string }): number =>
