@@ -1,6 +1,6 @@
 # src/derive/
 
-Pure pipeline: validate → derive → solve. No DOM, no React, no Three. The single derivation point — `isDeep`, mass, luminance band, Dwell tempo, mote tier, Shot framing and the destination set are computed here exactly once and resolved into the artifact. No renderer re-classifies or re-computes; when a consumer needs a value the artifact lacks, the fix is a schema-plus-derivation change here, never a local computation downstream.
+Pure pipeline: validate → derive → solve. No DOM, no React, no Three. The single derivation point — `isDeep`, mass, luminance band, Dwell tempo, mote tier, Shot framing, the destination set and the Rail's ordering are computed here exactly once and resolved into the artifact. No renderer re-classifies or re-computes; when a consumer needs a value the artifact lacks, the fix is a schema-plus-derivation change here, never a local computation downstream.
 
 **Imports:** may import from `src/data/`. This is the only directory permitted to. Never `src/tokens/` — derivation is pure and knows nothing of appearance — and never `src/shell/`, `src/render-scene/`, `src/render-fallback/` or `src/colophon/`: derivation runs ahead of the build and must not know what renders its output.
 **Imported by:** nothing at runtime — emits `generated/layout.generated.json` ahead of the build, via a separate npm script the build never invokes (AD-1). The artifact is committed; `npm run build` consumes it and the runtime never solves.
@@ -17,6 +17,8 @@ Pure pipeline: validate → derive → solve. No DOM, no React, no Three. The si
 | `solve.test.ts` | Determinism, orbit ownership, the non-finite guard, and mutation guards that pin each determinism guarantee. |
 | `destinations.ts` | The one destination set: every Client and every Project, once each, in content-derived order. |
 | `destinations.test.ts` | Cardinality, ID order under a re-order, and mutation guards that fail if the walk drops a Project or emits Clients only. |
+| `rail.ts` | The Rail's ordering — Clients by earliest `duration.start`, ties by ID — owned here, imported by `solve.ts`, and emitted as the artifact's `rail`. |
+| `rail.test.ts` | The ordering key on a fixture where start order opposes recency and ID order, the tie-break, Client granularity, and a source scan pinning that `solve.ts` imports the rule rather than restating it. |
 | `dwell.ts` | Dwell as a **tempo class**, one per Client, from the count of Deep Projects in its system. Never a duration. |
 | `dwell.test.ts` | The Deep/Shallow separation, the count ceiling, and mutation guards that fail if the tempo ignores the Deep count or counts volume instead. |
 | `shots.ts` | The default Shot: one per Client — entity ID, angle, distance, framing — with the distance computed to contain the system's widest orbit. |
@@ -128,7 +130,7 @@ A non-finite coordinate throws, naming the entity. Unguarded it would serialize 
 
 ## The artifact
 
-`generated/layout.generated.json` is the one committed document every later epic reads and no later epic re-derives. It carries the schema version, the reference month, every Client with its Star's position, its Projects, their derived properties and the whole authored record for each — plus the three Client-and-entity lists no consumer may re-derive: `destinations`, `dwell`, and `shots`.
+`generated/layout.generated.json` is the one committed document every later epic reads and no later epic re-derives. It carries the schema version, the reference month, every Client with its Star's position, its Projects, their derived properties and the whole authored record for each — plus the four Client-and-entity lists no consumer may re-derive: `destinations`, `dwell`, `shots`, and `rail`.
 
 ```sh
 npm run solve    # runs the pipeline and writes the artifact
@@ -149,9 +151,9 @@ Bytes are LF and end with a newline. `.gitattributes` normalizes the repository 
 
 `SCHEMA_VERSION` is `z.literal` in the schema, not a range: an artifact declaring any other version fails validation rather than being read on a guess. Every level is a `strictObject`, so a consumer writing an undeclared field fails the gate.
 
-The version is **3**. It started at 1; Story 1.6 added `destinations` and Story 1.7 added `dwell` and `shots`. Each time the contract's shape changed, the number it declares changed with it. An artifact still carrying `2` has no Dwell tempo and no Shot framing, and fails the gate rather than being read by a consumer that expects them.
+The version is **4**. It started at 1; Story 1.6 added `destinations`, Story 1.7 added `dwell` and `shots`, and Story 2.1 added `rail`. Each time the contract's shape changed, the number it declares changed with it. An artifact still carrying `3` publishes no Rail ordering, and fails the gate rather than being read by a consumer that expects one.
 
-Both new fields are **required**, not declared-and-empty — which was only possible once something populated them. A required field nothing emits would have made the artifact fail its own gate, which is exactly what the gate exists to prevent, and is why they were deliberately absent until Story 1.7.
+Every field is **required**, not declared-and-empty — which is only possible once something populates it. A required field nothing emits would have made the artifact fail its own gate, which is exactly what the gate exists to prevent, and is why each was deliberately absent until the story that emits it.
 
 ### Content parity is structural
 
@@ -171,7 +173,7 @@ This is the one thing in the artifact most worth reading carefully.
 
 The scene and the Fallback project the same data two ways, so the one thing they must never do is order Bodies differently. `timeAxis` therefore ranks **the same quantity `luminanceBand` does** — `recencyOf`, which is `duration.end` clamped to `asOf` — so a brighter Body is always further along the Fallback's axis. A Client takes the **maximum** of its Projects' `timeAxis`, never the minimum: a Client is as recent as the most recent work done for it, which is what a reader means by where an engagement sits in time.
 
-**The Rail's own sort key is `duration.start`, and it stays that way.** `solve.ts`'s `inRailOrder` sorts Client Stars by earliest start month, and for a portfolio holding a long early engagement beside a short late one the two orderings genuinely separate — Alpha running 2010-01 → 2025-01 beside Beta running 2012-01 → 2013-01 puts Alpha first on the Rail and last on the time axis. Neither ordering is wrong. What would be wrong is an artifact claiming they coincide, so the document carries the recency ordering and says so.
+**The Rail's own sort key is `duration.start`, and it stays that way.** `rail.ts`'s `inRailOrder` sorts Client Stars by earliest start month, and for a portfolio holding a long early engagement beside a short late one the two orderings genuinely separate — Alpha running 2010-01 → 2025-01 beside Beta running 2012-01 → 2013-01 puts Alpha first on the Rail and last on the time axis. Neither ordering is wrong. What would be wrong is an artifact claiming they coincide, so the `clients` array carries the recency ordering and says so, and the Rail's ordering rides in its own `rail` field (see **The Rail's ordering** below).
 
 This is bound **by test, not by comment.** An earlier implementation of this story derived `timeAxis` from `duration.start` while `luminanceBand` ranked recency, and passed 191 tests with the two inverted, because every fixture happened to have a start order agreeing with its recency order. `artifact.test.ts` fixes a set where the two deliberately oppose, and asserts the orderings are identical over it. There is also one ranking function — `recencyRanks`, exported from `entities.ts` — rather than two implementations mirroring each other: replacing its key with `duration.start` fails the suite.
 
@@ -198,6 +200,20 @@ One entry per Client and per Project, exactly once each. Each carries an `id` an
 It counts from the artifact's `clients` tree, **never from a fresh derive** — the gate never solves (AD-1). So a destination set agreeing with a *stale* entity tree still passes: that is the pre-existing content-drift limitation this file already documents, and `npm test` is what catches it. The gate's job here is the divergence the story names — the list disagreeing with the entities it addresses.
 
 The assertion sits **after** schema validation and **before** the byte checks. A malformed artifact must report its real failure rather than a cardinality one derived from a half-parsed tree, and a structural fault must not be reported as a formatting one. That ordering is itself pinned by a test, because it is invisible on a passing document.
+
+## The Rail's ordering
+
+The artifact carries **three** orderings, and until Story 2.1 none of them was the Rail's: `clients[]` is `timeAxis` order (max recency, oldest first), `destinations` is ID order, and the Rail's own key — minimum `duration.start` — was private to `solve.ts` and unemitted. `artifact.test.ts` actively asserts the emitted `clients` order is *not* the Rail order over a fixture where they differ, so the divergence is deliberate rather than an oversight.
+
+`rail` publishes the missing one: **Client IDs, in the order the journey reaches them, earliest engagement first.** A bare list of IDs, because the ordering *is* the payload — an entry names an entity and carries nothing else, and a consumer resolves the Client by looking the ID up in the `clients` tree.
+
+**Emitted rather than reconstructed.** The DOM index Story 2.1 builds walks the Rail. Rebuilding that order in the shell would put `startsAt` and its comparator in a second place, and two copies of one ordering rule drift the first time either changes — the exact failure Story 1.6 exists to forbid. So the rule moved out of `solve.ts` into `rail.ts`, which owns it, and `solve.ts` imports it: exactly one implementation exists in the repository, and `rail.test.ts` reads `solve.ts`'s source to keep it that way.
+
+**Publishing it changed no geometry.** `inRailOrder` already fed `node.index` into d3's placement and force accumulation, so this order has governed every coordinate since Story 1.4. Emitting it only makes an existing commitment readable.
+
+**Client-granular, like `dwell` and `shots`** (AD-4a): one entry per Client, none naming a Project. `checkStops` walks all three lists through one shared loop and fails naming the offending ID and the granularity — a Project on the Rail describes a stop the journey never makes.
+
+The index reads it **reversed**: the Rail runs oldest-first because that is the direction the camera travels, and a reader arriving at a portfolio wants the current work first. Same ordering, read the other way — see `src/shell/README.md`.
 
 ## Dwell and Shots are Client-granular
 
@@ -237,9 +253,9 @@ No Shot is authored in `career.json` today and this story authors none. What it 
 
 **Nothing in the pipeline may key a Shot by array position.** An index-keyed merge would silently re-target every override the first time a Client was added or renamed.
 
-### The Dwell and Shot assertion at the gate
+### The Dwell, Shot and Rail assertion at the gate
 
-`checkStops` asserts both lists against the artifact's own Client set, and `npm run build` fails naming the offending ID: an entry naming no Client, an entry naming a **Project** (the granularity error), a subject listed twice, a Client with no entry, or a Client ID the tree carries twice. It also asserts the one Shot property none of those cardinality checks can see: that a Shot's `distance` is **strictly greater** than the widest `railDistance` among its own subject's Projects. A Shot naming the right Client with a distance that frames its widest Project out of view satisfies every check above, and that Project is then unreachable from the Rail. The widest orbit is read off the artifact's own tree, never re-derived. Both lists are also asserted before the bytes are written, so the *first* divergent emission fails rather than being committed and rejected afterwards.
+`checkStops` asserts all three lists against the artifact's own Client set, and `npm run build` fails naming the offending ID: an entry naming no Client, an entry naming a **Project** (the granularity error), a subject listed twice, a Client with no entry, or a Client ID the tree carries twice. It also asserts the one Shot property none of those cardinality checks can see: that a Shot's `distance` is **strictly greater** than the widest `railDistance` among its own subject's Projects. A Shot naming the right Client with a distance that frames its widest Project out of view satisfies every check above, and that Project is then unreachable from the Rail. The widest orbit is read off the artifact's own tree, never re-derived. All three lists are also asserted before the bytes are written, so the *first* divergent emission fails rather than being committed and rejected afterwards.
 
 It counts from the artifact's `clients` tree, **never from a fresh derive** — the gate never solves (AD-1). The assertion sits after schema validation and before the byte checks, for the same reasons the destination check does, and that ordering is pinned by a test because it is invisible on a passing document.
 

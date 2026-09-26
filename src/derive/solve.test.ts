@@ -32,6 +32,7 @@ import { deriveEntities, type EntityGraph } from './entities.ts';
 import { solveLayout, type Position, type SolvedLayout } from './solve.ts';
 
 const SOLVE_TS = fileURLToPath(new URL('./solve.ts', import.meta.url));
+const RAIL_TS = fileURLToPath(new URL('./rail.ts', import.meta.url));
 const CAREER_JSON = fileURLToPath(new URL('../data/career.json', import.meta.url));
 
 const AS_OF = '2026-09';
@@ -503,14 +504,22 @@ test('ordering is by codepoint, never by locale', () => {
   // authored free text, so a locale difference would reorder the Rail and move
   // every coordinate — the one remaining path by which environment reaches the
   // layout.
-  // Matches a call, not a mention — the module documents `localeCompare` in
+  // Matches a call, not a mention — both modules document `localeCompare` in
   // prose to explain why it is not used.
-  const source = readFileSync(SOLVE_TS, 'utf8');
-  assert.doesNotMatch(
-    source.replace(/^\s*\*.*$/gm, ''),
-    /\.localeCompare\(/,
-    'sorting must not depend on the runtime locale or its ICU build',
-  );
+  //
+  // Both, because the Rail's comparator moved to `rail.ts` when Story 2.1
+  // published the ordering: scanning `solve.ts` alone would leave this assertion
+  // pinning only `inOrbitOrder` while the comparator that actually orders the
+  // Rail — and therefore `node.index`, and therefore every coordinate — went
+  // unwatched in the file it moved to.
+  for (const path of [SOLVE_TS, RAIL_TS]) {
+    const source = readFileSync(path, 'utf8');
+    assert.doesNotMatch(
+      source.replace(/^\s*\*.*$/gm, ''),
+      /\.localeCompare\(/,
+      `sorting must not depend on the runtime locale or its ICU build (${path})`,
+    );
+  }
 });
 
 // --- Orbit geometry: the constants that shape a system ----------------------
@@ -689,12 +698,24 @@ test('dropping the pre-solve sort makes the layout depend on authored order', as
     'the real module is order-independent',
   );
 
-  // Neutralize both stable sorts by making their comparators return 0, which
-  // leaves the entities in the order `deriveEntities` handed them over — that
-  // is, first-appearance order, straight out of the authored file.
+  // Neutralize the Rail sort by shadowing the imported `inRailOrder` with an
+  // identity pass-through, which leaves the Clients in the order
+  // `deriveEntities` handed them over — that is, first-appearance order,
+  // straight out of the authored file.
+  //
+  // The comparator itself moved to `rail.ts` when Story 2.1 published the
+  // ordering, so this guard mutates the **seam** rather than the rule: the copy
+  // this loader writes sits beside the original and imports the real `rail.ts`,
+  // so rewriting that module in place is not an option, and mutating the point
+  // of use is what pins that `solveLayout` actually sorts. `rail.test.ts` pins
+  // the rule; this pins the wiring. The intra-system `inOrbitOrder` is left
+  // alone — it orders a Client's own Projects, not the Rail, and neutralizing it
+  // here would confuse two claims.
   const mutant = await loadMutant(
-    /const byStart = compareCodepoints\(startsAt\(a\), startsAt\(b\)\);\n    return byStart !== 0 \? byStart : compareCodepoints\(a\.id, b\.id\);/,
-    'void startsAt; void a; void b;\n    return 0;',
+    /import \{ compareCodepoints, inRailOrder \} from '\.\/rail\.ts';/,
+    "import { compareCodepoints } from './rail.ts';\n" +
+      'import type { ClientEntity as _Unsorted } from \'./entities.ts\';\n' +
+      'const inRailOrder = (clients: readonly _Unsorted[]): _Unsorted[] => [...clients];',
   );
 
   const forward = mutant.solveLayout(graphOf(...entries), { randomSource: seededRandom() });

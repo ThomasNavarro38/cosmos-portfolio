@@ -114,8 +114,8 @@ test('SCHEMA_VERSION is a literal in the schema, so a mismatch fails', () => {
   }
 });
 
-test('the version is 3 now that dwell and shots landed, and changing the shape means changing it', () => {
-  assert.equal(SCHEMA_VERSION, 3, 'Story 1.7 added `dwell` and `shots`, so the shape version is 3');
+test('the version is 4 now that rail landed, and changing the shape means changing it', () => {
+  assert.equal(SCHEMA_VERSION, 4, 'Story 2.1 added `rail`, so the shape version is 4');
   assert.equal(valid().schemaVersion, SCHEMA_VERSION, 'the emitter declares it');
 
   // Read off the source: the literal must be in the schema, not merely compared
@@ -174,7 +174,7 @@ test('an unknown field is rejected at every level of the document', () => {
   }
 });
 
-test('the schema declares dwell and shots, and a version-3 artifact without either is rejected', () => {
+test('the schema declares dwell and shots, and a version-4 artifact without either is rejected', () => {
   // The inverse of the version-2 absence assertion, which said these belonged to
   // a later story. Story 1.7 declared them, so the assertion **inverts rather
   // than being deleted**: a regression that dropped either field again must fail
@@ -205,9 +205,57 @@ test('the schema declares dwell and shots, and a version-3 artifact without eith
     assertFails(
       validateArtifact(without),
       new RegExp(field),
-      `a version-3 artifact with no \`${field}\` must fail, not be read as having none`,
+      `a version-4 artifact with no \`${field}\` must fail, not be read as having none`,
     );
   }
+});
+
+// --- The Rail's ordering is declared, and required --------------------------
+
+test('the schema declares rail, and a version-4 artifact without it is rejected', () => {
+  // The same move `destinations` made at version 2 and `dwell`/`shots` at 3:
+  // once the field is declared the assertion **inverts rather than being
+  // deleted**, so a regression that dropped it fails here as loudly as adding one
+  // early once did. `ArtifactSchema` is a `strictObject`, so an undeclared `rail`
+  // would not merely be optional — it would be *rejected*, and the DOM index
+  // would have to reconstruct the Rail's order from `content.duration.start`,
+  // which is the second implementation Story 1.6 exists to forbid.
+  const code = readFileSync(SCHEMA_TS, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  assert.match(code, /\brail\s*:/, 'the Rail ordering must be declared at this version');
+
+  const artifact = valid();
+  assert.ok(Array.isArray(artifact.rail), 'and the emitter populates it');
+  assert.ok(artifact.rail.length > 0, 'with at least the one Client in the fixture');
+
+  const without = copy(artifact);
+  delete without['rail'];
+  assertFails(
+    validateArtifact(without),
+    /rail/,
+    'a version-4 artifact with no Rail must fail, not be read as having none',
+  );
+});
+
+test('a rail entry is a non-blank ID and nothing else — never an object carrying a coordinate', () => {
+  // The ordering *is* the payload, so an entry names an entity and carries no
+  // second copy of what the `clients` tree already holds. A `{ id, index }` or a
+  // `{ subject, position }` entry would be a render-order index and a coordinate
+  // smuggled into the one field whose whole content is a sequence.
+  for (const bad of [{ id: 'client:sncf' }, { subject: 'client:sncf', index: 0 }, 0, null, [], true]) {
+    const broken = copy(valid()) as { rail: unknown[] };
+    broken.rail[0] = bad;
+    assertFails(
+      validateArtifact(broken),
+      /rail\.0/,
+      `a rail entry of ${JSON.stringify(bad)} must be rejected — an entry is an ID`,
+    );
+  }
+
+  const blank = copy(valid()) as { rail: string[] };
+  blank.rail[0] = '';
+  assertFails(validateArtifact(blank), /rail\.0/, 'an empty ID names no Client');
 });
 
 test('a dwell entry carries a subject and a tempo, and nothing else', () => {
@@ -353,7 +401,7 @@ test('a Shot distance is finite and positive, its angle a real elevation, its fr
 
 // --- The destination set is declared, and required --------------------------
 
-test('the schema declares destinations, and a version-3 artifact without it is rejected', () => {
+test('the schema declares destinations, and a version-4 artifact without it is rejected', () => {
   // The inverse of the version-1 absence assertion, kept as the version rose:
   // a regression that dropped `destinations` must still fail here. `ArtifactSchema`
   // is a `strictObject`, so an undeclared `destinations` would not merely be
@@ -373,7 +421,7 @@ test('the schema declares destinations, and a version-3 artifact without it is r
   assertFails(
     validateArtifact(without),
     /destinations/,
-    'a version-3 artifact with no destination set must fail, not be read as having none',
+    'a version-4 artifact with no destination set must fail, not be read as having none',
   );
 });
 
@@ -437,7 +485,7 @@ test('every declared field is required, so a truncated document fails', () => {
   const topLevel = Object.keys(artifact);
   assert.deepEqual(
     topLevel.sort(),
-    ['asOf', 'clients', 'destinations', 'dwell', 'schemaVersion', 'shots'],
+    ['asOf', 'clients', 'destinations', 'dwell', 'rail', 'schemaVersion', 'shots'],
     'the declared top-level shape',
   );
 

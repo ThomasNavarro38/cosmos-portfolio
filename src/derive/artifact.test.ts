@@ -809,6 +809,7 @@ function stopFixture(): {
   doc: {
     dwell: { subject: string; tempo: string }[];
     shots: { subject: string; angle: number; distance: number; framing: string }[];
+    rail: string[];
     clients: { id: string; projects: { id: string; railDistance: number }[] }[];
   };
   write: () => string;
@@ -816,6 +817,7 @@ function stopFixture(): {
   const doc = JSON.parse(JSON.stringify(artifactOf(...opposedEntries()))) as {
     dwell: { subject: string; tempo: string }[];
     shots: { subject: string; angle: number; distance: number; framing: string }[];
+    rail: string[];
     clients: { id: string; projects: { id: string; railDistance: number }[] }[];
   };
   return { doc, write: () => writeTemp(serializeArtifact(doc as unknown as Artifact)) };
@@ -901,6 +903,116 @@ test('the gate fails when a Project is given a Dwell or a Shot of its own', () =
   assert.ok(
     failures.some((line) => line.includes(project.id) && /Rail stops at Clients/.test(line)),
     `the offending Project must be named as a granularity error: ${failures.join('\n')}`,
+  );
+});
+
+// --- Matrix row: the Rail's ordering at the gate ----------------------------
+
+test('the gate fails when a Client has no Rail stop, naming it', () => {
+  // The AC's cardinality-drift row, first clause. A Client absent from `rail` is
+  // a Rail stop the journey never makes — and the DOM index, whose order *is*
+  // the Rail's, would have no entry for it at all.
+  const { doc, write } = stopFixture();
+  const dropped = doc.rail[0];
+  assert.ok(dropped !== undefined, 'the fixture must carry a Rail stop to drop');
+  doc.rail = doc.rail.filter((id) => id !== dropped);
+
+  const failures = checkArtifact(write());
+  assert.notDeepEqual(failures, [], 'a dropped Rail stop must fail the gate');
+  assert.ok(
+    failures.some((line) => line.includes(dropped) && /no rail entry/.test(line)),
+    `the Client with no stop must be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate fails when a Rail stop is listed twice, naming the duplicate', () => {
+  const { doc, write } = stopFixture();
+  const first = doc.rail[0];
+  assert.ok(first !== undefined);
+  doc.rail = [...doc.rail, first];
+
+  const failures = checkArtifact(write());
+  assert.ok(
+    failures.some((line) => line.includes(first) && /more than once/.test(line)),
+    `the duplicated Rail stop must be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate fails when the Rail names an ID no Client carries', () => {
+  const { doc, write } = stopFixture();
+  doc.rail = [...doc.rail, 'client:nobody'];
+
+  const failures = checkArtifact(write());
+  assert.ok(
+    failures.some((line) => line.includes('client:nobody')),
+    `the invented ID must be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate fails when the Rail names a Project, reporting the granularity', () => {
+  // AD-4a for the Rail itself, and the row the story's matrix names explicitly.
+  // The Rail stops at Clients; a Project is reached by being framed at its
+  // Client's stop, so a Project ID here describes a stop that does not exist —
+  // and it must be reported as the *granularity* error it is, not as an unknown
+  // ID, because the two have different fixes.
+  const { doc, write } = stopFixture();
+  const project = doc.clients[0]?.projects[0];
+  assert.ok(project !== undefined);
+  doc.rail = [...doc.rail, project.id];
+
+  const failures = checkArtifact(write());
+  assert.notDeepEqual(failures, [], 'a Project on the Rail must fail the gate');
+  assert.ok(
+    failures.some((line) => line.includes(project.id) && /Rail stops at Clients/.test(line)),
+    `the offending Project must be named as a granularity error: ${failures.join('\n')}`,
+  );
+});
+
+test('the CLI exits 1 on an artifact whose Rail drifted', () => {
+  // The AC is about `npm run build`, whose only observable behaviour is the exit
+  // code — and `checkStops` in-process never shows it. Against a temp copy, never
+  // the committed file.
+  const doc = stripBanner(JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8'))) as Artifact;
+  const drifted = { ...doc, rail: [] } as unknown as Artifact;
+
+  const result = runIndex('--check', writeTemp(serializeArtifact(drifted)));
+  assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
+  assert.match(result.stderr, /rail/i, 'the failure must reach stderr');
+  assert.match(result.stderr, /client:sncf/, 'and must name the Client with no stop');
+});
+
+test('the CLI exits 1 on an artifact whose Rail names a Project', () => {
+  const doc = stripBanner(JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8'))) as Artifact;
+  const project = doc.clients[0]?.projects[0];
+  assert.ok(project !== undefined);
+  const drifted = { ...doc, rail: [...doc.rail, project.id] } as unknown as Artifact;
+
+  const result = runIndex('--check', writeTemp(serializeArtifact(drifted)));
+  assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
+  assert.ok(result.stderr.includes(project.id), 'the failure must name the offending Project');
+  assert.match(result.stderr, /Rail stops at Clients/, 'and state the granularity');
+});
+
+test('the emitted Rail is the Rail ordering, and demonstrably not the clients[] one', () => {
+  // The story's second acceptance criterion, at the artifact level: the document
+  // carries three orderings and this one is the Rail's. On `opposedEntries` the
+  // emitted `clients` array is `timeAxis` order and the Rail is start-month
+  // order, so they are reverses of each other — an assertion that `rail` merely
+  // "has the right length" would pass on either.
+  const artifact = artifactOf(...opposedEntries());
+  const emitted = artifact.clients.map((client) => client.id);
+
+  assert.equal(artifact.rail.length, emitted.length, 'one Rail stop per Client');
+  assert.deepEqual([...artifact.rail].sort(), [...emitted].sort(), 'and the same Clients');
+  assert.notDeepEqual(
+    [...artifact.rail],
+    emitted,
+    'but not in the same order — the Rail is not the Fallback timeline',
+  );
+  assert.deepEqual(
+    [...artifact.rail],
+    [...emitted].reverse(),
+    'on this fixture the two orderings are exact reverses',
   );
 });
 
@@ -1041,6 +1153,11 @@ test('the gate would catch the Dwell and Shot drift it is asserted against, muta
     ['an invented Shot subject', (d) => ({ ...d, shots: [...d.shots, { ...d.shots[0]!, subject: 'client:nobody' }] })],
     ['a Project given a Dwell', (d) => ({ ...d, dwell: [...d.dwell, { ...d.dwell[0]!, subject: project.id }] })],
     ['a Project given a Shot', (d) => ({ ...d, shots: [...d.shots, { ...d.shots[0]!, subject: project.id }] })],
+    ['a dropped Rail stop', (d) => ({ ...d, rail: d.rail.slice(1) })],
+    ['an emptied Rail', (d) => ({ ...d, rail: [] })],
+    ['a duplicated Rail stop', (d) => ({ ...d, rail: [...d.rail, d.rail[0]!] })],
+    ['an invented Rail stop', (d) => ({ ...d, rail: [...d.rail, 'client:nobody'] })],
+    ['a Project given a Rail stop', (d) => ({ ...d, rail: [...d.rail, project.id] })],
     // An entity-tree mutation rather than a list one: two Clients sharing an ID
     // collapse to a single key, and the collapsed tree then agrees with lists
     // naming that ID once. `entities.ts` throws on this at derive time, but the
@@ -1073,7 +1190,7 @@ test('the gate would catch the Dwell and Shot drift it is asserted against, muta
   }
 });
 
-test('the pre-write guard rejects an artifact whose Dwell or Shot list diverged', () => {
+test('the pre-write guard rejects an artifact whose Dwell, Shot or Rail list diverged', () => {
   // `checkEmittedArtifact` is the seam `runPipeline` runs before serializing.
   // Its branches are unreachable with any authored `career.json` — the emitter
   // builds both lists from the graph the check counts against — so the only way
@@ -1082,7 +1199,7 @@ test('the pre-write guard rejects an artifact whose Dwell or Shot list diverged'
   const sound = artifactOf(...opposedEntries());
   assert.deepEqual(checkEmittedArtifact(sound), [], 'a soundly emitted artifact must pass');
 
-  for (const field of ['dwell', 'shots'] as const) {
+  for (const field of ['dwell', 'shots', 'rail'] as const) {
     const dropped = { ...sound, [field]: sound[field].slice(0, -1) } as Artifact;
     const failures = checkEmittedArtifact(dropped);
     assert.ok(failures.length > 0, `a dropped ${field} entry must not reach serialization`);
@@ -1160,7 +1277,7 @@ test('the stop check still never solves', () => {
   assert.ok(body.length > 0, 'the scan must find the function');
   assert.doesNotMatch(
     body,
-    /runPipeline|writeFileSync|solveLayout|buildArtifact|deriveEntities|buildDwell|buildShots|deriveDwell/,
+    /runPipeline|writeFileSync|solveLayout|buildArtifact|deriveEntities|buildDwell|buildShots|buildRail|deriveDwell|inRailOrder/,
     'the gate may not solve, derive, or write',
   );
 });
@@ -1434,13 +1551,13 @@ test('the assembler computes nothing a rule could own', () => {
 
 // --- The version and the closed schema --------------------------------------
 
-test('the artifact carries destinations, dwell and shots at this version', () => {
-  // `dwell` and `shots` were on the forbidden list until Story 1.7, exactly as
-  // `destinations` was until 1.6. Each assertion **inverts rather than being
-  // deleted**, so a regression that dropped a field again fails here as loudly
-  // as adding one early once did.
+test('the artifact carries destinations, dwell, shots and rail at this version', () => {
+  // `rail` was on the forbidden list until Story 2.1, exactly as `dwell` and
+  // `shots` were until 1.7 and `destinations` until 1.6. Each assertion
+  // **inverts rather than being deleted**, so a regression that dropped a field
+  // again fails here as loudly as adding one early once did.
   const contents = serializeArtifact(artifactOf(...opposedEntries()));
-  for (const emitted of ['destinations', 'dwell', 'shots']) {
+  for (const emitted of ['destinations', 'dwell', 'shots', 'rail']) {
     assert.match(contents, new RegExp(`"${emitted}"`), `the ${emitted} list ships at this version`);
   }
 });

@@ -20,7 +20,8 @@
  * against the schema in `artifact-schema.ts`; the split is what lets
  * `solve.test.ts` assert this module touches no filesystem.
  *
- * **The Rail's order is not the Fallback's.** `inRailOrder` below sorts Client
+ * **The Rail's order is not the Fallback's.** `inRailOrder` — imported from
+ * `rail.ts`, which owns the rule and emits it into the artifact — sorts Client
  * Stars by earliest `duration.start`. The artifact's `timeAxis` measures
  * *recency*, and for a portfolio holding a long early engagement beside a short
  * late one the two orderings genuinely separate. Neither is wrong; what would be
@@ -41,6 +42,7 @@ import {
   type SimulationNode,
 } from 'd3-force-3d';
 import type { ClientEntity, EntityGraph, ProjectEntity } from './entities.ts';
+import { compareCodepoints, inRailOrder } from './rail.ts';
 
 /** A solved position in scene space. */
 export interface Position {
@@ -166,60 +168,20 @@ interface RailLink extends ForceLinkDatum<StarNode> {
 // --- Ordering ---------------------------------------------------------------
 
 /**
- * The month a Client's engagement began: the earliest `start` across its
- * Projects.
+ * The Rail's own ordering — earliest `duration.start`, ties by ID — lives in
+ * `rail.ts` and is imported rather than restated here.
  *
- * Read off the authored `duration` rather than off any derived scalar, because
- * mass is normalized across the set and would reorder the Rail as entries are
- * added. A `YYYY-MM` string compares lexicographically in chronological order.
- */
-function startsAt(client: ClientEntity): string {
-  let earliest: string | undefined;
-  for (const project of client.projects) {
-    const start = project.project.duration.start;
-    if (earliest === undefined || start < earliest) earliest = start;
-  }
-  // A Client with no Projects cannot come out of `deriveEntities` — the graph is
-  // folded from a flat list of Projects — but the type does not say so, and a
-  // `?? '0000-00'` fallback would sort a future empty Client to the head of the
-  // Rail rather than announce itself.
-  if (earliest === undefined) {
-    throw new Error(`Client "${client.id}" owns no Projects, so it has no place on the Rail.`);
-  }
-  return earliest;
-}
-
-/**
- * Clients in Rail order: earliest engagement first, ties broken by ID.
+ * It moved there when Story 2.1 published it into the artifact as `rail`, so the
+ * DOM index need never reconstruct it. Two implementations of one ordering rule
+ * drift the first time either changes, and this one governs every coordinate:
+ * `inRailOrder` feeds `node.index` into d3's placement and force accumulation,
+ * so a divergence between the emitted order and the solved one would move Bodies
+ * rather than merely re-order a list. `compareCodepoints` comes from there too,
+ * for the determinism reason its own header states.
  *
- * The ID tiebreak is what keeps the order independent of `career.json`'s
- * authored order. `deriveEntities` returns Clients in first-appearance order, so
- * sorting on the start month alone would leave two Clients starting in the same
- * month ordered by the file — and a re-order of the file would move them past
- * each other on the Rail. Sorting on content alone makes the order total.
+ * `inOrbitOrder` stays here: it is the *intra-system* ordering the orbit slots
+ * are assigned from, not the Rail's, and nothing outside this module reads it.
  */
-/**
- * Compares two strings by codepoint, never by locale.
- *
- * `localeCompare` collates against the runtime's ICU data and default locale, so
- * it is not a content-derived ordering: `'Ä'.localeCompare('Z')` is `-1` under
- * `en` and `1` under `sv`, and a small-ICU Node disagrees with both. Client
- * names are authored free text, so an accented name would reorder the Rail on a
- * machine whose locale differs — and because `node.index` follows array order
- * into d3's placement and force accumulation, that moves every coordinate. A
- * codepoint comparison is the same everywhere, which is what the determinism
- * contract needs.
- */
-function compareCodepoints(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-
-function inRailOrder(clients: readonly ClientEntity[]): ClientEntity[] {
-  return [...clients].sort((a, b) => {
-    const byStart = compareCodepoints(startsAt(a), startsAt(b));
-    return byStart !== 0 ? byStart : compareCodepoints(a.id, b.id);
-  });
-}
 
 /**
  * A Client's Projects in a stable order, by ID.

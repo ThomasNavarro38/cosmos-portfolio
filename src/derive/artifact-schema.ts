@@ -25,18 +25,20 @@ import { SHOT_FRAMINGS } from './shots.ts';
  * artifact declaring any other version fails validation rather than being read
  * on a guess.
  *
- * It started at 1, became **2** when Story 1.6 added `destinations`, and is **3**
- * now that Story 1.7 has added `dwell` and `shots`: each time the contract's
- * shape changed, the number it declares changed with it. An artifact still
- * carrying `2` has no Dwell tempo and no Shot framing, and must fail rather than
- * be read by a consumer that expects them.
+ * It started at 1, became **2** when Story 1.6 added `destinations`, **3** when
+ * Story 1.7 added `dwell` and `shots`, and is **4** now that Story 2.1 has added
+ * `rail`: each time the contract's shape changed, the number it declares changed
+ * with it. An artifact still carrying `3` publishes no Rail ordering, and must
+ * fail rather than be read by a consumer that expects one — a DOM index reading
+ * a `3` artifact would have no order to walk in but the ones the document
+ * already carries, neither of which is the Rail's.
  *
- * Both new fields are **required**, not declared-and-empty. That was only
- * possible once something populated them — a required field nothing emits would
- * have made the artifact fail its own gate, which is precisely what the gate
- * exists to prevent, and is why they were deliberately absent until now.
+ * Every new field is **required**, not declared-and-empty. That is only possible
+ * once something populates it — a required field nothing emits would have made
+ * the artifact fail its own gate, which is precisely what the gate exists to
+ * prevent, and is why each was deliberately absent until the story that emits it.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /** ISO 8601 year-month, matching the authored form exactly. */
 const IsoYearMonth = z
@@ -199,6 +201,19 @@ export const ArtifactSchema = z.strictObject({
   // cardinality against the `clients` tree is asserted by the build gate, not by
   // this schema, which can only see one entry's shape at a time.
   shots: z.array(ShotSchema),
+  // The order the journey reaches the Rail's stops in — Client IDs, earliest
+  // engagement first, ties by ID. **A bare list of IDs, in order**: the ordering
+  // *is* the payload, so an entry carries nothing else and a consumer resolves
+  // the Client by looking the ID up in the `clients` tree.
+  //
+  // Emitted rather than reconstructed because none of the document's other
+  // orderings is this one — `clients[]` is `timeAxis` order and `destinations`
+  // is ID order — and a consumer rebuilding it from `content.duration.start`
+  // would put the Rail's sort key in a second place, where the two would drift.
+  // Client-granular (AD-4a): one entry per Client, none naming a Project. That
+  // cardinality is asserted by the build gate, not by this schema, which can
+  // only see one entry at a time.
+  rail: z.array(z.string().min(1)),
 });
 
 /** The emitted artifact, as a type. */
@@ -218,6 +233,15 @@ export type Dwell = z.infer<typeof DwellSchema>;
 
 /** One Shot: the entity it frames, and how. Never a world coordinate. */
 export type Shot = z.infer<typeof ShotSchema>;
+
+/**
+ * The Rail's ordering: Client IDs in the order the journey reaches them.
+ *
+ * Named so a consumer types against "the Rail" rather than against a bare
+ * `string[]`, which says nothing about what the strings are or why they are in
+ * that order. Inferred from the schema like every other type here.
+ */
+export type Rail = z.infer<typeof ArtifactSchema>['rail'];
 
 /** A solved position, as the artifact carries it. */
 export type ArtifactPosition = z.infer<typeof PositionSchema>;

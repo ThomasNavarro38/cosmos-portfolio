@@ -17,6 +17,7 @@ import type { Position, SolvedLayout } from './solve.ts';
 import { SCHEMA_VERSION, type Artifact, type ArtifactClient, type ArtifactProject } from './artifact-schema.ts';
 import { buildDestinations } from './destinations.ts';
 import { buildDwell } from './dwell.ts';
+import { buildRail } from './rail.ts';
 import { buildShots } from './shots.ts';
 
 /**
@@ -81,18 +82,25 @@ function clientOf(client: ClientEntity, layout: SolvedLayout): ArtifactClient {
  *
  * Clients are emitted in **`timeAxis` order, oldest first, ties broken by ID** —
  * the ordering the Fallback reproduces. Deliberately *not* the Rail's order:
- * `solve.ts` sorts Client Stars by earliest `duration.start`, and for a
- * portfolio holding a long early engagement beside a short late one the two
- * genuinely differ. The document must carry the ordering it claims to, so a
- * consumer laying entries out in array order gets the same sequence as one
- * sorting on `timeAxis`, and neither is quietly reading the Rail.
+ * `rail.ts` sorts Client Stars by earliest `duration.start`, and for a portfolio
+ * holding a long early engagement beside a short late one the two genuinely
+ * differ. The document must carry the ordering it claims to, so a consumer
+ * laying entries out in array order gets the same sequence as one sorting on
+ * `timeAxis`, and neither is quietly reading the Rail.
+ *
+ * **The Rail's order rides in its own field.** `rail` carries the Client IDs in
+ * the order the journey reaches them, so a consumer that needs *that* ordering —
+ * the DOM index, whose walk is the Rail's — reads it off the document instead of
+ * re-deriving it from `content.duration.start`. Three orderings, each in the
+ * channel that names it, and none pretending to be another.
  *
  * The destination set comes from `buildDestinations`, the Dwell list from
- * `buildDwell`, and the Shot list from `buildShots` — never from a walk inlined
- * here. The assembler arranges; it never computes what a module owns (AD-3). A
- * second enumeration of the reachable set is precisely the divergence Story 1.6
- * exists to make impossible, and a Deep count or a widest-orbit walk inlined
- * here would be the same mistake for Story 1.7's two fields.
+ * `buildDwell`, the Shot list from `buildShots`, and the Rail from `buildRail` —
+ * never from a walk inlined here. The assembler arranges; it never computes what
+ * a module owns (AD-3). A second enumeration of the reachable set is precisely
+ * the divergence Story 1.6 exists to make impossible, and a Deep count, a
+ * widest-orbit walk, or a start-month sort inlined here would be the same
+ * mistake for the three fields that followed.
  *
  * @throws if the solve produced no position for an entity, naming it.
  */
@@ -115,6 +123,7 @@ export function buildArtifact(
     destinations: [...buildDestinations(graph)],
     dwell: [...buildDwell(graph)],
     shots: [...buildShots(graph)],
+    rail: [...buildRail(graph)],
   };
 }
 

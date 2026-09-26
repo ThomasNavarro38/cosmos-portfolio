@@ -70,8 +70,9 @@ export type PipelineResult =
  * Returns the failure lines, empty on success.
  *
  * Three of them: the document against its own declared schema, the destination
- * set against the entities it addresses, and the Dwell and Shot lists against
- * the Client set they pace and frame. None is redundant with the gate — without
+ * set against the entities it addresses, and the Dwell, Shot and Rail lists
+ * against the Client set they pace, frame and order. None is redundant with the
+ * gate — without
  * them the *first* bad emission would be the one committed, and the gate would
  * only ever reject it afterwards, when the artifact on disk is already wrong.
  *
@@ -98,7 +99,7 @@ export function checkEmittedArtifact(artifact: Artifact): string[] {
 
   const stopFailures = checkStops(artifact);
   if (stopFailures.length > 0) {
-    return ['the emitted Dwell or Shot list disagrees with its Clients:', ...stopFailures];
+    return ['the emitted Dwell, Shot or Rail list disagrees with its Clients:', ...stopFailures];
   }
 
   return [];
@@ -244,14 +245,14 @@ export function checkDestinations(artifact: Artifact): string[] {
 }
 
 /**
- * Asserts a validated artifact's `dwell` and `shots` against its own Client set.
- * Returns the failure lines, empty on success.
+ * Asserts a validated artifact's `dwell`, `shots` and `rail` against its own
+ * Client set. Returns the failure lines, empty on success.
  *
- * Both lists are Client-granular (AD-4a): the Rail stops at Clients, so exactly
- * one entry per Client, and **no entry naming a Project**. Five ways either list
- * can diverge, and each names the offending ID rather than reporting a count
- * alone — "5 dwell entries, 6 clients" against a document holding fifteen Bodies
- * is not a diagnosis:
+ * All three lists are Client-granular (AD-4a): the Rail stops at Clients, so
+ * exactly one entry per Client, and **no entry naming a Project**. Five ways any
+ * of them can diverge, and each names the offending ID rather than reporting a
+ * count alone — "5 dwell entries, 6 clients" against a document holding fifteen
+ * Bodies is not a diagnosis:
  *
  * - an entry naming no entity in the tree (invented),
  * - an entry naming a Project rather than a Client (the wrong granularity —
@@ -265,8 +266,14 @@ export function checkDestinations(artifact: Artifact): string[] {
  *   frames a Project out of view and makes it unreachable from the Rail.
  *
  * It walks the artifact only — no derive, no solve (AD-1). What the *emitter*
- * produces is pinned by `dwell.test.ts` and `shots.test.ts`; this is the
- * internal consistency check the build can actually make.
+ * produces is pinned by `dwell.test.ts`, `shots.test.ts` and `rail.test.ts`;
+ * this is the internal consistency check the build can actually make.
+ *
+ * `rail` joins the same walk rather than getting one of its own. It is a bare
+ * list of IDs where the other two are lists of `{ subject }` objects, so it is
+ * adapted into that shape at the call site — a second near-identical walk would
+ * drift from this one the first time either changed, which is the whole reason
+ * `dwell` and `shots` already share it.
  */
 export function checkStops(artifact: Artifact): string[] {
   const failures: string[] = [];
@@ -304,12 +311,19 @@ export function checkStops(artifact: Artifact): string[] {
     widestOrbit.set(client.id, Math.max(widestOrbit.get(client.id) ?? 0, widest));
   }
 
-  // One walk over both lists rather than two near-identical ones: the checks are
-  // the same four, and a second copy would drift from this one the first time
-  // either changed.
+  // One walk over all three lists rather than three near-identical ones: the
+  // checks are the same four, and a second copy would drift from this one the
+  // first time any of them changed.
+  //
+  // `rail` is a bare list of Client IDs — the ordering *is* its payload, so an
+  // entry carries nothing else — and it is adapted into the `{ subject }` shape
+  // here rather than being walked separately. The adaptation is the whole cost
+  // of keeping one walk; a `rail`-shaped copy of the loop would be four checks
+  // restated.
   const lists: [string, readonly { readonly subject: string }[]][] = [
     ['dwell', artifact.dwell],
     ['shots', artifact.shots],
+    ['rail', artifact.rail.map((id) => ({ subject: id }))],
   ];
 
   for (const [label, entries] of lists) {
@@ -372,7 +386,7 @@ export function checkStops(artifact: Artifact): string[] {
   if (failures.length > 0) {
     failures.push(
       `the artifact carries ${clients.size} Clients, ${artifact.dwell.length} dwell entries, ` +
-        `and ${artifact.shots.length} shots.`,
+        `${artifact.shots.length} shots, and ${artifact.rail.length} rail stops.`,
     );
   }
 
@@ -458,10 +472,11 @@ export function checkArtifact(path: string = ARTIFACT_PATH, sourceRoot: string =
     ];
   }
 
-  // The Dwell and Shot lists against the Client set in the *same document*. The
-  // schema can only see one entry's shape at a time — it cannot tell that a
-  // Client is missing a tempo, named twice, invented, or that a Project has been
-  // given a stop of its own. The last of those is the failure AD-4a is about:
+  // The Dwell, Shot and Rail lists against the Client set in the *same document*.
+  // The schema can only see one entry's shape at a time — it cannot tell that a
+  // Client is missing a tempo, a framing or a place on the Rail, is named twice,
+  // is invented, or that a Project has been given a stop of its own. The last of
+  // those is the failure AD-4a is about:
   // built per-Project the Rail stops at ~15 Bodies instead of ~5 Clients, and
   // the error stays invisible until the camera exists.
   //
@@ -474,7 +489,7 @@ export function checkArtifact(path: string = ARTIFACT_PATH, sourceRoot: string =
   const stops = checkStops(schema.artifact);
   if (stops.length > 0) {
     return [
-      'the committed layout artifact has a Dwell or Shot list that disagrees with its Clients:',
+      'the committed layout artifact has a Dwell, Shot or Rail list that disagrees with its Clients:',
       ...stops,
       'Run `npm run solve` and commit the result.',
     ];
