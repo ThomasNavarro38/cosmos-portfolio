@@ -240,6 +240,12 @@ export type Shot = z.infer<typeof ShotSchema>;
  * Named so a consumer types against "the Rail" rather than against a bare
  * `string[]`, which says nothing about what the strings are or why they are in
  * that order. Inferred from the schema like every other type here.
+ *
+ * `rail.ts` returns it from `buildRail`, so the producer and the document's own
+ * declaration describe the value with one type rather than with two that agree
+ * by coincidence. The shell is not among its consumers and cannot be:
+ * `src/shell/` may never import `src/derive/`, type-only imports included, so
+ * the index restates the slice it reads structurally instead.
  */
 export type Rail = z.infer<typeof ArtifactSchema>['rail'];
 

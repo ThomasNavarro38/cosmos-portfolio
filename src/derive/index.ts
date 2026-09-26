@@ -72,9 +72,9 @@ export type PipelineResult =
  * Three of them: the document against its own declared schema, the destination
  * set against the entities it addresses, and the Dwell, Shot and Rail lists
  * against the Client set they pace, frame and order. None is redundant with the
- * gate — without
- * them the *first* bad emission would be the one committed, and the gate would
- * only ever reject it afterwards, when the artifact on disk is already wrong.
+ * gate — without them the *first* bad emission would be the one committed, and
+ * the gate would only ever reject it afterwards, when the artifact on disk is
+ * already wrong.
  *
  * Extracted from `runPipeline` rather than inlined there because of what it
  * costs to test. Both branches are unreachable from `runPipeline` with any

@@ -331,6 +331,27 @@ test('a Client the rail omits is absent from the index, not appended', () => {
   assert.deepEqual(index.clients.map((entry) => entry.id), ['client:alpha']);
 });
 
+test('a Client the rail names twice is walked once, not entered twice', () => {
+  // The third drift mode the I/O matrix names alongside the unknown ID and the
+  // omitted Client, and the one the walk did not handle: `byId.get` resolves a
+  // repeated ID both times, so the Client was pushed once per mention. The two
+  // entries then carry the same `id`, which is what `index-nav.tsx` keys its
+  // `<li>` on — so a duplicate reached React as two siblings sharing one key, and
+  // reached a reader as the same destination announced twice.
+  //
+  // Gated at build like its siblings; guarded here for the same reason they are.
+  const artifact = opposedArtifact();
+  const index = buildDestinationIndex({
+    ...artifact,
+    rail: [artifact.rail[0]!, ...artifact.rail],
+  });
+  assert.deepEqual(
+    index.clients.map((entry) => entry.id),
+    ['client:mid', 'client:alpha', 'client:zulu'],
+    'the repeated stop is walked at one position only',
+  );
+});
+
 test('an empty artifact yields an empty index rather than throwing', () => {
   // Not a shape the pipeline emits, but the model is what a renderer calls on
   // every render: throwing here would take the whole shell down for a document
@@ -400,6 +421,38 @@ test('the renderer holds no logic the model could own', () => {
   assert.doesNotMatch(code, /\bisDeep\b|\bduration\b|\bnotable\b|\btimeAxis\b/, 'no re-derivation of a Body property');
   assert.doesNotMatch(code, /\bwindow\b|\bdocument\b|\bcamera\b|innerWidth/, 'no render, camera, or viewport state');
   assert.doesNotMatch(code, /aria-(?!label\b)/, 'no ARIA attribute standing in for the Deep/Shallow text');
+
+  // The ban above exempts `aria-label`, because the `<nav>` legitimately carries
+  // one — and that exemption is a hole exactly the width of the regression the ban
+  // exists to stop. Moving depth onto a button as `aria-label={project.depth}`
+  // satisfies every check above, and `aria-label` *replaces* the accessible name,
+  // so the Project title is lost along with the text. No ARIA attribute may carry
+  // a model field, labels included.
+  assert.doesNotMatch(
+    code,
+    /aria-[a-z]+=\{\s*(?:project|client)\./,
+    'no ARIA attribute may carry a model field — the text is the accessible name',
+  );
+});
+
+test('the title and the depth word reach the reader as text, not as attribute values', () => {
+  // The AC this file cannot reach by mounting: "its accessible name is the Client
+  // name or Project title and its Deep/Shallow state is available as text". Every
+  // other renderer scan here is negative — each forbids a bad form — and a negative
+  // scan cannot observe the good form going missing. So this one is positive: each
+  // model field must appear between a `>` and a `<`, which is the only position
+  // where JSX emits a text node.
+  const code = readFileSync(NAV_TSX, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+  for (const field of ['client.name', 'project.title', 'project.depth']) {
+    assert.match(
+      code,
+      new RegExp(`>[^<>]*\\{\\s*${field.replace('.', '\\.')}\\s*\\}`),
+      `${field} must be rendered as text a screen reader announces, never as an attribute`,
+    );
+  }
 });
 
 test('the renderer emits a nav, a nested list, and a button per entry', () => {
@@ -413,6 +466,43 @@ test('the renderer emits a nav, a nested list, and a button per entry', () => {
   assert.match(source, /<button\b/, 'and a button per entry, focusable by default');
   assert.doesNotMatch(source, /<div\s+role=["']button/, 'never a div wearing a role');
   assert.doesNotMatch(source, /tabIndex=\{-1\}/, 'and nothing removed from the tab order');
+});
+
+test('each Client’s Projects are nested inside its own list item, not beside it', () => {
+  // Tag presence — what the test above checks — cannot see nesting: hoisting the
+  // Projects' `<ul>` out of the Client `<li>` to a sibling leaves every tag in the
+  // file and passes all six of those assertions. But the nesting *is* the
+  // information (a Project belongs to a Client), and a flat list would make a
+  // reader infer the grouping from adjacency. The model pins it on the object; this
+  // pins the one hop the model cannot see, from that object into markup.
+  //
+  // Tag order in the source is the check: within the Client's `<li>`, the Client
+  // `<button>` must be followed by the nested `<ul>` before that `<li>` closes.
+  const code = readFileSync(NAV_TSX, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+  const tags = code.match(/<\/?(?:nav|ul|li|button)\b/g) ?? [];
+  assert.deepEqual(
+    tags,
+    [
+      '<nav',
+      '<ul',
+      '<li',
+      '<button',
+      '</button',
+      '<ul',
+      '<li',
+      '<button',
+      '</button',
+      '</li',
+      '</ul',
+      '</li',
+      '</ul',
+      '</nav',
+    ],
+    'the Projects’ list must open inside the Client’s own list item, after its button',
+  );
 });
 
 test('the renderer imports the model rather than the artifact', () => {

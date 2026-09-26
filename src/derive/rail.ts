@@ -30,6 +30,7 @@
  * authored `duration.start` the Rail has always been ordered by.
  */
 
+import type { Rail } from './artifact-schema.ts';
 import type { ClientEntity, EntityGraph } from './entities.ts';
 
 /**
@@ -105,6 +106,6 @@ export function inRailOrder(clients: readonly ClientEntity[]): ClientEntity[] {
  * The IDs `entities.ts` minted, never re-slugified here: a second ID derivation
  * is a second place for the contract to drift.
  */
-export function buildRail(graph: EntityGraph): readonly string[] {
+export function buildRail(graph: EntityGraph): Rail {
   return inRailOrder(graph.clients).map((client) => client.id);
 }

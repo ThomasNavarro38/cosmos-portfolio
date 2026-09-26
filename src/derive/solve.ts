@@ -167,21 +167,18 @@ interface RailLink extends ForceLinkDatum<StarNode> {
 
 // --- Ordering ---------------------------------------------------------------
 
-/**
- * The Rail's own ordering — earliest `duration.start`, ties by ID — lives in
- * `rail.ts` and is imported rather than restated here.
- *
- * It moved there when Story 2.1 published it into the artifact as `rail`, so the
- * DOM index need never reconstruct it. Two implementations of one ordering rule
- * drift the first time either changes, and this one governs every coordinate:
- * `inRailOrder` feeds `node.index` into d3's placement and force accumulation,
- * so a divergence between the emitted order and the solved one would move Bodies
- * rather than merely re-order a list. `compareCodepoints` comes from there too,
- * for the determinism reason its own header states.
- *
- * `inOrbitOrder` stays here: it is the *intra-system* ordering the orbit slots
- * are assigned from, not the Rail's, and nothing outside this module reads it.
- */
+// The Rail's own ordering — earliest `duration.start`, ties by ID — lives in
+// `rail.ts` and is imported rather than restated here. It moved there when Story
+// 2.1 published it into the artifact as `rail`, so the DOM index need never
+// reconstruct it. Two implementations of one ordering rule drift the first time
+// either changes, and this one governs every coordinate: `inRailOrder` feeds
+// `node.index` into d3's placement and force accumulation, so a divergence
+// between the emitted order and the solved one would move Bodies rather than
+// merely re-order a list. `compareCodepoints` comes from there too, for the
+// determinism reason its own header states.
+//
+// `inOrbitOrder` stays here: it is the *intra-system* ordering the orbit slots
+// are assigned from, not the Rail's, and nothing outside this module reads it.
 
 /**
  * A Client's Projects in a stable order, by ID.
