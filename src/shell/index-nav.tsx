@@ -3,9 +3,11 @@
  *
  * **A mapping, and nothing else.** Every rule the index obeys — the walk order,
  * the nesting, the accessible names, the Deep/Shallow text — lives in
- * `index-model.ts`, which is pure and fully tested. This file turns that model
- * into elements and makes no decision of its own: no sort, no filter, no state,
- * no re-derivation, no reach into render or camera state.
+ * `index-model.ts`, which is pure and fully tested. Every rule about *where the
+ * visitor is* lives in `state.ts`, which is pure and fully tested. This file
+ * turns the one into elements and hands events to the other, and makes no
+ * decision of its own: no sort, no filter, no local state, no re-derivation, no
+ * reach into render or camera state.
  *
  * The split is not stylistic. `node --test` under Node 24's built-in type
  * stripping cannot load a `.tsx` file in any position — `ERR_UNKNOWN_FILE_EXTENSION`
@@ -17,11 +19,23 @@
  * ratcheted by a source scan in `index-model.test.ts`, which fails the moment
  * this file grows a rule.
  *
+ * **The index is the store's first subscriber, and that is the point.** An
+ * authority with no consumer is unfalsifiable: "the camera and the index are both
+ * subscribers; neither owns the state" cannot be shown by a store alone. The
+ * index is the consumer that already exists, so selection is wired to the named
+ * events now and the camera joins the same surface later, symmetrically.
+ *
+ * It subscribes with a **selector**, never the whole store. `useStore(store, s =>
+ * s.focusedProjectId)` re-renders this tree when Focus changes and not when the
+ * camera writes `scrollProgress` sixty times a second.
+ *
  * **Greybox.** No styling, no design token, no visual identity — Epic 3 dresses
  * this. Semantics only.
  */
 
+import { useStore } from 'zustand/react';
 import { buildDestinationIndex, type IndexArtifact } from './index-model.ts';
+import { focusProject, navigationStore, selectClient } from './state.ts';
 
 /** What the index needs: the artifact, and nothing else. */
 export interface DestinationNavProps {
@@ -41,23 +55,32 @@ export interface DestinationNavProps {
  * in the accessible name rather than in an attribute a reader may never hear and
  * a marker nobody who cannot see can read.
  *
- * The buttons carry no handler yet. Story 2.2 owns navigation state and wires
- * selection to `entry.id`; this story owns the index existing, being reachable,
- * and being correctly ordered before any camera does.
+ * `aria-pressed` on the Project buttons carries Focus, and only Focus. It adds
+ * state and touches the accessible name not at all — which is why it is allowed
+ * where `aria-label` is banned: the announced name is still the title plus
+ * Deep/Shallow, with "pressed" alongside it. Exactly one button can report
+ * pressed, because the store holds exactly one `focusedProjectId`.
  */
 export function DestinationNav({ artifact }: DestinationNavProps) {
   const index = buildDestinationIndex(artifact);
+  const focusedProjectId = useStore(navigationStore, (state) => state.focusedProjectId);
 
   return (
     <nav aria-label="Destinations">
       <ul>
         {index.clients.map((client) => (
           <li key={client.id}>
-            <button type="button">{client.name}</button>
+            <button type="button" onClick={() => selectClient(client.id)}>
+              {client.name}
+            </button>
             <ul>
               {client.projects.map((project) => (
                 <li key={project.id}>
-                  <button type="button">
+                  <button
+                    type="button"
+                    aria-pressed={project.id === focusedProjectId}
+                    onClick={() => focusProject(project.id)}
+                  >
                     <span>{project.title}</span> <span>{project.depth}</span>
                   </button>
                 </li>

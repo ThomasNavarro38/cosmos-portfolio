@@ -420,19 +420,181 @@ test('the renderer holds no logic the model could own', () => {
   assert.doesNotMatch(code, /\buseState\b|\buseEffect\b|\buseRef\b/, 'no state — Story 2.2 owns navigation state');
   assert.doesNotMatch(code, /\bisDeep\b|\bduration\b|\bnotable\b|\btimeAxis\b/, 'no re-derivation of a Body property');
   assert.doesNotMatch(code, /\bwindow\b|\bdocument\b|\bcamera\b|innerWidth/, 'no render, camera, or viewport state');
-  assert.doesNotMatch(code, /aria-(?!label\b)/, 'no ARIA attribute standing in for the Deep/Shallow text');
 
-  // The ban above exempts `aria-label`, because the `<nav>` legitimately carries
-  // one — and that exemption is a hole exactly the width of the regression the ban
-  // exists to stop. Moving depth onto a button as `aria-label={project.depth}`
-  // satisfies every check above, and `aria-label` *replaces* the accessible name,
-  // so the Project title is lost along with the text. No ARIA attribute may carry
-  // a model field, labels included.
+  // `aria-labelledby` and `aria-describedby` redirect the accessible name at
+  // another element, so neither may appear here in any form. `aria-label` is
+  // handled separately below, because this file has exactly one legitimate use of
+  // it and a blanket ban would reject that too.
   assert.doesNotMatch(
     code,
-    /aria-[a-z]+=\{\s*(?:project|client)\./,
-    'no ARIA attribute may carry a model field — the text is the accessible name',
+    /aria-(?:labelledby|describedby)=/,
+    'no ARIA attribute may point the accessible name at another element',
   );
+
+  // The regression this ban was written for: depth moved onto a button as
+  // `aria-label={project.depth}` satisfied every other check here, and
+  // `aria-label` *replaces* the accessible name — so the Project title was lost
+  // along with the Deep/Shallow text.
+  //
+  // The ban is the name-replacing family rather than all ARIA, because
+  // `aria-pressed` is a different kind of attribute: it adds state and touches the
+  // accessible name not at all. But narrowing it to `=\{` was too far in the other
+  // direction: `aria-label="Deep"` is a literal, matches no `=\{` pattern, and
+  // destroys the accessible name exactly as the interpolated form did. **So the
+  // ban is on the attribute, not on its value syntax** — counted rather than
+  // pattern-matched, which is the only form that cannot be walked around by a
+  // value shape nobody thought of.
+  //
+  // The `<nav>`'s landmark label is the single exemption: a landmark has no text
+  // of its own to lose, so naming it is the correct use of the attribute. Exactly
+  // one `aria-label=` may appear in this file, and it must be that one.
+  const labels = [...code.matchAll(/aria-label=/g)];
+  assert.equal(
+    labels.length,
+    1,
+    `exactly one aria-label= belongs in this file — the <nav> landmark's — found ${labels.length}`,
+  );
+  assert.match(
+    code,
+    /<nav aria-label="Destinations">/,
+    "the one aria-label= is the landmark's, and the landmark keeps its name",
+  );
+});
+
+/**
+ * The narrowed ARIA ban, run against reconstructed forms rather than against the
+ * file.
+ *
+ * A negative scan over a file that no longer contains the bad form cannot show
+ * the pattern still catches it — the pattern can rot into vacuity and the scan
+ * keeps passing. So the forms are rebuilt here and the real checker is run over
+ * them.
+ *
+ * It is the *same* checker the scan above uses, extracted so the two cannot
+ * diverge: a fixture-driven test over a second copy of the logic proves things
+ * about the copy.
+ */
+function auditAria(code: string): string[] {
+  const failures: string[] = [];
+  if (/aria-(?:labelledby|describedby)=/.test(code)) failures.push('redirects the accessible name');
+  const labels = [...code.matchAll(/aria-label=/g)];
+  const landmark = /<nav aria-label="[^"]+">/.test(code);
+  if (labels.length > (landmark ? 1 : 0)) failures.push('replaces the accessible name');
+  return failures;
+}
+
+test('the ARIA ban rejects a label on a button whether the value is a model field or a literal', () => {
+  // The five forms that must fail. The literal `aria-label="Deep"` is the one the
+  // `=\{`-keyed narrowing let through: it replaces the announced name with the
+  // depth word alone, losing the Project title, which is precisely the regression
+  // the original blanket ban was written for.
+  const banned: readonly string[] = [
+    '<button aria-label={project.depth}>',
+    '<button aria-label={project.title}>',
+    '<button aria-label="Deep">',
+    '<button aria-labelledby={client.id}>',
+    '<button aria-describedby="depth-hint">',
+  ];
+  for (const form of banned) {
+    assert.notDeepEqual(auditAria(form), [], `${form} must be rejected — it replaces or redirects the name`);
+  }
+
+  // A button label is rejected even when the landmark's own legitimate label is
+  // present, so the exemption is one attribute wide rather than a blanket pass.
+  assert.notDeepEqual(
+    auditAria('<nav aria-label="Destinations"><button aria-label="Deep"></nav>'),
+    [],
+    'the landmark exemption must not cover a second label',
+  );
+
+  // And the state attributes the narrowing exists to permit must pass.
+  for (const form of [
+    '<button aria-pressed={isFocused}>',
+    '<button aria-pressed={project.id === focusedProjectId}>',
+    '<button aria-current="true">',
+    '<nav aria-label="Destinations">',
+  ]) {
+    assert.deepEqual(auditAria(form), [], `${form} carries state or names a landmark — it must pass`);
+  }
+});
+
+// --- What the renderer newly does, pinned positively -------------------------
+
+test('each handler is tied to its own element, so a transposition cannot pass', () => {
+  // This is the mutation that passed the entire verification path green: swap the
+  // two handlers and `selectClient(project.id)` writes a ProjectId into
+  // `railPosition` — the one thing AD-4a forbids. Both IDs are unbranded `string`,
+  // so `tsc` cannot see it either, and every negative scan in this file stays
+  // happy because nothing bad was *added*.
+  //
+  // A negative scan cannot observe a correct form going missing, so the correct
+  // form is pinned positively, the same idiom the text-node scan below uses. Both
+  // directions are asserted: the right pairing present, and the transposed pairing
+  // absent — because a file containing both would satisfy the positive half alone.
+  const code = readFileSync(NAV_TSX, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+  assert.match(code, /selectClient\(\s*client\.id\s*\)/, 'the Client button selects a Client');
+  assert.match(code, /focusProject\(\s*project\.id\s*\)/, 'the Project button focuses a Project');
+
+  assert.doesNotMatch(
+    code,
+    /selectClient\(\s*project\./,
+    'the Rail stops at Clients only — a ProjectId in railPosition is AD-4a',
+  );
+  assert.doesNotMatch(
+    code,
+    /focusProject\(\s*client\./,
+    'and Focus takes a Project, never a Client',
+  );
+
+  // The handlers must be attached, not merely present in the file. Deleting both
+  // `onClick` attributes left every other assertion here green; only `tsc`
+  // objected, and it objected about unused imports a developer would have
+  // silenced by deleting those too.
+  const clicks = [...code.matchAll(/onClick=\{/g)];
+  assert.equal(clicks.length, 2, `both entries carry a handler — found ${clicks.length}`);
+});
+
+test('aria-pressed is an equality against the focused Project, never a negation', () => {
+  // Inverting it to `!==` made every *unfocused* Project announce "pressed" — a
+  // screen reader told the opposite of the truth about every entry but one — and
+  // the whole suite stayed green. The comparison is pinned exactly, and the
+  // negated form banned, because `!==` is a one-character edit away and reads as
+  // plausible.
+  const code = readFileSync(NAV_TSX, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+  assert.match(
+    code,
+    /aria-pressed=\{\s*project\.id === focusedProjectId\s*\}/,
+    'aria-pressed is true exactly when this Project is the focused one',
+  );
+  assert.doesNotMatch(
+    code,
+    /aria-pressed=\{[^}]*!==?[^}]*\}/,
+    'never a negation — that reports every unfocused entry as pressed',
+  );
+  assert.doesNotMatch(code, /aria-pressed=\{\s*(?:true|false)\s*\}/, 'nor a constant');
+});
+
+test('the renderer subscribes with a selector rather than the whole store', () => {
+  // A whole-store subscription re-renders every Project when the camera writes
+  // `scrollProgress`, sixty times a second, and nothing else in this suite would
+  // notice. Pinned positively because the selector is the correct form and a
+  // negative scan cannot see it go missing.
+  const code = readFileSync(NAV_TSX, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+  assert.match(
+    code,
+    /useStore\(\s*navigationStore\s*,\s*\(\s*\w+\s*\)\s*=>/,
+    'useStore is given a selector, never the store alone',
+  );
+  assert.doesNotMatch(code, /useStore\(\s*navigationStore\s*\)/, 'never the whole store');
 });
 
 test('the title and the depth word reach the reader as text, not as attribute values', () => {
