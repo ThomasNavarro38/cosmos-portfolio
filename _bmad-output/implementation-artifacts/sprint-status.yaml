@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 09-06-2026 16:05
+last_updated: 09-26-2026 14:45
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -47,7 +47,7 @@ development_status:
   epic-1-retrospective: done
 
   epic-2: in-progress
-  2-1-the-dom-destination-index: review
+  2-1-the-dom-destination-index: done
   2-2-the-navigation-state-machine: backlog
   2-3-bodies-at-rest-in-the-3d-scene: backlog
   2-4-dust-at-rest: backlog
@@ -193,3 +193,34 @@ action_items:
     owner: "Thomas"
     status: open
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
+  - id: "story-2-1-review-item-1-rail-sequence-ungated"
+    epic: 2
+    action: "Gate the Rail's sequence, not only its membership: checkStops validates
+      that rail names every Client exactly once and no Project, but never that the
+      order is the Rail's, so a hand-edited artifact whose rail is a correct set in
+      the wrong order passes npm run build — though the ordering is the field's whole
+      payload. A pure read of the artifact's own tree (monotonic duration.start minima
+      across rail) would close it without re-deriving"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/spec-2-1-the-dom-destination-index.md"
+  - id: "story-2-1-review-item-2-root-rule-renderer-ban"
+    epic: 2
+    action: "Give ROOT_RULE a dynamicOnly entry for the renderers when the first one
+      lands: a static renderer import in main.tsx or App.tsx would hoist Three onto
+      the entry chunk (AD-7) and currently passes the gate, which bans only src/data/
+      and src/derive/ there. Needs the README.md:45 sentence first — boundaries.ts
+      deliberately states nothing the prose does not"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/spec-2-1-the-dom-destination-index.md"
+  - id: "story-2-1-review-item-3-empty-client-renders-empty-list"
+    epic: 2
+    action: "index-nav.tsx renders an empty <ul> for a Client carrying no Projects
+      — an empty list announced to assistive technology. Unreachable through the
+      pipeline (deriveEntities folds Projects into Clients, and startsAt throws naming
+      the Client), so it needs either a conditional in the renderer or a note recording
+      the case as accepted"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/spec-2-1-the-dom-destination-index.md"

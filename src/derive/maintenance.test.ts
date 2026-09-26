@@ -203,8 +203,8 @@ test('an entry appended with no `weight` at all re-solves clean too', () => {
 test('appending a Project reframes only its own Client and adds no stop of its own', () => {
   // AD-4a's half of the maintenance promise, at the pipeline level rather than at
   // `buildShots`': the Rail stops at Clients, so a new Project must not appear in
-  // `dwell`, in `shots`, or as anything but one more destination and one more
-  // Body under the Client it belongs to.
+  // `dwell`, in `shots`, in `rail`, or as anything but one more destination and one
+  // more Body under the Client it belongs to.
   const before = solve(writeTemp(JSON.stringify(committedCareer(), null, 2)));
   const career = committedCareer();
   career.projects.push(appendedEntry());
@@ -213,6 +213,7 @@ test('appending a Project reframes only its own Client and adds no stop of its o
   const doc = after_.document as {
     dwell: readonly { subject: string }[];
     shots: readonly { subject: string }[];
+    rail: readonly string[];
     destinations: readonly { id: string; kind: string }[];
   };
   // `shots` is declared here as well as `dwell`: without it the comparison
@@ -222,11 +223,16 @@ test('appending a Project reframes only its own Client and adds no stop of its o
   const priorDoc = before.document as {
     dwell: readonly unknown[];
     shots: readonly unknown[];
+    rail: readonly unknown[];
     destinations: readonly unknown[];
   };
 
   assert.equal(doc.dwell.length, priorDoc.dwell.length, 'a Project gets no Dwell entry of its own');
   assert.equal(doc.shots.length, priorDoc.shots.length, 'nor a Shot of its own');
+  // `rail` is the third Client-granular list, added by Story 2.1. Asserted here
+  // because this is where the promise is made at pipeline level: a Project that
+  // quietly gained a Rail stop would otherwise pass this suite untouched.
+  assert.equal(doc.rail.length, priorDoc.rail.length, 'nor a Rail stop of its own');
   assert.equal(
     doc.destinations.length,
     priorDoc.destinations.length + 1,
@@ -234,8 +240,9 @@ test('appending a Project reframes only its own Client and adds no stop of its o
   );
   assert.ok(
     doc.dwell.every((d) => d.subject.startsWith('client:')) &&
-      doc.shots.every((s) => s.subject.startsWith('client:')),
-    'and both lists stay Client-granular',
+      doc.shots.every((s) => s.subject.startsWith('client:')) &&
+      doc.rail.every((id) => id.startsWith('client:')),
+    'and all three lists stay Client-granular',
   );
 });
 

@@ -136,7 +136,10 @@ export interface DestinationIndex {
  * document naming the offending ID, so reaching here means the artifact was
  * hand-edited past the gate, and an entry whose button resolves to nothing is
  * worse than one absent. A Client the tree carries but `rail` omits is likewise
- * absent — for the same reason, and gated the same way.
+ * absent — for the same reason, and gated the same way. A Client `rail` names
+ * twice is walked at one position only: the entry's ID is what the renderer keys
+ * on, so a second entry would reach React as a duplicate key and a reader as the
+ * same destination announced twice. Three drift modes, one posture.
  *
  * @returns a fresh structure each call; nothing is cached and the argument is
  * never mutated, so a caller may re-render freely.
@@ -145,14 +148,20 @@ export function buildDestinationIndex(artifact: IndexArtifact): DestinationIndex
   const byId = new Map(artifact.clients.map((client) => [client.id, client]));
 
   const clients: IndexClientEntry[] = [];
+  // The stops already walked, so a Client named twice is entered once. Keyed on
+  // the ID rather than the Client object because the ID is what identifies a
+  // destination — and what the renderer keys its list items on.
+  const walked = new Set<string>();
   // Walked from the end rather than over a reversed copy: the reversal *is* the
   // rule, and spelling it as an index walk keeps it in one place where a reader
   // can see the direction. `rail` itself is never mutated.
   for (let i = artifact.rail.length - 1; i >= 0; i -= 1) {
     const id = artifact.rail[i];
     if (id === undefined) continue;
+    if (walked.has(id)) continue;
     const client = byId.get(id);
     if (client === undefined) continue;
+    walked.add(id);
 
     clients.push({
       id: client.id,

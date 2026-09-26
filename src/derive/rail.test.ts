@@ -281,17 +281,33 @@ test('solve.ts imports the Rail ordering rather than restating it', () => {
   assert.doesNotMatch(code, /function\s+compareCodepoints\b/, 'nor its own comparator');
 });
 
-test('the solve still places Client Stars in the order this module emits', () => {
-  // The binding that makes publishing safe: the emitted `rail` and the solved
-  // geometry must be the same ordering, or the artifact would claim a sequence
-  // the scene does not have. Asserted against the *solved x coordinates*, which
-  // is what `inRailOrder` actually drives — the Rail runs along the time axis.
+test('the emitted Rail is the node order the solve builds from, not a parallel list', () => {
+  // `buildRail` is defined as `inRailOrder(graph.clients).map(c => c.id)`, so
+  // asserting one against the other compares an expression with itself and cannot
+  // fail for any implementation. What it *can* pin is the seam: that `solveLayout`
+  // orders its nodes with the same exported `inRailOrder` this module emits from,
+  // rather than with a second sort of its own that happens to agree today.
+  //
+  // The claim about the solved geometry — that Client Stars ascend in x along the
+  // emitted Rail — needs a solve to observe, so it is asserted where the solve
+  // already runs: `solve.test.ts`, "the Rail the artifact emits is the order the
+  // solve lays Client Stars out in".
+  const code = readFileSync(SOLVE_TS, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+  assert.match(
+    code,
+    /import\s*\{[^}]*\binRailOrder\b[^}]*\}\s*from\s*'\.\/rail\.ts'/,
+    'the solve must order its nodes with the comparator this module exports',
+  );
+  assert.match(code, /inRailOrder\(/, 'and must actually call it');
+
   const graph = graphOf(...opposedEntries());
-  const railOrder = buildRail(graph);
   assert.deepEqual(
     inRailOrder(graph.clients).map((client) => client.id),
-    [...railOrder],
-    'the emitted list is exactly the order the solve builds its nodes in',
+    [...buildRail(graph)],
+    'the emitted list is that same order, projected onto IDs',
   );
 });
 

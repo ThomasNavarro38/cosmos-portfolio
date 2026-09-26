@@ -29,6 +29,7 @@ import { after, test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { deriveEntities, type EntityGraph } from './entities.ts';
+import { buildRail } from './rail.ts';
 import { solveLayout, type Position, type SolvedLayout } from './solve.ts';
 
 const SOLVE_TS = fileURLToPath(new URL('./solve.ts', import.meta.url));
@@ -727,6 +728,38 @@ test('dropping the pre-solve sort makes the layout depend on authored order', as
     forward,
     'without the sort the authored order must reach the layout — otherwise the sort pins nothing',
   );
+});
+
+test('the Rail the artifact emits is the order the solve lays Client Stars out in', () => {
+  // Story 2.1's safety claim — "publishing `rail` changes no geometry, it only
+  // makes an existing commitment readable" — asserted against the solved
+  // coordinates, which is the only place that commitment is observable.
+  //
+  // It lives here rather than in `rail.test.ts` because this is where the solve
+  // runs: comparing `buildRail(graph)` against `inRailOrder(graph.clients)` is
+  // comparing `buildRail`'s own definition against itself, which no implementation
+  // can fail. The claim needs the x axis on the other side of the equals sign.
+  //
+  // If the two ever diverge the artifact publishes a sequence the scene does not
+  // have: a reader tabbing the index walks one order while the camera travels
+  // another, and nothing else in the suite would say so.
+  // The fixture must be one where the Rail's key and the `timeAxis` key disagree,
+  // or the assertion is vacuous: on `multiClientEntries()` the two happen to
+  // coincide, so a Star tier re-sorted by recency still ascends in Rail order and
+  // the divergence goes unobserved. `Zulu` starts first and ends last, `Alpha`
+  // starts second and ends first — so the Rail reads Zulu → Alpha while recency
+  // reads Alpha → Zulu.
+  const graph = graphOf(
+    { ...baseEntry(), client: 'Alpha', project: 'A', duration: { start: '2012-01', end: '2013-01' } },
+    { ...baseEntry(), client: 'Zulu', project: 'Z', duration: { start: '2010-01', end: '2025-01' } },
+  );
+  const rail = buildRail(graph);
+  const byRecency = [...graph.clients].sort((a, b) => a.timeAxis - b.timeAxis).map((c) => c.id);
+  assert.notDeepEqual([...rail], byRecency, 'the fixture must separate Rail order from recency order');
+
+  const layout = solve(graph);
+  const byX = [...rail].sort((a, b) => positionOf(layout, a).x - positionOf(layout, b).x);
+  assert.deepEqual([...rail], byX, 'Client Stars must ascend in x along the emitted Rail');
 });
 
 test('the immediate .stop() is present and precedes every force', () => {

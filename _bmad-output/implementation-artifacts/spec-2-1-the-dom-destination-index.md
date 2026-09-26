@@ -2,8 +2,8 @@
 title: 'Story 2.1: The DOM destination index'
 type: 'feature'
 created: '2026-09-06'
-status: 'in-review'
-review_loop_iteration: 0
+status: 'done'
+review_loop_iteration: 1
 context: []
 baseline_commit: 'a464343fd24eaf0fda6b3025de0b05713159577e'
 ---
@@ -106,6 +106,60 @@ baseline_commit: 'a464343fd24eaf0fda6b3025de0b05713159577e'
 - Given `npm test`, `npm run typecheck` and `npm run gate` run, then all pass with no new dependency added
 
 ## Spec Change Log
+
+**Review iteration 1 — 2026-09-26.** Four review layers over `a464343..d4d6871`. All
+seven acceptance criteria verified met, by live command rather than by reading: AC 1
+proven by driving each of the four `rail` drift modes through the gate (each fails,
+names the offending ID, exits 1), AC 6 by planting an `import type` from `src/shell/`
+into `src/derive/` (caught, file/line/README cited). 407 tests, typecheck, gate, build
+and a byte-identical re-solve all green; dependency set unchanged at fifteen pins.
+
+No AC was violated. What the review found instead was that two of the story's central
+guarantees were *asserted* rather than *verified* — both demonstrated by applying the
+regression and watching the suite stay green:
+
+- Moving Deep/Shallow onto a button as `aria-label={project.depth}` — the exact form
+  the Design Notes name as the failure — passed all 407 tests, typecheck and gate.
+  `aria-label` replaces the accessible name, so the Project title was lost too. The
+  renderer scan's `aria-(?!label\b)` exemption, needed for the `<nav>`, was the hole.
+- Hoisting the Projects' `<ul>` out of the Client's `<li>` — the flattening the model
+  tests are careful to forbid — likewise passed, because tag-presence regex cannot
+  observe nesting.
+- `rail.test.ts`'s solve-binding test was tautological: `buildRail(g)` is *defined* as
+  `inRailOrder(g.clients).map(c => c.id)`, so it asserted an expression against itself,
+  while its comment claimed assertion "against the *solved x coordinates*" it never read.
+
+Applied, each verified red-then-green:
+
+1. Renderer scan bans any ARIA attribute carrying a model field, and a new positive
+   scan requires `client.name`, `project.title` and `project.depth` in text-node position.
+2. New `solve.test.ts` case asserts Client Stars ascend in x along the emitted `rail`,
+   on a fixture where Rail and recency order genuinely oppose; `rail.test.ts`'s
+   tautology rewritten to pin the import seam and point at the real assertion.
+3. New test pins the exact tag sequence, so the Projects' list must open inside the
+   Client's list item.
+4. `maintenance.test.ts` extended: `rail` is the third Client-granular list and an
+   appended Project must gain no stop in it.
+5. `solve.ts` dangling JSDoc → section note; `index.ts` stranded reflow rejoined.
+
+Three decisions taken with the human:
+
+6. `buildDestinationIndex` now walks a Client named twice in `rail` once only. The
+   duplicate is the third drift mode the I/O matrix names; the other two were guarded
+   and it was not, while the module header claimed the posture for all of them.
+7. `main.tsx`'s comment softened: a static renderer import there is barred by
+   convention, not by the gate. `ROOT_RULE` bans only `src/data/` and `src/derive/` —
+   the two bans `README.md:45` declares — and the rule table deliberately states
+   nothing the prose does not. Tracked for the story that introduces the first renderer.
+8. `buildRail` now returns the `Rail` type rather than a bare `readonly string[]`, so
+   producer and schema describe the value once. The type had no importers at all; its
+   JSDoc named a consumer — the shell — structurally forbidden from importing it.
+
+411 tests pass. Three findings deferred as not caused by this change, filed as action
+items on the sprint: the Rail's sequence is ungated (membership only), `ROOT_RULE` has
+no renderer ban, and the renderer emits an empty `<ul>` for a Projectless Client. The
+pre-existing inline comparator in `destinations.ts:68` is already covered by
+`epic-1-retro-item-14`.
 
 ## Design Notes
 
