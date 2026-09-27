@@ -141,6 +141,17 @@ export const BOUNDARY_RULES: readonly BoundaryRule[] = [
     source: 'src/shell/README.md:5',
     never: ['data', 'derive'],
     dynamicOnly: ['render-scene', 'render-fallback', 'colophon'],
+    // `src/shell/README.md:3` declares "`entry.ts` carries no React and no Three".
+    // The `dynamicOnly` row above stops a reach into `src/render-scene/` and stops
+    // nothing about a bare `import { Vector3 } from 'three'` written here — which
+    // hoists Three onto the entry chunk exactly the same way (AD-7). Verified
+    // before this row existed: a `shell/entry.ts` importing `three` passed clean.
+    //
+    // Three and not React: this directory renders the DOM destination index, so a
+    // directory-wide React ban would reject `index-nav.tsx`. The README's sentence
+    // is about `entry.ts`; what is enforceable per directory is the half that
+    // holds for every file in it.
+    neverPackages: ['three', '@react-three/fiber', '@react-three/drei'],
   },
   {
     directory: 'colophon',
@@ -152,6 +163,22 @@ export const BOUNDARY_RULES: readonly BoundaryRule[] = [
     directory: 'render-scene',
     source: 'src/render-scene/README.md:5',
     never: ['data', 'derive'],
+    // `src/render-scene/README.md:3` declares the directory "contains no
+    // classification test and no data-to-visual mapping — those live in
+    // `src/derive/`". The `never: ['derive']` row stops the module edge; this stops
+    // the solver's own dependency, which is the one package that would let a
+    // renderer re-run a force simulation without importing `src/derive/` at all.
+    //
+    // **`zustand/react` is deliberately absent, and could not be written.**
+    // `packageOf` below reduces every bare specifier to its package, so
+    // `zustand/react` and `zustand/vanilla` are both `zustand` — and a row banning
+    // `zustand` would reject the navigation store `src/render-scene/README.md:5`
+    // explicitly permits. The rule ("a frame callback reads `getState()`, never a
+    // reactive hook binding") is held instead by a source scan in
+    // `scene-model.test.ts`, with the reason in that directory's README. A row that
+    // banned more than the prose does is the drift this table exists to prevent;
+    // `boundaries.test.ts` asserts the row's absence so re-adding it fails loudly.
+    neverPackages: ['d3-force-3d'],
   },
   {
     directory: 'render-fallback',
@@ -213,15 +240,29 @@ const REGEX_PRECEDER_WORDS = new Set([
  * chunk (AD-7) — the failure AD-3 exists to prevent, in the one place the gate
  * was not looking.
  *
- * The bans are the two the root README states for the entry path rather than the
+ * The bans are the ones the root README states for the entry path rather than the
  * full consumer set: the entry legitimately reaches `src/shell/` and the
  * generated artifact, and inventing prohibitions no prose declares is the drift
  * this table exists to prevent.
+ *
+ * The renderer rules land here now because `src/main.tsx:12-17` said they belonged
+ * "with the story that introduces the first one, together with the README sentence
+ * that would license it" — story 2.3 introduced `src/render-scene/scene.tsx` and
+ * added that sentence. Until then the row would have had no subject: there was no
+ * renderer to import, so the hoist it forbids was unreachable.
  */
 export const ROOT_RULE: BoundaryRule = {
   directory: '',
   source: 'README.md:45',
   never: ['data', 'derive'],
+  // A static `import { Scene } from './render-scene/scene.tsx'` in `App.tsx` puts
+  // Three on the entry chunk (AD-7) and passed the gate clean before this row. The
+  // entry stub reaches a renderer the same way `src/shell/` does, or not at all.
+  dynamicOnly: ['render-scene', 'render-fallback', 'colophon'],
+  // And by package name, for the reason the `shell` row states: a `dynamicOnly` row
+  // stops a reach into a directory and stops nothing about a bare specifier. Three
+  // in `App.tsx` is the same hoist reached by the other door.
+  neverPackages: ['three', '@react-three/fiber', '@react-three/drei'],
 };
 
 /**

@@ -14,6 +14,7 @@ Entry, capability detection, routing, navigation state machine, and the persiste
 | `index-nav.tsx` | The thin renderer: model → `<nav>` / nested `<ul>` / `<button>`. No rule of its own and no *local* state — it subscribes to the store with a selector and hands clicks to its named events. |
 | `state.ts` | The navigation state machine: the one authority on where the visitor is. Five fields, one documented writer each, every transition a named event. Pure `.ts`, `zustand/vanilla` — no React import. |
 | `state.test.ts` | The whole transition matrix executed rather than scanned: Focus exclusivity, origin-at-entry, writer separation over all seven events, the malformed-input rejections, subscription, plus a tree-wide `setState` audit and source scans pinning that the store stays React-free and derives nothing. |
+| `scene-host.tsx` | The one edge into the 3D surface: `lazy(() => import('../render-scene/scene.tsx'))` behind `<Suspense>`, behind an error boundary. The boundary is what keeps the DOM index in the document when the chunk fails to arrive or the model throws. |
 
 ```sh
 npm test        # every *.test.ts under src/, this suite included

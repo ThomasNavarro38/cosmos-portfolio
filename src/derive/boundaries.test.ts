@@ -307,6 +307,109 @@ test('src/render-fallback/ importing three fails, and a deep import does not esc
   );
 });
 
+// --- Matrix rows: the renderer rules story 2.3 added ------------------------
+
+test('a static renderer import from the entry stub fails, and the dynamic form is accepted', () => {
+  // `src/main.tsx:12-17` said the renderer `dynamicOnly` rule "belongs with the story
+  // that introduces the first one, together with the README sentence that would
+  // license it" — story 2.3 introduced `src/render-scene/scene.tsx` and added the
+  // sentence to `README.md:45`. Before this row, a static
+  // `import { Scene } from './render-scene/scene.tsx'` in `App.tsx` put Three on the
+  // entry chunk and passed the gate clean: the DOM index would then wait on the whole
+  // renderer before First Paint, which is the inversion AD-4 exists to forbid.
+  for (const target of ['render-scene', 'render-fallback', 'colophon']) {
+    const failures = assertRejects(
+      { 'App.tsx': `import { X } from './${target}/x.tsx';\n` },
+      /App\.tsx:1/,
+      `the entry stub must reach src/${target}/ only dynamically`,
+    );
+    assert.ok(
+      failures.some((line) => /dynamic/i.test(line)),
+      `the failure must say what kind is required\n${failures.join('\n')}`,
+    );
+    assertAccepts(
+      { 'App.tsx': `const x = await import('./${target}/x.tsx');\n` },
+      `the dynamic form is the one AD-7 requires, not a violation`,
+    );
+  }
+});
+
+test('three and its React bindings are banned by name on the entry path and in the shell', () => {
+  // A `dynamicOnly` row stops a reach into a directory and stops nothing about a bare
+  // specifier: `import { Vector3 } from 'three'` in `App.tsx` or in `shell/entry.ts`
+  // hoists Three onto the entry chunk exactly the same way. Verified before these rows
+  // existed — both passed clean, which is the AD-7 hoist reached by the other door.
+  for (const pkg of ['three', '@react-three/fiber', '@react-three/drei']) {
+    assertRejects(
+      { 'App.tsx': `import { X } from '${pkg}';\n` },
+      /App\.tsx:1/,
+      `README.md:45 bans ${pkg} on the entry path`,
+    );
+    assertRejects(
+      { 'shell/entry.ts': `import { X } from '${pkg}';\n` },
+      /shell\/entry\.ts:1/,
+      `src/shell/README.md:3 declares entry.ts carries no Three`,
+    );
+  }
+  // A subpath must not escape it, the same way `three/webgpu` does not escape the
+  // Fallback's ban.
+  assertRejects(
+    { 'shell/entry.ts': "import { X } from 'three/webgpu';\n" },
+    /shell\/entry\.ts:1/,
+    'a subpath import of a banned package is the same import',
+  );
+});
+
+test('the entry path keeps React, and src/render-scene/ keeps Three', () => {
+  // The negative control, and it is what stops these rows from over-banning. The
+  // entry stub and the shell both render React — a directory-wide React ban would
+  // reject `index-nav.tsx` — and the 3D surface is where Three belongs.
+  assertAccepts({ 'App.tsx': "import { StrictMode } from 'react';\n" }, 'the entry stub renders React by design');
+  assertAccepts(
+    { 'shell/index-nav.tsx': "import { useStore } from 'zustand/react';\n" },
+    'the shell subscribes to its own store',
+  );
+  assertAccepts(
+    { 'render-scene/scene.tsx': "import { Canvas } from '@react-three/fiber';\nimport { Vector3 } from 'three';\n" },
+    'the 3D surface is where the 3D packages belong',
+  );
+});
+
+test('src/render-scene/ may not import the solver’s dependency', () => {
+  // `src/render-scene/README.md:3` declares the directory holds no data-to-visual
+  // mapping. The `never: ['derive']` row stops the module edge; this stops the one
+  // package that would let a renderer re-run a force simulation without importing
+  // `src/derive/` at all.
+  assertRejects(
+    { 'render-scene/scene.ts': "import { forceSimulation } from 'd3-force-3d';\n" },
+    /render-scene\/scene\.ts:1/,
+    'the scene reads solved positions; it does not solve',
+  );
+});
+
+test('the render-scene row does not ban zustand, because the parser cannot express zustand/react', () => {
+  // The finding this row was almost written for, kept as an assertion so re-adding it
+  // fails with the reason attached. `packageOf` splits a bare specifier on `/` and
+  // returns the first segment, so `zustand/react` and `zustand/vanilla` both reduce to
+  // `zustand` — a `neverPackages: ['zustand']` row here would reject the navigation
+  // store `src/render-scene/README.md:5` explicitly permits.
+  //
+  // The rule ("a frame callback reads `getState()`, never a reactive hook binding") is
+  // held by a source scan in `src/render-scene/scene-model.test.ts` instead, with the
+  // reason in that directory's README rather than in a row banning more than the prose
+  // does.
+  const row = BOUNDARY_RULES.find((rule) => rule.directory === 'render-scene');
+  assert.ok(row !== undefined);
+  assert.ok(
+    !(row.neverPackages ?? []).includes('zustand'),
+    'banning zustand here would ban the store the README permits — the rule is a source scan',
+  );
+  assertAccepts(
+    { 'render-scene/scene.ts': "import { navigationStore } from '../shell/state.ts';\n" },
+    'the scene may still reach the navigation store',
+  );
+});
+
 // --- Matrix row: the decoy --------------------------------------------------
 
 test('code inside a template interpolation is scanned, but the surrounding text is not', () => {
