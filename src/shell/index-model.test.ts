@@ -417,7 +417,11 @@ test('the renderer holds no logic the model could own', () => {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
   assert.doesNotMatch(code, /\.sort\s*\(|\.filter\s*\(|\.reverse\s*\(/, 'no ordering or selection in the renderer');
-  assert.doesNotMatch(code, /\buseState\b|\buseEffect\b|\buseRef\b/, 'no state — Story 2.2 owns navigation state');
+  // *Local* state, specifically. Subscribing to the navigation store is this
+  // renderer's job — `useStore` is deliberately absent from this list. What is
+  // banned is the renderer keeping a copy of anything, because a second home for
+  // "where the visitor is" is how the canvas and the index start disagreeing.
+  assert.doesNotMatch(code, /\buseState\b|\buseEffect\b|\buseRef\b/, 'no local state in the renderer');
   assert.doesNotMatch(code, /\bisDeep\b|\bduration\b|\bnotable\b|\btimeAxis\b/, 'no re-derivation of a Body property');
   assert.doesNotMatch(code, /\bwindow\b|\bdocument\b|\bcamera\b|innerWidth/, 'no render, camera, or viewport state');
 
@@ -448,17 +452,13 @@ test('the renderer holds no logic the model could own', () => {
   // The `<nav>`'s landmark label is the single exemption: a landmark has no text
   // of its own to lose, so naming it is the correct use of the attribute. Exactly
   // one `aria-label=` may appear in this file, and it must be that one.
-  const labels = [...code.matchAll(/aria-label=/g)];
-  assert.equal(
-    labels.length,
-    1,
-    `exactly one aria-label= belongs in this file — the <nav> landmark's — found ${labels.length}`,
-  );
-  assert.match(
-    code,
-    /<nav aria-label="Destinations">/,
-    "the one aria-label= is the landmark's, and the landmark keeps its name",
-  );
+  //
+  // Delegated to `auditAria` rather than restated here. The previous inline copy
+  // and the fixture-driven checker below disagreed on four of six probe inputs
+  // while a comment asserted they could not diverge — two copies of a rule are
+  // two rules. This is the one call site for the real file; the test below drives
+  // the same function over reconstructed bad forms.
+  assert.deepEqual(auditAria(code), [], 'the renderer must carry no name-affecting ARIA beyond the landmark label');
 });
 
 /**
@@ -470,16 +470,50 @@ test('the renderer holds no logic the model could own', () => {
  * keeps passing. So the forms are rebuilt here and the real checker is run over
  * them.
  *
- * It is the *same* checker the scan above uses, extracted so the two cannot
- * diverge: a fixture-driven test over a second copy of the logic proves things
- * about the copy.
+ * It is the *same* checker the scan above uses — literally, by call, not by
+ * restatement. An earlier version claimed that while the scan kept its own inline
+ * copy of the rule, and the two drifted apart: the copy here passed a file with
+ * *zero* `aria-label=` and passed a *renamed* landmark, both of which the inline
+ * assertions caught, while rejecting a `<nav>` whose attributes were wrapped
+ * across lines, which the inline form accepted. A fixture-driven test over a
+ * second copy of the logic proves things about the copy.
  */
 function auditAria(code: string): string[] {
   const failures: string[] = [];
   if (/aria-(?:labelledby|describedby)=/.test(code)) failures.push('redirects the accessible name');
+
+  // The name-*affecting* family, not only the name-replacing one. `aria-hidden`
+  // on the depth `<span>` removes Deep/Shallow from the accessible name while
+  // leaving `{project.depth}` in text position, so the positive text-node scan
+  // still passes and nothing else here objects — that mutation was proven green
+  // against the whole suite. `aria-roledescription` overrides the announced role
+  // and can carry a model field the same way. The blanket `aria-(?!label\b)` ban
+  // these replaced caught both; narrowing to the label family gave that away.
+  if (/aria-(?:hidden|roledescription|valuetext|details|owns)=/.test(code)) {
+    failures.push('suppresses or overrides part of the accessible name');
+  }
+
+  // No model field in any ARIA attribute except `aria-pressed`, the one state
+  // attribute this renderer legitimately binds. Without this clause
+  // `aria-roledescription={project.depth}` walks back in through another door.
+  if (/aria-(?!pressed)[a-z-]+=\{\s*(?:project|client)\./.test(code)) {
+    failures.push('carries a model field in an ARIA attribute');
+  }
+
+  // Counted, not pattern-matched: exactly one `aria-label=` may appear and it must
+  // be the landmark's. The two halves are asserted separately so a *missing* or
+  // *renamed* landmark fails too — a `labels.length > (landmark ? 1 : 0)` form
+  // passes zero labels and passes any landmark name, which is how this checker
+  // and the inline scan came to disagree on four of six probe inputs while the
+  // comment below claimed they could not diverge.
   const labels = [...code.matchAll(/aria-label=/g)];
-  const landmark = /<nav aria-label="[^"]+">/.test(code);
-  if (labels.length > (landmark ? 1 : 0)) failures.push('replaces the accessible name');
+  if (labels.length !== 1) failures.push(`exactly one aria-label= belongs here — found ${labels.length}`);
+  // Attribute-order- and whitespace-tolerant, so reformatting the `<nav>` across
+  // lines is not a finding: the single-line `/<nav aria-label="Destinations">/`
+  // form reported a false failure on exactly that.
+  if (!/<nav[^>]*\saria-label="Destinations"/.test(code)) {
+    failures.push('the one aria-label= must be the landmark\'s, naming it "Destinations"');
+  }
   return failures;
 }
 
@@ -488,16 +522,44 @@ test('the ARIA ban rejects a label on a button whether the value is a model fiel
   // `=\{`-keyed narrowing let through: it replaces the announced name with the
   // depth word alone, losing the Project title, which is precisely the regression
   // the original blanket ban was written for.
+  //
+  // Each fixture carries the legitimate landmark, so what is being tested is the
+  // *button's* attribute rather than the absence of the landmark label — without
+  // it every fixture would fail for the wrong reason and the test would prove
+  // nothing about the form it names.
+  const LANDMARK = '<nav aria-label="Destinations">';
   const banned: readonly string[] = [
     '<button aria-label={project.depth}>',
     '<button aria-label={project.title}>',
     '<button aria-label="Deep">',
     '<button aria-labelledby={client.id}>',
     '<button aria-describedby="depth-hint">',
+    // The name-*suppressing* forms the narrowing had let back in. The first was
+    // proven green against the whole suite: it strips Deep/Shallow from the
+    // accessible name while leaving `{project.depth}` in text position, so the
+    // positive text-node scan cannot see it either.
+    '<span aria-hidden="true">{project.depth}</span>',
+    '<button aria-roledescription={project.depth}>',
+    '<button aria-roledescription="deep work">',
+    '<button aria-valuetext={project.depth}>',
   ];
   for (const form of banned) {
-    assert.notDeepEqual(auditAria(form), [], `${form} must be rejected — it replaces or redirects the name`);
+    assert.notDeepEqual(
+      auditAria(LANDMARK + form),
+      [],
+      `${form} must be rejected — it replaces, redirects, or suppresses the name`,
+    );
   }
+
+  // A *missing* or *renamed* landmark is a finding too. The earlier
+  // `labels.length > (landmark ? 1 : 0)` form passed both, so a deleted label —
+  // the regression the positive assertion exists for — read as clean.
+  assert.notDeepEqual(auditAria('<nav><button/></nav>'), [], 'a deleted landmark label must be rejected');
+  assert.notDeepEqual(
+    auditAria('<nav aria-label="Anything"><button/></nav>'),
+    [],
+    'a renamed landmark must be rejected',
+  );
 
   // A button label is rejected even when the landmark's own legitimate label is
   // present, so the exemption is one attribute wide rather than a blanket pass.
@@ -507,15 +569,27 @@ test('the ARIA ban rejects a label on a button whether the value is a model fiel
     'the landmark exemption must not cover a second label',
   );
 
-  // And the state attributes the narrowing exists to permit must pass.
+  // And the state attributes the narrowing exists to permit must pass — including
+  // `aria-pressed` bound to a model field, the one such binding this renderer
+  // legitimately makes, which the model-field clause must therefore exempt.
   for (const form of [
     '<button aria-pressed={isFocused}>',
     '<button aria-pressed={project.id === focusedProjectId}>',
     '<button aria-current="true">',
-    '<nav aria-label="Destinations">',
+    '',
   ]) {
-    assert.deepEqual(auditAria(form), [], `${form} carries state or names a landmark — it must pass`);
+    assert.deepEqual(auditAria(LANDMARK + form), [], `${form} carries state only — it must pass`);
   }
+
+  // A `<nav>` whose attributes are wrapped across lines is not a finding. The
+  // single-line `/<nav aria-label="Destinations">/` form rejected it, so a
+  // formatter touching this file would have failed the build and the rule would
+  // have been loosened to make it green again.
+  assert.deepEqual(
+    auditAria('<nav\n  aria-label="Destinations"\n  id="x"\n>\n<button/></nav>'),
+    [],
+    'reformatting the landmark across lines must not be a finding',
+  );
 });
 
 // --- What the renderer newly does, pinned positively -------------------------
@@ -595,6 +669,20 @@ test('the renderer subscribes with a selector rather than the whole store', () =
     'useStore is given a selector, never the store alone',
   );
   assert.doesNotMatch(code, /useStore\(\s*navigationStore\s*\)/, 'never the whole store');
+
+  // And the selector must read the field the binding is named for. The pattern above
+  // stops at the arrow, so it accepts a selector reading *any* field: binding
+  // `focusedProjectId` to `(state) => state.railPosition` passed this test, the
+  // `aria-pressed` equality pin, and the whole suite — while making
+  // `project.id === focusedProjectId` compare a ProjectId against a ClientId, so it
+  // is always false and no Project can ever announce itself pressed. AC 6 fails at
+  // runtime with every check green. The two pins agreed with each other and with
+  // broken code, which is what a shape-only ratchet buys.
+  assert.match(
+    code,
+    /const\s+focusedProjectId\s*=\s*useStore\(\s*navigationStore\s*,\s*\(\s*(\w+)\s*\)\s*=>\s*\1\.focusedProjectId\s*\)/,
+    'the focusedProjectId binding must select focusedProjectId, not another field',
+  );
 });
 
 test('the title and the depth word reach the reader as text, not as attribute values', () => {

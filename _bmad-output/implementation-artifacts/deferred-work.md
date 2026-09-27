@@ -372,3 +372,30 @@ this file.
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
   summary: The `getState()`-in-render-loop rule is argued in three places and enforced nowhere; no boundary rule forbids a reactive hook binding under `src/render-scene/`.
   evidence: `state.test.ts` asserts only that `getState` is a function, which is a zustand API fact rather than a project invariant. The rule becomes checkable when the camera lands — a `neverPackages`-style rule banning `zustand/react` under `src/render-scene/` would make it real, and `render-scene/README.md:5` already declares it imports shell state.
+
+## Deferred from: code review of spec-2-2-the-navigation-state-machine (2026-09-26)
+
+Review iteration 2. Two of four layers completed; Verification Gap and Acceptance
+Auditor were killed mid-probe by an API session limit, so this review is incomplete on
+the acceptance-audit axis. Every item below was proven by execution against the real
+module, not inferred.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
+  summary: `focusOrigin` cannot return to `null` through any production path, though its own docstring describes that state as reachable ("`null` before any Focus has happened").
+  evidence: Probed — after `focusProject('p-3')` then `releaseFocus()`, `focusOrigin` remains `'rail'` indefinitely; only `resetNavigation()`, documented as existing for tests, clears it. The type `NavigationMode | null` invites reading the field as "is a Focus active", which it is not. Overlaps the already-filed item on the contradictory `(focusedProjectId, focusOrigin)` pair; Story 2.10 owns the release path that reads it and should be the one to decide whether release records itself.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
+  summary: The nested `<ul>` carries no accessible name, so a Project announced as "pressed" has no announced Client attribution.
+  evidence: In `index-nav.tsx` the Client `<button>` is a sibling of the Projects' `<ul>`, not its label, so a screen-reader user hearing "Deep, pressed" is not told whose system it belongs to. `src/shell/README.md` sets the bar that a screen-reader user can answer "which of these is worth reading" from the index alone — depth is solved, attribution is not. Story 2.7 owns the panel and grouping semantics. Related to the already-filed `railPosition`-has-no-DOM-representation item; `aria-pressed` landing in this story is what makes the gap newly visible.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
+  summary: `aria-pressed` is used for a state the control itself cannot un-press, and the conventional alternative is never argued against.
+  evidence: `aria-pressed` denotes a toggle button; a Project button enters Focus and never releases it, since release is `releaseFocus` and belongs to Story 2.10 per this spec's Never list. `aria-current` is the conventional fit for "this is the active one of a set" and already appears in `auditAria`'s permitted fixtures without comment. The diff argues at length why `aria-pressed` is *permissible* given the name-replacement ban — correctly — but never why it is the *right* attribute. Story 2.10 will either make it a real toggle or reveal it never was.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
+  summary: Three copies of the tree walker now exist and no test asserts the copies agree.
+  evidence: `shippedFilesUnder` in `src/shell/state.test.ts:545` and `src/derive/maintenance.test.ts:447` are verbatim identical, including the `node_modules` and dot-directory skips; `boundaries.ts`'s `sourceFilesUnder` is a third. `maintenance.test.ts` already carries the note that the two walkers must agree or a file exempt from the boundary rules is still audited here. Re-confirmed, and extends the duplication item this story already filed: the gap is not only the duplication but that nothing compares the two walks' output.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
+  summary: The writer-separation audit cannot see a cross-writer write whose value equals what is already there.
+  evidence: The probe at `state.test.ts:301` diffs fields by `!==`, so an event that also wrote another writer's field with an identical value reports only its own change as having happened. `populate()`'s docstring claims the probe distinguishes "did not write" from "wrote the value already there" — true for the fields a row declares, not for a stray identical write onto another writer's field. Closing it needs per-key write observation (a `subscribe` recording which keys each update object carried) rather than a before/after value diff. A narrow residual on a ratchet this iteration genuinely strengthened, recorded so the next writer-separation change knows the shape of what is left.

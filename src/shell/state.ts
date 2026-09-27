@@ -45,11 +45,19 @@
  * `mode` may have moved. Reading it at release would answer a question about the
  * past with the present, which is right until the first time it is not.
  *
- * **State changes only through the named events below.** `setState` is not
- * exported, so no consumer can reach it. That is the whole reason the transitions
- * are named: a `setState({ focusedProjectId })` somewhere in a renderer would be
- * a transition nobody can find, nobody tested, and nothing prevents from writing
- * two writers' fields at once.
+ * **State changes only through the named events below.** That is the whole reason
+ * the transitions are named: a `setState({ focusedProjectId })` somewhere in a
+ * renderer would be a transition nobody can find, nobody tested, and nothing
+ * prevents from writing two writers' fields at once.
+ *
+ * The enforcement is a source scan over the whole tree (`state.test.ts`), not the
+ * type system. `zustand` puts `setState` on the store object and the store must be
+ * exported so consumers can `subscribe` and `getState`, so a consumer *can* reach
+ * it: the scan catches a call, a bracket access, and a destructured alias, and a
+ * computed key (`store['set' + 'State']`) defeats it, as a pinned test records. So
+ * the rule is enforced at the cost of having to write the violation deliberately,
+ * rather than made unreachable — said plainly here, because a header claiming "no
+ * consumer can reach it" is the kind of false comfort that stops anyone checking.
  *
  * **A render loop reads with `getState()`, never with a hook.** A camera
  * subscribed reactively would re-render its whole tree on every progress write,
@@ -58,6 +66,15 @@
  * current value without subscribing. The loop itself arrives with the camera;
  * this module is what makes that path available, and `getState` is on the store
  * API for exactly it.
+ *
+ * **A redundant transition still notifies.** No event compares before writing, so
+ * `selectClient` at the Client already selected notifies every subscriber. That is
+ * chosen, not overlooked: short-circuiting means a per-field comparison in every
+ * event, in the module whose whole virtue is holding no logic, to save work the two
+ * real consumers already discard — a React subscriber's `useStore(store, selector)`
+ * stops the re-render on the selected slice, and the camera does not subscribe at
+ * all. A test pins the count, so changing this changes a failing assertion and this
+ * paragraph together.
  *
  * **No derivation, no artifact.** No ordering, no classification, no mapping
  * rule — those live in `src/derive/` (AD-3), and `src/shell/` may not import that
@@ -236,14 +253,20 @@ export function selectClient(clientId: ClientId): void {
  * the origin from the mode as it is now, because the visitor entered *this*
  * Focus from here.
  *
+ * Re-focusing the Project *already* focused is not a new Focus — the visitor never
+ * left — so the origin stands. Rewriting it there would answer "where did they come
+ * from" with "wherever they are now", which is the failure AD-16 exists to prevent:
+ * focus on the Rail, drift into free flight, click the same Project again, and the
+ * origin would silently become `freeflight` even though releasing should return the
+ * visitor to the Rail they entered from.
+ *
  * @throws if the ID is empty or not a string, naming the field and the value.
  */
 export function focusProject(projectId: ProjectId): void {
   const id = requireId('focusProject', projectId);
-  navigationStore.setState((state) => ({
-    focusedProjectId: id,
-    focusOrigin: state.mode,
-  }));
+  navigationStore.setState((state) =>
+    state.focusedProjectId === id ? {} : { focusedProjectId: id, focusOrigin: state.mode },
+  );
 }
 
 /**
