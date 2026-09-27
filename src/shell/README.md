@@ -11,7 +11,7 @@ Entry, capability detection, routing, navigation state machine, and the persiste
 | --- | --- |
 | `index-model.ts` | The DOM destination index as a pure view model: the artifact's `rail` read present → past, each Client's Projects nested beneath it, names and Deep/Shallow as text. Every AC-bearing rule lives here. |
 | `index-model.test.ts` | Ordering against a fixture where the Rail opposes the emitted `clients` order, nesting, the Deep/Shallow text, invariance under repeated builds, and source scans pinning that neither module derives, sorts, or reads render state. |
-| `index-nav.tsx` | The thin renderer: model → `<nav>` / nested `<ul>` / `<button>`. Mapping only, no logic. Subscribes to the store with a selector and hands clicks to its named events. |
+| `index-nav.tsx` | The thin renderer: model → `<nav>` / nested `<ul>` / `<button>`. No rule of its own and no *local* state — it subscribes to the store with a selector and hands clicks to its named events. |
 | `state.ts` | The navigation state machine: the one authority on where the visitor is. Five fields, one documented writer each, every transition a named event. Pure `.ts`, `zustand/vanilla` — no React import. |
 | `state.test.ts` | The whole transition matrix executed rather than scanned: Focus exclusivity, origin-at-entry, writer separation over all seven events, the malformed-input rejections, subscription, plus a tree-wide `setState` audit and source scans pinning that the store stays React-free and derives nothing. |
 
@@ -82,6 +82,8 @@ Progress stays **unclamped**: what range a value may take is the camera's questi
 ### The named-event contract is scanned for the tree, not for one file
 
 `zustand` puts `setState` on the store object, so the type cannot forbid a consumer calling it; the contract that none does is held by a source scan — and that scan walks **every shipped file under `src/`**, exempting `state.ts` by name. A scan of one hard-coded file left `App.tsx`, a future `entry.ts` and `render-scene/` — which `src/render-scene/README.md:5` already declares imports this store — free to write two writers' fields in one statement, which is the precise thing the rule exists to prevent. The audit is a pure function over files, so it is driven over fixtures as well as over the real tree: a checker only ever run against a clean tree proves nothing about what it would reject.
+
+What the scan reaches, and what it does not, is worth stating because the gap is permanent rather than a to-do. It catches a call (`store.setState(…)`), a bracket access (`store['setState']`) and a destructured alias (`const { setState: write } = store`); a computed key — `store['set' + 'State']` — defeats it, and no scan over text can close that. Comments and string literals are blanked before matching, in all three shapes prose takes, so these module headers can discuss `setState` at length without the audit firing on them. The contract is therefore enforced at the cost of having to write a violation deliberately, which is the honest claim; a stronger one would stop anyone checking.
 
 ## The index precedes the camera
 

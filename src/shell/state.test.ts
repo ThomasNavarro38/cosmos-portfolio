@@ -119,6 +119,27 @@ test('focusing B while A is focused leaves exactly one focused Project', () => {
   assert.deepEqual(holdingA, [], 'no field still holds the Project that was replaced');
 });
 
+test('re-focusing the Project already focused does not move its origin', () => {
+  // The other half of the re-store rule, and the half that was wrong. Focusing B
+  // while A is focused is a *new* Focus and must take a new origin (the test
+  // below). Focusing A while A is already focused is not a new Focus — the visitor
+  // never left — so rewriting `focusOrigin` there answers a question about where
+  // they came from with wherever they happen to be now, which is the exact failure
+  // AD-16 exists to prevent. Probed before the fix: origin moved rail → freeflight
+  // while `focusedProjectId` never changed, and 2.10 builds Escape precedence on
+  // that field.
+  resetNavigation();
+  focusProject('project-a');
+  assert.equal(navigationStore.getState().focusOrigin, 'rail');
+
+  enterFreeFlight();
+  focusProject('project-a');
+
+  const state = navigationStore.getState();
+  assert.equal(state.focusedProjectId, 'project-a', 'still the same Focus');
+  assert.equal(state.focusOrigin, 'rail', 'the origin is where this Focus was entered, not where the visitor is now');
+});
+
 test('focusing B while A is focused re-stores the origin from the mode at that entry', () => {
   // The visitor entered *this* Focus from free flight, even though the Focus it
   // replaced was entered from the Rail. A store that kept the first origin would
@@ -253,6 +274,24 @@ const WRITERS: ReadonlyArray<{
     writes: ['focusedProjectId', 'focusOrigin'],
   },
   {
+    // The *other* branch of `focusProject`. Re-focusing the Project already focused
+    // writes nothing, and a branch that writes nothing still has to be audited for
+    // what it does not write: putting `{ railPosition: 'HACKED-PROJECT-ID' }` in that
+    // branch passed 448/448, because every other row fires `focusProject` with a
+    // *different* ID and so never reaches it. A ProjectId in `railPosition` is the one
+    // thing AD-4a forbids, and it is unbranded `string`, so `tsc` cannot see it either.
+    //
+    // `writes: []` is the assertion: primed from a fully populated state, this event
+    // must leave every field exactly as it found it.
+    name: 'focusProject (same ID, the no-op branch)',
+    prime: () => {
+      populate();
+      focusProject('project-same');
+    },
+    fire: () => focusProject('project-same'),
+    writes: [],
+  },
+  {
     name: 'releaseFocus',
     prime: () => populate(),
     fire: () => releaseFocus(),
@@ -328,9 +367,19 @@ test('no event writes a field belonging to another writer, and every event write
     const changed = keys.filter(
       (key) => before[key as keyof typeof before] !== after[key as keyof typeof after],
     );
-    assert.ok(changed.length > 0, `${name} wrote nothing — the probe cannot see the write it audits`);
-    for (const field of changed) {
-      assert.ok(writes.includes(field), `${name} wrote ${field}, which belongs to another writer`);
+    if (writes.length === 0) {
+      // A row declaring no writes is asserting a *no-op branch*: it must leave every
+      // field as it found it. This is the inverse of the guard below — there, an event
+      // that wrote nothing would be a handler that silently stopped working; here,
+      // writing anything at all is the failure. `focusProject`'s same-ID branch is the
+      // one such path, and it went unaudited until a `railPosition` write was proven
+      // green through it.
+      assert.deepEqual(changed, [], `${name} declares no writes but changed ${changed.join(', ')}`);
+    } else {
+      assert.ok(changed.length > 0, `${name} wrote nothing — the probe cannot see the write it audits`);
+      for (const field of changed) {
+        assert.ok(writes.includes(field), `${name} wrote ${field}, which belongs to another writer`);
+      }
     }
   }
 });
@@ -414,6 +463,31 @@ test('a padded ID is stored trimmed, so the value checked is the value kept', ()
   assert.equal(navigationStore.getState().focusedProjectId, 'project-a');
 });
 
+test('an unpadded ID round-trips identically, which is what the renderer compares on', () => {
+  // Trimming makes these events *normalising*, and exactly one consumer compares
+  // the stored value against a raw model ID: `index-nav.tsx` renders
+  // `aria-pressed={project.id === focusedProjectId}`. So a padded ID would be
+  // stored trimmed and then match nothing — `'  p  ' === 'p'` is false — and the
+  // Project the visitor just focused would announce itself unpressed.
+  //
+  // That cannot happen while every ID reaches the store straight from the model, and
+  // this is the test that says so: for an ID as the artifact mints it, what goes in
+  // is what comes out. It fails if a future normalisation (a case fold, a slug
+  // rewrite) makes the store's output diverge from the model's IDs, which is the
+  // moment the renderer's `===` silently stops working.
+  //
+  // `ProjectId` and `ClientId` are plain `string` aliases — deliberately, since the
+  // shell cannot validate against an artifact it may not import — so `tsc` cannot
+  // see this class of drift and a test has to.
+  resetNavigation();
+  for (const id of ['project-a', 'client-zulu', 'p-1', 'a.b_c-d~e']) {
+    focusProject(id);
+    assert.equal(navigationStore.getState().focusedProjectId, id, `${id} must round-trip unchanged`);
+    selectClient(id);
+    assert.equal(navigationStore.getState().railPosition, id, `${id} must round-trip unchanged`);
+  }
+});
+
 test('a non-finite progress value is rejected, as a malformed ID is', () => {
   // `NaN` is what arithmetic on an undefined scroll offset produces, and it
   // propagates in silence: every comparison against it is false, so a camera
@@ -436,6 +510,17 @@ test('a non-finite progress value is rejected, as a malformed ID is', () => {
   assert.throws(() => advanceScroll(Number.POSITIVE_INFINITY), /advanceScroll/);
   assert.throws(() => advanceScroll(Number.NEGATIVE_INFINITY), /advanceScroll/);
   assert.throws(() => advanceScroll(undefined as unknown as number), /advanceScroll/);
+
+  // The other untyped arrivals. `'0.5'` is the realistic one and the ID guard's own
+  // test reasons about exactly this route: a value read off a DOM attribute or a
+  // query string is a string, and `typeof '0.5' !== 'number'` is the only thing
+  // standing between it and a `scrollProgress` that stringifies into arithmetic.
+  // `null` arrives from a cleared ref, `{}` from a mis-destructured event. Covering
+  // only `undefined` left the number guard tested more narrowly than the string one,
+  // which is the asymmetry this pair of guards exists to remove.
+  for (const bad of [null, '0.5', {}, [], true]) {
+    assert.throws(() => advanceScroll(bad as unknown as number), /advanceScroll/, `${JSON.stringify(bad)} is rejected`);
+  }
 
   assert.deepEqual(navigationStore.getState(), before, 'none of them wrote anything');
 });
@@ -466,6 +551,67 @@ test('a subscriber is notified once per transition and reads the new state', () 
   selectClient('client-zulu');
 
   assert.deepEqual(seen, ['client-alpha', 'client-mid'], 'one notification per transition, none after unsubscribe');
+});
+
+test('a redundant transition still notifies, and the selector is what absorbs it', () => {
+  // Chosen, not accidental. Probed at review: five of six notifications in a
+  // sequence of redundant calls were no-ops, and nothing pinned the behaviour in
+  // either direction — so it was undecided, which is worse than either answer.
+  //
+  // The decision is to notify. Short-circuiting would put a per-field comparison in
+  // every event, in the one module whose virtue is that it holds no logic, to save
+  // work that the two real consumers already discard: a React subscriber goes through
+  // `useStore(store, selector)`, whose equality check on the selected slice is what
+  // stops the re-render, and the camera reads `getState()` in its frame callback and
+  // never subscribes at all. `advanceScroll` at frame rate writes a *changing* value
+  // anyway — the redundant case is not the hot one.
+  //
+  // What this test buys is that the cost lands where it is documented: if a future
+  // event starts short-circuiting, this fails and the header's claim gets revisited
+  // with it.
+  resetNavigation();
+  selectClient('client-alpha');
+
+  let notifications = 0;
+  const unsubscribe = navigationStore.subscribe(() => notifications++);
+  selectClient('client-alpha');
+  enterRail();
+  releaseFocus();
+  advanceScroll(0);
+  unsubscribe();
+
+  assert.equal(notifications, 4, 'each event notifies, whether or not the value changed');
+
+  // The count alone is not the whole ratchet, and saying so is the point. An early
+  // `return` before `setState` does fail the assertion above — verified by mutating
+  // each of these four events in turn. What it cannot see is an event that still
+  // calls `setState` but hands it an empty partial: `zustand` gates notification on
+  // `!Object.is(nextState, state)` (`node_modules/zustand/esm/vanilla.mjs`), and a
+  // fresh `{}` is never identity-equal to the current state, so it notifies anyway.
+  //
+  // So the property that actually distinguishes the two is *object identity of the
+  // state*: every transition replaces the state object, whether or not any value
+  // differs. That is what a consumer's `Object.is`-based memoisation sees, and it is
+  // the honest statement of what this store guarantees.
+  resetNavigation();
+  selectClient('client-alpha');
+  const seen: unknown[] = [];
+  const stopIdentity = navigationStore.subscribe((state) => seen.push(state));
+  const first = navigationStore.getState();
+  selectClient('client-alpha');
+  enterRail();
+  stopIdentity();
+
+  assert.equal(seen.length, 2, 'a redundant transition still reaches the subscriber');
+  assert.ok(
+    seen.every((state) => state !== first),
+    'each transition replaces the state object, which is the property a memoised consumer observes',
+  );
+  assert.deepEqual(
+    navigationStore.getState(),
+    { mode: 'rail', railPosition: 'client-alpha', scrollProgress: 0, focusedProjectId: null, focusOrigin: null },
+    'and none of them changed anything',
+  );
 });
 
 test('getState reads the current value without subscribing, which is the render-loop path', () => {
@@ -573,9 +719,45 @@ function auditSetState(files: readonly { readonly path: string; readonly source:
     // name rather than by directory, so a second module in `src/shell/` gets no
     // free pass.
     if (file.path === 'src/shell/state.ts') continue;
-    const code = file.source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    // Comments and string literals are blanked rather than deleted, preserving both
+    // line count and column positions so a reported line number still points at the
+    // offending line. Three shapes of prose mention `setState` legitimately in this
+    // repo, and an audit that fired on any of them would be switched off in a week:
+    //
+    //   - a block comment (the module headers discuss it at length);
+    //   - a line comment in *any* column, not only the first — an `^\s*//`-anchored
+    //     strip left `const a = 1; // never call setState` a finding;
+    //   - a string or template literal — `const doc = 'setState is banned';` was a
+    //     finding under the previous stripper.
+    //
+    // The decoy test below covered only the first-column comment, so it certified a
+    // property this checker did not have. `src/derive/boundaries.ts:241` exports a
+    // proper single-pass `stripCommentsAndStrings`, but `src/shell/` may not import
+    // `src/derive/` — the same boundary that forces `shippedFilesUnder` to be
+    // duplicated here — so the blanking below plus a call-shaped match carry it.
+    //
+    // Order matters, and it is the opposite of the obvious one. A bracket access
+    // writes the member name *as a string literal* — `store['setState']` — so
+    // blanking strings first erases the very token the audit is looking for. The
+    // property-access form is therefore normalised to a dot access before any
+    // blanking, which both preserves it and folds two shapes into one match.
+    const code = file.source
+      .replace(/\[\s*(['"`])setState\1\s*(?:as\s+[^\]]+)?\]/g, (m) => '.setState'.padEnd(m.length, ' '))
+      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+      .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length))
+      .replace(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g, (m) => m.replace(/[^\n]/g, ' '));
     for (const [index, line] of code.split('\n').entries()) {
-      if (/\bsetState\b/.test(line)) {
+      // A call, or a binding of one to call later — not the bare word. What the
+      // contract forbids is *reaching* the function: `.setState(`, `['setState']`,
+      // or destructuring/aliasing it by name. Matching the token alone is what made
+      // surviving prose a finding.
+      // Any *reference* to the member, not only an immediate call. Binding it to a
+      // name to call on the next line (`const write = store.setState;`) reaches it
+      // just as surely as calling it, and a killed review subagent left exactly that
+      // form in the tree — so `.setState` counts whether or not a `(` follows. The
+      // destructured shape (`const { setState: write } = store`) has no dot, so it
+      // is matched separately by its punctuation.
+      if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(line)) {
         failures.push(`${file.path}:${index + 1} calls setState — state changes only through a named event.`);
       }
     }
@@ -626,18 +808,63 @@ test('the setState audit rejects a call from any consumer, naming file and line'
     [],
     'the store module itself is the one place setState belongs',
   );
+
+  // The indirect reaches, all of which a bare-token match caught by accident and a
+  // call-shaped match must catch on purpose. Each was probed against the real
+  // checker; the last is the exact form a killed review subagent left in the tree.
+  for (const source of [
+    "navigationStore['setState']({ mode: 'rail' });",
+    'const { setState: write } = navigationStore;',
+    "const write = navigationStore['setState' as 'setState'];",
+    'const { setState } = navigationStore;',
+  ]) {
+    assert.notDeepEqual(
+      auditSetState([{ path: 'src/App.tsx', source }]),
+      [],
+      `${source} reaches setState and must be a finding`,
+    );
+  }
+
+  // The residual, stated rather than implied: a computed key defeats any source
+  // scan. `const k = 'set' + 'State'; store[k](…)` produces no finding, and no
+  // regex over text can close that — which is why `state.ts`'s header and
+  // `README.md` must describe this audit as raising the cost of the mistake rather
+  // than preventing it. Pinned as a known hole so the claim and the check agree.
+  assert.deepEqual(
+    auditSetState([
+      { path: 'src/App.tsx', source: "const k = 'set' + 'State';\nnavigationStore[k]({ mode: 'rail' });" },
+    ]),
+    [],
+    'a computed key is the documented residual — if this ever fails, the scan improved and the docs should say so',
+  );
 });
 
-test('a setState mentioned in a comment is not a finding', () => {
+test('a setState mentioned in prose is not a finding, in any of the three shapes prose takes', () => {
   // The decoy rule every scan in this repo holds. An audit that fired on prose
   // would be turned off within a week — and the module headers here discuss
   // `setState` at length by necessity.
+  //
+  // The first version of this fixture used only first-column line comments, so it
+  // certified a property the checker did not have: the strip was anchored
+  // `^\s*//`, and string literals were not handled at all. Both surviving shapes
+  // were probed as real findings before this was widened.
   const source = [
     '// A consumer must never call setState directly.',
     '/* setState is unexported for this reason. */',
-    'const a = 1;',
+    'const a = 1; // never call setState — trailing, not first column',
+    "const doc = 'setState is banned';",
+    'const tpl = `the setState contract`;',
+    'const b = 2;',
   ].join('\n');
   assert.deepEqual(auditSetState([{ path: 'src/App.tsx', source }]), []);
+
+  // And the blanking must not cost the line number: a real call after a multi-line
+  // block comment is still reported at its own line, because comments are blanked
+  // in place rather than deleted.
+  const withComment = ['/* one', ' * two', ' */', 'navigationStore.setState({ mode: "rail" });'].join('\n');
+  assert.deepEqual(auditSetState([{ path: 'src/App.tsx', source: withComment }]), [
+    'src/App.tsx:4 calls setState — state changes only through a named event.',
+  ]);
 });
 
 test('the one-writer table in the module header names every field the store holds', () => {

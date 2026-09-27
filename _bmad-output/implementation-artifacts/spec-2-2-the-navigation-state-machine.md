@@ -3,7 +3,7 @@ title: 'Story 2.2: The navigation state machine'
 type: 'feature'
 created: '2026-09-26'
 status: 'done'
-review_loop_iteration: 1
+review_loop_iteration: 2
 context: []
 baseline_commit: 'b269aed65f36269bd6c3cb1aa734ff11b96b160a'
 ---
@@ -105,6 +105,152 @@ baseline_commit: 'b269aed65f36269bd6c3cb1aa734ff11b96b160a'
 - Given a component holds the store, when it changes state, then it does so only through a named event — `setState` is not reachable from outside the module
 - Given the index is rendered with a Project focused, when a screen reader reads the entry, then its accessible name is still the Project title with Deep/Shallow as text, and `aria-pressed` carries the Focus state
 - Given `npm test`, `npm run typecheck` and `npm run gate` run, then all pass with no new dependency added
+
+### Review Findings
+
+**Review iteration 2 — 2026-09-26.** Two of four layers completed (Blind Hunter, Edge
+Case Hunter); Verification Gap and Acceptance Auditor were killed mid-probe by an API
+session limit, so their coverage is partial and this review is **incomplete on the
+acceptance-audit axis**. Baseline re-confirmed green on a clean tree before and after
+every mutation: 445 pass / 0 fail / 0 skipped / 0 todo, typecheck and gate clean. Every
+finding below was proven by execution, not inferred.
+
+- [x] [Review][Patch] `aria-hidden` on the depth span strips Deep/Shallow from the accessible name with the whole suite green [src/shell/index-model.test.ts:477] — Proven by mutation: `<span aria-hidden="true">{project.depth}</span>` passes **445/445, typecheck and gate clean**. `auditAria` checks only the `label|labelledby|describedby` family; the old `:423` pattern `aria-(?!label\b)` rejected every ARIA attribute and caught this. The positive text-node scan cannot see it either — depth is still textually `{project.depth}`. This is half of AC 6 ("the accessible name is still the Project title with Deep/Shallow as text") failing with every check green. `aria-roledescription={project.depth}` passes identically. Fix: extend `auditAria` to the name-affecting family (`hidden|roledescription|valuetext|details|owns`) and re-add a model-field clause exempting `aria-pressed`.
+- [x] [Review][Patch] `auditAria` is documented as "the *same* checker" as the inline scan and diverges from it in both directions [src/shell/index-model.test.ts:477] — Probed on six inputs; they disagree on four. `auditAria` passes **zero** `aria-label=` (landmark deleted) and passes a **renamed** landmark (`aria-label="Anything"`) — the inline scan catches both via `labels.length === 1` and the positive `/<nav aria-label="Destinations">/`. Conversely `auditAria` **falsely rejects** multi-line `<nav>` attributes, where the inline scan's positive match would fail the build on pure reformatting. So the fixture suite cannot detect the landmark label being deleted or renamed — the regression class the positive assertion exists for — and the extraction comment ("extracted so the two cannot diverge") is false as written.
+- [x] [Review][Patch] The `setState` audit fires on prose in a string literal and on trailing comments — false positives its own decoy test certifies against [src/shell/state.test.ts:568] — The stripper handles block comments and *leading-position* line comments only. Probed: `const doc = 'setState is banned';` produces 1 finding; `const a = 1; // never call setState` produces 1 finding; the leading-comment form is correctly clean. The decoy test `a setState mentioned in a comment is not a finding` uses only leading-position comments, so it certifies a property the checker does not have. `src/derive/boundaries.ts` already solves this by blanking quoted regions before classifying; reuse that idiom and add both shapes to the decoy fixture.
+- [x] [Review][Patch] `focusProject` re-stores `focusOrigin` when the already-focused Project is focused again [src/shell/state.ts:241] — Probed against the real module: `focusProject('p-1')` on the Rail gives `focusOrigin: 'rail'`; then `enterFreeFlight()`; then `focusProject('p-1')` again gives `focusOrigin: 'freeflight'` with `focusedProjectId` unchanged at `'p-1'`. The visitor never left the Focus, but the origin AD-16 exists to preserve has moved — and 2.10 builds Escape precedence on exactly this field. The docstring's re-store rationale ("the visitor entered *this* Focus from here") is right for focusing B while A is focused and wrong for re-focusing A. Fix: no-op when `state.focusedProjectId === id`.
+- [x] [Review][Patch] `requireId` trims but the renderer compares untrimmed [src/shell/state.ts:179] — Probed: `focusProject('  p-2  ')` stores `'p-2'`; the renderer's `project.id === focusedProjectId` then compares `'  p-2  ' === 'p-2'` which is `false`, so a padded ID silently announces nothing as pressed. Harmless today (model IDs arrive unpadded) but nothing tests the round trip `focusProject(x)` then `getState().focusedProjectId === x`, and `ProjectId` is a plain `string` so `tsc` cannot see it. Fix: add the round-trip test and state normalisation in the event contract, or reject padding rather than silently accepting it.
+- [x] [Review][Patch] The tree-wide `setState` scan is bypassed by string concatenation [src/shell/state.test.ts:568] — Probed: `const k = 'set' + 'State';` then `navigationStore[k]({ mode: 'rail' })` yields no finding. Bracket-literal, destructured and as-cast alias forms **are** caught, so the scan is a real ratchet — but `state.ts`'s header ("`setState` is not exported, so no consumer can reach it") and the README ("scanned for the tree") both assert a closure the scan does not achieve. Fix: state the residual honestly in both places, or export a consumer-facing store type that omits `setState`.
+- [x] [Review][Patch] Every event notifies subscribers on a redundant transition, and nothing pins the behaviour either way [src/shell/state.ts:222] — Probed: `selectClient('c1')` twice more at `'c1'`, `enterRail()` already on rail, `releaseFocus()` with nothing focused, `advanceScroll(0)` at `0` produced **5 no-op notifications out of 6**. `advanceScroll` runs at frame rate and `useStore` is protected only by the selector's own equality check, not by the store declining to notify. The behaviour is undecided rather than chosen. Fix: pin it with a test in whichever direction is intended, and say which in the header.
+- [x] [Review][Patch] The stale rationale comment on the hook ban names this story as future work [src/shell/index-model.test.ts:420] — The assertion message reads `'no state — Story 2.2 owns navigation state'` inside story 2.2's own diff. The ban is still correct (local state is forbidden, subscription is not) but its stated reason is now self-referential. The README's `index-nav.tsx` row carries the matching contradiction: "Mapping only, no logic. Subscribes to the store with a selector and hands clicks to its named events." Fix both to say *local* state, as the module header already does.
+- [x] [Review][Patch] `advanceScroll`'s guard is untested for every non-number except `undefined` [src/shell/state.test.ts] — Covered: `NaN`, `±Infinity`, `undefined`. Uncovered: `null`, `'0.5'` (the realistic DOM-attribute arrival the parallel ID test explicitly reasons about), `{}`. `requireProgress` rejects all of them via `typeof progress !== 'number'`, so this is a coverage asymmetry rather than a defect — but it is the same asymmetry between the string and number guards that this iteration was amended to close.
+- [x] [Review][Defer] `focusOrigin` cannot return to `null` through any production path, though its docstring describes that state as reachable [src/shell/state.ts:101] — deferred, pre-existing — Probed: after `focusProject` then `releaseFocus`, `focusOrigin` stays `'rail'` indefinitely; only `resetNavigation` (documented "exists for tests") clears it. The type `NavigationMode | null` invites reading it as "is a Focus active", which it is not. Overlaps the already-filed deferred item on the contradictory `(focusedProjectId, focusOrigin)` pair; 2.10 owns the release path that reads it.
+- [x] [Review][Defer] The nested `<ul>` has no accessible name, so a pressed Project has no announced Client attribution [src/shell/index-nav.tsx:76] — deferred, pre-existing — The Client `<button>` is a sibling of the Projects' list, not its label, so a screen-reader user hearing "Deep, pressed" is not told whose system it belongs to. The README's own bar is that a screen-reader user can answer "which of these is worth reading" from the index alone — depth is solved, attribution is not. Story 2.7 owns the panel and grouping semantics; related to the already-filed `railPosition`-has-no-DOM-representation item.
+- [x] [Review][Defer] `aria-pressed` is used for a state the control cannot un-press, and the alternative is never argued [src/shell/index-nav.tsx:81] — deferred, pre-existing — `aria-pressed` denotes a toggle; a Project button enters Focus and never releases it (release is 2.10's). `aria-current` is the conventional fit for "the active one of a set" and already appears in `auditAria`'s permitted fixtures. The diff argues at length why `aria-pressed` is *permissible* given the name-replacement ban — correctly — but never why it is *right*. 2.10 will either make it a real toggle or show it never was.
+- [x] [Review][Defer] Three copies of the tree walker now exist and nothing asserts they agree [src/shell/state.test.ts:545] — deferred, pre-existing — `shippedFilesUnder` in `state.test.ts` and `maintenance.test.ts` are verbatim identical; `boundaries.ts`'s `sourceFilesUnder` is a third. `maintenance.test.ts` already carries the note that the walkers must agree or a file exempt from the boundary rules is still audited. Already filed as a deferred item by this story; re-confirmed, with the addition that no test compares the two walks' output.
+- [x] [Review][Defer] The writer-separation audit cannot see a cross-writer write whose value equals what is already there [src/shell/state.test.ts:301] — deferred, pre-existing — The probe diffs by `!==`, so an event that also wrote another writer's field with an identical value reports only its own change. `populate()`'s docstring claims the probe distinguishes "did not write" from "wrote the value already there" — true for the fields a row declares, not for a stray identical write onto another writer's field. Closing it needs per-key write observation via `subscribe`, not a before/after value diff. A narrow residual on a ratchet this iteration genuinely strengthened.
+
+**Patches applied — 2026-09-27.** All nine patch findings fixed, plus one further gap
+the fix pass turned up. Verified by mutation rather than by report: a thirteen-mutation
+battery, each applied alone and reverted, now fails on every one — including the five
+from review iteration 1 that this pass had to avoid weakening. `npm test` 448 pass / 0
+fail / 0 skipped / 0 todo (was 445); typecheck, gate and build green; `git diff --stat
+package.json package-lock.json` empty, so the set is unchanged at fifteen pins.
+`index-nav.tsx` is byte-identical to `b42dd95` — every fix landed in a test, the store,
+or documentation.
+
+| Mutation | Result |
+| --- | --- |
+| handlers transposed | caught |
+| `aria-pressed` inverted | caught |
+| Client `onClick` deleted | caught |
+| `aria-label` on a button | caught |
+| `aria-hidden` on depth span | **newly caught** |
+| `aria-roledescription={project.depth}` | **newly caught** |
+| selector reads `railPosition` | **newly caught** |
+| `focusOrigin` hardcoded | caught |
+| `releaseFocus` clears `focusOrigin` | caught |
+| `selectClient` writes two fields | caught |
+| `requireId` drops `.trim()` | caught |
+| `focusProject` re-stores origin | **newly caught** |
+| `setState` from `App.tsx` | caught |
+
+**One finding beyond the nine.** The `useStore` pin matched `useStore(navigationStore,
+(\w+) =>` and stopped at the arrow, so binding `focusedProjectId` to `(state) =>
+state.railPosition` passed that pin, the `aria-pressed` equality pin, and all 445 tests
+— while comparing a ProjectId against a ClientId, so `aria-pressed` is permanently
+`false` and AC 6 fails at runtime with every check green. Two shape-only pins agreed
+with each other and with broken code. The selector is now pinned to the field its
+binding is named for, with a back-reference so the parameter name stays free.
+
+**Two decisions recorded rather than silently changed.** Redundant transitions still
+notify: short-circuiting would put a per-field comparison in every event, in the module
+whose virtue is holding none, to save work `useStore`'s selector equality and the
+camera's `getState()` path already discard. A test pins it, with a stated limit — an
+early `return` before `setState` fails the notification count (verified by mutating all
+four events, separately and together), but an event that still calls `setState` with an
+empty partial notifies anyway, because `zustand` gates on `!Object.is(nextState, state)`
+and a fresh `{}` is never identity-equal to the current state. So the test also asserts
+the property that *is* observable — every transition replaces the state object — and the
+prose says which half is enforced rather than claiming the count closes both. And the
+`setState` scan's computed-key hole (`store['set' + 'State']`) cannot be closed by any
+scan over text, so `state.ts`'s header and `README.md` now state what the scan reaches
+and what it does not, instead of claiming `setState` is unreachable.
+
+**Acceptance audit — 2026-09-27.** The Acceptance Auditor layer, killed by a rate limit
+during review iteration 2, was re-run against the committed implementation plus the patch
+pass. It reproduced the baseline independently (448 pass / 0 fail / 0 skipped / 0 todo,
+typecheck, gate, build green, fifteen pins confirmed by parsing `package.json`) and
+verified all 8 I/O matrix rows map to a named test that executes, all seven Always
+constraints, the Never list, and KEEP items 1-6. It confirmed the `shell` → `derive` ban
+is enforced rather than merely obeyed by adding an `import type` and watching the gate
+reject it. Two findings, both now closed:
+
+1. **The patch pass's own new deviation.** The authorised `focusProject` fix — no-op when
+   the same ID is re-focused — was applied as a two-branch ternary, and every
+   writer-separation row fires `focusProject` with a *different* ID, so the new branch was
+   never exercised. `{ railPosition: 'HACKED-PROJECT-ID' }` in that branch passed 448/448:
+   a ProjectId in `railPosition`, the one thing AD-4a forbids, with `tsc` blind to it
+   because both IDs are unbranded `string`. Reproduced here before fixing. Closed by a
+   `WRITERS` row for the no-op branch declaring `writes: []`, with the audit loop taught
+   that an empty declaration asserts the inverse — every field unchanged. The
+   `changed.length > 0` guard is untouched for every other row. Re-mutated: **447 pass /
+   1 fail**, naming the branch and the field.
+
+2. **An overclaim about enforcement, partly.** The Change Log said the notify decision was
+   "pinned by a test asserting the count, so changing it changes a failing assertion".
+   Checked directly: an early `return` before `setState` *does* fail that assertion — all
+   four events, separately and together. What passes is an event that still calls
+   `setState` with an empty partial, because `zustand` gates notification on
+   `!Object.is(nextState, state)` and a fresh `{}` is never identity-equal. So the audit's
+   finding is right about the hole and wrong that the count pins nothing. The test now also
+   asserts the property that is observable — every transition replaces the state object —
+   and the Change Log sentence above states which half is enforced.
+
+**AC verdicts as audited.** AC 1, 2, 3, 7 satisfied. AC 4 satisfied after finding 1's fix.
+AC 5 satisfied with the computed-key residual documented in both `state.ts` and
+`README.md` and pinned as a known hole; the auditor probed eleven evasion shapes and found
+only reflection and computed-key forms missed, consistent with what those docs claim. AC 6
+machine-verified in its static half only — the auditor states plainly that it launched no
+browser and read no accessibility tree, so the live a11y-tree observation recorded above
+stands unreproduced and undisputed. `index-nav.tsx` is byte-identical to `b42dd95`, so that
+observation is not invalidated; `state.ts` did change on the click path again, which is the
+condition that prompted a re-drive last iteration, so AC 6's runtime half should be
+re-driven before this story is called done.
+
+**AC 6 re-driven live — 2026-09-27.** The one criterion with a runtime-only half, driven
+on `npm run dev` after the patch pass and the audit fixes, because `state.ts` changed on
+the click path again even though `index-nav.tsx` did not. Read from the accessibility tree,
+not from the DOM alone:
+
+```
+navigation "Destinations"
+  button "SNCF"
+  button "Client referential — MDM replacement Deep" focusable focused pressed
+```
+
+- **The accessible name survives intact** — `"Client referential — MDM replacement Deep"`,
+  composed from three real text nodes (`"Client referential — MDM replacement"`, `" "`,
+  `"Deep"`), with `pressed` *alongside* it rather than replacing it. That is the whole point
+  of keeping depth in text position, and the reason `aria-pressed` is allowed where
+  `aria-label` is banned. No button carries `aria-label`; no descendant carries
+  `aria-hidden`.
+- **`aria-pressed` flips `false` → `true` on activation**, and exactly one entry is pressed.
+  The Client button carries no `aria-pressed` at all, since it is not a toggle.
+- **Writer separation holds at runtime, not only in unit tests.** Selecting a Client after
+  focusing a Project left the Project reporting `pressed` — `railPosition` was written and
+  `focusedProjectId` stood.
+- **The same-ID no-op behaves correctly in the browser.** Re-activating the already-focused
+  Project left `aria-pressed` true and exactly one entry pressed — the `focusProject` fix
+  from this review, observed rather than argued.
+- **Nesting and tab order are the model's.** `navigation` → `list` → `listitem` → Client
+  button, with the Projects' list at level 2; tab order is document order (Client then
+  Project). The Project entry is a native `<button type="button">` with no `tabindex`, so
+  Enter and Space activate it by the platform rather than by a handler of ours.
+
+Measurement note, kept because it cost time twice: a read in the same tick as `.click()`
+sees a stale `aria-pressed`. Both reads above were taken after two animation frames, once
+React had committed. That was a measurement artifact last iteration and remains one.
 
 ## Spec Change Log
 
