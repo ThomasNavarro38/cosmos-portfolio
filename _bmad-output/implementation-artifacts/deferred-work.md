@@ -33,12 +33,15 @@ declared constraints the rule table [src/derive/boundaries.ts:113-161] does not
 carry — the drift the story's own thesis argues against, in the rows rather
 than in the walker.
 
-- **No `neverPackages` on the `shell` row or `ROOT_RULE`** — `src/shell/README.md:3`
-  declares "`entry.ts` carries no React and no Three", and the table bans
-  neither package on the entry path. Verified: a `shell/entry.ts` importing
-  `three` passes the gate clean, as does `main.tsx`. This is the AD-7 hoist the
-  `dynamicOnly` mechanism exists to prevent, reachable by package name rather
-  than through `src/render-scene/`.
+- ~~**No `neverPackages` on the `shell` row or `ROOT_RULE`**~~ — **closed by
+  story 2.3.** Both rows now ban `three`, `@react-three/fiber` and
+  `@react-three/drei`, and `ROOT_RULE` additionally gained
+  `dynamicOnly: ['render-scene','render-fallback','colophon']` — the rule
+  `src/main.tsx:12-17` said belonged with the story that introduced the first
+  renderer. `README.md:45` carries the licensing sentence, and
+  `boundaries.test.ts` proves each rejects by mutation. The bans are Three and
+  not React: the shell renders the DOM index, so a directory-wide React ban
+  would reject `index-nav.tsx`.
 - **No `neverPackages` on the `derive` row** — `src/derive/README.md:24`
   declares the pipeline carries no DOM, no React and no Three. The row
   [boundaries.ts:127] carries a `never` list of sibling directories and no
@@ -371,7 +374,7 @@ this file.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
   summary: The `getState()`-in-render-loop rule is argued in three places and enforced nowhere; no boundary rule forbids a reactive hook binding under `src/render-scene/`.
-  evidence: `state.test.ts` asserts only that `getState` is a function, which is a zustand API fact rather than a project invariant. The rule becomes checkable when the camera lands — a `neverPackages`-style rule banning `zustand/react` under `src/render-scene/` would make it real, and `render-scene/README.md:5` already declares it imports shell state.
+  evidence: `state.test.ts` asserts only that `getState` is a function, which is a zustand API fact rather than a project invariant. The rule becomes checkable when the camera lands — a `neverPackages`-style rule banning `zustand/react` under `src/render-scene/` would make it real, and `render-scene/README.md:5` already declares it imports shell state. **Story 2.3 checked the parser and the proposed row cannot be written:** `packageOf` [boundaries.ts] reduces every bare specifier to its package, so `zustand/react` and `zustand/vanilla` are both `zustand`, and a row expressing "no reactive binding" would also ban the store the README permits. The rule is held instead by a source scan in `src/render-scene/scene-model.test.ts` (no `zustand/react` import, no `useStore`, no `useFrame`), with the reason written in `src/render-scene/README.md`. What is still open is the scan's scope: it covers `scene.tsx` only, so a second renderer module added under `src/render-scene/` does not inherit it. A directory-coverage assertion in `scene-model.test.ts` now makes that fail loudly rather than pass silently — it names any module the scans do not cover — but the widening itself is still owed, and 2.5's camera is what owes it.
 
 ## Deferred from: code review of spec-2-2-the-navigation-state-machine (2026-09-26)
 
@@ -399,3 +402,102 @@ module, not inferred.
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
   summary: The writer-separation audit cannot see a cross-writer write whose value equals what is already there.
   evidence: The probe at `state.test.ts:301` diffs fields by `!==`, so an event that also wrote another writer's field with an identical value reports only its own change as having happened. `populate()`'s docstring claims the probe distinguishes "did not write" from "wrote the value already there" — true for the fields a row declares, not for a stray identical write onto another writer's field. Closing it needs per-key write observation (a `subscribe` recording which keys each update object carried) rather than a before/after value diff. A narrow residual on a ratchet this iteration genuinely strengthened, recorded so the next writer-separation change knows the shape of what is left.
+
+## Deferred from: spec-2-3-bodies-at-rest-in-the-3d-scene (2026-09-27)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: The artifact carries **1 Client and 1 Project** against an acceptance criterion naming ~5–6 Stars and ~10 Planets, so the epic's pacing judgement cannot be made honestly on the real scene.
+  evidence: `generated/layout.generated.json` emits one Client (`client:sncf`) with one Project, because `src/data/career.json` holds exactly that. The scene reads and never derives (AD-3), so no code in `src/render-scene/` can close the gap — it is a data question. `buildScene` is proven correct at *any* cardinality instead: `scene-model.test.ts` runs a 5-Client / 10-Project in-memory fixture with an uneven 3/1/2/1/3 distribution (so `clients.length * k` cannot land on fifteen by accident) and asserts exactly 15 Bodies, 5 Stars, 10 Planets. What this story cannot deliver is the *pacing judgement* the epic gates on — whether ~15–16 Bodies at their solved positions read as a career rather than as scatter. That needs real Bodies on screen and should be re-asked once authored career content lands, which is a second, independently shippable deliverable needing facts the repo does not hold.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: The no-connector, no-hook and no-store-write rules for the scene are source scans over `scene.tsx` by name, not over `src/render-scene/` as a directory.
+  evidence: `scene-model.test.ts` resolves `SCENE_TSX` to one path. **Narrowed, not closed:** a directory-coverage test in that file now reads `src/render-scene/` with `readdirSync` and fails naming any module the scans do not know about, the same shape as `checkRuleCoverage` in `boundaries.ts` one level down — so 2.5's camera cannot land unscanned and silently, it lands with a red suite telling its author to widen the scans. What is still deferred is the widening itself: the connector, ARIA, hook and store-write bans still target one filename, so the second module's author must extend them by hand rather than inherit them. Doing that properly means walking the directory the way `state.test.ts`'s `setState` audit walks the tree, and the walker to reuse already exists three times over (`shippedFilesUnder` in `maintenance.test.ts:447` and `state.test.ts:545`, `sourceFilesUnder` in `boundaries.ts`); a fourth copy is worth avoiding, so it is best done together with whatever consolidates those.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: `src/shell/scene-host.tsx` restates the artifact's shape inline rather than importing the scene's `SceneArtifact` type, so the shape now exists in a third place.
+  evidence: An `import type` counts as an import to the boundary parser and `src/shell/README.md:5` permits `src/render-scene/` only dynamically, so the type-only edge fails the gate — correctly, since it declares the shell knows the renderer's module graph. The restatement is structurally checked against the scene's own type where `lazy` types the element's props, so the two cannot silently disagree; what is duplicated is the *text*, which now reads once in `artifact-schema.ts`, once in `scene-model.ts` and once here. The same trade `index-model.ts` already accepted, one copy larger.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: The default camera frames the solved extent down to a stated narrowest aspect ratio (`NARROWEST_ASPECT = 0.45`), and a viewport narrower than that still loses the outermost Bodies.
+  evidence: Three derives the horizontal field of view from the vertical one times the viewport aspect, so a portrait viewport narrows the `x` axis — which is the axis the Rail runs along. A framing fitted to the vertical extent alone was shipped and then caught in a real browser: at 390 x 844 the committed Planet at `x: 10` sat off-frame while the whole suite was green, because a test can only assert a fit at some assumed aspect ratio and the assumed one was square. `frameBodies` now takes the larger of the vertical and horizontal fits, with the horizontal computed at `NARROWEST_ASPECT`, and `scene-model.test.ts` asserts containment at that aspect rather than at 1:1. No finite distance frames every aspect ratio, so a bound exists whether or not one is named; what is deferred is that the renderer does not *read* the live aspect. The honest fix once the camera lands in 2.5 is to reframe on resize from the actual viewport rather than from a constant — at which point the bound disappears instead of being widened.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: The Body list's ordering is asserted but carries no meaning yet, and a Star's placeholder size is a number this repo picked rather than one the solver resolved.
+  evidence: `buildScene` emits Bodies in `clients[]` order with each Star before its own Planets, and tests pin that against a reversed fixture — but nothing downstream reads draw order, so the guarantee is currently unfalsifiable by observation. Separately, a Client carries no `mass` in the artifact (mass is solved per Project), so `scene.tsx` draws a Star at a fixed `STAR_RADIUS` of 1. Summing its Planets' masses would be a fourth mapping rule in the one directory forbidden to hold any; if a Star's size should mean something, that rule belongs in `src/derive/` and arrives through the artifact. Flagged so Epic 3 does not quietly resolve it in the renderer.
+
+## Deferred from: code review of spec-2-3-bodies-at-rest-in-the-3d-scene (2026-09-27)
+
+Review iteration 1, three layers (blind hunter, edge-case hunter, verification gap),
+all three completed. Six findings routed to `bad_spec` and fixed by spec amendment
+plus re-derivation; the patch-level items were folded into that re-derivation. The
+entries below are real but not caused by this story.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: The `colophon` row carries no `neverPackages`, so it is now the only dynamically-reachable directory that may import Three directly.
+  evidence: Story 2.3 added `neverPackages: ['three','@react-three/fiber','@react-three/drei']` to `ROOT_RULE` and the `shell` row, and `render-fallback` already banned `three`. `colophon` appears in both `dynamicOnly` lists but its own row (`src/derive/boundaries.ts`) still carries only `never: ['data']` and `dynamicOnly: ['derive']`. The row predates this story, but the inconsistency is new: every sibling it is listed beside now carries the ban.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: `d3-force-3d` is banned in `src/render-scene/` but not on the entry path, though the AD-7 hoist argument is identical.
+  evidence: This story's own reasoning for banning Three by package name on `ROOT_RULE` and the `shell` row — that a `dynamicOnly` row stops a reach into a directory and stops nothing about a bare package specifier — applies unchanged to the solver's dependency, which the same diff banned one row below. An `import { forceSimulation } from 'd3-force-3d'` in `App.tsx` passes the gate today.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: The scene is mounted with no capability gate in front of it, and nothing records that `src/render-fallback/` is unreachable.
+  evidence: `src/shell/scene-host.tsx` renders the scene unconditionally. `src/render-fallback/README.md` describes a no-WebGL surface with absolute content parity, and `scene-host.tsx`'s own header names capability detection as a shell responsibility, but no code routes to it. Story 4.1 owns capability detection in the thin entry; until it lands, a visitor without WebGL reaches a surface that cannot initialise.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: A Project's `clientId` is never cross-checked against the Client it is nested under, though a code comment asserts the gate checks it.
+  evidence: `buildScene` carries `project.clientId` verbatim with a comment reading "the field is what the gate checks and the traversal is not". No such check exists in `src/derive/` — grep finds no assertion that `project.clientId === client.id`. A Planet can therefore claim to orbit a Star it is not nested under: exactly the class of silent wrongness the duplicate-ID and finite-coordinate guards exist to refuse. Either the check lands in the derive layer's gate or the comment is corrected.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: Nothing asserts over built output that Three is absent from the entry chunk; the AD-7 guarantee rests on three source-level proxies.
+  evidence: The boundary rows and the `lazy()` source scan prove no forbidden *edge* exists. None of them observes the *chunk*. Verified manually at review time — `dist/assets/index-*.js` carries zero occurrences of `WebGLRenderer`, `BufferGeometry`, `PerspectiveCamera`, `THREE` and `Mesh` while the scene chunk carries all five — but a bundler config change (`build.rollupOptions.output.inlineDynamicImports` is one line) would collapse the split with every source-level check still green.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: The renderer source scans resolve one hard-coded filename, so a second module under `src/render-scene/` is unscanned the day it lands.
+  evidence: Every "the renderer holds no logic" assertion targets `scene.tsx` by path. Story 2.5 adds the camera as a second module in that directory, which would inherit none of the connector, ARIA, store-write or hook bans. The cheap mitigation is a `readdirSync` assertion that the directory contains exactly the files the scans know about — the same shape as `checkRuleCoverage` in `boundaries.ts`, one level down — so an unscanned module fails immediately rather than silently.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: The `zustand/react` source scan, which substitutes for a boundary row that cannot be written, misses the subpath and bare-package forms.
+  evidence: The scan matches `from 'zustand/react'` and the bare word `useStore`. It does not catch `import { useShallow } from 'zustand/react/shallow'`, nor `import { useStore } from 'zustand'` via the root re-export under an alias, nor `useSyncExternalStore` used directly. `src/render-scene/README.md` presents the scan as the full substitute for the unwritable row, which overstates what it covers. No code imports these today and the camera it guards against is deferred to 2.5/2.6.
+
+## Deferred from: code review of spec-2-3-bodies-at-rest-in-the-3d-scene, round 2 (2026-09-27)
+
+Review iteration 2, three layers, all completed. One finding routed `bad_spec` (the
+camera aimed at the world origin) and fixed by spec amendment plus re-derivation;
+seven patch-level items were folded into that re-derivation. The entries below are
+real but not caused by this story.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: `zod` is unbanned on the entry path, though the AD-7 hoist argument this story makes for Three applies to it identically.
+  evidence: Probed directly — appending `import { z } from 'zod';` to `src/App.tsx` passes `npm run gate` clean. `zod` 4.5.4 is a runtime dependency used by `artifact-schema.ts` under `src/derive/`; the `never: ['derive']` row stops the module edge while nothing stops the bare package specifier. Same one-line fix as the Three ban this story added, one package short. Neither round-1 layer found this.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: The scene error boundary never resets and logs nothing, so a transient chunk-fetch failure blanks the scene for the whole session with no diagnosable cause.
+  evidence: `SceneBoundary` implements `getDerivedStateFromError` only — no `componentDidCatch`, so in a production build the distinction between "malformed artifact threw in `buildScene`" and "chunk 404'd after a deploy" is swallowed, and the two have opposite operator responses. `failed: true` is never cleared and no retry is exposed. This may be the intended posture — the index alone is a legitimate terminal state — but neither the code nor the README says "no retry, deliberately", and story 4.1's capability gate answers *no WebGL*, not a stale chunk hash. Decide and state it, or add a retry keyed on remount.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: The six renderer source scans each resolve one hard-coded filename, so widening them means editing six assertions by hand.
+  evidence: The directory-coverage test added this story fires when a new module lands (verified by probe with a temporary subdirectory module), so story 2.5's camera arrives with a red suite naming itself rather than silently unscanned — the risk is narrowed, not closed. Parameterising the scans over a `sourceFilesUnder(SCENE_DIR)` walker would close it and make the coverage test unnecessary; the repo already holds three such walkers (`shippedFilesUnder` in `maintenance.test.ts` and `state.test.ts`, `sourceFilesUnder` in `boundaries.ts`), and a fourth copy is the cost the earlier deferral predicted.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: ~~`codeOf` in the scene tests strips comments but not string literals~~ — **closed by the re-derivation**, with one residual stated below.
+  evidence: The stripper is now two, each named for what it keeps. `codeOf` blanks comments *and* string literals, matching `stripCommentsAndStrings` in `boundaries.ts` and for the same reason — a forbidden token inside a string is not a use of it. `quotedCodeOf` blanks comments only, and is used by the scans whose subject *is* a string: an import specifier, an `aria-hidden="true"` value, a `kind === 'star'` comparison. Splitting them was not optional once both existed in one file: blanking strings erased the very evidence half the scans assert, which turned four tests red the first time they ran. The residual that stands is the JSX-comment shape — a `{/* … */}` comment still reduces to a bare `{}`, so a future scan reasoning about brace placement would read a mutated tree. No scan does today, and the module says so in the stripper's docstring rather than leaving the next author to find out.
+
+## Deferred from: spec-2-3-bodies-at-rest-in-the-3d-scene, re-derivation after review iteration 2 (2026-09-27)
+
+The iteration-2 `bad_spec` finding (the camera aimed at the world origin) and all seven
+patch-level items were folded into the re-derivation and are closed; each is verified by
+mutation below the entry that names it. What follows is what the re-derivation itself
+leaves open.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: The camera's orientation is pinned by *standing the camera on the centre's own `x`/`y` and passing `rotation: [0,0,0]`*, so the framing's correctness now rests on a relation between two returned values rather than on one.
+  evidence: The spec offered three ways to pin the aim — supply `rotation`, apply `lookAt` on the camera object, or centre the framing so origin-aiming is correct. The third was taken in the form of the first: `frameBodies` returns an explicit `rotation` of `[0,0,0]` (which R3F therefore does not overwrite with `lookAt(0,0,0)`) *and* a position sharing the Bodies' centre in `x` and `y`, so looking down `-z` is looking at the centre. There is no `target` left unconsumed, which was the iteration-2 defect. The residual is that moving the camera off that centre line — a plausible edit once 2.5 wants an angled default — makes the explicit rotation as wrong as the inherited one was, and only the frustum-containment tests would catch it. A test pins the relation directly (`the camera stands at the Bodies' centre in x and y`), so the trap is named rather than latent; what would close it is a framing that derives `rotation` from the position and the centre rather than asserting they agree. That belongs with 2.5, which is the story that first wants an aim other than straight on.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: `BODY_MARGIN` and the renderer's radii are coupled by a *source scan that parses numeric literals*, not by a shared constant.
+  evidence: The iteration-2 patch item asked to "couple or assert"; asserting is what shipped, because coupling them properly means the model importing from the renderer or vice versa, and the model imports nothing at all — which is what makes AD-3 structural here. So `scene-model.test.ts` reads `STAR_RADIUS` and `PLANET_RADIUS` out of `scene.tsx` with a regex over `= <number>` and asserts each is `<= BODY_MARGIN`. It bites (verified: raising `STAR_RADIUS` above 3 turns it red), and it fails loudly if either constant stops being a plain literal — the `assert.equal(radii.length, 2)` guard is there for exactly that. What it cannot see is a radius computed rather than declared, which Epic 3 may well want once a Star's size means something. At that point the honest move is for the radius to arrive through the artifact from `src/derive/`, which is where the deferral above on Star sizing already points.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
+  summary: The canvas is sized with a hard-coded `70vh`, which is a layout decision made in the renderer rather than by a design system that does not exist yet.
+  evidence: The spec licensed sizing the surface explicitly and distinguished it from the visual identity Epic 3 defers, so this is in scope — but the *value* is arbitrary. `height: 70vh` with `width: 100%` was chosen so the index sits above a surface with real area at both desktop and phone viewports (verified in a browser at 1426x632 and at 390x844). It is inline because the repo holds no CSS at all and introducing a stylesheet would be the styling layer Epic 3 owns. When Epic 3 lands tokens and layout, this constant should move there rather than being tuned in place; a scan pins that the canvas has *a* height, not which one, so the move will not fight a test.
