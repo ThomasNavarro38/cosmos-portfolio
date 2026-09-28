@@ -18,20 +18,24 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { Frustum, Matrix4, PerspectiveCamera, Vector3 } from 'three';
 import { railStopCount as inputStopCount } from '../shell/rail-input.ts';
 import {
+  DWELL_SLOWDOWN,
   RAIL_MAX_FRAME_SECONDS,
+  RAIL_OPENING_SLOWDOWN,
   RAIL_SPRING_SECONDS,
-  RAIL_STOP_SLOWDOWN,
   SHOT_REFERENCE_ASPECT,
   aspectScale,
   buildRail,
+  containDistance,
   dampProgress,
   railFarPlane,
   railFrame,
   railPose,
   railStopCount,
   stepRailMotion,
+  stopDistance,
   warpProgress,
   type Rail,
   type RailArtifact,
@@ -40,7 +44,10 @@ import {
 } from './rail-model.ts';
 import {
   BODY_MARGIN,
+  DEFAULT_FOV,
+  DEFAULT_NEAR,
   NARROWEST_ASPECT,
+  STOP_MARGIN,
   buildScene,
   frameBodies,
   type Body,
@@ -50,6 +57,7 @@ import {
 } from './scene-model.ts';
 
 const MODEL_TS = fileURLToPath(new URL('./rail-model.ts', import.meta.url));
+const DWELL_TS = fileURLToPath(new URL('../derive/dwell.ts', import.meta.url));
 const ARTIFACT_JSON = fileURLToPath(new URL('../../generated/layout.generated.json', import.meta.url));
 
 // --- Fixtures ---------------------------------------------------------------
@@ -96,7 +104,20 @@ function fiveStops(): SceneArtifact {
     // Oldest first, as the artifact emits it.
     rail: ['client:c', 'client:a', 'client:e', 'client:b', 'client:d'],
     shots: clients.map((entry) => ({ subject: entry.id, angle: SHOT_ANGLE, distance: SHOT_DISTANCE })),
+    // Mixed tempos, so every trajectory claim below runs under per-stop slowdowns.
+    dwell: [
+      { subject: 'client:a', tempo: 'dwell-brief' },
+      { subject: 'client:b', tempo: 'dwell-held' },
+      { subject: 'client:c', tempo: 'dwell-steady' },
+      { subject: 'client:d', tempo: 'dwell-held' },
+      { subject: 'client:e', tempo: 'dwell-brief' },
+    ],
   };
+}
+
+/** The fixture with one Client's tempo replaced. */
+function withTempo(artifact: SceneArtifact, id: string, tempo: string): SceneArtifact {
+  return { ...artifact, dwell: artifact.dwell.map((entry) => (entry.subject === id ? { ...entry, tempo } : entry)) };
 }
 
 function railOf(artifact: SceneArtifact): { rail: Rail; bodies: readonly Body[] } {
@@ -172,17 +193,25 @@ test('committed: one Client yields the opening frame and the SNCF stop, progress
   assert.ok(star !== undefined);
   const stop = railPose(rail, 1, SHOT_REFERENCE_ASPECT);
   assertNear(stop.target, star.position, 'the stop looks at the SNCF Star, wherever it was solved');
-  assert.ok(Math.abs(distance(stop.position, stop.target) - shot.distance) < 1e-9, 'from the Shot’s distance');
+  const reach = distance(stop.position, stop.target);
+  assert.ok(reach >= shot.distance - 1e-9, 'never closer than the Shot’s distance');
   assert.ok(
-    Math.abs(Math.asin((stop.position.y - stop.target.y) / shot.distance) - shot.angle) < 1e-9,
+    Math.abs(Math.asin((stop.position.y - stop.target.y) / reach) - shot.angle) < 1e-9,
     'at the Shot’s elevation',
   );
+  const sncf = rail.keyframes[1];
+  assert.ok(sncf !== undefined);
+  assert.equal(sncf.slowdown, DWELL_SLOWDOWN['dwell-steady'], 'paced by its artifact tempo, dwell-steady');
+  assert.equal(rail.keyframes[0]?.slowdown, RAIL_OPENING_SLOWDOWN, 'the opening frame has its own slowdown');
+  for (const aspect of [SHOT_REFERENCE_ASPECT, NARROWEST_ASPECT]) {
+    assert.deepEqual(outsideAtStop(rail, bodies, 1, aspect), [], `the Star and the Planet are framed at ${aspect}`);
+  }
 
   assertNear(railPose(rail, 7, SHOT_REFERENCE_ASPECT).position, stop.position, 'progress past the end clamps to 1');
 });
 
 test('empty rail: the opening keyframe only, and progress clamps to 0 without throwing', () => {
-  const rail = buildRail({ rail: [], shots: [] }, []);
+  const rail = buildRail({ rail: [], shots: [], dwell: [] }, []);
   assert.deepEqual(subjectsOf(rail), [null]);
   assert.equal(railStopCount(rail), 0);
   const opening = railPose(rail, 0, SHOT_REFERENCE_ASPECT);
@@ -200,7 +229,7 @@ test('a rail Client with no Shot, or no Star, throws naming the ID', () => {
   const artifact = fiveStops();
   const { bodies } = buildScene(artifact);
 
-  const noShot: RailArtifact = { rail: artifact.rail, shots: artifact.shots.filter((s) => s.subject !== 'client:e') };
+  const noShot: RailArtifact = { ...artifact, shots: artifact.shots.filter((s) => s.subject !== 'client:e') };
   assert.throws(() => buildRail(noShot, bodies), /client:e/, 'a missing Shot names its Client');
 
   const noStar: RailArtifact = { ...artifact, rail: [...artifact.rail, 'client:ghost'] };
@@ -220,6 +249,7 @@ test('a rail Client with no Shot, or no Star, throws naming the ID', () => {
     { angle: SHOT_ANGLE, distance: Number.POSITIVE_INFINITY },
   ]) {
     const broken: RailArtifact = {
+      ...artifact,
       rail: ['client:a'],
       shots: [{ subject: 'client:a', ...bad }],
     };
@@ -227,21 +257,21 @@ test('a rail Client with no Shot, or no Star, throws naming the ID', () => {
   }
 
   // Just inside the quarter-turn is still a Shot: the bound is strict, not generous.
-  const steep: RailArtifact = { rail: ['client:a'], shots: [{ subject: 'client:a', angle: Math.PI / 2 - 1e-3, distance: 5 }] };
+  const steep: RailArtifact = { ...artifact, rail: ['client:a'], shots: [{ subject: 'client:a', angle: Math.PI / 2 - 1e-3, distance: 5 }] };
   const steepStop = buildRail(steep, bodies).keyframes[1];
-  assert.ok(steepStop !== undefined && steepStop.position.z > steepStop.target.z, 'and it stands on the +z side');
+  assert.ok(steepStop !== undefined && steepStop.direction.z > 0, 'and it stands on the +z side');
 });
 
 test('a rail Client framed by more than one Shot throws naming the ID, rather than taking the first', () => {
   const artifact = fiveStops();
   const { bodies } = buildScene(artifact);
   const doubled: RailArtifact = {
-    rail: artifact.rail,
+    ...artifact,
     shots: [...artifact.shots, { subject: 'client:b', angle: 0.2, distance: 40 }],
   };
   assert.throws(() => buildRail(doubled, bodies), /client:b/);
   // A Shot for a Client the Rail never stops at is not the Rail's concern.
-  const stray: RailArtifact = { rail: ['client:a'], shots: [...artifact.shots, { subject: 'client:b', angle: 0.2, distance: 40 }] };
+  const stray: RailArtifact = { ...artifact, rail: ['client:a'], shots: [...artifact.shots, { subject: 'client:b', angle: 0.2, distance: 40 }] };
   assert.doesNotThrow(() => buildRail(stray, bodies));
 });
 
@@ -269,8 +299,18 @@ test('a Client named twice in rail is one stop, at the position the index walks 
 });
 
 test('re-solve: shifting every Body by v shifts every keyframe and every pose by v', () => {
+  for (const [v, tolerance] of [
+    [at(13.5, -7.25, 22), 1e-9],
+    // Far from the origin, where a direction built by subtracting the subject
+    // from an elevated point would carry the coordinates' rounding.
+    [at(-4.1e5, 2.3e5, 7.7e5), 1e-6],
+  ] as const) {
+    assertShiftInvariant(v, tolerance);
+  }
+});
+
+function assertShiftInvariant(v: ScenePosition, tolerance: number): void {
   const artifact = fiveStops();
-  const v = at(13.5, -7.25, 22);
   const shift = (p: ScenePosition): ScenePosition => ({ x: p.x + v.x, y: p.y + v.y, z: p.z + v.z });
   const moved: SceneArtifact = {
     ...artifact,
@@ -287,47 +327,227 @@ test('re-solve: shifting every Body by v shifts every keyframe and every pose by
   before.keyframes.forEach((keyframe, index) => {
     const other = after.keyframes[index];
     assert.ok(other !== undefined);
-    assertNear(other.position, shift(keyframe.position), `keyframe ${index} position`, 1e-9);
-    assertNear(other.target, shift(keyframe.target), `keyframe ${index} target`, 1e-9);
+    assertNear(other.target, shift(keyframe.target), `keyframe ${index} target`, tolerance);
+    if (keyframe.framing === null) {
+      // The opening frame's direction is `frameBodies`' own offset, normalised.
+      assertNear(other.direction, keyframe.direction, 'the opening direction', 1e-12);
+    } else {
+      // A stop's is analytic from its Shot, so it is bit-for-bit unchanged.
+      assert.deepEqual(other.direction, keyframe.direction, `keyframe ${index} direction is exactly unchanged`);
+    }
+    assert.ok(Math.abs(stopDistance(other, 1) - stopDistance(keyframe, 1)) <= tolerance, `keyframe ${index} reach`);
   });
   for (const p of [0, 0.3, 1, 2.5, 4.9, 5]) {
     for (const aspect of [NARROWEST_ASPECT, 1, SHOT_REFERENCE_ASPECT]) {
-      assertNear(railPose(after, p, aspect).position, shift(railPose(before, p, aspect).position), `pose at ${p}`, 1e-9);
+      assertNear(
+        railPose(after, p, aspect).position,
+        shift(railPose(before, p, aspect).position),
+        `pose at ${p}, shift ${JSON.stringify(v)}`,
+        tolerance,
+      );
     }
   }
-});
+}
 
 // --- The trajectory ---------------------------------------------------------
 
 test('the curve passes through every keyframe at its integer progress', () => {
   const { rail } = railOf(fiveStops());
-  rail.keyframes.forEach((keyframe, index) => {
-    const pose = railPose(rail, index, keyframe.referenceAspect);
-    assertNear(pose.position, keyframe.position, `stop ${index} position`, 1e-9);
-    assertNear(pose.target, keyframe.target, `stop ${index} target`, 1e-9);
-  });
+  for (const aspect of [NARROWEST_ASPECT, 1, SHOT_REFERENCE_ASPECT]) {
+    rail.keyframes.forEach((keyframe, index) => {
+      const pose = railPose(rail, index, aspect);
+      const d = stopDistance(keyframe, aspect);
+      const expected = {
+        x: keyframe.target.x + keyframe.direction.x * d,
+        y: keyframe.target.y + keyframe.direction.y * d,
+        z: keyframe.target.z + keyframe.direction.z * d,
+      };
+      assertNear(pose.position, expected, `stop ${index} position at ${aspect}`, 1e-9);
+      assertNear(pose.target, keyframe.target, `stop ${index} target`, 1e-9);
+    });
+  }
 });
 
-test('the warp fixes every stop, is monotonic, and its rate is lowest — but positive — at a stop', () => {
-  assert.ok(RAIL_STOP_SLOWDOWN > 0 && RAIL_STOP_SLOWDOWN < 1, 'a slowdown, and never a halt');
-  const rate = (p: number): number => (warpProgress(p + H) - warpProgress(p - H)) / (2 * H);
-  for (let k = 0; k <= 5; k += 1) {
-    assert.ok(Math.abs(warpProgress(k) - k) < 1e-12, `stop ${k} is keyframe ${k}`);
-    assert.ok(rate(k) > 0, `rate at stop ${k} is positive`);
-    assert.ok(rate(k) < rate(k + 0.5), `rate at stop ${k} is below the rate mid-segment`);
-    assert.ok(Math.abs(rate(k) - (1 - RAIL_STOP_SLOWDOWN)) < 1e-6, 'and it is 1 − k');
+/**
+ * The `DWELL_TEMPOS` tuple, read out of `src/derive/dwell.ts` as text.
+ *
+ * Text, not an import: `src/render-scene/` may not import `src/derive/` — test
+ * files included — so the derive layer's order is parsed off its source, the
+ * same idiom `scene-model.test.ts` uses on `scene.tsx`. Returns `null` when the
+ * declaration is not the plain `as const` string tuple this expects, so a
+ * reshaped declaration fails loudly rather than parsing as empty.
+ */
+function dwellTemposIn(source: string): string[] | null {
+  const match = /export\s+const\s+DWELL_TEMPOS\s*=\s*\[([^\]]*)\]\s*as\s+const/.exec(source);
+  if (match === null) return null;
+  const body = match[1] ?? '';
+  const names = [...body.matchAll(/'([^']*)'|"([^"]*)"/g)].map((entry) => entry[1] ?? entry[2] ?? '');
+  const rest = body.replace(/'[^']*'|"[^"]*"/g, '').replace(/[\s,]/g, '');
+  return names.length === 0 || rest !== '' ? null : names;
+}
+
+test('the tempo parser reads the tuple, and a renamed or extra tempo changes what it reads', () => {
+  const shipped = "export const DWELL_TEMPOS = ['dwell-brief', 'dwell-steady', 'dwell-held'] as const;";
+  assert.deepEqual(dwellTemposIn(shipped), ['dwell-brief', 'dwell-steady', 'dwell-held']);
+  for (const bad of [
+    "export const DWELL_TEMPOS = ['dwell-brief', 'dwell-steady', 'dwell-long'] as const;",
+    "export const DWELL_TEMPOS = ['dwell-brief', 'dwell-steady', 'dwell-held', 'dwell-epic'] as const;",
+    "export const DWELL_TEMPOS = ['dwell-steady', 'dwell-brief', 'dwell-held'] as const;",
+  ]) {
+    assert.notDeepEqual(dwellTemposIn(bad), Object.keys(DWELL_SLOWDOWN), `${bad} must not match the table`);
   }
-  let previous = warpProgress(0);
-  for (let p = 0.01; p <= 5; p += 0.01) {
-    const next = warpProgress(p);
-    assert.ok(next > previous, `monotonic at ${p}`);
-    previous = next;
+  assert.equal(dwellTemposIn("export const DWELL_TEMPOS = [...BASE, 'dwell-held'] as const;"), null, 'a spread is not parsed');
+  assert.equal(dwellTemposIn('export const TEMPOS = [];'), null, 'a missing declaration is not parsed');
+});
+
+test('the Dwell table: the derive layer’s tempos in its order, brief < steady < held, well below a halt', () => {
+  const order = dwellTemposIn(readFileSync(DWELL_TS, 'utf8'));
+  assert.ok(order !== null, 'src/derive/dwell.ts declares DWELL_TEMPOS as a plain string tuple');
+  assert.deepEqual(Object.keys(DWELL_SLOWDOWN), order, 'every derived tempo, in DWELL_TEMPOS order, and no other');
+  const table: Readonly<Record<string, number>> = DWELL_SLOWDOWN;
+  const values = order.map((tempo) => table[tempo] ?? Number.NaN);
+  for (let i = 1; i < values.length; i += 1) {
+    assert.ok((values[i] ?? 0) > (values[i - 1] ?? 1), `${order[i]} slows strictly more than ${order[i - 1]}`);
   }
-  // A slowdown that would halt or reverse is not trusted.
-  for (const bad of [1, 1.5, -0.2, Number.NaN]) {
-    assert.equal(warpProgress(0.3, bad), 0.3, `slowdown ${bad} reads as none`);
+  for (const k of [...values, RAIL_OPENING_SLOWDOWN]) {
+    assert.ok(Number.isFinite(k) && k >= 0 && k < 1 && k <= 0.85, `${k} is a slowdown, never a halt`);
   }
 });
+
+/** The warp's rate, by central difference. */
+function warpRate(slowdowns: readonly number[], p: number, side: 'left' | 'right' | 'both' = 'both'): number {
+  const a = side === 'right' ? p : p - H;
+  const b = side === 'left' ? p : p + H;
+  return (warpProgress(b, slowdowns) - warpProgress(a, slowdowns)) / (b - a);
+}
+
+test('the warp under mixed slowdowns fixes every stop, is C1 and monotone, and its rate at stop i is 1 − k_i', () => {
+  const mixed = [RAIL_OPENING_SLOWDOWN, 0.75, 0.35, 0.55, 0.75, 0.35, 0.35];
+  const last = mixed.length - 1;
+  for (let i = 0; i <= last; i += 1) {
+    assert.ok(Math.abs(warpProgress(i, mixed) - i) < 1e-12, `s(${i}) = ${i}`);
+    const k = mixed[i] ?? 0;
+    if (i > 0) assert.ok(Math.abs(warpRate(mixed, i, 'left') - (1 - k)) < 1e-4, `left rate at ${i} is 1 − k`);
+    if (i < last) assert.ok(Math.abs(warpRate(mixed, i, 'right') - (1 - k)) < 1e-4, `right rate at ${i} is 1 − k`);
+  }
+  let previous = warpProgress(0, mixed);
+  for (let p = 0.001; p <= last; p += 0.001) {
+    const next = warpProgress(p, mixed);
+    assert.ok(next > previous, `monotonic at ${p}`);
+    // C1 everywhere: the rate is continuous, and never below 1 − max k.
+    assert.ok(warpRate(mixed, p) >= 1 - Math.max(...mixed) - 1e-6, `rate at ${p} stays positive`);
+    previous = next;
+  }
+  // The closed form, checked against a numerical integral of the rate it claims.
+  const rateAt = (p: number): number => {
+    const segment = Math.min(Math.floor(p), last - 1);
+    const t = p - segment;
+    const ka = mixed[segment] ?? 0;
+    const kb = mixed[segment + 1] ?? 0;
+    return 1 - (ka + (kb - ka) * t) * Math.cos(2 * Math.PI * t);
+  };
+  // Every segment, at several points in each, integrated cumulatively from 0 —
+  // including segments where Δk < 0 (0.75 → 0.35) and Δk = 0 (0.35 → 0.35).
+  const deltas = mixed.slice(1).map((k, i) => k - (mixed[i] ?? 0));
+  assert.ok(deltas.some((dk) => dk < 0) && deltas.some((dk) => dk > 0) && deltas.includes(0), 'every sign of Δk is covered');
+  const step = 1e-4;
+  let integral = 0;
+  let p = 0;
+  for (let segment = 0; segment < last; segment += 1) {
+    for (const t of [0.1, 0.25, 0.5, 0.75, 0.9, 1]) {
+      const goal = segment + t;
+      while (p < goal - 1e-12) {
+        const next = Math.min(p + step, goal);
+        integral += rateAt((p + next) / 2) * (next - p);
+        p = next;
+      }
+      const s = warpProgress(goal, mixed);
+      assert.ok(Math.abs(integral - s) < 1e-6, `at ${goal}: ∫rate = ${integral}, s = ${s}`);
+    }
+  }
+
+  // Progress outside [0, N] clamps; a slowdown that would halt or reverse is not trusted.
+  assert.equal(warpProgress(-2, mixed), 0);
+  assert.equal(warpProgress(99, mixed), last);
+  assert.equal(warpProgress(Number.NaN, mixed), 0);
+  for (const bad of [1, 1.5, -0.2, Number.NaN]) {
+    assert.equal(warpProgress(0.3, [bad, bad]), 0.3, `slowdown ${bad} reads as none`);
+  }
+});
+
+test('a held stop is crossed more slowly than a brief one: lower rate, strictly wider hold', () => {
+  // The AC: a Deep-holding stop against a Shallow-only one, crossed by equal
+  // wheel travel. Same geometry, only the tempo differs, so the difference is
+  // the Dwell's alone.
+  const base = fiveStops();
+  const index = 2; // client:b, present first: [opening, d, b, e, a, c]
+  const held = railOf(withTempo(base, 'client:b', 'dwell-held')).rail;
+  const brief = railOf(withTempo(base, 'client:b', 'dwell-brief')).rail;
+  assert.equal(held.keyframes[index]?.subject, 'client:b');
+
+  for (const aspect of [NARROWEST_ASPECT, SHOT_REFERENCE_ASPECT]) {
+    const heldRate = speed(velocity(held, index, 'right', aspect));
+    const briefRate = speed(velocity(brief, index, 'right', aspect));
+    assert.ok(heldRate > 0, 'the held stop still moves');
+    assert.ok(heldRate < briefRate, `rate at held (${heldRate}) < rate at brief (${briefRate})`);
+
+    const heldHold = holdWidth(held, index, aspect);
+    const briefHold = holdWidth(brief, index, aspect);
+    // Neither at zero nor at the scan's cap, or the comparison would be vacuous.
+    for (const [name, hold] of [['held', heldHold], ['brief', briefHold]] as const) {
+      assert.ok(hold.width > 0 && !hold.capped, `${name} hold ${hold.width} is a real, uncapped measurement`);
+    }
+    assert.ok(
+      heldHold.width > briefHold.width * 1.2,
+      `held holds ${heldHold.width} of travel, brief ${briefHold.width}: measurably longer`,
+    );
+  }
+
+  // And within one Rail, the tempo sets the warp's rate at each stop.
+  const mixed = railOf(base).rail;
+  const slowdowns = mixed.keyframes.map((keyframe) => keyframe.slowdown);
+  const rateOf = (id: string): number => {
+    const i = mixed.keyframes.findIndex((keyframe) => keyframe.subject === id);
+    return warpRate(slowdowns, i, i === slowdowns.length - 1 ? 'left' : 'right');
+  };
+  assert.ok(rateOf('client:b') < rateOf('client:c'), 'held < steady');
+  assert.ok(rateOf('client:c') < rateOf('client:a'), 'steady < brief');
+});
+
+/** How far each side of a stop `holdWidth` scans, in stops: half a segment. */
+const HOLD_SCAN = 0.5;
+
+/**
+ * The progress interval around stop `index` over which the camera stays within
+ * `fraction` of the stop's own distance of where it rests: how much wheel travel
+ * the stop holds it for. Scaled by the stop's distance, so the measure means the
+ * same at any fixture scale. `capped` says a side ran to the scan's limit (or
+ * the Rail's end) without leaving the ball, which would make the width a floor
+ * rather than a measurement.
+ */
+function holdWidth(rail: Rail, index: number, aspect: number, fraction = 0.02): { width: number; capped: boolean } {
+  const keyframe = rail.keyframes[index];
+  assert.ok(keyframe !== undefined);
+  const epsilon = fraction * stopDistance(keyframe, aspect);
+  const rest = railPose(rail, index, aspect).position;
+  const step = 1e-4;
+  let width = 0;
+  let capped = false;
+  for (const direction of [-1, 1]) {
+    let left = false;
+    for (let d = step; d < HOLD_SCAN; d += step) {
+      const p = index + direction * d;
+      if (p < 0 || p > railStopCount(rail)) break;
+      if (distance(railPose(rail, p, aspect).position, rest) > epsilon) {
+        left = true;
+        break;
+      }
+      width += step;
+    }
+    if (!left) capped = true;
+  }
+  return { width, capped };
+}
 
 test('the path slows at every stop without halting: rate > 0 there and below the mid-segment rate', () => {
   for (const artifact of [fiveStops(), committed()]) {
@@ -377,24 +597,194 @@ test('the camera stays on the +z side of its aim along the whole path, so the ai
 
 // --- Aspect -----------------------------------------------------------------
 
-test('a stop backs off on a narrower viewport, by reference / aspect, and is left alone on a wider one', () => {
+/**
+ * The Bodies of stop `index`'s Client that are not wholly inside the frustum of
+ * a real `three` camera at rest there, each as a sphere of `STOP_MARGIN`.
+ *
+ * Independent of the model's closed form: the camera is a `PerspectiveCamera`
+ * at the pose, turned by `lookAt`, and a sphere is inside when its centre is at
+ * least its radius inside every one of the six planes.
+ */
+function outsideAtStop(rail: Rail, bodies: readonly Body[], index: number, aspect: number): string[] {
+  const subject = rail.keyframes[index]?.subject;
+  assert.ok(typeof subject === 'string', `keyframe ${index} is a stop`);
+  const pose = railPose(rail, index, aspect);
+  // The far plane `scene.tsx` actually passes, so the far plane is checked too.
+  const far = Math.max(frameBodies(bodies).far, railFarPlane(rail, bodies));
+  const camera = new PerspectiveCamera(DEFAULT_FOV, aspect, DEFAULT_NEAR, far);
+  camera.position.set(pose.position.x, pose.position.y, pose.position.z);
+  camera.lookAt(pose.target.x, pose.target.y, pose.target.z);
+  camera.updateMatrixWorld();
+  camera.updateProjectionMatrix();
+  const frustum = new Frustum().setFromProjectionMatrix(
+    new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
+  );
+  // The model's rule: the Star with the stop's ID, plus every Planet whose `clientId` is it.
+  const system = bodies.filter(
+    (body) => (body.kind === 'star' && body.id === subject) || (body.kind === 'planet' && body.clientId === subject),
+  );
+  assert.ok(system.length >= 2, `stop ${subject} frames its Star and at least one Planet`);
+  return system
+    .filter((body) => {
+      const centre = new Vector3(body.position.x, body.position.y, body.position.z);
+      return frustum.planes.some((plane) => plane.distanceToPoint(centre) < STOP_MARGIN - 1e-6);
+    })
+    .map((body) => `${body.id} at ${aspect}`);
+}
+
+/** Every aspect the AC names — any aspect ≥ 0.45 — densely to 3, then the wide tail. */
+const ASPECT_SWEEP = [
+  ...Array.from({ length: 51 }, (_, j) => NARROWEST_ASPECT + ((3 - NARROWEST_ASPECT) * j) / 50),
+  4,
+  10,
+  1e3,
+];
+
+test('at rest at any stop, at any aspect ≥ 0.45, every Body of that Client is inside the frustum', () => {
+  for (const artifact of [fiveStops(), committed()]) {
+    const { rail, bodies } = railOf(artifact);
+    for (let index = 1; index <= railStopCount(rail); index += 1) {
+      for (const aspect of ASPECT_SWEEP) {
+        assert.deepEqual(outsideAtStop(rail, bodies, index, aspect), []);
+      }
+    }
+  }
+});
+
+test('the frustum check bites: a stop at the Shot’s distance alone would crop the committed Planet', () => {
+  // The negative control. Rebuild the committed stop with its reach forced to
+  // the Shot's distance at a phone aspect — what 2.5 shipped before its
+  // `reference / aspect` scaling — and the Planet falls out.
+  const { rail, bodies } = railOf(committed());
+  const stop = rail.keyframes[1];
+  const shot = committed().shots[0];
+  assert.ok(stop !== undefined && stop.framing !== null && shot !== undefined);
+  const cropped: Rail = {
+    keyframes: [
+      ...rail.keyframes.slice(0, 1),
+      { ...stop, framing: { ...stop.framing, extents: [] } },
+    ],
+  };
+  assert.equal(stopDistance(cropped.keyframes[1] ?? stop, NARROWEST_ASPECT), shot.distance);
+  assert.notDeepEqual(outsideAtStop(cropped, bodies, 1, NARROWEST_ASPECT), [], 'the Planet is cropped');
+});
+
+test('stop distance is max(shot.distance, contain(aspect)): a tight Shot is widened, a far Shot is kept', () => {
+  const artifact = fiveStops();
+  const { bodies } = buildScene(artifact);
+  const reachAt = (shotDistance: number, aspect: number): { reach: number; contain: number } => {
+    const rail = buildRail(
+      { ...artifact, rail: ['client:a'], shots: [{ subject: 'client:a', angle: SHOT_ANGLE, distance: shotDistance }] },
+      bodies,
+    );
+    const stop = rail.keyframes[1];
+    assert.ok(stop !== undefined && stop.framing !== null);
+    const pose = railPose(rail, 1, aspect);
+    return { reach: distance(pose.position, pose.target), contain: containDistance(stop.framing, aspect) };
+  };
+  for (const aspect of [NARROWEST_ASPECT, 1, SHOT_REFERENCE_ASPECT, 3]) {
+    const tight = reachAt(1, aspect);
+    assert.ok(tight.contain > 1, 'the tight Shot is closer than containment allows');
+    assert.ok(Math.abs(tight.reach - tight.contain) < 1e-9, `tight Shot at ${aspect}: distance = contain`);
+
+    const far = reachAt(500, aspect);
+    assert.ok(far.contain < 500);
+    assert.ok(Math.abs(far.reach - 500) < 1e-9, `far Shot at ${aspect}: distance = shot.distance`);
+  }
+});
+
+test('containment is continuous and non-increasing in the aspect, floored, and the aim never moves', () => {
   const { rail } = railOf(fiveStops());
   const stop = rail.keyframes[1];
   assert.ok(stop !== undefined);
-  const at1 = (aspect: number) => railPose(rail, 1, aspect);
-  const reach = (aspect: number) => distance(at1(aspect).position, at1(aspect).target);
-
-  assert.ok(Math.abs(reach(SHOT_REFERENCE_ASPECT) - SHOT_DISTANCE) < 1e-9);
-  assert.ok(Math.abs(reach(3) - SHOT_DISTANCE) < 1e-9, 'wider than the reference: unchanged');
-  assert.ok(Math.abs(reach(0.5) - (SHOT_DISTANCE * SHOT_REFERENCE_ASPECT) / 0.5) < 1e-9, 'narrower: scaled');
-  assertNear(at1(0.5).target, stop.target, 'the aim never moves with the aspect');
-
-  // Continuous in the aspect, so an eased aspect is an eased framing.
-  for (let a = 0.4; a < 2.5; a += 0.01) {
+  const reach = (aspect: number) => stopDistance(stop, aspect);
+  for (let a = 0.3; a < 4; a += 0.01) {
     assert.ok(Math.abs(reach(a + 0.001) - reach(a)) < 0.2, `no jump in framing near aspect ${a.toFixed(2)}`);
+    assert.ok(reach(a + 0.001) <= reach(a) + 1e-9, `a wider viewport never backs off, near ${a.toFixed(2)}`);
   }
+  assertNear(railPose(rail, 1, 0.5).target, stop.target, 'the aim never moves with the aspect');
+  assert.ok(Number.isFinite(reach(Number.POSITIVE_INFINITY)) && reach(Number.POSITIVE_INFINITY) > 0, 'the widest aspect');
+  assert.equal(reach(Number.NaN), reach(NARROWEST_ASPECT), 'no aspect at all reads as the floor, the safest frame');
+  // The opening frame keeps `aspectScale`, so progress 0 is the camera prop.
   assert.equal(aspectScale(SHOT_REFERENCE_ASPECT, Number.NaN), 1, 'no aspect at all reads as the reference');
   assert.equal(aspectScale(SHOT_REFERENCE_ASPECT, Number.POSITIVE_INFINITY), 1, 'the widest aspect is the widest scale');
+});
+
+test('one Shot changed moves only that stop’s keyframe', () => {
+  const artifact = fiveStops();
+  const before = railOf(artifact).rail;
+  const changed: SceneArtifact = {
+    ...artifact,
+    shots: artifact.shots.map((shot) =>
+      shot.subject === 'client:b' ? { ...shot, angle: 0.9, distance: 120 } : shot,
+    ),
+  };
+  const after = railOf(changed).rail;
+  before.keyframes.forEach((keyframe, index) => {
+    const other = after.keyframes[index];
+    assert.ok(other !== undefined);
+    for (const aspect of [NARROWEST_ASPECT, SHOT_REFERENCE_ASPECT]) {
+      const moved = distance(railPose(after, index, aspect).position, railPose(before, index, aspect).position) > 1e-9;
+      assert.equal(moved, keyframe.subject === 'client:b', `keyframe ${index} (${String(keyframe.subject)}) at ${aspect}`);
+    }
+  });
+});
+
+test('a Project added at a wider orbit, with no Shot edit, is still framed at its stop', () => {
+  const artifact = fiveStops();
+  const wider: SceneArtifact = {
+    ...artifact,
+    clients: artifact.clients.map((entry) =>
+      entry.id === 'client:c'
+        ? {
+            ...entry,
+            projects: [
+              ...entry.projects,
+              {
+                id: 'project:client:c/2',
+                clientId: 'client:c',
+                isDeep: false,
+                mass: 1,
+                luminanceBand: 'stroke-far',
+                moteTier: 'mote-none',
+                position: { x: entry.position.x - 24, y: entry.position.y + 6, z: entry.position.z - 9 },
+              },
+            ],
+          }
+        : entry,
+    ),
+  };
+  const { rail, bodies } = railOf(wider);
+  const index = rail.keyframes.findIndex((keyframe) => keyframe.subject === 'client:c');
+  for (const aspect of ASPECT_SWEEP) {
+    assert.deepEqual(outsideAtStop(rail, bodies, index, aspect), []);
+  }
+  const shot = wider.shots.find((entry) => entry.subject === 'client:c');
+  assert.ok(shot !== undefined);
+  const stop = rail.keyframes[index];
+  assert.ok(stop !== undefined);
+  assert.ok(stopDistance(stop, SHOT_REFERENCE_ASPECT) > shot.distance, 'it backed off');
+});
+
+test('a stop with no Dwell, two Dwells, or an unknown tempo throws naming the ID', () => {
+  const artifact = fiveStops();
+  const { bodies } = buildScene(artifact);
+  const missing: RailArtifact = { ...artifact, dwell: artifact.dwell.filter((entry) => entry.subject !== 'client:e') };
+  assert.throws(() => buildRail(missing, bodies), /client:e.*Dwell/);
+  const doubled: RailArtifact = { ...artifact, dwell: [...artifact.dwell, { subject: 'client:d', tempo: 'dwell-held' }] };
+  assert.throws(() => buildRail(doubled, bodies), /client:d/);
+  for (const tempo of ['dwell-deep', '', 'DWELL-HELD', 'constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    assert.throws(() => buildRail(withTempo(artifact, 'client:a', tempo), bodies), /client:a/, `tempo ${JSON.stringify(tempo)}`);
+  }
+  // A Dwell for a Client the Rail never stops at is not the Rail's concern.
+  const stray: RailArtifact = { ...artifact, rail: ['client:a'] };
+  assert.doesNotThrow(() => buildRail(stray, bodies));
+  // Looked up by ID, not by position: reversing the list changes nothing.
+  const reversed: SceneArtifact = { ...artifact, dwell: [...artifact.dwell].reverse() };
+  assert.deepEqual(
+    railOf(reversed).rail.keyframes.map((keyframe) => keyframe.slowdown),
+    railOf(artifact).rail.keyframes.map((keyframe) => keyframe.slowdown),
+  );
 });
 
 test('the scale is continuous through zero: a spring that overshoots a sliver aspect does not cut', () => {
@@ -421,7 +811,12 @@ test('a collapsed canvas cannot fling the camera away: the scale is floored at N
     const pose = railPose(rail, 1, aspect);
     return distance(pose.position, pose.target);
   };
-  assert.ok(Math.abs(reach(1e-6) - SHOT_DISTANCE * ceiling) < 1e-9, 'a sliver of canvas stands no further than the floor');
+  for (const sliver of [1e-6, 0, -1, Number.NEGATIVE_INFINITY]) {
+    assert.ok(
+      Math.abs(reach(sliver) - reach(NARROWEST_ASPECT)) < 1e-9,
+      `a sliver of canvas (${sliver}) stands no further than the floor`,
+    );
+  }
 });
 
 test('the far plane keeps every Body in range from every pose the Rail can reach', () => {
@@ -456,7 +851,7 @@ test('the far plane keeps every Body in range from every pose the Rail can reach
     // depth precision is not spent on a margin nothing uses.
     assert.ok(far <= needed * 1.25, `${far} is within 25% of the ${needed} the Rail needs`);
   }
-  assert.equal(railFarPlane(buildRail({ rail: [], shots: [] }, []), []), BODY_MARGIN, 'an empty Rail still yields a finite plane');
+  assert.equal(railFarPlane(buildRail({ rail: [], shots: [], dwell: [] }, []), []), BODY_MARGIN, 'an empty Rail still yields a finite plane');
 });
 
 test('the opening frame at any real viewport is the camera prop, so the rig’s first frame is no cut', () => {

@@ -37,6 +37,7 @@ import {
   BODY_MARGIN,
   DEFAULT_FOV,
   NARROWEST_ASPECT,
+  STOP_MARGIN,
   buildScene,
   frameBodies,
   type Body,
@@ -659,7 +660,7 @@ test('an empty Body list and a degenerate fov both yield a usable camera rather 
   }
 });
 
-test('the margin the framing leaves is at least the largest radius the renderer draws', () => {
+test('the margins the framing and the Rail stops leave are at least the largest radius the renderer draws', () => {
   // `BODY_MARGIN` lives in this model and `STAR_RADIUS` in `scene.tsx`, two files the
   // runner cannot cross: the model is `.ts` and the renderer is `.tsx`, which
   // `node --test` cannot load in any position. So the renderer's constant is read off
@@ -675,6 +676,12 @@ test('the margin the framing leaves is at least the largest radius the renderer 
     assert.ok(
       radius <= BODY_MARGIN,
       `BODY_MARGIN (${BODY_MARGIN}) must cover the drawn radius ${radius}, or the outermost Body clips`,
+    );
+    // A Rail stop contains each Body of its system as a sphere of `STOP_MARGIN`
+    // (`rail-model.ts`), so that sphere must cover the drawn one too.
+    assert.ok(
+      radius <= STOP_MARGIN,
+      `STOP_MARGIN (${STOP_MARGIN}) must cover the drawn radius ${radius}, or a Body clips at its stop`,
     );
     // Particles are kept `BODY_MARGIN` from a Body's *centre*. This makes that a
     // clearance between *surfaces*: no particle sphere touches a Body sphere.

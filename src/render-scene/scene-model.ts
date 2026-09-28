@@ -61,6 +61,21 @@ export interface SceneArtifact {
   readonly rail: readonly string[];
   /** One default Shot per Client stop: a subject and a relative framing, never a place. */
   readonly shots: readonly SceneArtifactShot[];
+  /**
+   * One Dwell tempo per Client, keyed by subject ID. The Rail model reads a
+   * stop's pace from it by ID, never by position.
+   */
+  readonly dwell: readonly SceneArtifactDwell[];
+}
+
+/**
+ * One Dwell entry, as far as the scene is concerned: a Client ID and its tempo
+ * class. The tempo is a string rather than the derive layer's union, which this
+ * directory may not import; `rail-model.ts` rejects a tempo it does not name.
+ */
+export interface SceneArtifactDwell {
+  readonly subject: string;
+  readonly tempo: string;
 }
 
 /**
@@ -303,6 +318,19 @@ export const DEFAULT_NEAR = 0.1;
  * numbers live in two files and Epic 3 is entitled to raise the radius.
  */
 export const BODY_MARGIN = 3;
+
+/**
+ * The radius every Body of a Client's system is contained as at its Rail stop,
+ * in scene units.
+ *
+ * `rail-model.ts` resolves a stop's distance so that a sphere this large around
+ * each Body's centre sits wholly inside the frustum, which keeps the drawn
+ * sphere inside with room to spare — the Planet reads as *in* the frame rather
+ * than grazing its edge. It must stay at least as large as the largest radius
+ * `scene.tsx` draws; `scene-model.test.ts` asserts that, as it does for
+ * `BODY_MARGIN`.
+ */
+export const STOP_MARGIN = 3;
 
 /**
  * The render order every Body draw carries.

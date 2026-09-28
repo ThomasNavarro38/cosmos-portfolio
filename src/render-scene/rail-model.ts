@@ -17,10 +17,26 @@
  * with its subject: translating every Body by `v` translates every keyframe by
  * `v`, and a test asserts exactly that.
  *
+ * **A stop frames its whole system, at any aspect** (FR-17a). The Shot gives the
+ * direction (`angle`) and a floor on the distance; at the live aspect the camera
+ * stands at `max(shot.distance, contain(aspect))`, where `contain` is the
+ * closed-form smallest distance along that direction that keeps the Client's
+ * Star and every one of its Planets inside the frustum, each as a sphere of
+ * `STOP_MARGIN`. A Shot can push the camera further back; it cannot crop a
+ * Project out.
+ *
+ * **Dwell is a width of scroll travel, never a time** (FR-18, AD-4a). Each stop's
+ * slowdown `k` is read from its artifact tempo through `DWELL_SLOWDOWN`, by the
+ * Client's ID; the opening frame has its own. Nothing expires and nothing snaps:
+ * a held stop is one the path crosses more slowly, so the same wheel travel
+ * keeps the camera near it for longer.
+ *
  * **One trajectory, one warp, two damped scalars.** `progress ∈ [0, N]` is
- * measured in stops. It is warped by `s = p − k·sin(2πp)/2π`, whose rate
- * `1 − k·cos(2πp)` is lowest — but still positive — at every integer, so a stop
- * is a slowdown and never a halt. The warped parameter drives a Catmull-Rom
+ * measured in stops. On each segment it is warped by
+ * `s = p − [k_a·sin(2πt) + Δk·(t·sin(2πt) + (cos(2πt) − 1)/2π)]/2π`, the integral
+ * of the rate `1 − k(t)·cos(2πt)` with `k` blended linearly from one stop's
+ * slowdown to the next. The rate is `1 − k_i` at stop `i` — lowest, but still
+ * positive — so a stop is a slowdown and never a halt. The warped parameter drives a Catmull-Rom
  * curve through the keyframes' aims and a monotone cubic through their offsets
  * (camera = aim + offset, so the camera never overshoots behind its aim), both
  * C1 at every knot, and the warp's own derivative is continuous, so the whole
@@ -33,15 +49,17 @@
  * and nothing else — no Three, no React, no store — so every rule an acceptance
  * criterion names runs under `node --test`, which cannot load the `.tsx` rig.
  *
- * Not here, on purpose: Dwell and per-tempo slowdown and framing containment at a
- * stop (2.6), the Focus/panel scroll split (2.7), click-to-fly and keyboard
- * travel (2.9), reduced motion (2.10). The slowdown is one constant here; 2.6
- * makes it per stop.
+ * Not here, on purpose: the Focus/panel scroll split (2.7), click-to-fly and
+ * keyboard travel (2.9), reduced motion (2.10), and containment *along the path*
+ * between stops — only a camera at rest at a stop is proven to frame its system.
  */
 
 import {
   BODY_MARGIN,
+  DEFAULT_FOV,
+  DEFAULT_NEAR,
   NARROWEST_ASPECT,
+  STOP_MARGIN,
   frameBodies,
   type Body,
   type SceneArtifact,
@@ -59,14 +77,36 @@ import {
 export const RAIL_SPRING_SECONDS = 0.35;
 
 /**
- * How much the path slows at a stop, as a fraction: the warp's rate is `1 − k`
- * at a stop and `1 + k` mid-segment.
+ * How much the path slows at a Client stop, per Dwell tempo, as a fraction: the
+ * warp's rate is `1 − k` at the stop.
  *
- * Strictly between 0 and 1. At 0 there is no slowdown; at 1 the rate at a stop
- * reaches zero and the stop becomes a halt, which the Rail must never be. 2.6
- * replaces this single value with one per stop, driven by Dwell tempo.
+ * The tempo names restate `DWELL_TEMPOS` in `src/derive/dwell.ts`, which this
+ * directory may not import; the order there is the order here, shortest first,
+ * and a longer tempo slows the path strictly more. Every value is in `[0, 1)`
+ * and the ceiling sits well below 1: at 1 the rate at a stop reaches zero and
+ * the stop becomes a halt, which the Rail must never be. A tempo not in this
+ * table is not guessed at — `buildRail` throws naming the Client.
  */
-export const RAIL_STOP_SLOWDOWN = 0.6;
+export const DWELL_SLOWDOWN = {
+  'dwell-brief': 0.35,
+  'dwell-steady': 0.55,
+  'dwell-held': 0.75,
+} as const satisfies Readonly<Record<string, number>>;
+
+/**
+ * The opening frame's slowdown: keyframe 0 has no Client and so no Dwell.
+ *
+ * The page opens here and the visitor leaves from here, so it eases out of rest
+ * like a steady stop rather than lurching off at full rate.
+ */
+export const RAIL_OPENING_SLOWDOWN: number = DWELL_SLOWDOWN['dwell-steady'];
+
+/**
+ * The heading the whole Rail is seen from, in radians about `+y`: `0` is the
+ * `+z` side, the side the opening frame also looks from. Every stop's direction
+ * is built from it and its Shot's elevation, so one Rail is seen from one side.
+ */
+export const RAIL_HEADING = 0;
 
 /**
  * The longest frame the spring integrates, in seconds.
@@ -78,36 +118,65 @@ export const RAIL_STOP_SLOWDOWN = 0.6;
 export const RAIL_MAX_FRAME_SECONDS = 0.1;
 
 /**
- * The aspect ratio a Shot's `distance` is taken to frame, width over height.
+ * A desktop aspect, width over height: the top of the dense aspect grid
+ * `railFarPlane` samples.
  *
- * A Shot carries one distance and a viewport has any aspect. Three narrows the
- * horizontal field of view with the aspect, so on a viewport narrower than this
- * a stop's distance is scaled up by `reference / aspect` — the visible
- * half-width at the subject is then the same as at this reference. Wider than
- * this, the distance is left alone rather than pulled in, because pulling in
- * would crop the vertical extent. Containment at a stop is 2.6's; what this
- * guarantees is that a resize reframes continuously rather than cropping.
+ * A stop's distance is resolved per aspect by `stopDistance`, so this constant
+ * frames nothing; 2.5 used it as the aspect a Shot's distance was taken to
+ * frame, and 2.6 replaced that with containment.
  */
 export const SHOT_REFERENCE_ASPECT = 16 / 9;
 
-/** The artifact slice the Rail reads: its order and its Shots. */
-export type RailArtifact = Pick<SceneArtifact, 'rail' | 'shots'>;
+/** The artifact slice the Rail reads: its order, its Shots and its Dwell. */
+export type RailArtifact = Pick<SceneArtifact, 'rail' | 'shots' | 'dwell'>;
 
 /**
- * One keyframe: where the camera looks, and where it stands at its reference
- * aspect.
+ * One Body of a stop's system, measured in the stop's own camera frame and
+ * relative to its subject: everything `containDistance` needs, and nothing that
+ * depends on the aspect.
  *
- * `position` is resolved at `referenceAspect`; `railPose` scales the
- * `position − target` offset for the live aspect. Both points are derived from
- * entities — keyframe 0 from the Bodies' framing, a stop from its Star — so
- * neither is a coordinate anybody wrote down.
+ * `depth` is the Body's offset along the view axis *toward* the camera; `across`
+ * and `up` are the absolute lateral offsets along the camera's right and up
+ * axes. The camera stands at `subject + d·direction`, so the Body lies at depth
+ * `d − depth` in front of it, `across` to the side and `up` above or below.
+ */
+export interface StopExtent {
+  readonly depth: number;
+  readonly across: number;
+  readonly up: number;
+}
+
+/** What a Client stop needs to resolve its distance at any aspect. */
+export interface StopFraming {
+  /** The Star and every Planet of the Client, in the stop's camera frame. */
+  readonly extents: readonly StopExtent[];
+}
+
+/**
+ * One keyframe: where the camera looks, which way it stands off, how much the
+ * path slows there, and — for a stop — what it must keep in frame.
+ *
+ * No keyframe stores where its camera stands: that depends on the aspect, so
+ * `railPose` resolves it as `target + stopDistance(keyframe, aspect) · direction`.
+ * Every field is derived from entities — keyframe 0 from the Bodies' framing, a
+ * stop from its Star, its Planets, its Shot and its Dwell — so none of it is a
+ * coordinate anybody wrote down.
  */
 export interface RailKeyframe {
   /** The Client this stop frames, or `null` for the opening frame. */
   readonly subject: string | null;
   readonly target: ScenePosition;
-  readonly position: ScenePosition;
-  readonly referenceAspect: number;
+  /**
+   * The opening frame: its distance from its aim, as `frameBodies` resolved it.
+   * A stop: its Shot's distance, the floor its containment is never below.
+   */
+  readonly reach: number;
+  /** Unit vector from `target` toward the camera. */
+  readonly direction: ScenePosition;
+  /** The warp's `k` here: the rate through this keyframe is `1 − slowdown`. */
+  readonly slowdown: number;
+  /** A stop's containment data, or `null` for the opening frame. */
+  readonly framing: StopFraming | null;
 }
 
 /** The whole Rail: the opening frame, then one keyframe per Client stop. */
@@ -158,15 +227,29 @@ export interface RailMotion {
  * past it the camera crosses to the `−z` side, looking back at the Rail from
  * behind. The schema gates the same open interval; the check here stays so a
  * hand-built artifact that never passed the gate still fails by name.
+ *
+ * **Dwell is looked up by the Client's ID, and it throws the same way.** A stop
+ * with no `dwell` entry, with more than one, or with a tempo `DWELL_SLOWDOWN`
+ * does not name, throws naming the Client — a guessed pace is a Dwell nobody
+ * derived.
+ *
+ * A stop's system is its Star plus every Planet whose `clientId` is the stop's
+ * ID; those Bodies are measured once, here, in the stop's camera frame, so
+ * `stopDistance` resolves containment at any aspect without walking the Bodies
+ * again.
  */
 export function buildRail(artifact: RailArtifact, bodies: readonly Body[]): Rail {
   const framing = frameBodies(bodies);
+  const openingOffset = offsetBetween(framing.target, framing.position);
+  const openingReach = length(openingOffset);
   const keyframes: RailKeyframe[] = [
     {
       subject: null,
       target: framing.target,
-      position: framing.position,
-      referenceAspect: NARROWEST_ASPECT,
+      reach: openingReach,
+      direction: scaled(openingOffset, 1 / openingReach),
+      slowdown: RAIL_OPENING_SLOWDOWN,
+      framing: null,
     },
   ];
 
@@ -204,20 +287,147 @@ export function buildRail(artifact: RailArtifact, bodies: readonly Body[]): Rail
       );
     }
 
+    const slowdown = dwellSlowdownOf(artifact, id);
+
     const subject = star.position;
+    const direction = elevation(shot.angle);
+    const system = bodies.filter(
+      (body) => body.id === star.id || (body.kind === 'planet' && body.clientId === id),
+    );
     keyframes.push({
       subject: id,
       target: subject,
-      position: {
-        x: subject.x,
-        y: subject.y + shot.distance * Math.sin(shot.angle),
-        z: subject.z + shot.distance * Math.cos(shot.angle),
-      },
-      referenceAspect: SHOT_REFERENCE_ASPECT,
+      reach: shot.distance,
+      direction,
+      slowdown,
+      framing: { extents: system.map((body) => extentOf(body, subject, direction)) },
     });
   }
 
   return { keyframes };
+}
+
+/**
+ * The slowdown for one stop, from the artifact's Dwell entry for that Client ID.
+ *
+ * Throws naming the ID when there is no entry, more than one, or a tempo the
+ * table does not name. `Object.hasOwn`, so a tempo like `constructor` or
+ * `__proto__` is unknown rather than an inherited property read as a number.
+ */
+function dwellSlowdownOf(artifact: RailArtifact, id: string): number {
+  const entries = artifact.dwell.filter((entry) => entry.subject === id);
+  const entry = entries[0];
+  if (entry === undefined) {
+    throw new Error(`the Rail stops at ${JSON.stringify(id)}, but no Dwell paces it; a stop needs a tempo.`);
+  }
+  if (entries.length > 1) {
+    throw new Error(
+      `the Rail stops at ${JSON.stringify(id)}, but ${entries.length} Dwell entries pace it; a stop takes exactly one.`,
+    );
+  }
+  const table: Readonly<Record<string, number>> = DWELL_SLOWDOWN;
+  const slowdown = Object.hasOwn(table, entry.tempo) ? table[entry.tempo] : undefined;
+  if (slowdown === undefined) {
+    throw new Error(
+      `the Dwell for ${JSON.stringify(id)} has tempo ${JSON.stringify(entry.tempo)}, which the Rail does not know; ` +
+        `expected one of ${Object.keys(DWELL_SLOWDOWN).join(', ')}.`,
+    );
+  }
+  return slowdown;
+}
+
+/**
+ * One Body measured in a stop's camera frame, relative to the stop's subject.
+ *
+ * The camera looks along `−direction` with world `+y` as its up hint, as
+ * `camera.lookAt` resolves it: its right axis is `up × direction`, normalised,
+ * and its own up is `direction × right`. `direction` never has `x` or `z` both
+ * zero, because a Shot's angle is strictly inside `±π/2`.
+ */
+function extentOf(body: Body, subject: ScenePosition, direction: ScenePosition): StopExtent {
+  const w = offsetBetween(subject, body.position);
+  const planar = Math.hypot(direction.x, direction.z);
+  const rightX = direction.z / planar;
+  const rightZ = -direction.x / planar;
+  // `direction × right`, with the right axis's `y` component zero.
+  const upX = direction.y * rightZ;
+  const upY = direction.z * rightX - direction.x * rightZ;
+  const upZ = -direction.y * rightX;
+  return {
+    depth: w.x * direction.x + w.y * direction.y + w.z * direction.z,
+    across: Math.abs(w.x * rightX + w.z * rightZ),
+    up: Math.abs(w.x * upX + w.y * upY + w.z * upZ),
+  };
+}
+
+/**
+ * The unit direction `angle` above the orbital plane, at `RAIL_HEADING`.
+ *
+ * Built analytically rather than by subtracting the subject from a point
+ * elevated off it: that subtraction carries rounding that grows with the
+ * subject's world coordinates, so a re-solve that moved the system far from
+ * the origin would change the direction by more than an ulp.
+ */
+function elevation(angle: number): ScenePosition {
+  const level = Math.cos(angle);
+  return {
+    x: level * Math.sin(RAIL_HEADING),
+    y: Math.sin(angle),
+    z: level * Math.cos(RAIL_HEADING),
+  };
+}
+
+/**
+ * The smallest distance along a stop's direction at which every Body of its
+ * system sits inside the frustum, each as a sphere of `STOP_MARGIN`, at `aspect`.
+ *
+ * **Closed form, and exact.** For a Body at `depth` δ with lateral offsets `u`
+ * (`across`) and `v` (`up`), a camera at distance `d` sees it at depth `d − δ`.
+ * A side plane at half-angle `H` keeps a sphere of radius `m` inside when
+ * `(d − δ)·sin H − |u|·cos H ≥ m`, i.e. `d ≥ δ + (|u|·cos H + m)/sin H`;
+ * likewise with `v` and the vertical half-fov `V`; and the near plane needs
+ * `d ≥ δ + m + near`. Each bound is linear in `d`, so the answer is their
+ * maximum over the Bodies — no search, no sampling.
+ *
+ * `V` is half of `DEFAULT_FOV`; `tan H = tan V · aspect`, as Three derives it.
+ * **Continuous in the aspect**: it is floored at `NARROWEST_ASPECT`, and zero or
+ * below reads as the floor (an aspect spring overshooting a sliver goal must not
+ * jump); `+∞` is `H = π/2`, the widest; only `NaN` — no aspect at all — reads as
+ * the floor too, the most conservative frame.
+ */
+export function containDistance(framing: StopFraming, aspect: number): number {
+  const usable = Number.isNaN(aspect) ? NARROWEST_ASPECT : Math.max(aspect, NARROWEST_ASPECT);
+  const halfV = (DEFAULT_FOV * Math.PI) / 360;
+  const halfH = Math.atan(Math.tan(halfV) * usable);
+  const [sinV, cosV, sinH, cosH] = [Math.sin(halfV), Math.cos(halfV), Math.sin(halfH), Math.cos(halfH)];
+  let need = 0;
+  for (const extent of framing.extents) {
+    need = Math.max(
+      need,
+      extent.depth +
+        Math.max(
+          (extent.across * cosH + STOP_MARGIN) / sinH,
+          (extent.up * cosV + STOP_MARGIN) / sinV,
+          STOP_MARGIN + DEFAULT_NEAR,
+        ),
+    );
+  }
+  return need;
+}
+
+/**
+ * How far from its aim a keyframe's camera stands at a live aspect.
+ *
+ * A stop stands at `max(shot.distance, containDistance(aspect))`: the Shot's
+ * angle always wins, and its distance wins whenever it is the larger, so a Shot
+ * overrides the default framing without being able to crop a Project out. The
+ * opening frame keeps its own reach scaled by `aspectScale`, which is 1 at every
+ * aspect from `NARROWEST_ASPECT` up, so progress 0 stays the `camera` prop.
+ */
+export function stopDistance(keyframe: RailKeyframe, aspect: number): number {
+  const { framing } = keyframe;
+  if (framing === null) return keyframe.reach * aspectScale(NARROWEST_ASPECT, aspect);
+  return Math.max(keyframe.reach, containDistance(framing, aspect));
 }
 
 /** How many Client stops the Rail has: `N`, so progress runs over `[0, N]`. */
@@ -226,8 +436,9 @@ export function railStopCount(rail: Rail): number {
 }
 
 /**
- * How far a keyframe's offset is scaled at a live aspect: `reference / aspect`
- * when the viewport is narrower than the reference, `1` otherwise.
+ * How far the opening keyframe's offset is scaled at a live aspect:
+ * `reference / aspect` when the viewport is narrower than the reference, `1`
+ * otherwise. Stops do not use it — `stopDistance` resolves them by containment.
  *
  * **Bounded.** The aspect is floored at `NARROWEST_ASPECT`, so a collapsed
  * canvas (a sliver of width, or none) cannot fling the camera away by a factor
@@ -255,27 +466,33 @@ export const RAIL_FAR_ASPECT_SAMPLES = 8;
  * Rail, at any aspect.
  *
  * The `camera` prop's `far` comes from keyframe 0's framing, but a stop on a
- * narrow viewport backs off by up to `reference / NARROWEST_ASPECT` and can then
- * stand further from a distant Body than the opening frame ever did.
+ * narrow viewport backs off to contain its system and can then stand further
+ * from a distant Body than the opening frame ever did.
  *
  * **Sampled, with the gaps between samples paid for.** The pose is not affine
- * in the aspect — keyframe 0 never scales while the stops do, and the monotone
- * cubic's tangent limiter is nonlinear — so no single aspect is known to be the
- * worst. The curve is sampled on a grid: progress along the Rail, every keyframe
- * included, by aspects spanning the floor to the reference (wider than the
- * reference nothing scales, so the reference stands for them). Between two
- * neighbouring samples the path is C1 and short, so any pose on it lies within
- * about half their chord of the nearer one; half the longest chord in the grid
- * is added as slack, with `BODY_MARGIN` on top. Euclidean
- * distance bounds the depth along the view axis, so the plane is conservative.
+ * in the aspect — keyframe 0 never scales while the stops do, containment is a
+ * maximum of nonlinear terms, and the monotone cubic's tangent limiter is
+ * nonlinear — so no single aspect is known to be the worst. The curve is
+ * sampled on a grid: progress along the Rail, every keyframe included, by
+ * aspects spanning the floor to the reference densely, then twice the
+ * reference and `+∞` (a stop's distance only shrinks as the aspect widens,
+ * toward the limit `+∞` resolves exactly). Between two neighbouring samples the
+ * path is C1 and short, so any pose on it lies within about half their chord of
+ * the nearer one; half the longest chord in the grid is added as slack, with
+ * `BODY_MARGIN` on top. Euclidean distance bounds the depth along the view
+ * axis, so the plane is conservative.
  */
 export function railFarPlane(rail: Rail, bodies: readonly Body[]): number {
   const stops = railStopCount(rail);
   const samples = Math.max(1, stops * RAIL_FAR_SAMPLES_PER_SEGMENT);
-  const aspects = Array.from(
-    { length: RAIL_FAR_ASPECT_SAMPLES + 1 },
-    (_, j) => NARROWEST_ASPECT + ((SHOT_REFERENCE_ASPECT - NARROWEST_ASPECT) * j) / RAIL_FAR_ASPECT_SAMPLES,
-  );
+  const aspects = [
+    ...Array.from(
+      { length: RAIL_FAR_ASPECT_SAMPLES + 1 },
+      (_, j) => NARROWEST_ASPECT + ((SHOT_REFERENCE_ASPECT - NARROWEST_ASPECT) * j) / RAIL_FAR_ASPECT_SAMPLES,
+    ),
+    SHOT_REFERENCE_ASPECT * 2,
+    Number.POSITIVE_INFINITY,
+  ];
   let furthest = 0;
   let slack = 0;
   let previousRow: ScenePosition[] | null = null;
@@ -298,17 +515,38 @@ export function railFarPlane(rail: Rail, bodies: readonly Body[]): number {
 }
 
 /**
- * The slowdown warp: progress in stops → curve parameter in stops.
+ * The slowdown warp: progress in stops → curve parameter in stops, with one
+ * slowdown per keyframe.
  *
- * `s = p − k·sin(2πp)/2π`. It fixes every integer (`s(k) = k`), so stop `k` is
- * keyframe `k`; its rate `1 − k·cos(2πp)` is `1 − k` at a stop and `1 + k`
- * mid-segment, positive everywhere for `k < 1`, so it is monotonic and never
- * halts. A slowdown outside `[0, 1)` would halt or reverse the camera at a stop,
- * so it reads as no slowdown at all rather than being trusted.
+ * On the segment from keyframe `i` to `i + 1`, with `t = p − i`, the slowdown is
+ * blended linearly, `k(t) = k_a + Δk·t`, and the rate is `1 − k(t)·cos(2πt)`.
+ * Its integral is the closed form
+ * `s = p − [k_a·sin(2πt) + Δk·(t·sin(2πt) + (cos(2πt) − 1)/2π)]/2π`, which
+ * vanishes at `t = 0` and `t = 1`, so `s(i) = i` at every integer and stop `i`
+ * is keyframe `i`. The rate at stop `i` is `1 − k_i` from either side, so the
+ * warp is C1 through every stop; it is at least `1 − max k > 0` everywhere, so
+ * it is monotonic and never halts.
+ *
+ * A slowdown outside `[0, 1)` (or not a number) would halt or reverse the camera
+ * at its stop, so it reads as no slowdown at all rather than being trusted.
+ * Progress is clamped to `[0, N]` — the curve has no parameter outside it — and
+ * a non-finite one reads as 0. With fewer than two keyframes there is no
+ * segment to warp and progress is returned as clamped.
  */
-export function warpProgress(progress: number, slowdown: number = RAIL_STOP_SLOWDOWN): number {
-  const k = Number.isFinite(slowdown) && slowdown >= 0 && slowdown < 1 ? slowdown : 0;
-  return progress - (k * Math.sin(2 * Math.PI * progress)) / (2 * Math.PI);
+export function warpProgress(progress: number, slowdowns: readonly number[]): number {
+  const last = slowdowns.length - 1;
+  const p = Number.isFinite(progress) ? Math.min(Math.max(progress, 0), Math.max(last, 0)) : 0;
+  if (last < 1) return p;
+  const segment = Math.min(Math.floor(p), last - 1);
+  const t = p - segment;
+  const usable = (k: number | undefined): number =>
+    k !== undefined && Number.isFinite(k) && k >= 0 && k < 1 ? k : 0;
+  const ka = usable(slowdowns[segment]);
+  const dk = usable(slowdowns[segment + 1]) - ka;
+  const turn = 2 * Math.PI;
+  const sin = Math.sin(turn * t);
+  const cos = Math.cos(turn * t);
+  return p - (ka * sin + dk * (t * sin + (cos - 1) / turn)) / turn;
 }
 
 /**
@@ -316,8 +554,8 @@ export function warpProgress(progress: number, slowdown: number = RAIL_STOP_SLOW
  *
  * **The aim and the offset are two curves.** The aim (`target`) runs a
  * Catmull-Rom curve through the keyframes' targets. The camera stands at the
- * aim plus an *offset* — the keyframes' `position − target`, scaled for the
- * aspect — interpolated per axis by a monotone cubic (Fritsch–Carlson), which
+ * aim plus an *offset* — each keyframe's `direction` times its `stopDistance`
+ * at the live aspect — interpolated per axis by a monotone cubic (Fritsch–Carlson), which
  * is C1 and never leaves the range of its two neighbouring knots. That matters:
  * every keyframe's offset has `z > 0` (the opening frame stands back on `+z`, a
  * stop's angle is strictly inside `±π/2`), so the interpolated offset does too
@@ -331,9 +569,7 @@ export function warpProgress(progress: number, slowdown: number = RAIL_STOP_SLOW
  */
 export function railPose(rail: Rail, progress: number, aspect: number): RailPose {
   const targets = rail.keyframes.map((keyframe) => keyframe.target);
-  const offsets = rail.keyframes.map((keyframe) =>
-    scaled(offsetOf(keyframe), aspectScale(keyframe.referenceAspect, aspect)),
-  );
+  const offsets = rail.keyframes.map((keyframe) => scaled(keyframe.direction, stopDistance(keyframe, aspect)));
   const firstTarget = targets[0];
   const firstOffset = offsets[0];
   if (firstTarget === undefined || firstOffset === undefined) {
@@ -342,8 +578,10 @@ export function railPose(rail: Rail, progress: number, aspect: number): RailPose
   const stops = targets.length - 1;
   if (stops === 0) return { target: firstTarget, position: along(firstTarget, firstOffset, 1) };
 
-  const clamped = Number.isFinite(progress) ? Math.min(Math.max(progress, 0), stops) : 0;
-  const s = warpProgress(clamped);
+  const s = warpProgress(
+    progress,
+    rail.keyframes.map((keyframe) => keyframe.slowdown),
+  );
   const segment = Math.min(Math.floor(s), stops - 1);
   const t = s - segment;
 
@@ -453,6 +691,9 @@ export function railFrame(
 
 // --- Geometry ---------------------------------------------------------------
 
+/** Relative size below which a knot-to-knot delta is rounding, not a turn. */
+const RAIL_FLAT_TOLERANCE = 1e-9;
+
 function scaled(vector: ScenePosition, factor: number): ScenePosition {
   return { x: vector.x * factor, y: vector.y * factor, z: vector.z * factor };
 }
@@ -468,7 +709,16 @@ function scaled(vector: ScenePosition, factor: number): ScenePosition {
 function monotoneCubic(values: readonly number[], segment: number, t: number): number {
   const n = values.length;
   const at = (i: number): number => values[i] ?? 0;
-  const deltas = Array.from({ length: n - 1 }, (_, i) => at(i + 1) - at(i));
+  // A delta at the scale of floating-point rounding is flat. Two stops with the
+  // same framing can differ by an ulp after a re-solve translates them, and the
+  // sign test below would read that noise as a turn and zero a tangent — which
+  // broke translation invariance once per-stop distances made equal offsets
+  // common.
+  const flat = RAIL_FLAT_TOLERANCE * Math.max(1, ...values.map(Math.abs));
+  const deltas = Array.from({ length: n - 1 }, (_, i) => {
+    const delta = at(i + 1) - at(i);
+    return Math.abs(delta) <= flat ? 0 : delta;
+  });
   const d = (i: number): number => deltas[i] ?? 0;
   const tangents = Array.from({ length: n }, (_, i) => {
     if (i === 0) return d(0);
@@ -505,12 +755,13 @@ function distanceBetween(a: ScenePosition, b: ScenePosition): number {
   return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
-function offsetOf(keyframe: RailKeyframe): ScenePosition {
-  return {
-    x: keyframe.position.x - keyframe.target.x,
-    y: keyframe.position.y - keyframe.target.y,
-    z: keyframe.position.z - keyframe.target.z,
-  };
+/** `to − from`. */
+function offsetBetween(from: ScenePosition, to: ScenePosition): ScenePosition {
+  return { x: to.x - from.x, y: to.y - from.y, z: to.z - from.z };
+}
+
+function length(vector: ScenePosition): number {
+  return Math.hypot(vector.x, vector.y, vector.z);
 }
 
 function along(origin: ScenePosition, offset: ScenePosition, scale: number): ScenePosition {
