@@ -271,6 +271,18 @@ export const DEFAULT_NEAR = 0.1;
 export const BODY_MARGIN = 3;
 
 /**
+ * The render order every Body draw carries.
+ *
+ * A Body concern, so it lives with the Body: `dust-model.ts` sets its own order
+ * below this one, which is what puts every Dust draw before every Body draw. A
+ * constant needs no import, so this module keeps importing nothing at all. The
+ * renderer pairs it with a `transparent` material at opacity 1, because three
+ * draws its whole opaque list before its transparent list whatever the
+ * `renderOrder`.
+ */
+export const BODY_RENDER_ORDER = 2;
+
+/**
  * Where the default camera stands and how it is turned, computed from the Bodies.
  *
  * **The orientation is part of the framing, not a default to inherit.** React

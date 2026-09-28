@@ -501,3 +501,10 @@ leaves open.
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
   summary: The canvas is sized with a hard-coded `70vh`, which is a layout decision made in the renderer rather than by a design system that does not exist yet.
   evidence: The spec licensed sizing the surface explicitly and distinguished it from the visual identity Epic 3 defers, so this is in scope — but the *value* is arbitrary. `height: 70vh` with `width: 100%` was chosen so the index sits above a surface with real area at both desktop and phone viewports (verified in a browser at 1426x632 and at 390x844). It is inline because the repo holds no CSS at all and introducing a stylesheet would be the styling layer Epic 3 owns. When Epic 3 lands tokens and layout, this constant should move there rather than being tuned in place; a scan pins that the canvas has *a* height, not which one, so the move will not fight a test.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-4-dust-at-rest.md`
+  summary: Dust media are camera-facing sprites while the non-overlap and composite-alpha ceiling are proven over world-space spheres, so an oblique camera looking along the line between two Stars stacks two media on screen past `DUST_MEDIUM_PEAK_OPACITY`.
+  evidence: The default camera looks down `-z` at a layout where this cannot occur today; 2.5/2.6 introduce oblique Shots (`shots[].angle` is 30°), which is when screen-space stacking becomes reachable and should be re-checked perceptually or capped in view space.
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-4-dust-at-rest.md`
+  summary: A medium can extend past the Body-only default framing and is clipped hard at the canvas edge, visible as a rim on the grey wash.
+  evidence: Observed in the browser during implementation on the SNCF system; `frameBodies` deliberately frames Bodies only, so the fix belongs with 2.6's Client-stop framing or a medium radius bounded by the frame.

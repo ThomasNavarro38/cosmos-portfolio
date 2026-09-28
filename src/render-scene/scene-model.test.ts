@@ -31,6 +31,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Frustum, Matrix4, PerspectiveCamera, Vector3 } from 'three';
+import { DUST_PARTICLE_RADIUS } from './dust-model.ts';
 import {
   BODY_MARGIN,
   DEFAULT_FOV,
@@ -45,6 +46,7 @@ import {
 
 const SCENE_DIR = fileURLToPath(new URL('.', import.meta.url));
 const MODEL_TS = fileURLToPath(new URL('./scene-model.ts', import.meta.url));
+const DUST_TS = fileURLToPath(new URL('./dust-model.ts', import.meta.url));
 const SCENE_TSX = fileURLToPath(new URL('./scene.tsx', import.meta.url));
 const SCENE_HOST_TSX = fileURLToPath(new URL('../shell/scene-host.tsx', import.meta.url));
 const APP_TSX = fileURLToPath(new URL('../App.tsx', import.meta.url));
@@ -653,6 +655,12 @@ test('the margin the framing leaves is at least the largest radius the renderer 
       radius <= BODY_MARGIN,
       `BODY_MARGIN (${BODY_MARGIN}) must cover the drawn radius ${radius}, or the outermost Body clips`,
     );
+    // Particles are kept `BODY_MARGIN` from a Body's *centre*. This makes that a
+    // clearance between *surfaces*: no particle sphere touches a Body sphere.
+    assert.ok(
+      radius + DUST_PARTICLE_RADIUS <= BODY_MARGIN,
+      `BODY_MARGIN (${BODY_MARGIN}) must cover the radius ${radius} plus a particle's ${DUST_PARTICLE_RADIUS}`,
+    );
   }
 });
 
@@ -710,7 +718,7 @@ test('no module here imports src/data/, src/derive/, the solver, or zustand/reac
   // package, so `zustand/react` and `zustand/vanilla` are both `zustand`, and a row
   // banning `zustand` would reject the navigation store this directory's README
   // explicitly permits.
-  for (const path of [MODEL_TS, SCENE_TSX]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX]) {
     assert.deepEqual(auditForbiddenImports(readFileSync(path, 'utf8')), [], `${path} must hold no forbidden import`);
   }
 });
@@ -752,7 +760,7 @@ test('the scene holds no classification or mapping-rule vocabulary of its own', 
   // A case-insensitive `\balpha\b` ban was dropped from this list deliberately — over
   // a pure-structure module it cannot fail by construction, and it would misfire on a
   // future token name or on a fixture Client named Alpha.
-  for (const path of [MODEL_TS, SCENE_TSX]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX]) {
     const code = codeOf(path);
     assert.doesNotMatch(code, /\bclassify\w*\s*\(|\bfunction\s+classify/i, 'no classification test');
     assert.doesNotMatch(code, /\b(?:luminance|mote|mass|rail)(?:Band|Tier|Of|For|From)?\s*\(/i, 'no mapping computed');
@@ -1005,6 +1013,180 @@ test('the connector ban rejects drei’s Line as well as Three’s intrinsics', 
   }
 });
 
+// --- The draw-order ratchet: Dust never paints over a Body -------------------
+
+/**
+ * The text of **every** `<collection>.map(…)` in the renderer, by balanced
+ * parentheses — empty when the renderer maps no such collection.
+ *
+ * Every one, not the first: an audit of the first match alone passed a second
+ * `media.map(…)` block that carried no draw-order rule at all.
+ */
+function mapBlocks(code: string, collection: string): string[] {
+  const blocks: string[] = [];
+  for (const start of code.matchAll(new RegExp(`\\b${collection}\\s*\\.\\s*map\\s*\\(`, 'g'))) {
+    let depth = 0;
+    let end = code.length;
+    for (let index = start.index + start[0].length - 1; index < code.length; index += 1) {
+      const character = code[index];
+      if (character === '(') depth += 1;
+      if (character === ')') {
+        depth -= 1;
+        if (depth === 0) {
+          end = index + 1;
+          break;
+        }
+      }
+    }
+    blocks.push(code.slice(start.index, end));
+  }
+  return blocks;
+}
+
+/**
+ * The draw-order rule on the renderer, as a pure function over its source.
+ *
+ * Every Dust draw precedes every Body draw and writes no depth, so a Body is never
+ * painted over by Dust in front of it or behind it, from any camera. Three halves:
+ *
+ *   - Every scene object mapped from `media` or `particles` carries
+ *     `renderOrder={DUST_RENDER_ORDER}`, and every material there
+ *     `depthWrite={false}`.
+ *   - Every Body mesh carries `renderOrder={BODY_RENDER_ORDER}`, and its material is
+ *     `transparent` at opacity 1. **Transparent is load-bearing:** three renders its
+ *     whole opaque list before its transparent list whatever the `renderOrder`, so an
+ *     opaque Body is drawn *before* the Dust and then painted over.
+ *   - No `renderOrder` takes a literal, and no billboard exists outside the medium.
+ *
+ * Plus the story's exclusions: no Mote and no per-Skill entity in the renderer, and
+ * the framing still reads the Bodies only.
+ */
+function auditDrawOrder(source: string): string[] {
+  const code = blankProse(source);
+  const failures: string[] = [];
+
+  for (const collection of ['media', 'particles']) {
+    const blocks = mapBlocks(code, collection);
+    if (blocks.length === 0) failures.push(`maps no ${collection} — the Dust the model builds is never drawn`);
+    for (const block of blocks) {
+      const objects = block.match(/<(?:sprite|mesh|points|instancedMesh|group)\b[^>]*>/g) ?? [];
+      if (objects.length === 0) failures.push(`${collection} are mapped to no scene object`);
+      for (const object of objects) {
+        if (!/\brenderOrder\s*=\s*\{\s*DUST_RENDER_ORDER\s*\}/.test(object)) {
+          failures.push(`a ${collection} draw lacks renderOrder={DUST_RENDER_ORDER} — it may draw after a Body`);
+        }
+      }
+      const materials = block.match(/<\w+Material\b[^>]*>/g) ?? [];
+      if (materials.length === 0) failures.push(`${collection} are drawn with no material of their own`);
+      for (const material of materials) {
+        if (!/\bdepthWrite\s*=\s*\{\s*false\s*\}/.test(material)) {
+          failures.push(`a ${collection} material writes depth — it would hide a Body drawn behind it`);
+        }
+      }
+    }
+  }
+
+  const bodyBlocks = mapBlocks(code, 'bodies');
+  if (bodyBlocks.length === 0) failures.push('maps no bodies — the Bodies are not drawn');
+  for (const bodyBlock of bodyBlocks) {
+    const meshes = bodyBlock.match(/<mesh\b[^>]*>/g) ?? [];
+    if (meshes.length === 0) failures.push('the Bodies are mapped to no mesh');
+    for (const mesh of meshes) {
+      if (!/\brenderOrder\s*=\s*\{\s*BODY_RENDER_ORDER\s*\}/.test(mesh)) {
+        failures.push('a Body mesh lacks renderOrder={BODY_RENDER_ORDER} — Dust could draw after it');
+      }
+    }
+    const materials = bodyBlock.match(/<\w+Material\b[^>]*>/g) ?? [];
+    if (materials.length === 0) failures.push('the Bodies are drawn with no material');
+    for (const material of materials) {
+      // A bare attribute or `{true}`, and nothing else: `{0}` and `{!true}` are falsy
+      // and passed a scan that excluded only `{false}`.
+      if (!/\btransparent(?:\s*=\s*\{\s*true\s*\}|(?![\w-]|\s*=))/.test(material)) {
+        failures.push('a Body material is opaque — three draws the opaque list first, so Dust paints over it');
+      }
+      const opacity = /\bopacity\s*=\s*\{\s*([^}]*?)\s*\}/.exec(material);
+      if (opacity !== null && opacity[1] !== '1') {
+        failures.push(`a Body is drawn at opacity ${opacity[1]} — transparent is for ordering, never for fading`);
+      }
+    }
+  }
+
+  for (const match of code.matchAll(/\brenderOrder\s*=\s*\{\s*([^}]*?)\s*\}/g)) {
+    if (match[1] !== 'DUST_RENDER_ORDER' && match[1] !== 'BODY_RENDER_ORDER') {
+      failures.push(`renderOrder={${match[1]}} — draw order comes from the model's named constants only`);
+    }
+  }
+  const sprites = (code.match(/<sprite\b/g) ?? []).length;
+  const mediumSprites = mapBlocks(code, 'media').reduce(
+    (sum, block) => sum + (block.match(/<sprite\b/g) ?? []).length,
+    0,
+  );
+  if (sprites !== mediumSprites) failures.push('a billboard is drawn outside the medium, under no draw-order rule');
+
+  if (/\bMotes?\b|\bmotes?\b|\bSkills?\b|\bskills?\b/.test(code)) {
+    failures.push('names a Mote or a Skill — no Mote and no per-Skill entity at rest (FR-13; 2.8 owns Motes)');
+  }
+  if (!/\bframeBodies\s*\(\s*bodies\s*\)/.test(code)) {
+    failures.push('the framing is not handed exactly the Bodies — Dust never widens it');
+  }
+  return failures;
+}
+
+test('every Dust draw precedes every Body draw and writes no depth', () => {
+  assert.deepEqual(auditDrawOrder(readFileSync(SCENE_TSX, 'utf8')), [], 'no Dust fragment may be drawn over a Body');
+});
+
+test('the draw-order audit rejects the real renderer with any one of its guarantees removed', () => {
+  // Mutations of the shipped file rather than hand-written snippets, so each bad form
+  // is exactly one edit away from what ships. Every mutation is checked to have
+  // applied, or a renamed attribute would turn this into a test of nothing.
+  const real = readFileSync(SCENE_TSX, 'utf8');
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['the medium writes depth', (s) => s.replace(/(<spriteMaterial\b[^>]*?)\s*depthWrite=\{false\}/, '$1')],
+    ['a particle writes depth', (s) => s.replace(/(<meshBasicMaterial\b[^>]*?)\s*depthWrite=\{false\}/, '$1')],
+    ['depth explicitly on', (s) => s.replace('depthWrite={false}', 'depthWrite={true}')],
+    ['the medium loses its order', (s) => s.replace(/(<sprite\b[^>]*?)\s*renderOrder=\{DUST_RENDER_ORDER\}/, '$1')],
+    ['a particle loses its order', (s) => s.replace(/(particles\.map[\s\S]*?)renderOrder=\{DUST_RENDER_ORDER\}/, '$1')],
+    ['a Body loses its order', (s) => s.replace('renderOrder={BODY_RENDER_ORDER}', '')],
+    ['Dust takes the Body order', (s) => s.replace('renderOrder={DUST_RENDER_ORDER}', 'renderOrder={BODY_RENDER_ORDER}')],
+    ['a literal order', (s) => s.replace('renderOrder={BODY_RENDER_ORDER}', 'renderOrder={3}')],
+    ['the Body goes opaque', (s) => s.replace(/(<meshStandardMaterial\b[^>]*?)\s*transparent\b/, '$1')],
+    ['the Body is transparent={false}', (s) => s.replace(/(<meshStandardMaterial\b[^>]*?\s)transparent\b/, '$1transparent={false}')],
+    ['the Body fades', (s) => s.replace(/(<meshStandardMaterial\b[^>]*?)opacity=\{1\}/, '$1opacity={0.5}')],
+    ['the particles are not drawn', (s) => s.replace(/particles\.map/, 'particlesUnused.map')],
+    ['a stray billboard', (s) => s.replace('<ambientLight', '<sprite scale={[1, 1, 1]} />\n      <ambientLight')],
+    ['a Mote', (s) => s.replace('<ambientLight', '{motes.map((m) => <mesh key={m} />)}\n      <ambientLight')],
+    ['a Skill', (s) => s.replace('buildDust(bodies)', 'buildDust(bodies, skills)')],
+    ['the framing widened', (s) => s.replace('frameBodies(bodies)', 'frameBodies([...bodies, ...particles])')],
+    ['the Body is transparent={0}', (s) => s.replace(/(<meshStandardMaterial\b[^>]*?\s)transparent\b/, '$1transparent={0}')],
+    [
+      'the Body is transparent={!true}',
+      (s) => s.replace(/(<meshStandardMaterial\b[^>]*?\s)transparent\b/, '$1transparent={!true}'),
+    ],
+    [
+      'a second, unaudited media block',
+      (s) => s.replace('<ambientLight', '{media.map((m) => <sprite key={m.id}><spriteMaterial /></sprite>)}\n      <ambientLight'),
+    ],
+    [
+      'a second, unaudited particles block',
+      (s) => s.replace('<ambientLight', '{particles.map((p) => <mesh key={p.id}><meshBasicMaterial /></mesh>)}\n      <ambientLight'),
+    ],
+    [
+      'a second, unaudited bodies block',
+      (s) =>
+        s.replace(
+          '<ambientLight',
+          '{bodies.map((b) => <mesh key={b.id}><meshStandardMaterial transparent={false} /></mesh>)}\n      <ambientLight',
+        ),
+    ],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped renderer`);
+    assert.notDeepEqual(auditDrawOrder(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
 // --- The surface has extent -------------------------------------------------
 
 /**
@@ -1183,7 +1365,14 @@ test('every module in this directory is covered by the scans above', () => {
   // unscanned module fail *loudly*, naming itself, rather than passing silently. The
   // same shape as `checkRuleCoverage` in `boundaries.ts`, one level down. Widening the
   // scans themselves is recorded in `deferred-work.md`.
-  const known = new Set(['scene-model.ts', 'scene-model.test.ts', 'scene.tsx', 'README.md']);
+  const known = new Set([
+    'scene-model.ts',
+    'scene-model.test.ts',
+    'dust-model.ts',
+    'dust-model.test.ts',
+    'scene.tsx',
+    'README.md',
+  ]);
   const found: string[] = [];
   // `withFileTypes`, so a subdirectory is descended into rather than read as an
   // unscanned module — without it a `src/render-scene/camera/` would pass as a file
