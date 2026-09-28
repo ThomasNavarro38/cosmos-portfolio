@@ -6,9 +6,9 @@
  * positions the scene model already emits — the same kind of work as
  * `frameBodies` — and its parameters are M1 tuning items (D-T1, E-T2). So it lives
  * in the scene rather than in the artifact, and it reads **nothing but the Bodies'
- * positions, their `kind` and their `clientId`**: no `content`, no Skill, no
- * authored field. If Dust ever encodes Skills per Client, that is a derivation and
- * it moves to `src/derive/` (AD-3).
+ * positions, their `kind`, their `id` and their `clientId`**: no `content`, no
+ * Skill, no authored field. If Dust ever encodes Skills per Client, that is a
+ * derivation and it moves to `src/derive/` (AD-3).
  *
  * **Pure and deterministic.** Imports `./scene-model.ts` and nothing else — not
  * `three`, not React — so every rule here executes under `node --test`. The scatter
@@ -50,9 +50,10 @@ import { BODY_MARGIN, BODY_RENDER_ORDER, type Body, type ScenePosition } from '.
  * Particles per Body. The density ratio (D-T1): the particle target is
  * `round(DUST_PARTICLES_PER_BODY × bodies.length)`.
  *
- * Sparse on purpose — the direction mock carries fourteen particles for roughly
- * fifteen Bodies. A little above that here because the scene is a volume seen in
- * perspective, where some particles fall behind others or outside the frame.
+ * Sparse on purpose, though about three times the direction mock, which carries
+ * fourteen particles for roughly fifteen Bodies: the scene is a volume seen in
+ * perspective, where some particles fall behind others or outside the frame. An M1
+ * tuning item, to be settled by looking.
  */
 export const DUST_PARTICLES_PER_BODY = 3;
 
@@ -105,8 +106,10 @@ export const DUST_PARTICLE_CLEARANCE = BODY_MARGIN;
  * Bounded so a pathological layout cannot loop forever; a candidate inside some
  * Body's clearance is rejected and redrawn. The fixtures hit their target well
  * within this budget, and a test asserts it. Overridable through `DustTuning` so a
- * test can make the bound bind: with `DUST_SCATTER_PADDING` above the clearance,
- * free volume always exists, so at the shipped budget no layout runs short.
+ * test can make the bound bind. With `DUST_SCATTER_PADDING` above the clearance,
+ * free volume always exists, so the target is always reachable — but sampling is
+ * random, and a layout whose free shell is a small share of its box can still run
+ * short at this budget.
  */
 export const DUST_PLACEMENT_ATTEMPTS_PER_PARTICLE = 64;
 
@@ -205,9 +208,10 @@ function requireTuning(tuning: DustTuning): void {
   if (!Number.isFinite(mediumPeakOpacity) || mediumPeakOpacity < 0 || mediumPeakOpacity > 1) {
     throw new RangeError(`mediumPeakOpacity must be finite and within [0, 1], not ${String(mediumPeakOpacity)}`);
   }
-  if (!Number.isInteger(placementAttemptsPerParticle) || placementAttemptsPerParticle < 0) {
+  // At least one: zero attempts places nothing, a silently empty scatter.
+  if (!Number.isInteger(placementAttemptsPerParticle) || placementAttemptsPerParticle < 1) {
     throw new RangeError(
-      `placementAttemptsPerParticle must be a non-negative integer, not ${String(placementAttemptsPerParticle)}`,
+      `placementAttemptsPerParticle must be a positive integer, not ${String(placementAttemptsPerParticle)}`,
     );
   }
 }
@@ -292,9 +296,11 @@ export function mediumAlphaAt(medium: DustMedium, point: ScenePosition): number 
  * to 0 at the edge along `falloffAt`.
  *
  * Built here, fully, because the renderer may not loop, slice or filter — it hands
- * this array to a `dataTexture` as-is. The disc is inscribed in the square, so the
- * sprite's world radius is half its scale. The centre is at `(size − 1) / 2`, so an
- * odd size — the only kind accepted — puts one texel exactly on it.
+ * this array to a `dataTexture` as-is. The disc reaches 0 on the edge texels'
+ * centres, half a texel inside the quad, so a sprite is scaled by
+ * `mediumSpriteScale` rather than by twice the radius. The centre is at
+ * `(size − 1) / 2`, so an odd size — the only kind accepted — puts one texel
+ * exactly on it.
  */
 export function mediumFalloff(size: number): Uint8Array {
   if (!Number.isInteger(size) || size < 1 || size % 2 === 0) {
@@ -316,6 +322,23 @@ export function mediumFalloff(size: number): Uint8Array {
     }
   }
   return data;
+}
+
+/**
+ * The sprite scale that draws a medium at exactly its model radius.
+ *
+ * The falloff reaches 0 on the edge texels' centres, `(size − 1) / 2` texels from
+ * the centre texel on a quad `size` texels across, so the drawn radius is
+ * `scale × (size − 1) / (2 × size)`. Scaling by twice the radius drew every disc
+ * slightly small, and left nothing tying the drawn radius to the model's — the
+ * radius the non-overlap and ceiling proofs are stated over.
+ *
+ * A fresh, mutable tuple, because that is the shape the renderer's `scale` takes.
+ */
+export function mediumSpriteScale(medium: DustMedium): [number, number, number] {
+  const size = DUST_MEDIUM_TEXTURE_SIZE;
+  const diameter = (2 * medium.radius * size) / (size - 1);
+  return [diameter, diameter, 1];
 }
 
 // --- Helpers -----------------------------------------------------------------

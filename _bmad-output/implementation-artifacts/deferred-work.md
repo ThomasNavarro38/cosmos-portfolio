@@ -504,7 +504,16 @@ leaves open.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-dust-at-rest.md`
   summary: Dust media are camera-facing sprites while the non-overlap and composite-alpha ceiling are proven over world-space spheres, so an oblique camera looking along the line between two Stars stacks two media on screen past `DUST_MEDIUM_PEAK_OPACITY`.
-  evidence: The default camera looks down `-z` at a layout where this cannot occur today; 2.5/2.6 introduce oblique Shots (`shots[].angle` is 30°), which is when screen-space stacking becomes reachable and should be re-checked perceptually or capped in view space.
+  evidence: The default camera looks down `-z`, and the committed layout has one Star, so this cannot occur in today's data. It is reachable even under the default camera once two Stars are separated mainly in `z`, because their sprites then stack on screen while their spheres stay apart; no fixture covers that case. 2.5/2.6 introduce oblique Shots (`shots[].angle` is 30°), which make screen-space stacking reachable for any layout. Re-check it perceptually then, or cap the alpha in view space.
+
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-4-dust-at-rest.md`
   summary: A medium can extend past the Body-only default framing and is clipped hard at the canvas edge, visible as a rim on the grey wash.
   evidence: Observed in the browser during implementation on the SNCF system; `frameBodies` deliberately frames Bodies only, so the fix belongs with 2.6's Client-stop framing or a medium radius bounded by the frame.
+
+## Deferred from: code review of spec-2-4-dust-at-rest.md (2026-09-28)
+
+- `auditDustModel` (`src/render-scene/dust-model.test.ts:489`) strips `//` comments before strings, so a `//` inside a string literal blanks the rest of its line. It has no `eval`, `new Function` or bracket-access (`globalThis['Math']`) bans. It also bans authored fields by a hand-kept list rather than allow-listing the `Body` fields Dust may read, so it goes stale as the schema grows. This is hardening beyond today's source: none of these forms exists in `dust-model.ts`.
+- Each particle is its own `<mesh>` with its own `<sphereGeometry>` and `<meshBasicMaterial>` (`src/render-scene/scene.tsx:195`). N particles cost N geometries, N materials and N draw calls, and `buildDust` re-runs on every `Scene` render because hooks are banned there. This is cheap at 6 particles today and 45 at the five-Client scale. Share one geometry and material, or move to an `instancedMesh`, if the ratio or the Body count grows.
+- Particles scatter up to `DUST_SCATTER_PADDING` (6) past the Bodies' box, while `frameBodies` leaves only `BODY_MARGIN` (3), so some particles can fall outside the default frame and count toward the ratio unseen. Today all 6 committed particles sit inside the frustum at both a wide and a phone aspect. This belongs with 2.6's framing, next to the medium-rim entry above.
+- Dust is always drawn before Bodies and writes no depth, so a particle or medium nearer the camera than a Body is covered by that Body. This is intended ("in front of it or behind it"), but once 2.5 moves the camera it may read as a depth inversion. Re-check it perceptually with the first moving camera.
+- The scatter is one PRNG sequence over the Bodies' box and target, and particle IDs are indices (`dust:${n}`, `src/render-scene/dust-model.ts:263`). Adding or moving any Body therefore reshuffles every particle. This matters when 2.8 condenses Motes out of specific particles, which will need a stable key per particle.
