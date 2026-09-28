@@ -53,8 +53,8 @@ baseline_commit: '7ec2820e9382d6a8d1fd2413c79de14ec18c1da0'
 - `src/render-scene/rail-camera.tsx` -- **new**. `useFrame`: read `navigationStore.getState().scrollProgress`, damp progress and aspect in a `useRef`, then `camera.position.set(...)` from the model and `camera.lookAt(...)`.
 - `src/render-scene/scene.tsx` -- `buildRail`, then `<RailCamera rail={rail} />` inside `<Canvas>`. The camera prop stays keyframe 0 (`auditCanvasSurface` :1251).
 - `src/render-scene/scene-model.test.ts` -- directory-coverage `known` (:1418), `auditForbiddenImports` file list (:721), the vocabulary loop (:762) and the connector ban all gain the new files. `auditRenderer` (:781) stays on `scene.tsx`, and the rig gets its own audit.
-- `src/shell/rail-input.ts` -- **new**, pure: `nextProgress(current, deltaY, deltaMode, stopCount, pageHeight)`.
-- `src/shell/scene-host.tsx` -- wrap the boundary in a `<div ref>`, with a `useEffect` wheel listener `{ passive: false }` → `preventDefault`, `advanceScroll(nextProgress(...))`. Add `rail` and `shots` to `SceneHostArtifact` (:72). The tag-order test (:1339) tolerates a wrapping `div`.
+- `src/shell/rail-input.ts` -- **new**, pure: `wheelProgress(current, { deltaY, deltaMode, ctrlKey }, stopCount, pageHeight)` → the next progress, or `null` when the event is not the Rail's (ctrl+wheel, horizontal-only, noise).
+- `src/shell/scene-host.tsx` -- wrap the boundary in a `<div ref>`, with a `useEffect` wheel listener `{ passive: false }` → `preventDefault`, `advanceScroll(wheelProgress(...))`. Add `rail` and `shots` to `SceneHostArtifact` (:72). The tag-order test (:1339) tolerates a wrapping `div`.
 - `src/shell/state.ts` -- writer table (:33) and `scrollProgress` doc (:132). `state.test.ts:213` titles still say "the camera".
 - READMEs for both directories. `deferred-work.md`: re-check Dust depth perceptually (:518).
 
@@ -66,7 +66,7 @@ baseline_commit: '7ec2820e9382d6a8d1fd2413c79de14ec18c1da0'
 - [x] `src/render-scene/rail-camera.tsx` + `scene.tsx` -- the rig and its mount -- the camera flies
 - [x] `src/render-scene/scene-model.test.ts` -- widen the scans. Add a rig audit (no store write, no named event, no coordinate literal, no subscription, no DOM) with mutations. Add a tree scan: nothing outside `render-scene/` imports `rail-camera`/`rail-model` -- AD-4, enforced
 - [x] `src/shell/rail-input.ts` + `rail-input.test.ts`, `scene-host.tsx`, `state.ts`/`state.test.ts` -- wheel → progress; the writer moves -- one writer per field
-- [ ] READMEs, `deferred-work.md` -- house style
+- [x] READMEs, `deferred-work.md` -- house style
 - [x] `npm test`, `npm run typecheck`, `npm run gate`, `npm run build`; no dependency change
 
 **Acceptance Criteria:**
@@ -74,6 +74,19 @@ baseline_commit: '7ec2820e9382d6a8d1fd2413c79de14ec18c1da0'
 - Given wheeling stops mid-segment, when frames continue, then the camera decelerates rather than stopping on the frame the input ends
 - Given the window is resized, when the camera re-frames, then it eases into the new framing
 - Given the wheel is over the DOM index, then the page scrolls normally and the Rail does not move
+
+### Review Findings
+
+- [x] [Review][Patch] The schema admits Shots the Rail rejects, so tighten the Shot `angle` to the open interval `(−π/2, π/2)` and add a gate test. This was decided at review: the gate should reject what the renderer rejects. [src/derive/artifact-schema.ts:158]
+- [x] [Review][Patch] `auditWheelWiring` never requires `ref={host}` on the `<div>` that wraps `<SceneBoundary>`. Dropping the ref, or moving it to an empty sibling, stays green while the wheel never reaches the listener. Add the clause and two mutations. [src/shell/rail-input.test.ts:106]
+- [x] [Review][Patch] Two new scans are never driven over bad forms, which the spec's Always rule requires: the purity scan and the scene mount scan. [src/shell/rail-input.test.ts:89, src/render-scene/scene-model.test.ts:1616]
+- [x] [Review][Patch] `aspectScale` treats a non-positive finite aspect as the reference, giving scale 1, instead of the floor, which is the max scale. If the damped aspect spring overshoots past 0 toward a sliver-width goal, the scale snaps from ceiling to 1 and the camera cuts. [src/render-scene/rail-model.ts:235]
+- [x] [Review][Patch] `railFarPlane`'s docstring claims the pose is convex in the aspect, which is unsound: the Fritsch–Carlson limiter is nonlinear, and keyframe 0 never scales. It samples only the two extreme aspects, the wide end relies on `aspectScale`'s non-finite fallback, and nothing bounds travel between samples. Sample several aspects, pass a real wide aspect, and fix the docstring. [src/render-scene/rail-model.ts:256]
+- [x] [Review][Patch] The far-plane test asserts `far > frameBodies(bodies).far * 0.5`, which contradicts its comment ("genuinely further than the opening frame's"). [src/render-scene/rail-model.test.ts:437]
+- [x] [Review][Patch] The docstring contradicts itself: "one curve, one warp, two springs" against "one spring and one curve". Line 26 also overflows. [src/render-scene/rail-model.ts:20]
+- [x] [Review][Patch] Spec bookkeeping: the "READMEs, `deferred-work.md`" task is left unchecked although it was delivered, and the Code Map still names `nextProgress(...)` where the shipped function is `wheelProgress(current, wheel, stopCount, pageHeight)`. [spec-2-5-backward-time-rail-traversal.md]
+- [x] [Review][Defer] The aim is a uniform Catmull-Rom over unevenly spaced Stars, so world-space speed per stop varies with the gap, and cusps are possible on very uneven spacing. [src/render-scene/rail-model.ts:510] — deferred, perceptual tuning belongs with 2.6
+- [x] [Review][Defer] Nothing checks containment along the path: no test proves the camera never passes through or grazes a Body between stops. [src/render-scene/rail-model.ts:303] — deferred, framing containment is 2.6's
 
 ## Design Notes
 

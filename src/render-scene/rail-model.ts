@@ -17,15 +17,17 @@
  * with its subject: translating every Body by `v` translates every keyframe by
  * `v`, and a test asserts exactly that.
  *
- * **One curve, one warp, two springs.** `progress ∈ [0, N]` is measured in stops.
- * It is warped by `s = p − k·sin(2πp)/2π`, whose rate `1 − k·cos(2πp)` is lowest
- * — but still positive — at every integer, so a stop is a slowdown and never a
- * halt. The warped parameter drives a Catmull-Rom curve through the keyframes'
- * aims and a monotone cubic through their offsets (camera = aim + offset, so the
- * camera never overshoots behind its aim), both C1 at every knot, and the warp's
- * own derivative is continuous, so the whole trajectory is C1 through every stop. The rig damps two scalars, progress
- * and aspect, with one critically damped spring each; it never damps the pose,
- * so there is one spring and one curve rather than a lag stacked on a lag.
+ * **One trajectory, one warp, two damped scalars.** `progress ∈ [0, N]` is
+ * measured in stops. It is warped by `s = p − k·sin(2πp)/2π`, whose rate
+ * `1 − k·cos(2πp)` is lowest — but still positive — at every integer, so a stop
+ * is a slowdown and never a halt. The warped parameter drives a Catmull-Rom
+ * curve through the keyframes' aims and a monotone cubic through their offsets
+ * (camera = aim + offset, so the camera never overshoots behind its aim), both
+ * C1 at every knot, and the warp's own derivative is continuous, so the whole
+ * trajectory is C1 through every stop. The rig damps two scalars, progress and
+ * aspect, with one critically damped spring each, and evaluates the trajectory
+ * at the damped values. It never damps the pose itself, so the camera's lag is
+ * the spring's alone rather than a lag stacked on a lag.
  *
  * **Pure, like every model in this directory.** It imports `./scene-model.ts`
  * and nothing else — no Three, no React, no store — so every rule an acceptance
@@ -154,7 +156,8 @@ export interface RailMotion {
  * **The angle must be strictly inside a quarter-turn.** At `±π/2` the camera
  * stands directly above or below its subject and `lookAt` has no defined roll;
  * past it the camera crosses to the `−z` side, looking back at the Rail from
- * behind. The schema allows the closed interval; the Rail needs the open one.
+ * behind. The schema gates the same open interval; the check here stays so a
+ * hand-built artifact that never passed the gate still fails by name.
  */
 export function buildRail(artifact: RailArtifact, bodies: readonly Body[]): Rail {
   const framing = frameBodies(bodies);
@@ -228,17 +231,24 @@ export function railStopCount(rail: Rail): number {
  *
  * **Bounded.** The aspect is floored at `NARROWEST_ASPECT`, so a collapsed
  * canvas (a sliver of width, or none) cannot fling the camera away by a factor
- * of thousands; the largest scale is `reference / NARROWEST_ASPECT`. A
- * non-finite or non-positive aspect — a zero-height canvas mid-layout — reads as
- * the reference.
+ * of thousands; the largest scale is `reference / NARROWEST_ASPECT`.
+ *
+ * **Continuous everywhere it is defined.** Zero and below read as the floor,
+ * like any sliver: the damped aspect is a spring, and one that overshoots a
+ * tiny goal past zero must not jump the camera from the floor's distance back
+ * to the reference's. `+∞` is the widest aspect and scales by 1. Only `NaN` —
+ * no aspect at all — reads as the reference.
  */
 export function aspectScale(referenceAspect: number, aspect: number): number {
-  if (!Number.isFinite(aspect) || aspect <= 0) return 1;
+  if (Number.isNaN(aspect)) return 1;
   return Math.max(1, referenceAspect / Math.max(aspect, NARROWEST_ASPECT));
 }
 
 /** How many samples per segment `railFarPlane` takes along the curve. */
 export const RAIL_FAR_SAMPLES_PER_SEGMENT = 32;
+
+/** How many aspects `railFarPlane` samples between the floor and the reference. */
+export const RAIL_FAR_ASPECT_SAMPLES = 8;
 
 /**
  * A far plane that keeps every Body in front of the camera from anywhere on the
@@ -246,26 +256,45 @@ export const RAIL_FAR_SAMPLES_PER_SEGMENT = 32;
  *
  * The `camera` prop's `far` comes from keyframe 0's framing, but a stop on a
  * narrow viewport backs off by up to `reference / NARROWEST_ASPECT` and can then
- * stand further from a distant Body than the opening frame ever did. So the
- * curve is sampled (every keyframe included) at the two extreme aspects — the
- * pose is affine in the one aspect scale, so the distance to a Body is convex in
- * it and its maximum lies at an end — and the furthest Body distance plus
- * `BODY_MARGIN` is returned. Euclidean distance bounds the depth along the view
- * axis, so it is conservative.
+ * stand further from a distant Body than the opening frame ever did.
+ *
+ * **Sampled, with the gaps between samples paid for.** The pose is not affine
+ * in the aspect — keyframe 0 never scales while the stops do, and the monotone
+ * cubic's tangent limiter is nonlinear — so no single aspect is known to be the
+ * worst. The curve is sampled on a grid: progress along the Rail, every keyframe
+ * included, by aspects spanning the floor to the reference (wider than the
+ * reference nothing scales, so the reference stands for them). Between two
+ * neighbouring samples the path is C1 and short, so any pose on it lies within
+ * about half their chord of the nearer one; half the longest chord in the grid
+ * is added as slack, with `BODY_MARGIN` on top. Euclidean
+ * distance bounds the depth along the view axis, so the plane is conservative.
  */
 export function railFarPlane(rail: Rail, bodies: readonly Body[]): number {
   const stops = railStopCount(rail);
   const samples = Math.max(1, stops * RAIL_FAR_SAMPLES_PER_SEGMENT);
+  const aspects = Array.from(
+    { length: RAIL_FAR_ASPECT_SAMPLES + 1 },
+    (_, j) => NARROWEST_ASPECT + ((SHOT_REFERENCE_ASPECT - NARROWEST_ASPECT) * j) / RAIL_FAR_ASPECT_SAMPLES,
+  );
   let furthest = 0;
-  for (const aspect of [NARROWEST_ASPECT, Number.POSITIVE_INFINITY]) {
+  let slack = 0;
+  let previousRow: ScenePosition[] | null = null;
+  for (const aspect of aspects) {
+    const row: ScenePosition[] = [];
     for (let i = 0; i <= samples; i += 1) {
       const { position } = railPose(rail, stops === 0 ? 0 : (i / samples) * stops, aspect);
       for (const body of bodies) {
         furthest = Math.max(furthest, distanceBetween(position, body.position));
       }
+      const before = row[i - 1];
+      if (before !== undefined) slack = Math.max(slack, distanceBetween(before, position));
+      const across = previousRow?.[i];
+      if (across !== undefined) slack = Math.max(slack, distanceBetween(across, position));
+      row.push(position);
     }
+    previousRow = row;
   }
-  return furthest + BODY_MARGIN;
+  return furthest + slack / 2 + BODY_MARGIN;
 }
 
 /**
