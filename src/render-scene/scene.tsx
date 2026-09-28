@@ -36,8 +36,17 @@
  * story's own acceptance; colour, tokens and typography are Epic 3's.
  *
  * **Nothing here reacts to anything.** No interaction, no hover, no click-to-fly,
- * no Rail traversal, no Shot, no Dwell, no Dust, no Motes, no Focus — those are
- * 2.4 through 2.10. Bodies at rest, and a static view that sees them.
+ * no Rail traversal, no Shot, no Dwell, no Motes, no Focus — those are 2.5
+ * through 2.10. Bodies and Dust at rest, and a static view that sees them.
+ *
+ * **Dust is drawn strictly behind every Body** (FR-15). The model in
+ * `dust-model.ts` decides what Dust exists; this file only guarantees the draw
+ * order: every Dust draw carries `DUST_RENDER_ORDER` and writes no depth, every
+ * Body carries `BODY_RENDER_ORDER` and a `transparent` material at opacity 1. The
+ * last part is load-bearing: three renders its whole opaque list before its
+ * transparent list whatever the `renderOrder`, so an opaque Body would be drawn
+ * *before* the (transparent) Dust and then painted over by it. Moving the Bodies
+ * into the transparent pass is what lets `renderOrder` order them after the Dust.
  *
  * **Greybox.** Placeholder geometry only, and **no connector geometry of any
  * kind**: no line, no edge, no link between two Bodies. Orbit is expressed as a
@@ -45,7 +54,35 @@
  */
 
 import { Canvas } from '@react-three/fiber';
-import { buildScene, frameBodies, type Body, type SceneArtifact } from './scene-model.ts';
+import { DataTexture, LinearFilter } from 'three';
+import {
+  DUST_COLOR,
+  DUST_MEDIUM_TEXTURE_SIZE,
+  DUST_PARTICLE_OPACITY,
+  DUST_PARTICLE_RADIUS,
+  DUST_RENDER_ORDER,
+  buildDust,
+  mediumFalloff,
+} from './dust-model.ts';
+import { BODY_RENDER_ORDER, buildScene, frameBodies, type Body, type SceneArtifact } from './scene-model.ts';
+
+/**
+ * The medium's falloff texture: one GPU texture, shared by every medium.
+ *
+ * Module scope, so there is one upload however many Client systems there are and a
+ * re-render rebuilds nothing. The texels are built in full by `mediumFalloff`,
+ * because this file may not loop, slice or filter. Linear filtering because
+ * `DataTexture` defaults to nearest, which draws the gradient as visible blocks
+ * once a 65-texel texture is stretched across a system.
+ */
+const MEDIUM_TEXTURE = new DataTexture(
+  mediumFalloff(DUST_MEDIUM_TEXTURE_SIZE),
+  DUST_MEDIUM_TEXTURE_SIZE,
+  DUST_MEDIUM_TEXTURE_SIZE,
+);
+MEDIUM_TEXTURE.magFilter = LinearFilter;
+MEDIUM_TEXTURE.minFilter = LinearFilter;
+MEDIUM_TEXTURE.needsUpdate = true;
 
 /** What the scene needs: the artifact, and nothing else. */
 export interface SceneProps {
@@ -84,8 +121,8 @@ function radiusOf(body: Body): number {
 }
 
 /**
- * The scene: a sized canvas, a default camera that contains every Body, and one
- * sphere per Body at its solved position.
+ * The scene: a sized canvas, a default camera that contains every Body, the Dust
+ * behind them, and one sphere per Body at its solved position.
  *
  * The camera's `rotation` is passed explicitly and comes from the model. R3F calls
  * `camera.lookAt(0, 0, 0)` whenever the prop carries no rotation, which aims past
@@ -96,7 +133,9 @@ function radiusOf(body: Body): number {
  */
 export function Scene({ artifact }: SceneProps) {
   const { bodies } = buildScene(artifact);
+  // The framing sees Bodies only: Dust never widens it.
   const framing = frameBodies(bodies);
+  const { media, particles } = buildDust(bodies);
 
   return (
     <Canvas
@@ -131,10 +170,50 @@ export function Scene({ artifact }: SceneProps) {
         ]}
         intensity={1.2}
       />
+      {/*
+        The medium: one billboard per Client system, its scale the diameter because
+        the falloff disc is inscribed in the texture. Drawn before every Body and
+        writing no depth, so it can never paint over one.
+      */}
+      {media.map((medium) => (
+        <sprite
+          key={medium.id}
+          position={[medium.position.x, medium.position.y, medium.position.z]}
+          scale={[medium.radius * 2, medium.radius * 2, 1]}
+          renderOrder={DUST_RENDER_ORDER}
+        >
+          <spriteMaterial
+            map={MEDIUM_TEXTURE}
+            color={DUST_COLOR}
+            opacity={medium.opacity}
+            transparent
+            depthWrite={false}
+          />
+        </sprite>
+      ))}
+      {/* The particles: the same draw-order rules as the medium. */}
+      {particles.map((particle) => (
+        <mesh
+          key={particle.id}
+          position={[particle.position.x, particle.position.y, particle.position.z]}
+          renderOrder={DUST_RENDER_ORDER}
+        >
+          <sphereGeometry args={[DUST_PARTICLE_RADIUS, 8, 6]} />
+          <meshBasicMaterial color={DUST_COLOR} opacity={DUST_PARTICLE_OPACITY} transparent depthWrite={false} />
+        </mesh>
+      ))}
+      {/*
+        Bodies: in the transparent pass at opacity 1, so `renderOrder` places them
+        after the Dust — see this file's header for why an opaque Body would lose.
+      */}
       {bodies.map((body) => (
-        <mesh key={body.id} position={[body.position.x, body.position.y, body.position.z]}>
+        <mesh
+          key={body.id}
+          position={[body.position.x, body.position.y, body.position.z]}
+          renderOrder={BODY_RENDER_ORDER}
+        >
           <sphereGeometry args={[radiusOf(body), 24, 16]} />
-          <meshStandardMaterial />
+          <meshStandardMaterial transparent opacity={1} />
         </mesh>
       ))}
     </Canvas>
