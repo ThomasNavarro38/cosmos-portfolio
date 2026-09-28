@@ -36,9 +36,10 @@
  * story's own acceptance; colour, tokens and typography are Epic 3's.
  *
  * **Nothing here reacts to anything.** No interaction, no hover, no click-to-fly,
- * no Dwell, no Motes, no Focus — those are 2.6 through 2.10. Rail traversal (2.5)
- * is mounted here as `<RailCamera>`, and every rule it obeys lives in
- * `rail-model.ts`; this file only builds the keyframes and hands them over. The
+ * no Motes, no Focus — those are 2.7 through 2.10. Rail traversal (2.5), with
+ * its stop framing and Dwell pacing (2.6), is mounted here as `<RailCamera>`, and
+ * every rule it obeys lives in `rail-model.ts`; this file only builds the
+ * keyframes and hands them over. The
  * `camera` prop stays keyframe 0, so the first frame is the opening frame whether
  * or not the rig has run yet.
  *
@@ -105,7 +106,8 @@ export interface SceneProps {
  * belongs in `src/derive/` and arrives through the artifact.
  *
  * `scene-model.ts`'s `BODY_MARGIN` is the slack the framing leaves around the
- * outermost Body, and it must stay at least this large or a raised radius clips
+ * outermost Body, and `STOP_MARGIN` the sphere a Rail stop contains each Body
+ * as; both must stay at least this large or a raised radius clips
  * through the frustum edge. The two numbers live in two files, so the relation is
  * asserted in `scene-model.test.ts` rather than left to whoever edits one of them.
  */

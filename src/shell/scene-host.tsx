@@ -84,6 +84,10 @@ export interface SceneHostArtifact {
     readonly angle: number;
     readonly distance: number;
   }[];
+  readonly dwell: readonly {
+    readonly subject: string;
+    readonly tempo: string;
+  }[];
   readonly clients: readonly {
     readonly id: string;
     readonly position: { readonly x: number; readonly y: number; readonly z: number };
