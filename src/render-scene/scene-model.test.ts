@@ -28,9 +28,10 @@
 
 import { strict as assert } from 'node:assert';
 import { readFileSync, readdirSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { Frustum, Matrix4, PerspectiveCamera, Vector3 } from 'three';
+import { Frustum, Matrix4, PerspectiveCamera, Quaternion, Vector3 } from 'three';
 import { DUST_PARTICLE_RADIUS } from './dust-model.ts';
 import {
   BODY_MARGIN,
@@ -39,7 +40,7 @@ import {
   buildScene,
   frameBodies,
   type Body,
-  type SceneArtifact,
+  type SceneBodiesArtifact,
   type SceneArtifactClient,
   type SceneArtifactProject,
 } from './scene-model.ts';
@@ -48,6 +49,9 @@ const SCENE_DIR = fileURLToPath(new URL('.', import.meta.url));
 const MODEL_TS = fileURLToPath(new URL('./scene-model.ts', import.meta.url));
 const DUST_TS = fileURLToPath(new URL('./dust-model.ts', import.meta.url));
 const SCENE_TSX = fileURLToPath(new URL('./scene.tsx', import.meta.url));
+const RAIL_MODEL_TS = fileURLToPath(new URL('./rail-model.ts', import.meta.url));
+const RAIL_CAMERA_TSX = fileURLToPath(new URL('./rail-camera.tsx', import.meta.url));
+const SRC_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SCENE_HOST_TSX = fileURLToPath(new URL('../shell/scene-host.tsx', import.meta.url));
 const APP_TSX = fileURLToPath(new URL('../App.tsx', import.meta.url));
 const ARTIFACT_JSON = fileURLToPath(new URL('../../generated/layout.generated.json', import.meta.url));
@@ -139,7 +143,7 @@ function client(
  * Planets-per-Client one. Positions are spread on `x` and `y` so the framing has a
  * real extent to fit rather than a degenerate point.
  */
-function fiveClients(): SceneArtifact {
+function fiveClients(): SceneBodiesArtifact {
   return {
     clients: [
       client(
@@ -169,11 +173,11 @@ function fiveClients(): SceneArtifact {
 }
 
 /** The committed artifact, read once, typed against the model's own restatement. */
-function committedArtifact(): SceneArtifact {
-  return JSON.parse(readFileSync(ARTIFACT_JSON, 'utf8')) as SceneArtifact;
+function committedArtifact(): SceneBodiesArtifact {
+  return JSON.parse(readFileSync(ARTIFACT_JSON, 'utf8')) as SceneBodiesArtifact;
 }
 
-const idsOf = (artifact: SceneArtifact): string[] => buildScene(artifact).bodies.map((body) => body.id);
+const idsOf = (artifact: SceneBodiesArtifact): string[] => buildScene(artifact).bodies.map((body) => body.id);
 
 // --- The fixture guard ------------------------------------------------------
 
@@ -357,7 +361,7 @@ test('reversing the artifact’s order reverses the Bodies, so no hidden sort su
   // ones. Both directions are asserted, because "the order changed" alone would pass
   // for a model that sorted descending.
   const artifact = fiveClients();
-  const reversed: SceneArtifact = {
+  const reversed: SceneBodiesArtifact = {
     clients: [...artifact.clients].reverse().map((entry) => ({
       ...entry,
       projects: [...entry.projects].reverse(),
@@ -384,7 +388,7 @@ test('a Project with a company adds no Body, and the count is unchanged', () => 
   // a *difference* against the same document without the field, so the test fails if
   // a Company ever starts producing a mesh.
   const bare = fiveClients();
-  const withCompany: SceneArtifact = {
+  const withCompany: SceneBodiesArtifact = {
     clients: bare.clients.map((entry) => ({
       ...entry,
       projects: entry.projects.map((p) => ({ ...p, content: { company: 'Some Consultancy' } })),
@@ -403,17 +407,17 @@ test('a duplicate entity ID throws naming the duplicated ID', () => {
   // surface looks right. The gate rejects such a document, so reaching here means it
   // was hand-edited past the build — and silence is the one failure mode worse than
   // a throw.
-  const twoStars: SceneArtifact = {
+  const twoStars: SceneBodiesArtifact = {
     clients: [client('client:a', at(0)), client('client:a', at(5))],
   };
   assert.throws(() => buildScene(twoStars), /client:a/, 'the offending ID is named');
 
-  const starAndPlanet: SceneArtifact = {
+  const starAndPlanet: SceneBodiesArtifact = {
     clients: [client('client:a', at(0), project('client:a', 'client:a', at(2)))],
   };
   assert.throws(() => buildScene(starAndPlanet), /client:a/, 'a Star and a Planet colliding is the same failure');
 
-  const twoPlanets: SceneArtifact = {
+  const twoPlanets: SceneBodiesArtifact = {
     clients: [
       client('client:a', at(0), project('project:dup', 'client:a', at(2))),
       client('client:b', at(9), project('project:dup', 'client:b', at(11))),
@@ -573,7 +577,7 @@ test('the camera stands at the Bodies’ centre in x and y, which is what makes 
   // aims at the centre only if the camera shares the centre's `x` and `y` — move the
   // camera off that line and the explicit rotation becomes as wrong as the default
   // was. Asserted on an artifact whose centre is neither the origin nor on an axis.
-  const artifact: SceneArtifact = {
+  const artifact: SceneBodiesArtifact = {
     clients: [client('client:a', at(10, 4)), client('client:b', at(30, 12))],
   };
   const bodies = buildScene(artifact).bodies;
@@ -581,6 +585,23 @@ test('the camera stands at the Bodies’ centre in x and y, which is what makes 
   assert.equal(framing.position.x, 20, 'midway in x');
   assert.equal(framing.position.y, 8, 'midway in y');
   assert.ok(framing.position.z > 12, 'and standing back from the furthest Body');
+});
+
+test('the framing’s target is the Bodies’ centre, and looking at it from the position is the rotation', () => {
+  // Keyframe 0 of the Rail aims by `lookAt(target)`; the camera prop aims by
+  // `rotation`. The two must be one aim, or the rig's first frame turns the camera.
+  // Pinned through a real camera: `lookAt(target)` must leave it unrotated.
+  for (const artifact of [fiveClients(), committedArtifact()]) {
+    const framing = frameBodies(buildScene(artifact).bodies);
+    const camera = new PerspectiveCamera(framing.fov, 1, framing.near, framing.far);
+    camera.position.set(framing.position.x, framing.position.y, framing.position.z);
+    camera.lookAt(framing.target.x, framing.target.y, framing.target.z);
+    assert.ok(camera.quaternion.angleTo(new Quaternion()) < 1e-9, 'looking at the target is rotation [0, 0, 0]');
+  }
+  const framing = frameBodies(
+    buildScene({ clients: [client('client:a', at(10, 4, -2)), client('client:b', at(30, 12, 6))] }).bodies,
+  );
+  assert.deepEqual(framing.target, { x: 20, y: 8, z: 2 }, 'the centre in all three axes, read off the Bodies');
 });
 
 test('the horizontal fit decides when the extent is wide, which vertical-only framing could not', () => {
@@ -718,7 +739,7 @@ test('no module here imports src/data/, src/derive/, the solver, or zustand/reac
   // package, so `zustand/react` and `zustand/vanilla` are both `zustand`, and a row
   // banning `zustand` would reject the navigation store this directory's README
   // explicitly permits.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX]) {
     assert.deepEqual(auditForbiddenImports(readFileSync(path, 'utf8')), [], `${path} must hold no forbidden import`);
   }
 });
@@ -760,7 +781,7 @@ test('the scene holds no classification or mapping-rule vocabulary of its own', 
   // A case-insensitive `\balpha\b` ban was dropped from this list deliberately — over
   // a pure-structure module it cannot fail by construction, and it would misfire on a
   // future token name or on a fixture Client named Alpha.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX]) {
     const code = codeOf(path);
     assert.doesNotMatch(code, /\bclassify\w*\s*\(|\bfunction\s+classify/i, 'no classification test');
     assert.doesNotMatch(code, /\b(?:luminance|mote|mass|rail)(?:Band|Tier|Of|For|From)?\s*\(/i, 'no mapping computed');
@@ -979,7 +1000,11 @@ function auditConnectors(code: string): string[] {
 }
 
 test('the renderer draws no line, edge, or connector between any two Bodies', () => {
-  assert.deepEqual(auditConnectors(readFileSync(SCENE_TSX, 'utf8')), [], 'orbit is a position, never a drawn ring');
+  // The Rail's files too: a camera path drawn as a `<CatmullRomLine>` would be a
+  // connector between two Clients by another name.
+  for (const path of [SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX]) {
+    assert.deepEqual(auditConnectors(readFileSync(path, 'utf8')), [], `${path}: orbit is a position, never a drawn ring`);
+  }
 });
 
 test('the connector ban rejects drei’s Line as well as Three’s intrinsics', () => {
@@ -1378,7 +1403,7 @@ test('the host restates the artifact shape rather than importing the scene’s t
   assert.match(code, /interface\s+SceneHostArtifact/, 'the shape is restated');
   const shape = /interface\s+SceneHostArtifact[\s\S]*?\n\}/.exec(code);
   assert.ok(shape !== null);
-  assert.doesNotMatch(shape[0], /\n\s+(?!readonly)[a-zA-Z]+\s*[?:]/, 'every member readonly, matching SceneArtifact');
+  assert.doesNotMatch(shape[0], /\n\s+(?!readonly)[a-zA-Z]+\s*[?:]/, 'every member readonly, matching SceneBodiesArtifact');
 });
 
 // --- App.tsx mounts it, pinned positively ----------------------------------
@@ -1406,12 +1431,263 @@ test('App.tsx imports the scene host and renders it after the index', () => {
   );
 });
 
+// --- The Rail rig -------------------------------------------------------------
+
+/**
+ * A world-coordinate literal, in any of the shapes one takes in this stack.
+ *
+ * FR-17 says a Shot names an entity plus a relative framing and never a place, and
+ * the Rail inherits that: every keyframe is resolved from a Body. A literal pose —
+ * `camera.position.set(0, 5, 40)`, `lookAt(0, 0, 0)`, `{ x: 0, y: 0, z: 40 }`, a
+ * numeric triple — is a place somebody wrote down, and it stays put when the
+ * solver moves the Bodies. Run over prose-blanked code, so a number in a comment
+ * or a message is not a finding.
+ */
+function coordinateLiterals(code: string): string[] {
+  const failures: string[] = [];
+  const number = String.raw`-?\d[\d.]*`;
+  const shapes: readonly (readonly [string, RegExp])[] = [
+    // Object-literal context only — after `{` or `,` — so a ternary `c ? x : 0` is
+    // not a coordinate.
+    ['an object literal coordinate', new RegExp(String.raw`[{,]\s*[xyz]\s*:\s*${number}`)],
+    ['a numeric .set(…)', new RegExp(String.raw`\.set\s*\(\s*${number}`)],
+    ['a numeric lookAt(…)', new RegExp(String.raw`\blookAt\s*\(\s*${number}`)],
+    ['a numeric Vector3', new RegExp(String.raw`new\s+Vector3\s*\(\s*${number}`)],
+    ['a numeric triple', new RegExp(String.raw`\[\s*${number}\s*,\s*${number}\s*,\s*${number}\s*\]`)],
+  ];
+  for (const [name, pattern] of shapes) {
+    if (pattern.test(code)) failures.push(`holds ${name} — a keyframe is an entity plus a framing, never a place`);
+  }
+  return failures;
+}
+
+test('neither Rail file holds a world-coordinate literal', () => {
+  for (const path of [RAIL_MODEL_TS, RAIL_CAMERA_TSX]) {
+    assert.deepEqual(coordinateLiterals(codeOf(path)), [], `${path} must resolve every pose from entities`);
+  }
+});
+
+test('the coordinate-literal scan rejects each shape, and passes entity-derived arithmetic', () => {
+  for (const form of [
+    'camera.position.set(0, 5, 40);',
+    'camera.lookAt(10, 0, 0);',
+    'const aim = new Vector3(0, 0, 0);',
+    'const home = { x: 0, y: 0, z: 40 };',
+    'const opening = [5, 0, 30];',
+    'const drop = { y: -12 };',
+    'const p = { a: 1, z: 40 };',
+  ]) {
+    assert.notDeepEqual(coordinateLiterals(form), [], `${form} must be rejected`);
+  }
+  for (const form of [
+    'camera.position.set(pose.position.x, pose.position.y, pose.position.z);',
+    'camera.lookAt(pose.target.x, pose.target.y, pose.target.z);',
+    'return { x: a.x * 2 - b.x, y: a.y * 2 - b.y, z: a.z * 2 - b.z };',
+    'const eased = { value: goal, velocity: 0 };',
+    'y: subject.y + shot.distance * Math.sin(shot.angle),',
+    'const pick = inside ? x : 0;',
+    'const edge = ready ? z : -1;',
+  ]) {
+    assert.deepEqual(coordinateLiterals(form), [], `${form} is derived and must pass`);
+  }
+});
+
+/**
+ * The rig's contract, as a pure function over its source.
+ *
+ * It **reads** progress with `getState()` inside `useFrame`, damps through the
+ * model and writes the Three camera — and does nothing else. No store write and
+ * no named event (the scroll input owns `scrollProgress`, the index owns
+ * `railPosition`), no subscription or reactive hook (a re-render per frame to
+ * read a value it is about to read anyway), no DOM (the viewport arrives as R3F's
+ * `size`), no coordinate literal, no interaction. The positive half pins that it
+ * still does the one thing it is for.
+ */
+function auditRig(source: string): string[] {
+  const code = blankProse(source);
+  const quoted = blankComments(source);
+  const failures: string[] = [];
+
+  if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) failures.push('writes the store with setState');
+  if (/\b(?:advanceScroll|selectClient|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation)\b/.test(code)) {
+    failures.push('names a navigation event — the rig reads the store and writes only the camera');
+  }
+  if (/\buseStore\b|\bsubscribe\b|\buseSyncExternalStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {
+    failures.push('subscribes to the store — a frame loop reads getState()');
+  }
+  if (/\buseThree\b|\buseState\b|\buseReducer\b|\buseEffect\b|\buseLayoutEffect\b|\buseMemo\b/.test(code)) {
+    failures.push('holds reactive state or an effect — the damped state is a ref, the loop is useFrame');
+  }
+  if (/\bwindow\b|\bdocument\b|innerWidth|innerHeight|getBoundingClientRect|addEventListener|matchMedia/.test(code)) {
+    failures.push('reads the DOM — the viewport arrives as R3F’s size');
+  }
+  if (/\braycast\w*|\bonClick\b|\bonPointer\w+|\bonWheel\b|\bonScroll\b/i.test(code)) {
+    failures.push('handles an interaction — the wheel is the shell’s, click-to-fly is 2.9’s');
+  }
+  if (/\.sort\s*\(|\.filter\s*\(|\.reverse\s*\(|\.slice\s*\(/.test(code)) failures.push('orders or selects');
+  failures.push(...coordinateLiterals(code));
+
+  // The binding, exactly: the frame body is `railFrame` (executed in
+  // `rail-model.test.ts`), and the rig's only job is to hand it the right inputs
+  // and apply what comes back. Each clause is one way to hand it the wrong ones.
+  const loop = /\buseFrame\s*\(\s*\(\s*\{\s*camera\s*,\s*size\s*\}\s*,\s*delta\s*\)\s*=>\s*\{([\s\S]*?)\}\s*\)\s*;/.exec(code);
+  if (loop === null) {
+    failures.push('runs no frame loop taking ({ camera, size }, delta)');
+    return failures;
+  }
+  const frame = loop[1] ?? '';
+  const statements = frame
+    .split(';')
+    .map((statement) => statement.replace(/\s+/g, ''))
+    .filter((statement) => statement !== '');
+  const expected = [
+    'constframe=railFrame(motion.current,rail,navigationStore.getState().scrollProgress,size.width,size.height,delta)',
+    'motion.current=frame.motion',
+    'camera.position.set(frame.pose.position.x,frame.pose.position.y,frame.pose.position.z)',
+    'camera.lookAt(frame.pose.target.x,frame.pose.target.y,frame.pose.target.z)',
+  ];
+  if (JSON.stringify(statements) !== JSON.stringify(expected)) {
+    failures.push(
+      'the frame loop is not exactly: railFrame(motion.current, rail, getState().scrollProgress, size.width, ' +
+        'size.height, delta), write motion back, apply position and aim',
+    );
+  }
+  if (!/const\s+motion\s*=\s*useRef<RailMotion\s*\|\s*null>\(\s*null\s*\)/.test(code)) {
+    failures.push('the carried motion is not a ref that starts empty');
+  }
+  return failures;
+}
+
+test('the rig reads the store, writes only the camera, and holds no rule of its own', () => {
+  assert.deepEqual(auditRig(readFileSync(RAIL_CAMERA_TSX, 'utf8')), []);
+});
+
+test('the rig audit rejects the real rig with any one guarantee broken', () => {
+  // Mutations of the shipped file, each checked to have applied, so every bad form
+  // is exactly one edit from what ships.
+  const real = readFileSync(RAIL_CAMERA_TSX, 'utf8');
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    [
+      'a store write',
+      (s) => s.replace('motion.current = frame.motion;', 'motion.current = frame.motion;\n    navigationStore.setState({ scrollProgress: 1 });'),
+    ],
+    ['a named event', (s) => s.replace('motion.current = frame.motion;', 'motion.current = frame.motion;\n    advanceScroll(frame.motion.progress.value);')],
+    [
+      'selecting a Client from scroll',
+      (s) => s.replace('motion.current = frame.motion;', "motion.current = frame.motion;\n    selectClient('client:sncf');"),
+    ],
+    ['a subscription', (s) => s.replace('return null;', 'navigationStore.subscribe(() => {});\n  return null;')],
+    [
+      'a hook binding',
+      (s) => s.replace('navigationStore.getState().scrollProgress', 'useStore(navigationStore, (state) => state.scrollProgress)'),
+    ],
+    ['reactive state', (s) => s.replace('const motion = useRef', 'const [, force] = useState(0);\n  const motion = useRef')],
+    ['useThree', (s) => s.replace('const motion = useRef', 'const { size } = useThree();\n  const motion = useRef')],
+    ['a DOM read', (s) => s.replace('size.width, size.height,', 'window.innerWidth, window.innerHeight,')],
+    [
+      'a literal position',
+      (s) =>
+        s.replace(
+          'camera.position.set(frame.pose.position.x, frame.pose.position.y, frame.pose.position.z)',
+          'camera.position.set(0, 5, 40)',
+        ),
+    ],
+    [
+      'a literal aim',
+      (s) => s.replace('camera.lookAt(frame.pose.target.x, frame.pose.target.y, frame.pose.target.z)', 'camera.lookAt(0, 0, 0)'),
+    ],
+    ['no getState read', (s) => s.replace('navigationStore.getState().scrollProgress', 'motion.current?.progress.value ?? 0')],
+    ['the write-back removed', (s) => s.replace('motion.current = frame.motion;', '')],
+    ['delta dropped', (s) => s.replace('size.height, delta)', 'size.height, 0)')],
+    ['a constant width', (s) => s.replace('scrollProgress, size.width,', 'scrollProgress, 1600,')],
+    ['a constant height', (s) => s.replace('size.width, size.height,', 'size.width, 900,')],
+    ['a fresh motion every frame', (s) => s.replace('railFrame(motion.current,', 'railFrame(null,')],
+    ['the aim applied as the position', (s) => s.replace('frame.pose.position.x, frame.pose.position.y', 'frame.pose.target.x, frame.pose.position.y')],
+    ['no model frame', (s) => s.replace(/railFrame\(motion\.current,[^;]*;/, "{ motion: motion.current!, pose: rail.keyframes[0]! };")],
+    ['an interaction', (s) => s.replace('return null;', 'return <mesh onClick={() => undefined} />;')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped rig`);
+    assert.notDeepEqual(auditRig(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
+test('the scene builds the Rail from the artifact and mounts the rig inside the Canvas', () => {
+  // Pinned positively: deleting the mount is a one-line edit that leaves every
+  // negative scan green while the camera stops flying.
+  const code = codeOf(SCENE_TSX);
+  assert.match(code, /\bbuildRail\s*\(\s*artifact\s*,\s*bodies\s*\)/, 'the keyframes come from the artifact and Bodies');
+  const inside = /<Canvas\b[\s\S]*<\/Canvas>/.exec(code)?.[0] ?? '';
+  assert.match(inside, /<RailCamera\s+rail=\{\s*rail\s*\}\s*\/>/, 'the rig is mounted inside the Canvas');
+  // The far plane covers every pose the rig can reach, not only the opening frame.
+  assert.match(
+    code,
+    /\bfar\s*:\s*Math\.max\(\s*framing\.far\s*,\s*railFarPlane\(\s*rail\s*,\s*bodies\s*\)\s*\)/,
+    'the camera prop far plane includes railFarPlane(rail, bodies)',
+  );
+});
+
+/**
+ * Every `.ts`/`.tsx` file under `src/` outside `src/render-scene/` that imports the
+ * Rail model or the rig, as a pure function over files.
+ *
+ * AD-4: the scene is presentational, and the Rail is part of it. The shell reaches
+ * the renderer through one dynamic edge (`scene-host.tsx`); a static edge into
+ * `rail-model.ts` from the shell would hoist it — and whatever it grows — onto the
+ * entry path, and the index would start depending on render geometry.
+ */
+function railImporters(files: readonly { readonly path: string; readonly source: string }[]): string[] {
+  const failures: string[] = [];
+  for (const file of files) {
+    if (file.path.startsWith('src/render-scene/')) continue;
+    const code = blankComments(file.source);
+    for (const match of code.matchAll(/(?:\bfrom|\bimport|\brequire)\s*\(?\s*['"`]([^'"`]+)['"`]/g)) {
+      if (/(?:^|\/)rail-(?:model|camera)(?:\.tsx?)?$/.test(match[1] ?? '')) {
+        failures.push(`${file.path} imports ${match[1]} — only src/render-scene/ may reach the Rail`);
+      }
+    }
+  }
+  return failures;
+}
+
+test('nothing outside src/render-scene/ imports the Rail model or the rig', () => {
+  const files = readdirSync(SRC_ROOT, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && /\.tsx?$/.test(entry.name))
+    .map((entry) => join(entry.parentPath, entry.name))
+    .map((path) => ({ path: `src/${relative(SRC_ROOT, path).split(sep).join('/')}`, source: readFileSync(path, 'utf8') }));
+  assert.ok(files.some((file) => file.path === 'src/shell/scene-host.tsx'), 'the walk must reach the shell');
+  assert.deepEqual(railImporters(files), []);
+});
+
+test('the Rail-importer scan rejects every edge form from outside, and ignores prose and the directory itself', () => {
+  for (const source of [
+    "import { buildRail } from '../render-scene/rail-model.ts';",
+    "import type { Rail } from '../render-scene/rail-model.ts';",
+    "const rig = await import('../render-scene/rail-camera.tsx');",
+    "export { railPose } from '../render-scene/rail-model';",
+    "import { RailCamera } from './render-scene/rail-camera.tsx';",
+  ]) {
+    assert.notDeepEqual(railImporters([{ path: 'src/shell/x.ts', source }]), [], `${source} must be rejected`);
+  }
+  assert.deepEqual(
+    railImporters([
+      { path: 'src/render-scene/scene.tsx', source: "import { buildRail } from './rail-model.ts';" },
+      { path: 'src/shell/x.ts', source: "// import { buildRail } from '../render-scene/rail-model.ts';" },
+      { path: 'src/shell/y.ts', source: "const cases = ['src/render-scene/rail-camera.tsx'];" },
+      { path: 'src/shell/z.ts', source: "import { wheelProgress } from './rail-input.ts';" },
+    ]),
+    [],
+  );
+});
+
 // --- Directory coverage ----------------------------------------------------
 
 test('every module in this directory is covered by the scans above', () => {
-  // The scans resolve `scene.tsx` by name, so a second module under
-  // `src/render-scene/` — 2.5's camera is the next one — would inherit none of the
-  // connector, ARIA, hook or store-write bans. This does not widen them; it makes an
+  // The scans resolve each module by name, so a new module under
+  // `src/render-scene/` would inherit none of the connector, hook, store-write or
+  // coordinate-literal bans. 2.5's `rail-model.ts` and `rail-camera.tsx` are named
+  // in every scan that applies to them (the rig has its own audit below). This does not widen them; it makes an
   // unscanned module fail *loudly*, naming itself, rather than passing silently. The
   // same shape as `checkRuleCoverage` in `boundaries.ts`, one level down. Widening the
   // scans themselves is recorded in `deferred-work.md`.
@@ -1421,6 +1697,9 @@ test('every module in this directory is covered by the scans above', () => {
     'dust-model.ts',
     'dust-model.test.ts',
     'scene.tsx',
+    'rail-model.ts',
+    'rail-model.test.ts',
+    'rail-camera.tsx',
     'README.md',
   ]);
   const found: string[] = [];

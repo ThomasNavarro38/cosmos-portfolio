@@ -30,15 +30,17 @@
  * | --- | --- | --- |
  * | `mode` | `enterRail` / `enterFreeFlight` | Rail travel or free flight |
  * | `railPosition` | `selectClient` — the index | The discrete Client the Rail stops at, never a ProjectId (AD-4a) |
- * | `scrollProgress` | `advanceScroll` — the camera | Continuous progress along the Rail |
+ * | `scrollProgress` | `advanceScroll` — the Rail's scroll input (`rail-input.ts`) | Continuous progress along the Rail, in stops: 0 is the opening frame, `k` the `k`-th Client stop, present first |
  * | `focusedProjectId` | `focusProject` / `releaseFocus` | The one Project focused, or none |
  * | `focusOrigin` | `focusProject`, at entry | The mode Focus was entered from |
  *
- * No event writes two writers' fields. A camera advancing `scrollProgress` must
- * not move `railPosition`, and an index selecting a Client must not invent a
- * scroll value — collapsing them into one field would make "the Rail is between
- * two Clients" and "the Rail stops at this Client" the same statement, and the
- * two consumers would fight over it every frame.
+ * No event writes two writers' fields. The scroll input advancing
+ * `scrollProgress` must not move `railPosition`, and an index selecting a Client
+ * must not invent a scroll value. Collapsing them into one field would make "the
+ * Rail is between two Clients" and "the Rail stops at this Client" the same
+ * statement, and the two writers would fight over it every frame. The camera
+ * writes neither: it reads `scrollProgress` and moves the Three camera, nothing
+ * else.
  *
  * **`focusOrigin` is stored at entry, never inferred at release** (AD-16). The
  * releasing consumer needs to know where to return the visitor *to*, and by then
@@ -63,9 +65,8 @@
  * subscribed reactively would re-render its whole tree on every progress write,
  * sixty times a second, to produce a value it is about to read anyway. So the
  * loop calls `navigationStore.getState()` inside its frame callback and takes the
- * current value without subscribing. The loop itself arrives with the camera;
- * this module is what makes that path available, and `getState` is on the store
- * API for exactly it.
+ * current value without subscribing — `src/render-scene/rail-camera.tsx` is that
+ * loop, and `getState` is on the store API for exactly it.
  *
  * **A redundant transition still notifies.** No event compares before writing, so
  * `selectClient` at the Client already selected notifies every subscriber. That is
@@ -130,13 +131,18 @@ export interface NavigationState {
    */
   readonly railPosition: ClientId | null;
   /**
-   * Continuous progress along the Rail. Written by `advanceScroll` only.
+   * Continuous progress along the Rail, **in stops**. Written by
+   * `advanceScroll` only, and its caller is the Rail's scroll input
+   * (`rail-input.ts`, wired by `scene-host.tsx`).
+   *
+   * `0` is the opening frame and `k` is the `k`-th Client stop, present first,
+   * so a Rail of `N` Client stops runs over `[0, N]`. The camera rig reads it
+   * with `getState()` each frame and writes nothing back.
    *
    * Separate from `railPosition` because it is a different quantity with a
-   * different writer — the camera's, at frame rate. Unclamped and uninterpreted
-   * here: what a given value means in world space is the camera's, and a clamp
-   * in the shell would be a derivation rule living in the one directory forbidden
-   * to hold any.
+   * different writer. Unclamped here: the range is the scroll input's to enforce
+   * — `wheelProgress` clamps to `[0, N]` — and what a value means in world space
+   * is the Rail model's. The store checks only that it is a finite number.
    */
   readonly scrollProgress: number;
   /**
@@ -216,9 +222,9 @@ function requireId(field: string, id: string): string {
  * field rejected `''` would make that claim true of one writer and false of the
  * other.
  *
- * Unclamped still: *what range* a progress value may take is the camera's
- * question, and a clamp here would be a derivation rule in the one directory
- * forbidden to hold any. This checks only that the value is a number at all.
+ * Unclamped still: *what range* a progress value may take is the scroll input's
+ * to enforce (`rail-input.ts` clamps to `[0, N]`), and the store knows nothing of
+ * the Rail's length. This checks only that the value is a number at all.
  */
 function requireProgress(field: string, progress: number): number {
   if (typeof progress !== 'number' || !Number.isFinite(progress)) {
@@ -285,13 +291,13 @@ export function releaseFocus(): void {
 }
 
 /**
- * The camera advances along the Rail.
+ * The Rail's scroll input advances along the Rail.
  *
- * Writes `scrollProgress` and nothing else — in particular not `railPosition`.
- * Which Client a given progress value is nearest is a question about the Rail's
- * geometry, which the camera owns and the shell does not; if the camera wants the
- * Rail's discrete stop to follow, it calls `selectClient` too, and that is two
- * named transitions rather than one event quietly writing two writers' fields.
+ * Writes `scrollProgress` and nothing else — in particular not `railPosition`,
+ * which keeps the index as its one writer. Scrolling does not select a Client:
+ * the continuous position and the discrete stop stay two quantities, and if one
+ * should ever follow the other that is two named transitions rather than one
+ * event quietly writing two writers' fields.
  *
  * @throws if the value is not a finite number, naming the field and the value.
  * A `NaN` written here would propagate to a camera as "nowhere" with no error

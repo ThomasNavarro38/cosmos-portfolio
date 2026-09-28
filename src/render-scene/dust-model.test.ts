@@ -44,7 +44,7 @@ import {
   buildScene,
   frameBodies,
   type Body,
-  type SceneArtifact,
+  type SceneBodiesArtifact,
   type SceneArtifactClient,
   type SceneArtifactProject,
 } from './scene-model.ts';
@@ -79,7 +79,7 @@ function client(
 }
 
 /** Five Clients, ten Projects, unevenly distributed — the neighbouring-systems case. */
-function fiveClients(): SceneArtifact {
+function fiveClients(): SceneBodiesArtifact {
   return {
     clients: [
       client(
@@ -109,10 +109,10 @@ function fiveClients(): SceneArtifact {
 }
 
 function committedBodies(): readonly Body[] {
-  return buildScene(JSON.parse(readFileSync(ARTIFACT_JSON, 'utf8')) as SceneArtifact).bodies;
+  return buildScene(JSON.parse(readFileSync(ARTIFACT_JSON, 'utf8')) as SceneBodiesArtifact).bodies;
 }
 
-const dustOf = (artifact: SceneArtifact): Dust => buildDust(buildScene(artifact).bodies);
+const dustOf = (artifact: SceneBodiesArtifact): Dust => buildDust(buildScene(artifact).bodies);
 
 const distance = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) =>
   Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
@@ -340,13 +340,13 @@ test('Dust is identical for the same Bodies whatever their Skills, because Dust 
   // carries no `content` field at all — `buildScene` drops it. The real guard is
   // structural: `Body` has no content, and the source audit at the bottom of this file
   // bans `content` and `skills` in the model. This test pins the end-to-end behaviour.
-  const withSkills = (skills: readonly string[]): SceneArtifact =>
+  const withSkills = (skills: readonly string[]): SceneBodiesArtifact =>
     ({
       clients: fiveClients().clients.map((entry) => ({
         ...entry,
         projects: entry.projects.map((p) => ({ ...p, content: { skills } })),
       })),
-    }) as SceneArtifact;
+    }) as SceneBodiesArtifact;
 
   assert.deepEqual(dustOf(withSkills(['Java', 'Spring Boot'])), dustOf(withSkills(['Rust', 'Kafka', 'MDM'])));
 });
@@ -377,7 +377,7 @@ test('the scatter is identical across builds, and the Body list comes back uncha
 test('the scatter moves when the Bodies move, so it is read off them rather than hard-coded', () => {
   // The whole layout shifts, so the scatter's box moves with it.
   const shift = (p: { x: number; y: number; z: number }) => at(p.x + 1, p.y + 2, p.z);
-  const moved: SceneArtifact = {
+  const moved: SceneBodiesArtifact = {
     clients: fiveClients().clients.map((entry) => ({
       ...entry,
       position: shift(entry.position),

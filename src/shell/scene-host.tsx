@@ -34,13 +34,21 @@
  * remount belongs with story 4.1's capability gate, which answers *no WebGL* — a
  * different question from a stale chunk hash.
  *
+ * **The Rail's scroll input is here too** (2.5): a non-passive `wheel` listener on
+ * a `<div>` wrapping the boundary turns wheel travel over the scene into
+ * `advanceScroll(wheelProgress(...))` when the event is the Rail's. It is the one writer of `scrollProgress`;
+ * the rule itself lives in `rail-input.ts`, which is pure and tested, and the
+ * camera rig only reads the field.
+ *
  * **Capability detection is not here yet.** `src/render-fallback/` describes the
  * no-WebGL surface with absolute content parity and holds no code; story 4.1 owns
  * the gate that routes to it. Until then a visitor without WebGL reaches this
  * surface, fails to initialise, and keeps the index — recorded in `deferred-work.md`.
  */
 
-import { Component, Suspense, lazy, type ReactNode } from 'react';
+import { Component, Suspense, lazy, useEffect, useRef, type ReactNode } from 'react';
+import { railStopCount, wheelProgress } from './rail-input.ts';
+import { advanceScroll, navigationStore } from './state.ts';
 
 /**
  * The scene, in its own chunk.
@@ -70,6 +78,12 @@ const Scene = lazy(async () => {
  * would let the restatement drift while the docstring claimed it could not.
  */
 export interface SceneHostArtifact {
+  readonly rail: readonly string[];
+  readonly shots: readonly {
+    readonly subject: string;
+    readonly angle: number;
+    readonly distance: number;
+  }[];
   readonly clients: readonly {
     readonly id: string;
     readonly position: { readonly x: number; readonly y: number; readonly z: number };
@@ -139,11 +153,35 @@ class SceneBoundary extends Component<SceneBoundaryProps, SceneBoundaryState> {
  * would be a visual element Epic 3 has not designed.
  */
 export function SceneHost({ artifact }: SceneHostProps) {
+  const host = useRef<HTMLDivElement>(null);
+  const stopCount = railStopCount(artifact.rail);
+
+  // The Rail's scroll input, over the scene only: a wheel over the index is never
+  // seen here, so the page scrolls normally there. Registered by hand because
+  // React attaches `wheel` passively, and a passive listener cannot stop the page
+  // scrolling under the camera.
+  useEffect(() => {
+    const element = host.current;
+    if (element === null) return undefined;
+    const onWheel = (event: WheelEvent): void => {
+      const next = wheelProgress(navigationStore.getState().scrollProgress, event, stopCount, window.innerHeight);
+      // Not the Rail's (a pinch-zoom, a horizontal-only wheel, noise): the
+      // browser keeps it, and the store is not written.
+      if (next === null) return;
+      event.preventDefault();
+      advanceScroll(next);
+    };
+    element.addEventListener('wheel', onWheel, { passive: false });
+    return () => element.removeEventListener('wheel', onWheel);
+  }, [stopCount]);
+
   return (
-    <SceneBoundary>
-      <Suspense fallback={null}>
-        <Scene artifact={artifact} />
-      </Suspense>
-    </SceneBoundary>
+    <div ref={host}>
+      <SceneBoundary>
+        <Suspense fallback={null}>
+          <Scene artifact={artifact} />
+        </Suspense>
+      </SceneBoundary>
+    </div>
   );
 }

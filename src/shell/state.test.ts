@@ -210,7 +210,7 @@ test('leaving the Rail for free flight retains the stop, so the Rail is re-enter
 
 // --- Writer separation ------------------------------------------------------
 
-test('the camera advancing progress does not move the discrete stop', () => {
+test('the Rail’s scroll input advancing progress does not move the discrete stop', () => {
   // Continuous progress and the discrete Client are different quantities with
   // different writers. Collapsing them would make "between two Clients" and
   // "stopped at this Client" the same statement.
@@ -219,7 +219,7 @@ test('the camera advancing progress does not move the discrete stop', () => {
   advanceScroll(0.42);
 
   assert.equal(navigationStore.getState().scrollProgress, 0.42);
-  assert.equal(navigationStore.getState().railPosition, 'client-zulu', 'untouched by the camera');
+  assert.equal(navigationStore.getState().railPosition, 'client-zulu', 'untouched by the scroll input');
 });
 
 test('the index selecting a Client does not invent a scroll value', () => {
@@ -525,10 +525,10 @@ test('a non-finite progress value is rejected, as a malformed ID is', () => {
   assert.deepEqual(navigationStore.getState(), before, 'none of them wrote anything');
 });
 
-test('progress is unclamped, because the range is the camera question this layer does not answer', () => {
+test('progress is unclamped, because the range is the scroll input’s to enforce, not the store’s', () => {
   // The guard checks that the value is a number, not what it means. A clamp here
-  // would be a derivation rule in the one directory forbidden to hold any (AD-3),
-  // and it would silently disagree with whatever range the camera actually uses.
+  // would put the Rail's length in a module that knows nothing of the Rail, and it
+  // would silently disagree with the range `rail-input.ts` actually clamps to.
   resetNavigation();
   for (const value of [-1, 0, 0.5, 1, 7.25]) {
     advanceScroll(value);
