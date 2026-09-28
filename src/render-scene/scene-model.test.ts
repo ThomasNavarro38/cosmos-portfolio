@@ -1056,7 +1056,10 @@ function mapBlocks(code: string, collection: string): string[] {
  *     `transparent` at opacity 1. **Transparent is load-bearing:** three renders its
  *     whole opaque list before its transparent list whatever the `renderOrder`, so an
  *     opaque Body is drawn *before* the Dust and then painted over.
- *   - No `renderOrder` takes a literal, and no billboard exists outside the medium.
+ *   - No `renderOrder` takes a literal or sits anywhere but on an audited draw, and
+ *     no billboard or point cloud exists outside the Dust.
+ *   - Every medium sprite is scaled by `mediumSpriteScale`, so it is drawn at the
+ *     model's radius and the model's non-overlap proof holds on screen.
  *
  * Plus the story's exclusions: no Mote and no per-Skill entity in the renderer, and
  * the framing still reads the Bodies only.
@@ -1111,22 +1114,54 @@ function auditDrawOrder(source: string): string[] {
     }
   }
 
+  // The medium is drawn at the model's radius through the model's own scale, so the
+  // non-overlap and ceiling proofs over `radius` are proofs about the screen too.
+  for (const block of mapBlocks(code, 'media')) {
+    for (const sprite of block.match(/<sprite\b[^>]*>/g) ?? []) {
+      if (!/\bscale\s*=\s*\{\s*mediumSpriteScale\s*\(\s*medium\s*\)\s*\}/.test(sprite)) {
+        failures.push('a medium is not scaled by mediumSpriteScale — its drawn radius may not be the model’s');
+      }
+    }
+  }
+
   for (const match of code.matchAll(/\brenderOrder\s*=\s*\{\s*([^}]*?)\s*\}/g)) {
     if (match[1] !== 'DUST_RENDER_ORDER' && match[1] !== 'BODY_RENDER_ORDER') {
       failures.push(`renderOrder={${match[1]}} — draw order comes from the model's named constants only`);
     }
   }
-  const sprites = (code.match(/<sprite\b/g) ?? []).length;
-  const mediumSprites = mapBlocks(code, 'media').reduce(
-    (sum, block) => sum + (block.match(/<sprite\b/g) ?? []).length,
-    0,
-  );
-  if (sprites !== mediumSprites) failures.push('a billboard is drawn outside the medium, under no draw-order rule');
+  // Every `renderOrder`, in any value form, sits on an object the audit above checked.
+  // A `<group renderOrder={BODY_RENDER_ORDER}>` wrapping the Dust reorders it (three
+  // sorts by group order first), and `renderOrder="5"` is blanked to no braces at all;
+  // both passed while each audited object still read correctly.
+  const count = (text: string, pattern: RegExp) => (text.match(pattern) ?? []).length;
+  const audited = [
+    ...['media', 'particles'].flatMap((collection) =>
+      mapBlocks(code, collection).flatMap(
+        (block) => block.match(/<(?:sprite|mesh|points|instancedMesh|group)\b[^>]*>/g) ?? [],
+      ),
+    ),
+    ...mapBlocks(code, 'bodies').flatMap((block) => block.match(/<mesh\b[^>]*>/g) ?? []),
+  ];
+  const renderOrders = /\brenderOrder\s*=/g;
+  if (count(code, renderOrders) !== audited.reduce((sum, object) => sum + count(object, renderOrders), 0)) {
+    failures.push('a renderOrder is set outside the audited Dust and Body draws — it can reorder them');
+  }
+  // Dust-shaped draws — a billboard, a point cloud, an instanced batch — exist only in
+  // the Dust blocks, where the rules above hold them.
+  const dustShaped = /<(?:sprite|points|instancedMesh)\b/g;
+  const dustShapedInBlocks = ['media', 'particles']
+    .flatMap((collection) => mapBlocks(code, collection))
+    .reduce((sum, block) => sum + count(block, dustShaped), 0);
+  if (count(code, dustShaped) !== dustShapedInBlocks) {
+    failures.push('a billboard or point cloud is drawn outside the Dust, under no draw-order rule');
+  }
 
   if (/\bMotes?\b|\bmotes?\b|\bSkills?\b|\bskills?\b/.test(code)) {
     failures.push('names a Mote or a Skill — no Mote and no per-Skill entity at rest (FR-13; 2.8 owns Motes)');
   }
-  if (!/\bframeBodies\s*\(\s*bodies\s*\)/.test(code)) {
+  // Every call, not one: a second, widened call passed beside the exact one.
+  const framings = [...code.matchAll(/\bframeBodies\s*\(([^)]*)\)/g)];
+  if (framings.length === 0 || framings.some((call) => call[1]?.trim() !== 'bodies')) {
     failures.push('the framing is not handed exactly the Bodies — Dust never widens it');
   }
   return failures;
@@ -1154,6 +1189,21 @@ test('the draw-order audit rejects the real renderer with any one of its guarant
     ['the Body is transparent={false}', (s) => s.replace(/(<meshStandardMaterial\b[^>]*?\s)transparent\b/, '$1transparent={false}')],
     ['the Body fades', (s) => s.replace(/(<meshStandardMaterial\b[^>]*?)opacity=\{1\}/, '$1opacity={0.5}')],
     ['the particles are not drawn', (s) => s.replace(/particles\.map/, 'particlesUnused.map')],
+    ['the media are not drawn', (s) => s.replace(/media\.map/, 'mediaUnused.map')],
+    [
+      'the medium drawn off its radius',
+      (s) => s.replace('scale={mediumSpriteScale(medium)}', 'scale={[medium.radius * 4, medium.radius * 4, 1]}'),
+    ],
+    [
+      'a group reorders the Dust',
+      (s) => s.replace('<ambientLight', '<group renderOrder={BODY_RENDER_ORDER} />\n      <ambientLight'),
+    ],
+    ['a string-valued order', (s) => s.replace('<ambientLight', '<ambientLight renderOrder="5"')],
+    ['a stray point cloud', (s) => s.replace('<ambientLight', '<instancedMesh />\n      <ambientLight')],
+    [
+      'a second, widened framing',
+      (s) => s.replace('frameBodies(bodies);', 'frameBodies(bodies);\n  const wide = frameBodies([...bodies, ...particles]);'),
+    ],
     ['a stray billboard', (s) => s.replace('<ambientLight', '<sprite scale={[1, 1, 1]} />\n      <ambientLight')],
     ['a Mote', (s) => s.replace('<ambientLight', '{motes.map((m) => <mesh key={m} />)}\n      <ambientLight')],
     ['a Skill', (s) => s.replace('buildDust(bodies)', 'buildDust(bodies, skills)')],

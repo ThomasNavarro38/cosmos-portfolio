@@ -35,6 +35,7 @@ import {
   falloffAt,
   mediumAlphaAt,
   mediumFalloff,
+  mediumSpriteScale,
   type Dust,
 } from './dust-model.ts';
 import {
@@ -274,8 +275,10 @@ test('placement is bounded: a crowded layout under a tight budget runs short rat
   // A 5 x 5 x 5 lattice of Stars 3 apart: the clearance spheres cover the lattice's
   // interior, so most candidates are rejected. At one attempt per particle the target
   // cannot be reached, and the scatter must come back short, terminate, and still
-  // respect clearance. (At the shipped budget no layout runs short: the padding
-  // always leaves a free shell, which is why the budget is a tuning field.)
+  // respect clearance. (The padding always leaves a free shell, so reaching the target
+  // is always possible — but sampling is random, so at the shipped budget a layout
+  // whose free shell is a small share of its box can still run short. The fixtures
+  // above assert that they reach their target.)
   const clients: SceneArtifactClient[] = [];
   for (let i = 0; i < 5; i += 1) {
     for (let j = 0; j < 5; j += 1) {
@@ -309,7 +312,9 @@ test('out-of-range tuning throws a RangeError naming the field, rather than a si
       `mediumPeakOpacity = ${value}`,
     );
   }
-  for (const value of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5]) {
+  // Zero attempts is out of range too: with a positive target it placed nothing,
+  // the same silently empty scatter a NaN ratio used to yield.
+  for (const value of [Number.NaN, Number.POSITIVE_INFINITY, -1, 0, 1.5]) {
     assert.throws(
       () => buildDust(bodies, { ...DUST_TUNING, placementAttemptsPerParticle: value }),
       (error: Error) => error instanceof RangeError && /placementAttemptsPerParticle/.test(error.message),
@@ -471,6 +476,29 @@ test('the falloff texture rejects a size it cannot build, even sizes included', 
   assert.equal(mediumFalloff(1)[3], 255, 'a single texel is all centre');
 });
 
+test('a medium sprite fades out exactly at the model radius, so the non-overlap and ceiling proofs hold on screen', () => {
+  // The texture's t = 1 sits on the edge texels' centres, half a texel inside the
+  // quad, so "scale = 2 × radius" drew every disc 32/32.5 of its radius — and nothing
+  // tied the drawn radius to the model's at all. Measured off the texture itself: on
+  // a sprite of this scale, the first fully transparent texel out from the centre
+  // lands exactly on the radius.
+  const size = DUST_MEDIUM_TEXTURE_SIZE;
+  const data = mediumFalloff(size);
+  const centre = (size - 1) / 2;
+  let edgeColumn = centre;
+  while (data[(centre * size + edgeColumn) * 4 + 3] !== 0) edgeColumn += 1;
+
+  for (const radius of [0, 1, 10, 20.8]) {
+    const medium = { id: 'client:a', position: at(0), radius, opacity: DUST_MEDIUM_PEAK_OPACITY };
+    const scale = mediumSpriteScale(medium);
+    assert.equal(scale.length, 3);
+    assert.equal(scale[0], scale[1], 'a disc, not an ellipse');
+    assert.equal(scale[2], 1, 'a sprite has no depth to scale');
+    const drawnRadius = ((edgeColumn + 0.5) / size - 0.5) * scale[0];
+    assert.ok(Math.abs(drawnRadius - radius) <= 1e-9, `drawn at ${drawnRadius} for a model radius of ${radius}`);
+  }
+});
+
 // --- Draw order --------------------------------------------------------------
 
 test('Dust renders before every Body: DUST_RENDER_ORDER < BODY_RENDER_ORDER', () => {
@@ -513,10 +541,14 @@ function auditDustModel(source: string): string[] {
     failures.push('reads a resolved visual property — Dust depends on position and kind only');
   }
   if (/\bwindow\b|\bdocument\b|\buseFrame\b/.test(code)) failures.push('touches the DOM or animates');
+  // The directory's ordering rule, which `scene-model.test.ts` holds for the scene
+  // model only: the derive layer owns every ordering and runs the only simulation.
+  if (/\.(?:sort|toSorted)\s*\(/.test(code)) failures.push('sorts — the derive layer owns every ordering');
+  if (/\bforce(?:Simulation|ManyBody|Link|Center)\b/.test(code)) failures.push('runs a force simulation');
   return failures;
 }
 
-test('the Dust model imports only the scene model and reads nothing but positions and kind', () => {
+test('the Dust model imports only the scene model and reads nothing but positions, kind, id and clientId', () => {
   assert.deepEqual(auditDustModel(readFileSync(DUST_TS, 'utf8')), []);
 });
 
@@ -542,6 +574,9 @@ test('the Dust-model audit rejects each form it names', () => {
     'const dense = body.moteTier === "mote-dense";',
     'const heavy = body.mass > 3;',
     'const w = window.innerWidth;',
+    'const nearest = stars.sort((a, b) => a.position.x - b.position.x);',
+    'const nearest = stars.toSorted((a, b) => a.position.x - b.position.x);',
+    'const settle = forceSimulation(nodes);',
   ]) {
     assert.notDeepEqual(auditDustModel(form), [], `${form} must be rejected`);
   }

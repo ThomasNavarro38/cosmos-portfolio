@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 09-28-2026 08:16
+last_updated: 09-28-2026 12:00
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -50,7 +50,7 @@ development_status:
   2-1-the-dom-destination-index: done
   2-2-the-navigation-state-machine: done
   2-3-bodies-at-rest-in-the-3d-scene: done
-  2-4-dust-at-rest: review
+  2-4-dust-at-rest: done
   2-5-backward-time-rail-traversal: backlog
   2-6-client-stop-framing-and-derived-dwell: backlog
   2-7-focus-entry-the-panel-shell-and-scroll-s-two-meanings: backlog

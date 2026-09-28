@@ -63,6 +63,7 @@ import {
   DUST_RENDER_ORDER,
   buildDust,
   mediumFalloff,
+  mediumSpriteScale,
 } from './dust-model.ts';
 import { BODY_RENDER_ORDER, buildScene, frameBodies, type Body, type SceneArtifact } from './scene-model.ts';
 
@@ -171,15 +172,15 @@ export function Scene({ artifact }: SceneProps) {
         intensity={1.2}
       />
       {/*
-        The medium: one billboard per Client system, its scale the diameter because
-        the falloff disc is inscribed in the texture. Drawn before every Body and
-        writing no depth, so it can never paint over one.
+        The medium: one billboard per Client system, scaled by the model so it fades
+        out exactly at its radius. Drawn before every Body and writing no depth, so
+        it can never paint over one.
       */}
       {media.map((medium) => (
         <sprite
           key={medium.id}
           position={[medium.position.x, medium.position.y, medium.position.z]}
-          scale={[medium.radius * 2, medium.radius * 2, 1]}
+          scale={mediumSpriteScale(medium)}
           renderOrder={DUST_RENDER_ORDER}
         >
           <spriteMaterial
