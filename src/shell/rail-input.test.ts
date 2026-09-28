@@ -86,11 +86,38 @@ function blank(source: string): string {
     .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
 }
 
+/**
+ * The input rule's purity, as a pure function over its source: it imports
+ * nothing (so no store and no renderer), reads no DOM global — the handler
+ * passes the event and the page height in — and orders nothing.
+ */
+function auditInputPurity(source: string): string[] {
+  const code = blank(source);
+  const failures: string[] = [];
+  if (/^\s*import\b|\bimport\s*\(|\brequire\s*\(/m.test(code)) failures.push('imports something');
+  if (/\bwindow\b|\bdocument\b|\bnavigator\b/.test(code)) failures.push('reads a DOM global — the handler passes them in');
+  if (/\.sort\s*\(/.test(code)) failures.push('orders something');
+  return failures;
+}
+
 test('the input rule is pure: no import, no DOM, no store', () => {
-  const code = blank(readFileSync(INPUT_TS, 'utf8'));
-  assert.doesNotMatch(code, /^\s*import\b|\bimport\s*\(|\brequire\s*\(/m, 'imports nothing');
-  assert.doesNotMatch(code, /\bwindow\b|\bdocument\b|\bnavigator\b/, 'reads no DOM global — the handler passes them in');
-  assert.doesNotMatch(code, /\.sort\s*\(/, 'orders nothing');
+  assert.deepEqual(auditInputPurity(readFileSync(INPUT_TS, 'utf8')), []);
+});
+
+test('the purity audit rejects the real rule with any one impurity added', () => {
+  const real = readFileSync(INPUT_TS, 'utf8');
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['a store import', (s) => `import { navigationStore } from './state.ts';\n${s}`],
+    ['a dynamic import', (s) => s.replace('return new Set(rail).size;', "void import('./state.ts');\n  return new Set(rail).size;")],
+    ['a window read', (s) => s.replace(/pageHeight: number,(\s*)\): number \| null \{/, 'pageHeight: number = window.innerHeight,$1): number | null {')],
+    ['a document read', (s) => s.replace('return new Set(rail).size;', 'return document.hidden ? 0 : new Set(rail).size;')],
+    ['a re-ordering', (s) => s.replace('new Set(rail).size', 'new Set([...rail].sort()).size')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
+    assert.notDeepEqual(auditInputPurity(mutated), [], `"${name}" must be rejected`);
+  }
 });
 
 /**
@@ -110,6 +137,12 @@ function auditWheelWiring(source: string): string[] {
     failures.push('the stop count is not railStopCount(artifact.rail) — a raw length counts a duplicated Client twice');
   }
   if (!/const\s+element\s*=\s*host\.current\s*;/.test(code)) failures.push('the listener target is not the host element');
+  // The ref is what makes `host.current` the element the wheel crosses: without
+  // it the effect finds `null` and never runs again; on anything but the wrapper
+  // of the boundary, a wheel over the canvas never reaches the listener.
+  if (!/<div\b[^>/]*\bref=\{host\}[^>/]*>\s*<SceneBoundary>[\s\S]*<\/SceneBoundary>\s*<\/div>/.test(code)) {
+    failures.push('the host ref is not on the element wrapping the scene — the wheel over the canvas never reaches the listener');
+  }
   if (!/\belement\.addEventListener\(\s*'wheel'\s*,\s*onWheel\s*,\s*\{\s*passive\s*:\s*false\s*\}\s*\)/.test(code)) {
     failures.push('no non-passive wheel listener on the host element');
   }
@@ -172,6 +205,8 @@ test('the wiring audit rejects the real host with any one guarantee removed', ()
     ],
     ['a raw rail length', (s) => s.replace('railStopCount(artifact.rail)', 'artifact.rail.length')],
     ['a constant page height', (s) => s.replace('stopCount, window.innerHeight)', 'stopCount, 800)')],
+    ['the ref dropped', (s) => s.replace('<div ref={host}>', '<div>')],
+    ['the ref on an empty sibling', (s) => s.replace('<div ref={host}>', '<div ref={host} />\n    <div>')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);

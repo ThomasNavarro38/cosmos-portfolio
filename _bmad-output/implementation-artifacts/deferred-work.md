@@ -535,3 +535,8 @@ leaves open.
   summary: `railPose` allocates its knot arrays (targets, scaled offsets, per-axis monotone tangents) on every call, so the rig allocates a handful of small arrays per frame.
   evidence: At today's counts (two keyframes committed, six in the five-Client fixture) this is a few dozen numbers per frame and invisible next to the render. If the stop count or the frame cost ever matters, cache the aspect-independent parts per Rail and recompute only when the damped aspect changes.
 
+
+## Deferred from: code review of spec-2-5-backward-time-rail-traversal (2026-09-28)
+
+- The Rail's aim is a uniform Catmull-Rom over the Stars (`src/render-scene/rail-model.ts:510`), and progress is uniform in stops. Wheel travel per stop is fixed, so a long gap between two Clients is crossed much faster in world space than a short one, and uniform parameterisation can cusp on very uneven spacing. Centripetal or chord-length parameterisation would fix both. This is perceptual tuning for 2.6.
+- Nothing checks containment along the path (`railPose`, `src/render-scene/rail-model.ts:303`). The tests pin C1, the z side and the far plane, but no test proves the camera never passes through or within `BODY_MARGIN` of a Body between stops. Neighbouring systems with short Shot distances make it plausible. Belongs with 2.6's framing containment.

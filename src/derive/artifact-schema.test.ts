@@ -375,7 +375,10 @@ test('a Shot distance is finite and positive, its angle a real elevation, its fr
   // finite number outside it is not a framing the derive layer sanctioned: `30`
   // reads as a plausible degrees value and is nearly five full turns in radians,
   // and a wrapped radian arrives looking equally reasonable.
-  for (const bad of [30, 42, Math.PI, Math.PI / 2 + 1e-9, -Math.PI / 2 - 1e-9]) {
+  // The boundaries fail too: straight overhead or beneath, `lookAt` has no
+  // defined roll, and the Rail rejects them at runtime — the gate rejects what
+  // the renderer rejects rather than letting the scene discover it.
+  for (const bad of [30, 42, Math.PI, Math.PI / 2, -Math.PI / 2, Math.PI / 2 + 1e-9, -Math.PI / 2 - 1e-9]) {
     const broken = copy(valid()) as { shots: Record<string, unknown>[] };
     const entry = broken.shots[0];
     assert.ok(entry !== undefined);
@@ -383,8 +386,8 @@ test('a Shot distance is finite and positive, its angle a real elevation, its fr
     assertFails(validateArtifact(broken), /shots\.0\.angle/, `an angle of ${String(bad)} must fail`);
   }
 
-  // The boundaries themselves are framings — straight down and straight up.
-  for (const good of [0, Math.PI / 6, Math.PI / 2, -Math.PI / 2]) {
+  // Just inside the quarter-turn is still a framing.
+  for (const good of [0, Math.PI / 6, Math.PI / 2 - 1e-9, -Math.PI / 2 + 1e-9]) {
     const ok = copy(valid()) as { shots: Record<string, unknown>[] };
     const entry = ok.shots[0];
     assert.ok(entry !== undefined);

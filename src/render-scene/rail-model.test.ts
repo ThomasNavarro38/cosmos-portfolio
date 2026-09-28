@@ -393,8 +393,18 @@ test('a stop backs off on a narrower viewport, by reference / aspect, and is lef
   for (let a = 0.4; a < 2.5; a += 0.01) {
     assert.ok(Math.abs(reach(a + 0.001) - reach(a)) < 0.2, `no jump in framing near aspect ${a.toFixed(2)}`);
   }
-  assert.equal(aspectScale(SHOT_REFERENCE_ASPECT, Number.NaN), 1, 'a degenerate aspect reads as the reference');
-  assert.equal(aspectScale(SHOT_REFERENCE_ASPECT, 0), 1);
+  assert.equal(aspectScale(SHOT_REFERENCE_ASPECT, Number.NaN), 1, 'no aspect at all reads as the reference');
+  assert.equal(aspectScale(SHOT_REFERENCE_ASPECT, Number.POSITIVE_INFINITY), 1, 'the widest aspect is the widest scale');
+});
+
+test('the scale is continuous through zero: a spring that overshoots a sliver aspect does not cut', () => {
+  // The damped aspect is a spring; carried velocity can take it past a tiny
+  // positive goal to zero or below. The scale there must match the sliver's —
+  // the floor — not jump back to the reference.
+  const ceiling = SHOT_REFERENCE_ASPECT / NARROWEST_ASPECT;
+  for (const aspect of [1e-9, 0, -1e-9, -1, Number.NEGATIVE_INFINITY]) {
+    assert.equal(aspectScale(SHOT_REFERENCE_ASPECT, aspect), ceiling, `aspect ${aspect}`);
+  }
 });
 
 test('a collapsed canvas cannot fling the camera away: the scale is floored at NARROWEST_ASPECT', () => {
@@ -420,22 +430,31 @@ test('the far plane keeps every Body in range from every pose the Rail can reach
     const far = railFarPlane(rail, bodies);
     assert.ok(Number.isFinite(far) && far > 0);
     const stops = railStopCount(rail);
-    for (const aspect of [1e-4, NARROWEST_ASPECT, 0.7, 1, SHOT_REFERENCE_ASPECT, 4]) {
+    let needed = 0;
+    // Every aspect between the floor and the reference, densely — the scale
+    // varies only there — plus the degenerate and the wide ends. The model
+    // samples a coarser grid, so this checks its slack, not its own samples.
+    const sweep = Array.from(
+      { length: 41 },
+      (_, j) => NARROWEST_ASPECT + ((SHOT_REFERENCE_ASPECT - NARROWEST_ASPECT) * j) / 40,
+    );
+    for (const aspect of [1e-4, ...sweep, 4]) {
       const poses = [
         ...rail.keyframes.map((_, k) => railPose(rail, k, aspect)),
-        ...Array.from({ length: stops * 50 + 1 }, (_, i) => railPose(rail, i / 50, aspect)),
+        ...Array.from({ length: stops * 97 + 1 }, (_, i) => railPose(rail, i / 97, aspect)),
       ];
       for (const pose of poses) {
         for (const body of bodies) {
-          assert.ok(distance(pose.position, body.position) + BODY_MARGIN <= far + 1e-9, `${body.id} past far at aspect ${aspect}`);
+          const reach = distance(pose.position, body.position) + BODY_MARGIN;
+          needed = Math.max(needed, reach);
+          assert.ok(reach <= far + 1e-9, `${body.id} past far at aspect ${aspect}`);
         }
       }
     }
-    // And it is genuinely further than the opening frame's own far plane can be
-    // relied on for, once a narrow stop is involved on the wide fixture.
-    if (artifact.clients.length > 1) {
-      assert.ok(far > frameBodies(bodies).far * 0.5, 'a real distance, not a token one');
-    }
+    // Neither a token plane nor an inflated one: the slack the model adds for
+    // what falls between its samples stays a fraction of the real need, so
+    // depth precision is not spent on a margin nothing uses.
+    assert.ok(far <= needed * 1.25, `${far} is within 25% of the ${needed} the Rail needs`);
   }
   assert.equal(railFarPlane(buildRail({ rail: [], shots: [] }, []), []), BODY_MARGIN, 'an empty Rail still yields a finite plane');
 });

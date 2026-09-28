@@ -1613,19 +1613,50 @@ test('the rig audit rejects the real rig with any one guarantee broken', () => {
   }
 });
 
-test('the scene builds the Rail from the artifact and mounts the rig inside the Canvas', () => {
-  // Pinned positively: deleting the mount is a one-line edit that leaves every
-  // negative scan green while the camera stops flying.
-  const code = codeOf(SCENE_TSX);
-  assert.match(code, /\bbuildRail\s*\(\s*artifact\s*,\s*bodies\s*\)/, 'the keyframes come from the artifact and Bodies');
+/**
+ * The Rail's mount in `scene.tsx`, as a pure function over its source.
+ *
+ * Pinned positively: deleting the mount is a one-line edit that leaves every
+ * negative scan green while the camera stops flying. The keyframes come from the
+ * artifact and the Bodies, the rig sits inside the `<Canvas>` (outside it,
+ * `useFrame` has no loop to join), and the camera prop's far plane covers every
+ * pose the rig can reach, not only the opening frame.
+ */
+function auditRailMount(source: string): string[] {
+  const code = blankProse(source);
+  const failures: string[] = [];
+  if (!/\bconst\s+rail\s*=\s*buildRail\s*\(\s*artifact\s*,\s*bodies\s*\)/.test(code)) {
+    failures.push('the keyframes do not come from buildRail(artifact, bodies)');
+  }
   const inside = /<Canvas\b[\s\S]*<\/Canvas>/.exec(code)?.[0] ?? '';
-  assert.match(inside, /<RailCamera\s+rail=\{\s*rail\s*\}\s*\/>/, 'the rig is mounted inside the Canvas');
-  // The far plane covers every pose the rig can reach, not only the opening frame.
-  assert.match(
-    code,
-    /\bfar\s*:\s*Math\.max\(\s*framing\.far\s*,\s*railFarPlane\(\s*rail\s*,\s*bodies\s*\)\s*\)/,
-    'the camera prop far plane includes railFarPlane(rail, bodies)',
-  );
+  if (!/<RailCamera\s+rail=\{\s*rail\s*\}\s*\/>/.test(inside)) failures.push('the rig is not mounted inside the Canvas');
+  if (!/\bfar\s*:\s*Math\.max\(\s*framing\.far\s*,\s*railFarPlane\(\s*rail\s*,\s*bodies\s*\)\s*\)/.test(code)) {
+    failures.push('the camera prop far plane does not include railFarPlane(rail, bodies)');
+  }
+  return failures;
+}
+
+test('the scene builds the Rail from the artifact and mounts the rig inside the Canvas', () => {
+  assert.deepEqual(auditRailMount(readFileSync(SCENE_TSX, 'utf8')), []);
+});
+
+test('the mount audit rejects the real scene with any one guarantee removed', () => {
+  const real = readFileSync(SCENE_TSX, 'utf8');
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['the rig unmounted', (s) => s.replace('<RailCamera rail={rail} />', '')],
+    [
+      'the rig outside the Canvas',
+      (s) => s.replace('<RailCamera rail={rail} />', '').replace('</Canvas>', '</Canvas>\n      <RailCamera rail={rail} />'),
+    ],
+    ['an empty Rail', (s) => s.replace('buildRail(artifact, bodies)', 'buildRail({ rail: [], shots: [] }, bodies)')],
+    ['the opening far plane only', (s) => s.replace(/far:\s*Math\.max\(framing\.far,\s*railFarPlane\(rail,\s*bodies\)\)/, 'far: framing.far')],
+    ['the far plane of no Bodies', (s) => s.replace('railFarPlane(rail, bodies)', 'railFarPlane(rail, [])')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped scene`);
+    assert.notDeepEqual(auditRailMount(mutated), [], `"${name}" must be rejected`);
+  }
 });
 
 /**
