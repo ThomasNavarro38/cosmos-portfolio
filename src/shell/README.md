@@ -14,7 +14,9 @@ Entry, capability detection, routing, navigation state machine, and the persiste
 | `index-nav.tsx` | The thin renderer: model → `<nav>` / nested `<ul>` / `<button>`. No rule of its own and no *local* state — it subscribes to the store with a selector and hands clicks to its named events. |
 | `state.ts` | The navigation state machine: the one authority on where the visitor is. Five fields, one documented writer each, every transition a named event. Pure `.ts`, `zustand/vanilla` — no React import. |
 | `state.test.ts` | The whole transition matrix executed rather than scanned: Focus exclusivity, origin-at-entry, writer separation over all seven events, the malformed-input rejections, subscription, plus a tree-wide `setState` audit and source scans pinning that the store stays React-free and derives nothing. |
-| `scene-host.tsx` | The one edge into the 3D surface: `lazy(() => import('../render-scene/scene.tsx'))` behind `<Suspense>`, behind an error boundary. The boundary is what keeps the DOM index in the document when the chunk fails to arrive or the model throws. |
+| `scene-host.tsx` | The one edge into the 3D surface: `lazy(() => import('../render-scene/scene.tsx'))` behind `<Suspense>`, behind an error boundary. The boundary is what keeps the DOM index in the document when the chunk fails to arrive or the model throws. It also wraps the boundary in a `<div>` carrying the Rail's non-passive `wheel` listener. |
+| `rail-input.ts` | The Rail's scroll input as a pure rule: `wheelProgress(current, { deltaY, deltaMode, ctrlKey }, stopCount, pageHeight)` normalises a wheel delta to pixels (line and page modes included), divides by `WHEEL_PIXELS_PER_STOP` and clamps to `[0, N]` — or returns `null` when the event is not the Rail's (ctrl+wheel / pinch-zoom, a horizontal-only wheel, a non-finite delta, an unknown mode). `railStopCount` counts the distinct Clients `rail` names; a test in `src/render-scene/rail-model.test.ts` pins it to the Rail model's own count. Imports nothing. |
+| `rail-input.test.ts` | The wheel matrix — pixel/line/page, clamping at both ends and on an empty Rail, the `null` cases — plus a purity scan and an audit of the wiring in `scene-host.tsx` (listener on the host element, the store's progress and the event passed unchanged, `railStopCount(artifact.rail)`, return on `null` before `preventDefault`) driven over mutations of the shipped file. |
 
 ```sh
 npm test        # every *.test.ts under src/, this suite included
@@ -49,21 +51,25 @@ A destination is an action inside this page, not a document to navigate to. A `<
 
 `state.ts` owns navigation state; the camera and the DOM index are both consumers and neither owns position (AD-9). Building the camera first and letting the canvas hold the current destination produces the inverted architecture AD-4 exists to forbid — one where the index translates render state rather than commanding it — so the authority lands before its second consumer exists, and the index subscribes to it today.
 
-An authority with no subscriber is unfalsifiable, which is why the index is wired now rather than in 2.7. Selection sets state; nothing yet reacts to that state visually beyond `aria-pressed`, and that is the correct amount of behaviour for a story whose camera does not exist.
+An authority with no subscriber is unfalsifiable, which is why the index is wired now rather than in 2.7. Selection sets state; nothing yet reacts to it visually beyond `aria-pressed` — the Rail rig (2.5) reads `scrollProgress`, not `railPosition`; click-to-fly is 2.9's.
 
 ### One writer per field
 
 **The one-writer table lives in the `state.ts` module header, and that is the only copy.** It is the one a test pins — `state.test.ts` asserts a row exists there for every field the store actually holds — so a second copy here would be a table nobody checks, and the two would disagree on wording and ordering within a story. A test also asserts this file has not grown its own rows back.
 
-Continuous `scrollProgress` and discrete `railPosition` are separate fields with separate writers, and **no event writes two writers' fields**. Collapsing them would make "the Rail is between two Clients" and "the Rail stops at this Client" the same statement, and the two consumers would fight over it every frame. A camera that wants the discrete stop to follow its progress calls `selectClient` too — two named transitions rather than one event quietly writing both.
+Continuous `scrollProgress` and discrete `railPosition` are separate fields with separate writers, and **no event writes two writers' fields**. Collapsing them would make "the Rail is between two Clients" and "the Rail stops at this Client" the same statement, and the two writers would fight over it every frame. If the discrete stop should ever follow scroll progress, that is `selectClient` called too — two named transitions rather than one event quietly writing both. Today it does not: scroll never selects a Client.
 
 `focusOrigin` is stored at Focus entry and read at release (AD-16). Inferring it at release would answer a question about the past with the present, which is right until the first time `mode` has moved in between.
 
 State changes **only through the named events** exported from `state.ts`. A `setState` in a renderer would be a transition nobody can find, nobody tested, and nothing stops from writing two writers' fields at once — see the tree-wide scan below.
 
+### The Rail's scroll input is the one writer of `scrollProgress`
+
+A wheel over the scene — and only over the scene: the listener sits on the `<div>` wrapping the scene boundary, so a wheel over the index scrolls the page normally — asks `wheelProgress(...)` and, only when the answer is not `null`, prevents the default and calls `advanceScroll(next)`. A pinch-zoom (ctrl+wheel) and a horizontal-only wheel are therefore left to the browser. The listener is registered by hand with `{ passive: false }` because React attaches `wheel` passively, and a passive listener cannot stop the page scrolling under the camera. Progress is measured in stops: 0 is the opening frame and `k` the `k`-th Client stop, present first. The camera rig reads it and writes nothing back, and scrolling never calls `selectClient`: `railPosition` keeps the index as its one writer. The store itself stays unclamped; the range is `rail-input.ts`'s to enforce.
+
 ### A render loop reads with `getState()`, never with a hook
 
-A camera subscribed reactively would re-render its whole tree on every progress write, sixty times a second, to obtain a value it is about to read anyway. So a frame callback calls `navigationStore.getState()` and takes the current value without subscribing. React consumers do the opposite — `useStore(navigationStore, selector)`, a selector and never the whole store, so a Client selection does not re-render every Project. The loop itself arrives with the camera; `state.ts` is what makes the path available.
+A camera subscribed reactively would re-render its whole tree on every progress write, sixty times a second, to obtain a value it is about to read anyway. So a frame callback calls `navigationStore.getState()` and takes the current value without subscribing. React consumers do the opposite — `useStore(navigationStore, selector)`, a selector and never the whole store, so a Client selection does not re-render every Project. `src/render-scene/rail-camera.tsx` is that loop; `state.ts` is what makes the path available.
 
 ### Why the store is pure `.ts` rather than a `create()` hook
 
@@ -78,7 +84,7 @@ The guarantee has to hold for *every* writer or it holds for none. Two ways it d
 - **A padded ID is stored trimmed.** The guard validated `id.trim()` and then stored the raw `id`, so `'  client-zulu  '` passed the check and was parked as a string matching no artifact ID — a destination that does not exist, reached through the guard written to prevent exactly that. The value checked and the value kept are now one string.
 - **`advanceScroll` rejects a non-finite value.** `NaN` is what arithmetic on an undefined scroll offset produces, and it propagates in silence: every comparison against it is false, so a camera reading it places the visitor nowhere and reports nothing. A store that threw on `''` while accepting `NaN` made its own claim true of one writer and false of the other.
 
-Progress stays **unclamped**: what range a value may take is the camera's question, and a clamp here would be a derivation rule in the one directory forbidden to hold any (AD-3). The guard checks that the value is a number, not what it means.
+Progress stays **unclamped in the store**: the store knows nothing of the Rail's length, so the range is enforced by its one writer, `rail-input.ts`, which clamps to `[0, N]`. The store's guard checks that the value is a number, not what it means.
 
 ### The named-event contract is scanned for the tree, not for one file
 

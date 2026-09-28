@@ -53,6 +53,38 @@
  */
 export interface SceneArtifact {
   readonly clients: readonly SceneArtifactClient[];
+  /**
+   * Client IDs in Rail order — **oldest engagement first**, as the artifact emits
+   * it. The Rail model reads it from the end (present first), exactly as the DOM
+   * index does; nothing here re-sorts it.
+   */
+  readonly rail: readonly string[];
+  /** One default Shot per Client stop: a subject and a relative framing, never a place. */
+  readonly shots: readonly SceneArtifactShot[];
+}
+
+/**
+ * The slice of the artifact the Body list is built from.
+ *
+ * `buildScene` reads `clients` and nothing else, so it asks for nothing else: the
+ * Rail's `rail` and `shots` are `rail-model.ts`'s to read, and a Body list that
+ * could not be built without them would couple the scene's shape to the camera's.
+ */
+export type SceneBodiesArtifact = Pick<SceneArtifact, 'clients'>;
+
+/**
+ * One Shot in the artifact, as far as the scene is concerned: an entity ID plus
+ * relative framing, with **no world coordinate** (FR-17).
+ *
+ * `angle` is the elevation above the orbital plane, in radians, measured from the
+ * subject; `distance` is how far from the subject the camera stands. The
+ * artifact's `framing` class is not restated: there is one member today and
+ * nothing here branches on it.
+ */
+export interface SceneArtifactShot {
+  readonly subject: string;
+  readonly angle: number;
+  readonly distance: number;
 }
 
 /** One Client in the artifact, as far as the scene is concerned. */
@@ -160,7 +192,7 @@ export interface SceneBodies {
  * @returns a fresh structure each call; nothing is cached and the argument is
  * never mutated, so a caller may re-render freely.
  */
-export function buildScene(artifact: SceneArtifact): SceneBodies {
+export function buildScene(artifact: SceneBodiesArtifact): SceneBodies {
   const bodies: Body[] = [];
   // Keyed on the ID because the ID is what identifies a destination — and what
   // the renderer keys its meshes on.
@@ -240,9 +272,11 @@ function requireFinitePosition(id: string, position: ScenePosition): ScenePositi
  * `0.45` is narrower than any phone in portrait (a 390 × 844 viewport is 0.46), so
  * the fit holds across the range a visitor actually has. No finite distance frames
  * *every* aspect ratio, so a bound exists whether or not one is named; naming it
- * is what makes it assertable. The honest fix once the camera lands in 2.5 is to
- * reframe on resize from the live viewport, at which point the bound disappears
- * rather than being widened — recorded in `deferred-work.md`.
+ * is what makes it assertable. Since 2.5 it is also the Rail's floor: keyframe
+ * 0's reference aspect in `rail-model.ts`, and the smallest aspect `aspectScale`
+ * will scale for, so a collapsed canvas cannot fling the camera away. The
+ * opening frame is therefore exactly this framing at every aspect; a viewport
+ * narrower than the floor still crops, as before.
  */
 export const NARROWEST_ASPECT = 0.45;
 
@@ -296,14 +330,30 @@ export const BODY_RENDER_ORDER = 2;
  * So the framing names the rotation it wants, and the renderer passes it. The
  * value is `[0, 0, 0]`: an unrotated Three camera looks down `-z`, and the camera
  * stands on the `+z` side at the centre's own `x` and `y`, so looking down `-z`
- * *is* looking at the centre. There is no target to return and nothing left for a
- * dependency to choose.
+ * *is* looking at the centre, and nothing is left for a dependency to choose.
+ *
+ * The centre is returned too, as `target`, and it is the same aim stated the other
+ * way: the Rail rig (2.5) aims every keyframe with `lookAt`, and keyframe 0 is this
+ * framing, so it needs the entity-derived point rather than a rotation. The
+ * renderer's `camera` prop still passes `rotation`, so R3F's `lookAt(0, 0, 0)`
+ * default never fires, and a test pins that looking at `target` from `position`
+ * produces exactly that rotation.
  */
 export interface SceneFraming {
   /** Where the camera stands, in scene space. */
   readonly position: ScenePosition;
   /** Euler angles in radians, passed to the camera so no default fills them in. */
   readonly rotation: ScenePosition;
+  /**
+   * The Bodies' centre: the point the camera looks at.
+   *
+   * Looking at it from `position` **is** `rotation` — the camera stands on the
+   * centre's own `x` and `y`, so the aim runs down `-z` — and a test pins that
+   * the two agree. It exists so a consumer that aims by `lookAt` (the Rail rig,
+   * which must aim at every keyframe the same way) aims keyframe 0 at entities
+   * rather than at a coordinate it invented.
+   */
+  readonly target: ScenePosition;
   /** The vertical field of view, in degrees. */
   readonly fov: number;
   /** The near plane, passed rather than defaulted. */
@@ -317,10 +367,10 @@ export interface SceneFraming {
  *
  * Read off the Bodies rather than hard-coded, because the solver decides where
  * they land: a constant distance framed the one committed Planet by luck and
- * would lose the first Body solved beyond it. This is **not** the camera work
- * 2.5 and 2.6 own — there is no Rail traversal, no Shot, no Dwell, no scroll
- * handling and no interaction here. It is a single static view, and whether the
- * Bodies are inside its frustum is this story's own acceptance.
+ * would lose the first Body solved beyond it. It is a single static view, and
+ * it is the Rail's **keyframe 0** (`rail-model.ts`): the opening frame First Paint
+ * already shows, which the visitor scrolls *from* into the first Client stop.
+ * Traversal, Shots and scroll handling live in the Rail model, not here.
  *
  * The distance is the **larger** of the vertical and horizontal fits. Fitting the
  * vertical extent alone is what let a portrait viewport lose the outermost Body;
@@ -378,6 +428,9 @@ export function frameBodies(
     // Explicit, and the reason is in `SceneFraming`: an omitted rotation is what
     // R3F fills in with `lookAt(0, 0, 0)`, aiming past the Bodies at the origin.
     rotation: { x: 0, y: 0, z: 0 },
+    // The centre in all three axes. The camera shares its `x` and `y`, so looking
+    // at it is looking down `-z`, which is the `rotation` above.
+    target: { x: centreX, y: centreY, z: (minZ + maxZ) / 2 },
     fov,
     near: DEFAULT_NEAR,
     // Far enough behind the furthest Body that nothing is clipped out the back,

@@ -36,8 +36,11 @@
  * story's own acceptance; colour, tokens and typography are Epic 3's.
  *
  * **Nothing here reacts to anything.** No interaction, no hover, no click-to-fly,
- * no Rail traversal, no Shot, no Dwell, no Motes, no Focus — those are 2.5
- * through 2.10. Bodies and Dust at rest, and a static view that sees them.
+ * no Dwell, no Motes, no Focus — those are 2.6 through 2.10. Rail traversal (2.5)
+ * is mounted here as `<RailCamera>`, and every rule it obeys lives in
+ * `rail-model.ts`; this file only builds the keyframes and hands them over. The
+ * `camera` prop stays keyframe 0, so the first frame is the opening frame whether
+ * or not the rig has run yet.
  *
  * **Dust is drawn strictly behind every Body** (FR-15). The model in
  * `dust-model.ts` decides what Dust exists; this file only guarantees the draw
@@ -65,6 +68,8 @@ import {
   mediumFalloff,
   mediumSpriteScale,
 } from './dust-model.ts';
+import { RailCamera } from './rail-camera.tsx';
+import { buildRail, railFarPlane } from './rail-model.ts';
 import { BODY_RENDER_ORDER, buildScene, frameBodies, type Body, type SceneArtifact } from './scene-model.ts';
 
 /**
@@ -137,6 +142,9 @@ export function Scene({ artifact }: SceneProps) {
   // The framing sees Bodies only: Dust never widens it.
   const framing = frameBodies(bodies);
   const { media, particles } = buildDust(bodies);
+  // The Rail's keyframes, resolved from entities. Keyframe 0 is the framing above,
+  // so the prop below and the rig's first frame agree.
+  const rail = buildRail(artifact, bodies);
 
   return (
     <Canvas
@@ -151,7 +159,9 @@ export function Scene({ artifact }: SceneProps) {
         rotation: [framing.rotation.x, framing.rotation.y, framing.rotation.z],
         fov: framing.fov,
         near: framing.near,
-        far: framing.far,
+        // Far enough for every pose the Rail can reach, not only the opening
+        // frame: a stop on a narrow viewport stands further out than keyframe 0.
+        far: Math.max(framing.far, railFarPlane(rail, bodies)),
       }}
     >
       {/*
@@ -162,6 +172,8 @@ export function Scene({ artifact }: SceneProps) {
         camera can see head-on, which is the flat silhouette the second source
         exists to prevent. Placeholder lighting; Epic 3 owns how this looks.
       */}
+      {/* The rig: the one thing that moves the camera. It reads, it never writes the store. */}
+      <RailCamera rail={rail} />
       <ambientLight intensity={0.6} />
       <directionalLight
         position={[
