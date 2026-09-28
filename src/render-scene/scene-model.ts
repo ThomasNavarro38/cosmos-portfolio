@@ -287,11 +287,10 @@ function requireFinitePosition(id: string, position: ScenePosition): ScenePositi
  * `0.45` is narrower than any phone in portrait (a 390 × 844 viewport is 0.46), so
  * the fit holds across the range a visitor actually has. No finite distance frames
  * *every* aspect ratio, so a bound exists whether or not one is named; naming it
- * is what makes it assertable. Since 2.5 it is also the Rail's floor: keyframe
- * 0's reference aspect in `rail-model.ts`, and the smallest aspect `aspectScale`
- * will scale for, so a collapsed canvas cannot fling the camera away. The
- * opening frame is therefore exactly this framing at every aspect; a viewport
- * narrower than the floor still crops, as before.
+ * is what makes it assertable. Since 2.5 it is also the Rail's floor: the
+ * smallest aspect `rail-model.ts` contains a stop for, so a collapsed canvas
+ * cannot fling the camera away. The opening frame is exactly this framing at
+ * every aspect; a viewport narrower than the floor still crops, as before.
  */
 export const NARROWEST_ASPECT = 0.45;
 
@@ -324,11 +323,16 @@ export const BODY_MARGIN = 3;
  * in scene units.
  *
  * `rail-model.ts` resolves a stop's distance so that a sphere this large around
- * each Body's centre sits wholly inside the frustum, which keeps the drawn
- * sphere inside with room to spare — the Planet reads as *in* the frame rather
- * than grazing its edge. It must stay at least as large as the largest radius
- * `scene.tsx` draws; `scene-model.test.ts` asserts that, as it does for
- * `BODY_MARGIN`.
+ * each Body's centre sits wholly inside the frustum. Its floor is the largest
+ * radius `scene.tsx` draws — below that a Body clips at its stop — and
+ * `scene-model.test.ts` asserts it, as it does for `BODY_MARGIN`. Everything
+ * above the floor is composition: at today's radii (1 at most) it leaves the
+ * Planet two units clear of the frame's edge, so it reads as *in* the frame
+ * rather than grazing it.
+ *
+ * Equal to `BODY_MARGIN` today, but not the same quantity: that one is the
+ * opening frame's slack and the Dust's clearance, this one is how snugly a stop
+ * frames its system. Tuning one must not move the other.
  */
 export const STOP_MARGIN = 3;
 
