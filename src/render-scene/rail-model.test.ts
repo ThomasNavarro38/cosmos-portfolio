@@ -22,11 +22,11 @@ import { Frustum, Matrix4, PerspectiveCamera, Vector3 } from 'three';
 import { railStopCount as inputStopCount } from '../shell/rail-input.ts';
 import {
   DWELL_SLOWDOWN,
+  RAIL_HEADING,
   RAIL_MAX_FRAME_SECONDS,
   RAIL_OPENING_SLOWDOWN,
   RAIL_SPRING_SECONDS,
-  SHOT_REFERENCE_ASPECT,
-  aspectScale,
+  DESKTOP_ASPECT,
   buildRail,
   containDistance,
   dampProgress,
@@ -147,7 +147,7 @@ function velocity(
   rail: Rail,
   p: number,
   side: 'left' | 'right',
-  aspect = SHOT_REFERENCE_ASPECT,
+  aspect = DESKTOP_ASPECT,
   field: 'position' | 'target' = 'position',
 ): ScenePosition {
   const a = railPose(rail, side === 'left' ? p - H : p, aspect)[field];
@@ -183,7 +183,7 @@ test('committed: one Client yields the opening frame and the SNCF stop, progress
   assert.equal(railStopCount(rail), 1);
 
   const framing = frameBodies(bodies);
-  const opening = railPose(rail, 0, SHOT_REFERENCE_ASPECT);
+  const opening = railPose(rail, 0, DESKTOP_ASPECT);
   assertNear(opening.position, framing.position, 'progress 0 is the opening frame the camera prop shows');
   assertNear(opening.target, framing.target, 'and it aims where the framing aims');
 
@@ -191,7 +191,7 @@ test('committed: one Client yields the opening frame and the SNCF stop, progress
   assert.ok(shot !== undefined);
   const star = bodies.find((body) => body.kind === 'star' && body.id === 'client:sncf');
   assert.ok(star !== undefined);
-  const stop = railPose(rail, 1, SHOT_REFERENCE_ASPECT);
+  const stop = railPose(rail, 1, DESKTOP_ASPECT);
   assertNear(stop.target, star.position, 'the stop looks at the SNCF Star, wherever it was solved');
   const reach = distance(stop.position, stop.target);
   assert.ok(reach >= shot.distance - 1e-9, 'never closer than the Shot’s distance');
@@ -203,22 +203,22 @@ test('committed: one Client yields the opening frame and the SNCF stop, progress
   assert.ok(sncf !== undefined);
   assert.equal(sncf.slowdown, DWELL_SLOWDOWN['dwell-steady'], 'paced by its artifact tempo, dwell-steady');
   assert.equal(rail.keyframes[0]?.slowdown, RAIL_OPENING_SLOWDOWN, 'the opening frame has its own slowdown');
-  for (const aspect of [SHOT_REFERENCE_ASPECT, NARROWEST_ASPECT]) {
+  for (const aspect of [DESKTOP_ASPECT, NARROWEST_ASPECT]) {
     assert.deepEqual(outsideAtStop(rail, bodies, 1, aspect), [], `the Star and the Planet are framed at ${aspect}`);
   }
 
-  assertNear(railPose(rail, 7, SHOT_REFERENCE_ASPECT).position, stop.position, 'progress past the end clamps to 1');
+  assertNear(railPose(rail, 7, DESKTOP_ASPECT).position, stop.position, 'progress past the end clamps to 1');
 });
 
 test('empty rail: the opening keyframe only, and progress clamps to 0 without throwing', () => {
   const rail = buildRail({ rail: [], shots: [], dwell: [] }, []);
   assert.deepEqual(subjectsOf(rail), [null]);
   assert.equal(railStopCount(rail), 0);
-  const opening = railPose(rail, 0, SHOT_REFERENCE_ASPECT);
+  const opening = railPose(rail, 0, DESKTOP_ASPECT);
   for (const p of [-3, 0.5, 4, Number.NaN]) {
-    assert.deepEqual(railPose(rail, p, SHOT_REFERENCE_ASPECT), opening, `progress ${p} is the opening frame`);
+    assert.deepEqual(railPose(rail, p, DESKTOP_ASPECT), opening, `progress ${p} is the opening frame`);
   }
-  const motion = stepRailMotion(null, rail, 3, SHOT_REFERENCE_ASPECT, 0.016);
+  const motion = stepRailMotion(null, rail, 3, DESKTOP_ASPECT, 0.016);
   assert.equal(motion.progress.value, 0, 'the target clamps to 0');
   for (const value of [opening.position.x, opening.position.y, opening.position.z]) {
     assert.ok(Number.isFinite(value));
@@ -338,7 +338,7 @@ function assertShiftInvariant(v: ScenePosition, tolerance: number): void {
     assert.ok(Math.abs(stopDistance(other, 1) - stopDistance(keyframe, 1)) <= tolerance, `keyframe ${index} reach`);
   });
   for (const p of [0, 0.3, 1, 2.5, 4.9, 5]) {
-    for (const aspect of [NARROWEST_ASPECT, 1, SHOT_REFERENCE_ASPECT]) {
+    for (const aspect of [NARROWEST_ASPECT, 1, DESKTOP_ASPECT]) {
       assertNear(
         railPose(after, p, aspect).position,
         shift(railPose(before, p, aspect).position),
@@ -353,7 +353,7 @@ function assertShiftInvariant(v: ScenePosition, tolerance: number): void {
 
 test('the curve passes through every keyframe at its integer progress', () => {
   const { rail } = railOf(fiveStops());
-  for (const aspect of [NARROWEST_ASPECT, 1, SHOT_REFERENCE_ASPECT]) {
+  for (const aspect of [NARROWEST_ASPECT, 1, DESKTOP_ASPECT]) {
     rail.keyframes.forEach((keyframe, index) => {
       const pose = railPose(rail, index, aspect);
       const d = stopDistance(keyframe, aspect);
@@ -472,7 +472,17 @@ test('the warp under mixed slowdowns fixes every stop, is C1 and monotone, and i
   assert.equal(warpProgress(Number.NaN, mixed), 0);
   for (const bad of [1, 1.5, -0.2, Number.NaN]) {
     assert.equal(warpProgress(0.3, [bad, bad]), 0.3, `slowdown ${bad} reads as none`);
+    // One bad end: that end alone reads as none, and the good end still slows.
+    const good = DWELL_SLOWDOWN['dwell-steady'];
+    for (const t of [0.1, 0.3, 0.5, 0.8]) {
+      assert.equal(warpProgress(t, [good, bad]), warpProgress(t, [good, 0]), `[k, ${bad}] at ${t} is [k, 0]`);
+      assert.equal(warpProgress(t, [bad, good]), warpProgress(t, [0, good]), `[${bad}, k] at ${t} is [0, k]`);
+    }
+    assert.ok(Math.abs(warpRate([good, bad], 0, 'right') - (1 - good)) < 1e-4, 'the good end keeps its slowdown');
+    assert.ok(Math.abs(warpRate([good, bad], 1, 'left') - 1) < 1e-4, 'the bad end has none');
   }
+  // The slowdowns name the knots: progress past the last one clamps to it.
+  assert.equal(warpProgress(1.5, [0.35, 0.55]), 1, 'progress clamps to the knots the slowdowns name');
 });
 
 test('a held stop is crossed more slowly than a brief one: lower rate, strictly wider hold', () => {
@@ -485,7 +495,7 @@ test('a held stop is crossed more slowly than a brief one: lower rate, strictly 
   const brief = railOf(withTempo(base, 'client:b', 'dwell-brief')).rail;
   assert.equal(held.keyframes[index]?.subject, 'client:b');
 
-  for (const aspect of [NARROWEST_ASPECT, SHOT_REFERENCE_ASPECT]) {
+  for (const aspect of [NARROWEST_ASPECT, DESKTOP_ASPECT]) {
     const heldRate = speed(velocity(held, index, 'right', aspect));
     const briefRate = speed(velocity(brief, index, 'right', aspect));
     assert.ok(heldRate > 0, 'the held stop still moves');
@@ -568,7 +578,7 @@ test('the path slows at every stop without halting: rate > 0 there and below the
 test('the trajectory is C1 through every stop: position and aim have the same tangent from either side', () => {
   const { rail } = railOf(fiveStops());
   for (let k = 1; k < railStopCount(rail); k += 1) {
-    for (const aspect of [NARROWEST_ASPECT, SHOT_REFERENCE_ASPECT]) {
+    for (const aspect of [NARROWEST_ASPECT, DESKTOP_ASPECT]) {
       for (const field of ['position', 'target'] as const) {
         const left = velocity(rail, k, 'left', aspect, field);
         const right = velocity(rail, k, 'right', aspect, field);
@@ -586,7 +596,7 @@ test('the camera stays on the +z side of its aim along the whole path, so the ai
   for (const artifact of [fiveStops(), committed()]) {
     const { rail } = railOf(artifact);
     const stops = railStopCount(rail);
-    for (const aspect of [0.1, NARROWEST_ASPECT, 1, SHOT_REFERENCE_ASPECT, 3]) {
+    for (const aspect of [0.1, NARROWEST_ASPECT, 1, DESKTOP_ASPECT, 3]) {
       for (let i = 0; i <= stops * 100; i += 1) {
         const pose = railPose(rail, i / 100, aspect);
         assert.ok(pose.position.z - pose.target.z > 0, `at progress ${i / 100}, aspect ${aspect}`);
@@ -623,7 +633,10 @@ function outsideAtStop(rail: Rail, bodies: readonly Body[], index: number, aspec
   const system = bodies.filter(
     (body) => (body.kind === 'star' && body.id === subject) || (body.kind === 'planet' && body.clientId === subject),
   );
-  assert.ok(system.length >= 2, `stop ${subject} frames its Star and at least one Planet`);
+  assert.ok(
+    system.some((body) => body.kind === 'star'),
+    `stop ${subject} frames its Star, and every Planet it has`,
+  );
   return system
     .filter((body) => {
       const centre = new Vector3(body.position.x, body.position.y, body.position.z);
@@ -652,9 +665,9 @@ test('at rest at any stop, at any aspect ≥ 0.45, every Body of that Client is 
 });
 
 test('the frustum check bites: a stop at the Shot’s distance alone would crop the committed Planet', () => {
-  // The negative control. Rebuild the committed stop with its reach forced to
-  // the Shot's distance at a phone aspect — what 2.5 shipped before its
-  // `reference / aspect` scaling — and the Planet falls out.
+  // The negative control. Rebuild the committed stop with no containment, so
+  // it stands at the Shot's distance alone, unscaled, at a phone aspect — and
+  // the Planet falls out.
   const { rail, bodies } = railOf(committed());
   const stop = rail.keyframes[1];
   const shot = committed().shots[0];
@@ -682,7 +695,7 @@ test('stop distance is max(shot.distance, contain(aspect)): a tight Shot is wide
     const pose = railPose(rail, 1, aspect);
     return { reach: distance(pose.position, pose.target), contain: containDistance(stop.framing, aspect) };
   };
-  for (const aspect of [NARROWEST_ASPECT, 1, SHOT_REFERENCE_ASPECT, 3]) {
+  for (const aspect of [NARROWEST_ASPECT, 1, DESKTOP_ASPECT, 3]) {
     const tight = reachAt(1, aspect);
     assert.ok(tight.contain > 1, 'the tight Shot is closer than containment allows');
     assert.ok(Math.abs(tight.reach - tight.contain) < 1e-9, `tight Shot at ${aspect}: distance = contain`);
@@ -705,9 +718,12 @@ test('containment is continuous and non-increasing in the aspect, floored, and t
   assertNear(railPose(rail, 1, 0.5).target, stop.target, 'the aim never moves with the aspect');
   assert.ok(Number.isFinite(reach(Number.POSITIVE_INFINITY)) && reach(Number.POSITIVE_INFINITY) > 0, 'the widest aspect');
   assert.equal(reach(Number.NaN), reach(NARROWEST_ASPECT), 'no aspect at all reads as the floor, the safest frame');
-  // The opening frame keeps `aspectScale`, so progress 0 is the camera prop.
-  assert.equal(aspectScale(SHOT_REFERENCE_ASPECT, Number.NaN), 1, 'no aspect at all reads as the reference');
-  assert.equal(aspectScale(SHOT_REFERENCE_ASPECT, Number.POSITIVE_INFINITY), 1, 'the widest aspect is the widest scale');
+  // The opening frame keeps its own reach at every aspect, so progress 0 is the camera prop.
+  const opening = rail.keyframes[0];
+  assert.ok(opening !== undefined);
+  for (const aspect of [Number.NaN, Number.POSITIVE_INFINITY, 0, -1, 1e-9, NARROWEST_ASPECT, DESKTOP_ASPECT]) {
+    assert.equal(stopDistance(opening, aspect), opening.reach, `the opening frame at aspect ${aspect}`);
+  }
 });
 
 test('one Shot changed moves only that stop’s keyframe', () => {
@@ -723,7 +739,7 @@ test('one Shot changed moves only that stop’s keyframe', () => {
   before.keyframes.forEach((keyframe, index) => {
     const other = after.keyframes[index];
     assert.ok(other !== undefined);
-    for (const aspect of [NARROWEST_ASPECT, SHOT_REFERENCE_ASPECT]) {
+    for (const aspect of [NARROWEST_ASPECT, DESKTOP_ASPECT]) {
       const moved = distance(railPose(after, index, aspect).position, railPose(before, index, aspect).position) > 1e-9;
       assert.equal(moved, keyframe.subject === 'client:b', `keyframe ${index} (${String(keyframe.subject)}) at ${aspect}`);
     }
@@ -759,11 +775,91 @@ test('a Project added at a wider orbit, with no Shot edit, is still framed at it
   for (const aspect of ASPECT_SWEEP) {
     assert.deepEqual(outsideAtStop(rail, bodies, index, aspect), []);
   }
-  const shot = wider.shots.find((entry) => entry.subject === 'client:c');
-  assert.ok(shot !== undefined);
   const stop = rail.keyframes[index];
-  assert.ok(stop !== undefined);
-  assert.ok(stopDistance(stop, SHOT_REFERENCE_ASPECT) > shot.distance, 'it backed off');
+  const before = railOf(artifact).rail.keyframes[index];
+  assert.ok(stop !== undefined && before !== undefined && before.subject === 'client:c');
+  for (const aspect of [NARROWEST_ASPECT, DESKTOP_ASPECT]) {
+    assert.ok(
+      stopDistance(stop, aspect) > stopDistance(before, aspect),
+      `the new Project is what backed the stop off, at ${aspect}`,
+    );
+  }
+});
+
+test('a Planet toward the camera, below its Star, or none at all is still framed at its stop', () => {
+  // The fixtures above put every Planet level with its Star and off to the side,
+  // where a stop's depth and vertical terms are zero. Here one Planet sits on
+  // the camera's side of its Star and one below it, so a wrong sign on the depth
+  // or a lost absolute value on the vertical offset crops one of them; a
+  // Star-only Client is a system of one.
+  const project = (id: string, index: number, position: ScenePosition) => ({
+    id: `project:${id}/${index}`,
+    clientId: id,
+    isDeep: false,
+    mass: 1,
+    luminanceBand: 'stroke-far',
+    moteTier: 'mote-none',
+    position,
+  });
+  const artifact: SceneArtifact = {
+    clients: [
+      {
+        id: 'client:near',
+        position: at(0, 0, 0),
+        projects: [project('client:near', 1, at(12, 0, 14)), project('client:near', 2, at(0, -14, 4))],
+      },
+      { id: 'client:alone', position: at(90, 0, 0), projects: [] },
+    ],
+    rail: ['client:alone', 'client:near'],
+    shots: [
+      { subject: 'client:near', angle: SHOT_ANGLE, distance: SHOT_DISTANCE },
+      { subject: 'client:alone', angle: SHOT_ANGLE, distance: SHOT_DISTANCE },
+    ],
+    dwell: [
+      { subject: 'client:near', tempo: 'dwell-steady' },
+      { subject: 'client:alone', tempo: 'dwell-brief' },
+    ],
+  };
+  const { rail, bodies } = railOf(artifact);
+  const extents = rail.keyframes[1]?.framing?.extents ?? [];
+  assert.ok(extents.some((extent) => extent.depth > 0), 'a Planet sits toward the camera');
+  assert.ok(extents.some((extent) => extent.up > 0), 'a Planet sits off the view axis vertically');
+  assert.equal(rail.keyframes[2]?.framing?.extents.length, 1, 'a Star-only Client is a system of one');
+  for (let index = 1; index <= railStopCount(rail); index += 1) {
+    for (const aspect of ASPECT_SWEEP) {
+      assert.deepEqual(outsideAtStop(rail, bodies, index, aspect), []);
+    }
+  }
+});
+
+test('the Rail heading stays strictly inside a quarter-turn, so every stop looks from the +z side', () => {
+  assert.ok(Math.abs(RAIL_HEADING) < Math.PI / 2, `RAIL_HEADING ${RAIL_HEADING} keeps every stop offset at z > 0`);
+  const { rail } = railOf(fiveStops());
+  for (const keyframe of rail.keyframes) {
+    assert.ok(keyframe.direction.z > 0, `keyframe ${String(keyframe.subject)} looks from +z`);
+  }
+});
+
+test('a small real turn between two near stops is not flattened by a far Shot elsewhere on the Rail', () => {
+  // Keyframes run opening, d, b, e, a, c. d and b differ by a hundredth of a
+  // unit in Shot distance; e stands a billion units out. Rounding noise is
+  // judged against each pair's own scale, so d → b is a real rise and the
+  // offset is still rising as it passes b toward e. Judged against e's scale,
+  // d → b would read as flat and the offset would stop dead at b.
+  const artifact = fiveStops();
+  const distances: Readonly<Record<string, number>> = { 'client:d': 40, 'client:b': 40.01, 'client:e': 1e9 };
+  const spread: SceneArtifact = {
+    ...artifact,
+    shots: artifact.shots.map((shot) => ({ ...shot, distance: distances[shot.subject] ?? shot.distance })),
+  };
+  const { rail } = railOf(spread);
+  assert.deepEqual(subjectsOf(rail).slice(1, 4), ['client:d', 'client:b', 'client:e']);
+  const offsetZ = (progress: number): number => {
+    const pose = railPose(rail, progress, DESKTOP_ASPECT);
+    return pose.position.z - pose.target.z;
+  };
+  const rateAtB = (offsetZ(2) - offsetZ(2 - H)) / H;
+  assert.ok(rateAtB > 1e-3, `the offset is still rising at b (${rateAtB}), not stopped dead by a far Shot`);
 });
 
 test('a stop with no Dwell, two Dwells, or an unknown tempo throws naming the ID', () => {
@@ -771,6 +867,8 @@ test('a stop with no Dwell, two Dwells, or an unknown tempo throws naming the ID
   const { bodies } = buildScene(artifact);
   const missing: RailArtifact = { ...artifact, dwell: artifact.dwell.filter((entry) => entry.subject !== 'client:e') };
   assert.throws(() => buildRail(missing, bodies), /client:e.*Dwell/);
+  const unlisted = { ...artifact, dwell: undefined } as unknown as RailArtifact;
+  assert.throws(() => buildRail(unlisted, bodies), /client:d.*no Dwell list/, 'a hand-built artifact with no Dwell list');
   const doubled: RailArtifact = { ...artifact, dwell: [...artifact.dwell, { subject: 'client:d', tempo: 'dwell-held' }] };
   assert.throws(() => buildRail(doubled, bodies), /client:d/);
   for (const tempo of ['dwell-deep', '', 'DWELL-HELD', 'constructor', '__proto__', 'toString', 'hasOwnProperty']) {
@@ -787,26 +885,27 @@ test('a stop with no Dwell, two Dwells, or an unknown tempo throws naming the ID
   );
 });
 
-test('the scale is continuous through zero: a spring that overshoots a sliver aspect does not cut', () => {
+test('containment is continuous through zero: a spring that overshoots a sliver aspect does not cut', () => {
   // The damped aspect is a spring; carried velocity can take it past a tiny
-  // positive goal to zero or below. The scale there must match the sliver's —
-  // the floor — not jump back to the reference.
-  const ceiling = SHOT_REFERENCE_ASPECT / NARROWEST_ASPECT;
+  // positive goal to zero or below. The stop's distance there must match the
+  // sliver's — the floor — not jump.
+  const { rail } = railOf(fiveStops());
+  const stop = rail.keyframes[1];
+  assert.ok(stop !== undefined);
+  const floor = stopDistance(stop, NARROWEST_ASPECT);
   for (const aspect of [1e-9, 0, -1e-9, -1, Number.NEGATIVE_INFINITY]) {
-    assert.equal(aspectScale(SHOT_REFERENCE_ASPECT, aspect), ceiling, `aspect ${aspect}`);
+    assert.equal(stopDistance(stop, aspect), floor, `aspect ${aspect}`);
   }
 });
 
-test('a collapsed canvas cannot fling the camera away: the scale is floored at NARROWEST_ASPECT', () => {
-  const ceiling = SHOT_REFERENCE_ASPECT / NARROWEST_ASPECT;
-  for (const aspect of [NARROWEST_ASPECT, 0.2, 1e-3, 1e-9, Number.MIN_VALUE]) {
-    assert.equal(aspectScale(SHOT_REFERENCE_ASPECT, aspect), ceiling, `aspect ${aspect}`);
-  }
-  for (const aspect of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
-    const scale = aspectScale(SHOT_REFERENCE_ASPECT, aspect);
-    assert.ok(Number.isFinite(scale) && scale >= 1 && scale <= ceiling, `aspect ${aspect} gives ${scale}`);
-  }
+test('a collapsed canvas cannot fling the camera away: containment is floored at NARROWEST_ASPECT', () => {
   const { rail } = railOf(fiveStops());
+  const stop = rail.keyframes[1];
+  assert.ok(stop !== undefined);
+  const floor = stopDistance(stop, NARROWEST_ASPECT);
+  for (const aspect of [0.2, 1e-3, 1e-9, Number.MIN_VALUE, Number.NaN]) {
+    assert.equal(stopDistance(stop, aspect), floor, `aspect ${aspect}`);
+  }
   const reach = (aspect: number) => {
     const pose = railPose(rail, 1, aspect);
     return distance(pose.position, pose.target);
@@ -826,14 +925,14 @@ test('the far plane keeps every Body in range from every pose the Rail can reach
     assert.ok(Number.isFinite(far) && far > 0);
     const stops = railStopCount(rail);
     let needed = 0;
-    // Every aspect between the floor and the reference, densely — the scale
-    // varies only there — plus the degenerate and the wide ends. The model
+    // Every aspect between the floor and a desktop, densely, plus the
+    // degenerate end and the wide tail out to `+∞`. The model
     // samples a coarser grid, so this checks its slack, not its own samples.
     const sweep = Array.from(
       { length: 41 },
-      (_, j) => NARROWEST_ASPECT + ((SHOT_REFERENCE_ASPECT - NARROWEST_ASPECT) * j) / 40,
+      (_, j) => NARROWEST_ASPECT + ((DESKTOP_ASPECT - NARROWEST_ASPECT) * j) / 40,
     );
-    for (const aspect of [1e-4, ...sweep, 4]) {
+    for (const aspect of [1e-4, ...sweep, 4, 10, 1e3, Number.POSITIVE_INFINITY]) {
       const poses = [
         ...rail.keyframes.map((_, k) => railPose(rail, k, aspect)),
         ...Array.from({ length: stops * 97 + 1 }, (_, i) => railPose(rail, i / 97, aspect)),
@@ -855,15 +954,15 @@ test('the far plane keeps every Body in range from every pose the Rail can reach
 });
 
 test('the opening frame at any real viewport is the camera prop, so the rig’s first frame is no cut', () => {
-  // `NARROWEST_ASPECT` is keyframe 0's reference: at every aspect at least that
+  // `NARROWEST_ASPECT` is the floor `frameBodies` fits: at every aspect at least that
   // wide the opening frame is exactly `frameBodies(bodies)`, which `scene.tsx`
   // passes as the `camera` prop.
   const { rail, bodies } = railOf(fiveStops());
   const framing = frameBodies(bodies);
-  for (const aspect of [NARROWEST_ASPECT, 0.75, 1, SHOT_REFERENCE_ASPECT, 2.6]) {
+  for (const aspect of [NARROWEST_ASPECT, 0.75, 1, DESKTOP_ASPECT, 2.6]) {
     assertNear(railPose(rail, 0, aspect).position, framing.position, `aspect ${aspect}`);
   }
-  assert.ok(SHOT_REFERENCE_ASPECT > NARROWEST_ASPECT);
+  assert.ok(DESKTOP_ASPECT > NARROWEST_ASPECT);
 });
 
 // --- The spring ---------------------------------------------------------------
@@ -1011,7 +1110,7 @@ test('railFrame binds its inputs: the carried motion, the store progress, width 
 
 test('a resize eases: the aspect is damped, and the framing moves a little each frame rather than jumping', () => {
   const { rail } = railOf(fiveStops());
-  let motion = stepRailMotion(null, rail, 1, SHOT_REFERENCE_ASPECT, 0.016);
+  let motion = stepRailMotion(null, rail, 1, DESKTOP_ASPECT, 0.016);
   const before = railPose(rail, motion.progress.value, motion.aspect.value).position;
   const jumped = railPose(rail, 1, 0.5).position;
 
@@ -1026,7 +1125,7 @@ test('a resize eases: the aspect is damped, and the framing moves a little each 
   // A degenerate live aspect keeps the previous one.
   const held = stepRailMotion(motion, rail, 1, Number.NaN, 1 / 60);
   assert.ok(Math.abs(held.aspect.value - motion.aspect.value) < 1e-6);
-  assert.equal(stepRailMotion(null, rail, 0, 0, 0.016).aspect.value, NARROWEST_ASPECT, 'first frame: keyframe 0’s reference');
+  assert.equal(stepRailMotion(null, rail, 0, 0, 0.016).aspect.value, NARROWEST_ASPECT, 'first frame: the floor, the safest frame');
 });
 
 // --- Purity --------------------------------------------------------------------

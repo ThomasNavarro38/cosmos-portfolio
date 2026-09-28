@@ -105,6 +105,9 @@ export const RAIL_OPENING_SLOWDOWN: number = DWELL_SLOWDOWN['dwell-steady'];
  * The heading the whole Rail is seen from, in radians about `+y`: `0` is the
  * `+z` side, the side the opening frame also looks from. Every stop's direction
  * is built from it and its Shot's elevation, so one Rail is seen from one side.
+ *
+ * It must stay strictly inside `±π/2`: every stop's offset then has `z > 0`,
+ * which is what keeps the camera from crossing behind its aim. A test asserts it.
  */
 export const RAIL_HEADING = 0;
 
@@ -121,11 +124,10 @@ export const RAIL_MAX_FRAME_SECONDS = 0.1;
  * A desktop aspect, width over height: the top of the dense aspect grid
  * `railFarPlane` samples.
  *
- * A stop's distance is resolved per aspect by `stopDistance`, so this constant
- * frames nothing; 2.5 used it as the aspect a Shot's distance was taken to
- * frame, and 2.6 replaced that with containment.
+ * It frames nothing — a stop's distance is resolved per aspect by
+ * `stopDistance` — it only bounds where the far plane's sampling is dense.
  */
-export const SHOT_REFERENCE_ASPECT = 16 / 9;
+export const DESKTOP_ASPECT = 16 / 9;
 
 /** The artifact slice the Rail reads: its order, its Shots and its Dwell. */
 export type RailArtifact = Pick<SceneArtifact, 'rail' | 'shots' | 'dwell'>;
@@ -310,11 +312,17 @@ export function buildRail(artifact: RailArtifact, bodies: readonly Body[]): Rail
 /**
  * The slowdown for one stop, from the artifact's Dwell entry for that Client ID.
  *
- * Throws naming the ID when there is no entry, more than one, or a tempo the
+ * Throws naming the ID when there is no Dwell list, no entry, more than one, or a tempo the
  * table does not name. `Object.hasOwn`, so a tempo like `constructor` or
  * `__proto__` is unknown rather than an inherited property read as a number.
  */
 function dwellSlowdownOf(artifact: RailArtifact, id: string): number {
+  // The type says the list is there; a hand-built artifact that never passed
+  // the gate may not agree, and it should still fail by name.
+  const dwell: unknown = artifact.dwell;
+  if (!Array.isArray(dwell)) {
+    throw new Error(`the Rail stops at ${JSON.stringify(id)}, but the artifact carries no Dwell list; a stop needs a tempo.`);
+  }
   const entries = artifact.dwell.filter((entry) => entry.subject === id);
   const entry = entries[0];
   if (entry === undefined) {
@@ -341,7 +349,7 @@ function dwellSlowdownOf(artifact: RailArtifact, id: string): number {
  *
  * The camera looks along `−direction` with world `+y` as its up hint, as
  * `camera.lookAt` resolves it: its right axis is `up × direction`, normalised,
- * and its own up is `direction × right`. `direction` never has `x` or `z` both
+ * and its own up is `direction × right`. `direction` never has `x` and `z` both
  * zero, because a Shot's angle is strictly inside `±π/2`.
  */
 function extentOf(body: Body, subject: ScenePosition, direction: ScenePosition): StopExtent {
@@ -392,8 +400,12 @@ function elevation(angle: number): ScenePosition {
  * `V` is half of `DEFAULT_FOV`; `tan H = tan V · aspect`, as Three derives it.
  * **Continuous in the aspect**: it is floored at `NARROWEST_ASPECT`, and zero or
  * below reads as the floor (an aspect spring overshooting a sliver goal must not
- * jump); `+∞` is `H = π/2`, the widest; only `NaN` — no aspect at all — reads as
- * the floor too, the most conservative frame.
+ * jump); `+∞` is `H = π/2`, the widest; `NaN` — no aspect at all — also reads as
+ * the floor, the most conservative frame.
+ *
+ * The near-plane bound never decides the answer at today's `DEFAULT_FOV`: the
+ * vertical bound alone is at least `m / sin V`, far above `m + near`. It stays
+ * as the guard the spec names, for a wider fov or a deeper near plane.
  */
 export function containDistance(framing: StopFraming, aspect: number): number {
   const usable = Number.isNaN(aspect) ? NARROWEST_ASPECT : Math.max(aspect, NARROWEST_ASPECT);
@@ -421,12 +433,13 @@ export function containDistance(framing: StopFraming, aspect: number): number {
  * A stop stands at `max(shot.distance, containDistance(aspect))`: the Shot's
  * angle always wins, and its distance wins whenever it is the larger, so a Shot
  * overrides the default framing without being able to crop a Project out. The
- * opening frame keeps its own reach scaled by `aspectScale`, which is 1 at every
- * aspect from `NARROWEST_ASPECT` up, so progress 0 stays the `camera` prop.
+ * opening frame keeps its own reach at every aspect: `frameBodies` already fits
+ * the whole career down to `NARROWEST_ASPECT`, so progress 0 stays the `camera`
+ * prop, and a viewport narrower than the floor crops it as the prop does.
  */
 export function stopDistance(keyframe: RailKeyframe, aspect: number): number {
   const { framing } = keyframe;
-  if (framing === null) return keyframe.reach * aspectScale(NARROWEST_ASPECT, aspect);
+  if (framing === null) return keyframe.reach;
   return Math.max(keyframe.reach, containDistance(framing, aspect));
 }
 
@@ -435,30 +448,10 @@ export function railStopCount(rail: Rail): number {
   return Math.max(0, rail.keyframes.length - 1);
 }
 
-/**
- * How far the opening keyframe's offset is scaled at a live aspect:
- * `reference / aspect` when the viewport is narrower than the reference, `1`
- * otherwise. Stops do not use it — `stopDistance` resolves them by containment.
- *
- * **Bounded.** The aspect is floored at `NARROWEST_ASPECT`, so a collapsed
- * canvas (a sliver of width, or none) cannot fling the camera away by a factor
- * of thousands; the largest scale is `reference / NARROWEST_ASPECT`.
- *
- * **Continuous everywhere it is defined.** Zero and below read as the floor,
- * like any sliver: the damped aspect is a spring, and one that overshoots a
- * tiny goal past zero must not jump the camera from the floor's distance back
- * to the reference's. `+∞` is the widest aspect and scales by 1. Only `NaN` —
- * no aspect at all — reads as the reference.
- */
-export function aspectScale(referenceAspect: number, aspect: number): number {
-  if (Number.isNaN(aspect)) return 1;
-  return Math.max(1, referenceAspect / Math.max(aspect, NARROWEST_ASPECT));
-}
-
 /** How many samples per segment `railFarPlane` takes along the curve. */
 export const RAIL_FAR_SAMPLES_PER_SEGMENT = 32;
 
-/** How many aspects `railFarPlane` samples between the floor and the reference. */
+/** How many aspects `railFarPlane` samples between the floor and `DESKTOP_ASPECT`. */
 export const RAIL_FAR_ASPECT_SAMPLES = 8;
 
 /**
@@ -474,8 +467,8 @@ export const RAIL_FAR_ASPECT_SAMPLES = 8;
  * maximum of nonlinear terms, and the monotone cubic's tangent limiter is
  * nonlinear — so no single aspect is known to be the worst. The curve is
  * sampled on a grid: progress along the Rail, every keyframe included, by
- * aspects spanning the floor to the reference densely, then twice the
- * reference and `+∞` (a stop's distance only shrinks as the aspect widens,
+ * aspects spanning the floor to `DESKTOP_ASPECT` densely, then twice that
+ * and `+∞` (a stop's distance only shrinks as the aspect widens,
  * toward the limit `+∞` resolves exactly). Between two neighbouring samples the
  * path is C1 and short, so any pose on it lies within about half their chord of
  * the nearer one; half the longest chord in the grid is added as slack, with
@@ -488,9 +481,9 @@ export function railFarPlane(rail: Rail, bodies: readonly Body[]): number {
   const aspects = [
     ...Array.from(
       { length: RAIL_FAR_ASPECT_SAMPLES + 1 },
-      (_, j) => NARROWEST_ASPECT + ((SHOT_REFERENCE_ASPECT - NARROWEST_ASPECT) * j) / RAIL_FAR_ASPECT_SAMPLES,
+      (_, j) => NARROWEST_ASPECT + ((DESKTOP_ASPECT - NARROWEST_ASPECT) * j) / RAIL_FAR_ASPECT_SAMPLES,
     ),
-    SHOT_REFERENCE_ASPECT * 2,
+    DESKTOP_ASPECT * 2,
     Number.POSITIVE_INFINITY,
   ];
   let furthest = 0;
@@ -636,8 +629,8 @@ export function dampProgress(
  * the keyframe the `camera` prop already shows — whatever the store holds, so a
  * remount with progress already in the store springs out to it from the frame
  * on screen rather than cutting there. A live aspect that is not a positive
- * finite number keeps the previous one (or `NARROWEST_ASPECT`, keyframe 0's
- * reference, on the first frame).
+ * finite number keeps the previous one (or `NARROWEST_ASPECT`, the floor and
+ * the safest frame, on the first frame).
  */
 export function stepRailMotion(
   previous: RailMotion | null,
@@ -711,12 +704,12 @@ function monotoneCubic(values: readonly number[], segment: number, t: number): n
   const at = (i: number): number => values[i] ?? 0;
   // A delta at the scale of floating-point rounding is flat. Two stops with the
   // same framing can differ by an ulp after a re-solve translates them, and the
-  // sign test below would read that noise as a turn and zero a tangent — which
-  // broke translation invariance once per-stop distances made equal offsets
-  // common.
-  const flat = RAIL_FLAT_TOLERANCE * Math.max(1, ...values.map(Math.abs));
+  // sign test below would read that noise as a turn and zero a tangent. The
+  // scale is the pair's own, so one far Shot elsewhere on the Rail cannot
+  // flatten a real, small turn between two near ones.
   const deltas = Array.from({ length: n - 1 }, (_, i) => {
     const delta = at(i + 1) - at(i);
+    const flat = RAIL_FLAT_TOLERANCE * Math.max(1, Math.abs(at(i)), Math.abs(at(i + 1)));
     return Math.abs(delta) <= flat ? 0 : delta;
   });
   const d = (i: number): number => deltas[i] ?? 0;
