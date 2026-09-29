@@ -24,6 +24,7 @@ import {
   crossFadeLayerStyle,
   crossFadeTiming,
   focusMove,
+  leavingAfter,
   indexEntryId,
   panelFraction,
   panelStyle,
@@ -257,6 +258,15 @@ test('only A → B cross-fades: entry and release slide the panel, and no change
   assert.equal(focusMove('project:a', 'project:b'), 'panel');
 });
 
+test('the outgoing layer is held through a release, so a running A → B fade finishes as the panel slides out', () => {
+  assert.equal(leavingAfter(null, 'project:a', 'project:b'), 'project:a', 'A → B: A leaves');
+  assert.equal(leavingAfter('project:a', 'project:b', 'project:c'), 'project:b', 'B → C: B leaves');
+  assert.equal(leavingAfter('project:a', 'project:b', null), 'project:a', 'release mid-fade: A keeps fading, never cut');
+  assert.equal(leavingAfter(null, 'project:a', null), null, 'release with nothing leaving');
+  assert.equal(leavingAfter('project:a', null, 'project:c'), null, 'entry slides: the held layer goes');
+  assert.equal(leavingAfter(null, null, 'project:a'), null);
+});
+
 test('the cross-fade runs on the Focus duration and curve, incoming 0 → 1 and outgoing from where it was drawn → 0', () => {
   const timing = crossFadeTiming('1');
   assert.deepEqual(timing.incoming, [{ opacity: 0 }, { opacity: 1 }]);
@@ -290,6 +300,7 @@ test('the outgoing layer lies over the incoming content, clipped to the panel, a
   assert.equal(layer.padding, PANEL_PADDING, 'the panel’s own padding, so the two layers align');
   assert.equal(panelStyle(true).padding, PANEL_PADDING);
   assert.equal(layer.height, '100%');
+  assert.equal(layer.boxSizing, 'border-box', 'the padding sits inside 100%, so the layer is never taller than the panel');
   assert.equal(layer.overflow, 'hidden', 'a longer outgoing Project never lengthens the panel’s scroll');
   assert.equal(layer.pointerEvents, 'none');
 });
@@ -409,11 +420,11 @@ function auditPanel(source: string): string[] {
   // after the effect commits cannot recompute it as null and unmount A mid-fade.
   if (!/const\s+leavingId\s*=\s*useRef<string\s*\|\s*null>\(\s*null\s*\)/.test(code)) failures.push('the leaving Project is not held in a ref');
   if (
-    !/if\s*\(\s*focusedProjectId\s*!==\s*previous\.current\s*\)\s*leavingId\.current\s*=\s*crossFade\(\s*previous\.current\s*,\s*focusedProjectId\s*\)\s*;/.test(
+    !/if\s*\(\s*focusedProjectId\s*!==\s*previous\.current\s*\)\s*leavingId\.current\s*=\s*leavingAfter\(\s*leavingId\.current\s*,\s*previous\.current\s*,\s*focusedProjectId\s*\)\s*;/.test(
       code,
     )
   ) {
-    failures.push('the leaving Project is not crossFade(previous, next), written only when Focus has changed');
+    failures.push('the leaving Project is not leavingAfter(leaving, previous, next), written only when Focus has changed');
   }
   if ((code.match(/\bleavingId\.current\s*=/g) ?? []).length !== 1) failures.push('the leaving Project is written other than once');
   if (!/const\s+leaving\s*=\s*buildPanel\(\s*artifact\s*,\s*leavingId\.current\s*\)/.test(code)) {
@@ -563,6 +574,10 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
     ['the outgoing layer shows the incoming Project', (s) => s.replace('blocks={leaving.blocks}', 'blocks={panel.blocks}')],
     ['a fade on every change', (s) => s.replace('buildPanel(artifact, leavingId.current)', 'buildPanel(artifact, previous.current)')],
     ['the leaving Project recomputed on every render', (s) => s.replace('if (focusedProjectId !== previous.current) leavingId.current =', 'leavingId.current =')],
+    [
+      'a release cuts a running fade',
+      (s) => s.replace('leavingAfter(leavingId.current, previous.current, focusedProjectId)', 'crossFade(previous.current, focusedProjectId)'),
+    ],
     [
       'the leaving Project derived at render',
       (s) => s.replace('const leaving = buildPanel(artifact, leavingId.current);', 'const leaving = buildPanel(artifact, crossFade(previous.current, focusedProjectId));'),

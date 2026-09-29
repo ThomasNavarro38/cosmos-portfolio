@@ -73,6 +73,23 @@ context: []
 - Given `npm run dev`, when the SNCF Project is focused, then nine labelled Motes condense out of the medium as the camera arrives, they keep orbiting while the panel is read, and no label sits under the panel (perceptual, checked in a browser)
 - Given A→B with a fixture of two Projects, when B is activated, then one transition overlaps decay, hand-off and condensation, and the panel content cross-fades
 
+### Review Findings
+
+- [x] [Review][Patch] Re-slot a blocked Mote on the next step, in flight too, per the Labels rule (decided: follow the spec) [src/render-scene/mote-model.ts:615]
+- [x] [Review][Patch] Check AC2 in Chrome with a temporary, reverted two-Project fixture, desktop and 390×844 (decided: run it now) [src/data/career.json]
+- [x] [Review][Patch] Releasing during an A→B cross-fade unmounts the outgoing layer mid-fade [src/shell/focus-panel.tsx:81]
+- [x] [Review][Patch] No test asserts a decaying Mote's position returns to its Dust source (release and A-only Skills) [src/render-scene/mote-model.test.ts]
+- [x] [Review][Patch] Constants test skips `MOTE_ORBIT_PHASES` (length 3, distinct), `MOTE_MIN_SCALE` in (0, 1], `MOTE_SOURCE_SPREAD > 0`, `MOTE_RESLOT_SECONDS > 0` [src/render-scene/mote-model.test.ts:198]
+- [x] [Review][Patch] Layer-style test does not pin `boxSizing: 'border-box'` [src/shell/panel-model.test.ts]
+- [x] [Review][Patch] No test resizes the canvas while focused (re-judged blocking, re-slot) [src/render-scene/mote-model.test.ts]
+- [x] [Review][Defer] Scrolling during the cross-fade moves the absolute outgoing layer with the content [src/shell/panel-model.ts:281] — deferred, 0.8s window
+- [x] [Review][Defer] `field.current` survives a change of `artifact`/`bodies`/`media` identity (HMR only) [src/render-scene/mote-field.tsx:56] — deferred, dev-only
+- [x] [Review][Defer] A gliding Mote occupies only its target slot, so a neighbour may re-slot beside its old one [src/render-scene/mote-model.ts:618] — deferred, transient
+- [x] [Review][Defer] Label width estimate miscounts wide glyphs (emoji, CJK, ZWJ) [src/render-scene/mote-model.ts:668] — deferred, authored data is Latin
+- [x] [Review][Defer] Per-frame `Html` projection and style writes scale with the artifact's distinct Skills, not the focused Project's [src/render-scene/mote-field.tsx:64] — deferred, current pool is small
+- [x] [Review][Defer] A focused Project's Skills are visual only until the panel's Skills list (3.5) [src/render-scene/mote-field.tsx] — deferred to 3.5
+- [x] [Review][Defer] The orbits spin indefinitely while focused (WCAG 2.2.2); 2.10 must stop or pause it under reduced motion [src/render-scene/mote-model.ts] — deferred to 2.10
+
 ## Design Notes
 
 A Mote pool keyed by Skill name makes "one Mote per Skill" structural rather than asserted, and it makes the A→B hand-off a single object moving. The orbit assignment by list index is greybox composition, not a tier: 3.5 replaces it with the artifact's derived tier. Condensation shares the Focus duration so that "B condenses as it arrives" holds by construction. At 0.8s it is still faster than a reading decision; retuning `FOCUS_SECONDS` retunes all three surfaces.

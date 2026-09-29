@@ -578,8 +578,8 @@ leaves open.
 ## Deferred from: spec-2-8-condensation-and-decay (2026-09-29)
 
 - The orbit a Skill sits on is greybox composition by list index: Skill `i` (deduplicated, in the Project's `skills` order) goes to orbit `i mod 3`, slot `2⌊i/3⌋`. 3.5 replaces this with the artifact's derived Mote tier. Nothing in `src/render-scene/` reads `moteTier` yet.
-- When a label is blocked and no free slot keeps the no-adjacency rule, the Mote stays and its label stays hidden. That happens on a crowded orbit, where every free slot is next to an occupied one. At 390×844 it hides `technical leadership` and `code review` on the committed Project (browser check, 2026-09-29). The fix belongs with 3.5's tiering and typography, not with more slots.
-- Only right-hand labels are checked, and only against the panel edge. A left-hand label can run off the canvas's left edge: at 390×844, `Spring Boot` and `Tomcat` start at negative x. The spec checks the panel edge only. A left-edge rule would mirror `labelPlacement`.
+- When a label is blocked and no free slot keeps the no-adjacency rule, the Mote stays and its label stays hidden. That happens on a crowded orbit, where every free slot is next to an occupied one. At 390×844 it hides `technical leadership` and `code review` on the committed Project (browser check, 2026-09-29). Re-checked after the review made re-slotting happen in flight, with the temporary two-Project fixture: Project A hides only `Spring Boot`. The fix belongs with 3.5's tiering and typography, not with more slots.
+- Only right-hand labels are checked, and only against the panel edge. A left-hand label can run off the canvas's left edge: at 390×844, `Spring Boot` and `Tomcat` start at negative x. In the fixture re-check, `technical leadership`, `Cloudera` and `code review` do. The spec checks the panel edge only. A left-edge rule would mirror `labelPlacement`.
 - Label width is estimated as `chars × 0.6em` (a monospace advance at 12px). A different monospace font, or Epic 3's typography, changes the real width. Re-derive `MOTE_LABEL_CHAR_PX` from the font that ships.
 - drei's `<Html>` projects its position in its own frame callback. R3F runs that callback before `MoteField`'s, because a child subscribes first. So a label trails its dot by one frame while the camera moves. It is invisible at the orbit's spin speed.
 - The orbits turn continuously, so on a Project with long labels a Mote that turns into the region by the panel is blocked, then glides to a free slot. That repeats as the orbits turn. Tune `MOTE_ORBIT_RADIANS_PER_SECOND` and `MOTE_RESLOT_SECONDS` at M1 by looking.
@@ -616,3 +616,13 @@ leaves open.
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-8-condensation-and-decay.md`
   summary: The panel cross-fade's DOM behaviour is verified by source audits only; nothing renders FocusPanel.
   evidence: 2.8 review — no DOM test runner in the closed dependency set; auditPanel is a regex over the source.
+
+## Deferred from: code review of spec-2-8-condensation-and-decay.md (2026-09-29)
+
+- Scrolling the panel during an A→B cross-fade moves the absolute outgoing layer with the incoming content, so A's ghost slides out of alignment for the rest of the 0.8s fade (`src/shell/panel-model.ts` `crossFadeLayerStyle`).
+- `MoteField`'s `field.current` is never reset when `artifact`, `bodies` or `media` change identity; only HMR does that today, but stale `planetId`s would throw in `planetOf` (`src/render-scene/mote-field.tsx:56`).
+- During a re-slot glide a Mote occupies only its target slot in `reslot`'s `occupied` set, so a second blocked Mote may re-slot beside its old, still-visually-near slot — transient label adjacency (`src/render-scene/mote-model.ts` `reslot`).
+- `labelChars` counts code points at 0.6em each; emoji, CJK and ZWJ sequences render wider, so such a label could cross the panel edge unblocked. Authored Skills are Latin today (`src/render-scene/mote-model.ts` `labelChars`).
+- The Mote pool holds one mesh and one drei `Html` per distinct Skill in the whole artifact; each `Html` projects and `applyMoteDraw` writes styles every frame, even at rest. Cost grows with `career.json`, not with the focused Project (`src/render-scene/mote-field.tsx`).
+- A focused Project's Skills are visual only (labels live in the `aria-hidden` canvas) until the panel's Skills list lands in 3.5.
+- The Motes' orbits spin indefinitely while a Project is focused (`MOTE_ORBIT_RADIANS_PER_SECOND`) — auto-playing motion over 5s with no pause (WCAG 2.2.2). 2.10's reduced-motion work must stop or pause it.

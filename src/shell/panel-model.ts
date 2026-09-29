@@ -219,6 +219,17 @@ export function crossFade(previous: string | null, next: string | null): string 
 }
 
 /**
+ * The Project the outgoing layer holds once Focus changes from `previous` to
+ * `next`, given the one it held (`leaving`): `crossFade(previous, next)`, except
+ * on release, where it keeps `leaving` — an `A → B` fade still running then
+ * finishes as the panel slides out rather than being cut, and a finished one
+ * already rests at opacity 0.
+ */
+export function leavingAfter(leaving: string | null, previous: string | null, next: string | null): string | null {
+  return next === null ? leaving : crossFade(previous, next);
+}
+
+/**
  * One WAAPI keyframe of the cross-fade. Mutable, because that is what
  * `Element.animate` takes, and a type alias rather than an interface, because
  * only an alias is assignable to the DOM's index-signed `Keyframe`.
