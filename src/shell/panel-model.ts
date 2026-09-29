@@ -72,7 +72,7 @@ export function panelWidthCss(): string {
 
 /**
  * The `id` of a Project's entry in the DOM destination index, so DOM focus can
- * return to the entry that opened the panel (UX-DR40).
+ * return to the released Project's own entry (UX-DR40).
  *
  * The entity ID verbatim after a fixed prefix — an ID the artifact minted is
  * already unique and whitespace-free, and a re-slugified one would be a second

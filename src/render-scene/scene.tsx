@@ -6,7 +6,8 @@
  * the camera stands and how it is turned — lives in `scene-model.ts`, which is
  * pure and fully executed under `node --test`. This file turns that list into
  * meshes and makes no decision of its own: no sort, no filter, no local state, no
- * store subscription, no `useFrame`, no hover or pointer handler, no re-derivation. That residual
+ * store subscription, no `useFrame`, no hover handler and no pointer handler but the one
+ * `onClick` below, no re-derivation. That residual
  * is ratcheted by source scans in `scene-model.test.ts`, which fail the moment
  * this file grows a rule.
  *

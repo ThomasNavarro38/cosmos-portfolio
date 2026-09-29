@@ -567,3 +567,10 @@ leaves open.
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-7-focus-entry-the-panel-shell-and-scroll-s-two-meanings.md`
   summary: At narrow widths the fixed full-height Focus panel covers the right side of the DOM destination index as well as the scene.
   evidence: The panel is `position: fixed; top: 0; bottom: 0; right: 0` over the whole viewport; at 390×844 the Project entry's button is half under the open panel (browser check, 2026-09-29). Layout belongs with Epic 3's panel and Epic 4's narrow-viewport routing.
+
+## Deferred from: code review of spec-2-7-focus-entry-the-panel-shell-and-scroll-s-two-meanings (2026-09-29)
+
+- Touch and swipe input get neither meaning of scroll. The Rail and the focused panel are both driven by `wheel` only (`src/shell/scene-host.tsx`), so on a phone a swipe over the scene neither travels the Rail nor scrolls the open panel. This has been true since 2.5; it needs a touch story.
+- A drag that ends over a Planet counts as a click: `activateBody` runs on every R3F `onClick` with no movement threshold. Once 2.9 adds drag or free flight, that would enter Focus by accident. Gate on `event.delta` then.
+- A wheel over a Focus panel whose content does not overflow (a short Shallow Project) can chain to document scroll. `overscroll-behavior: contain` only holds on a box that can actually scroll. `scrollProgress` stays untouched, but the page can scroll under a focused reader.
+- The focus ease blends position and aim linearly and separately (`stepFocus`). Only the rest poses are proven to contain the Planet. Nothing asserts that the Planet stays on screen and in front of `near` mid-transition between a wide Rail pose and a tight focus pose.

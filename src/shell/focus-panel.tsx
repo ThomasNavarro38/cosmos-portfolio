@@ -18,8 +18,11 @@
  *     moment Focus clears and slide out blank.
  *   - **An effect applying `focusMove`** — DOM focus is a side effect, and it has
  *     to run after the panel is visible: on entry to the panel container
- *     (`tabindex="-1"`, labelled by its `<h2>`), on release back to the index
- *     entry that opened it (UX-DR40).
+ *     (`tabindex="-1"`, labelled by its `<h2>` — and only once there is one,
+ *     so the label never points at an `id` not yet in the document), on release back to the released
+ *     Project's own index entry (UX-DR40) — the one the visitor was reading,
+ *     whether Focus came from the index, a Planet click or a move from another
+ *     Project.
  *
  * **No scrim, no backdrop, no modal** (UX-DR20). The panel paints its own column
  * and nothing else; the scene stays visible and interactive beside it. The
@@ -74,7 +77,7 @@ export function FocusPanel({ artifact }: FocusPanelProps) {
       id={FOCUS_PANEL_ID}
       ref={container}
       tabIndex={-1}
-      aria-labelledby={FOCUS_PANEL_TITLE_ID}
+      aria-labelledby={panel === null ? undefined : FOCUS_PANEL_TITLE_ID}
       style={panelStyle(focusedProjectId !== null && panel !== null)}
     >
       {panel?.blocks.map((block) => {

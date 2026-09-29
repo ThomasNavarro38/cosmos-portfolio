@@ -8,7 +8,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { FOCUS_EASING, FOCUS_SECONDS, cubicBezier, easeFocus, focusEasingCss } from './focus-motion.ts';
+import { FOCUS_EASING, FOCUS_SECONDS, cubicBezier, easeFocus, focusEasingCss, reversingFactor } from './focus-motion.ts';
 
 const MOTION_TS = fileURLToPath(new URL('./focus-motion.ts', import.meta.url));
 
@@ -74,10 +74,49 @@ test('a curve CSS would reject is rejected here too', () => {
   }
 });
 
+test('a transition reversed mid-flight runs for the share CSS gives it', () => {
+  assert.equal(reversingFactor(0.3, 1), 0.3, 'a first reversal runs as long as the slide had moved');
+  assert.equal(reversingFactor(0, 1), 0, 'reversed before it moved: nothing to run');
+  assert.equal(reversingFactor(1, 1), 1, 'reversed at its end: the whole duration');
+  assert.ok(Math.abs(reversingFactor(0.5, 0.4) - 0.8) < 1e-12, 'a reversal of a reversal: |p·f + 1 − f|');
+  assert.ok(Math.abs(reversingFactor(0.25, 0.6) - 0.55) < 1e-12);
+  assert.equal(reversingFactor(2, 1), 1, 'progress clamped to [0, 1]');
+  assert.equal(reversingFactor(-1, 1), 0);
+  assert.equal(reversingFactor(Number.NaN, 0.5), 1, 'a non-finite progress reads as uninterrupted');
+  assert.equal(reversingFactor(0.5, Number.NaN), 0.5, 'a non-finite factor reads as 1');
+  for (let p = 0; p <= 1; p += 0.05) {
+    for (let f = 0; f <= 1; f += 0.05) {
+      const factor = reversingFactor(p, f);
+      assert.ok(factor >= 0 && factor <= 1, `${p}, ${f}`);
+    }
+  }
+});
+
+function auditMotion(source: string): string[] {
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+  const failures: string[] = [];
+  if (/^\s*import\b|\bimport\s*\(|\brequire\s*\(/m.test(code)) failures.push('imports a module');
+  if (/\bwindow\b|\bdocument\b|performance\s*\.\s*now|Date\s*\.\s*now/.test(code)) {
+    failures.push('reads a clock or the DOM — time arrives as an argument');
+  }
+  return failures;
+}
+
 test('the timing module is pure: no import, no clock, no DOM', () => {
-  const code = readFileSync(MOTION_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/\/\/[^\n]*/g, ' ');
-  assert.doesNotMatch(code, /^\s*import\b|\bimport\s*\(|\brequire\s*\(/m, 'imports nothing');
-  assert.doesNotMatch(code, /\bwindow\b|\bdocument\b|performance\s*\.\s*now|Date\s*\.\s*now/, 'time arrives as an argument');
+  const real = readFileSync(MOTION_TS, 'utf8');
+  assert.deepEqual(auditMotion(real), []);
+  for (const [name, form] of [
+    ['a static import', "import { FOCUS_REACH } from '../render-scene/focus-model.ts';\n"],
+    ['an indented import', "  import x from 'y';\n"],
+    ['a dynamic import', "const m = import('./x.ts');\n"],
+    ['a require', "const m = require('./x');\n"],
+    ['a clock', 'const now = performance.now();\n'],
+    ['a wall clock', 'const now = Date.now();\n'],
+    ['a window read', 'const w = window.innerWidth;\n'],
+    ['a document read', 'const el = document.body;\n'],
+  ] as const) {
+    assert.notDeepEqual(auditMotion(`${real}\n${form}`), [], `"${name}" must be rejected`);
+  }
+  // Prose about imports or the DOM is not code, and does not trip it.
+  assert.deepEqual(auditMotion(`${real}\n// import nothing; no window, no Date.now()\n`), []);
 });

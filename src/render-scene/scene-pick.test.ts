@@ -76,16 +76,40 @@ test('the committed artifact’s Planets resolve to destinations the store accep
   }
 });
 
-test('the rule names one event and no other, and reads no DOM', () => {
-  const code = readFileSync(PICK_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/\/\/[^\n]*/g, ' ');
-  assert.doesNotMatch(code, /\b(?:releaseFocus|selectClient|advanceScroll|enterRail|enterFreeFlight|setState)\b/);
-  assert.doesNotMatch(code, /\bwindow\b|\bdocument\b|\braycast/);
+function auditPickRule(source: string): string[] {
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+  const failures: string[] = [];
+  if (/\b(?:releaseFocus|selectClient|advanceScroll|enterRail|enterFreeFlight|setState)\b/.test(code)) {
+    failures.push('names a store write other than focusProject');
+  }
+  if (/\bwindow\b|\bdocument\b|\braycast/.test(code)) failures.push('reads the DOM or hit-tests — R3F has already picked the Body');
   const specifiers = [...code.matchAll(/from\s*['"]([^'"]+)['"]/g)].map((match) => match[1]);
-  assert.deepEqual(specifiers, ['../shell/state.ts', './scene-model.ts']);
+  if (specifiers.join('|') !== '../shell/state.ts|./scene-model.ts') failures.push(`imports ${specifiers.join(', ')}`);
   // The event is required, so `tsc` rejects a binding that forgets it — and with it
   // the stop that keeps a Star click from reaching a Planet behind it.
-  assert.match(code, /function\s+activateBody\(\s*body\s*:\s*Body\s*,\s*event\s*:\s*BodyClick\s*\)/);
-  assert.match(code, /^\s*event\.stopPropagation\(\)\s*;/m, 'stopped unconditionally, not behind ?.');
+  if (!/function\s+activateBody\(\s*body\s*:\s*Body\s*,\s*event\s*:\s*BodyClick\s*\)/.test(code)) {
+    failures.push('activateBody does not require the click event');
+  }
+  if (!/^\s*event\.stopPropagation\(\)\s*;/m.test(code)) failures.push('the click is not stopped unconditionally');
+  return failures;
+}
+
+test('the rule names one event and no other, and reads no DOM', () => {
+  const real = readFileSync(PICK_TS, 'utf8');
+  assert.deepEqual(auditPickRule(real), []);
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['a second event', (s) => s.replace("if (body.kind === 'planet') focusProject(body.id);", "if (body.kind === 'planet') focusProject(body.id);\n  else selectClient(body.id);")],
+    ['a raw store write', (s) => s.replace('focusProject(body.id);', 'navigationStore.setState({ focusedProjectId: body.id });')],
+    ['a DOM read', (s) => s.replace('event.stopPropagation();', 'event.stopPropagation();\n  if (document.hidden) return;')],
+    ['its own hit test', (s) => s.replace('event.stopPropagation();', 'event.stopPropagation();\n  raycaster.intersectObjects([]);')],
+    ['another import', (s) => s.replace("import type { Body } from './scene-model.ts';", "import type { Body } from './scene-model.ts';\nimport { Vector3 } from 'three';")],
+    ['the event optional', (s) => s.replace('event: BodyClick)', 'event?: BodyClick)')],
+    ['the stop behind ?.', (s) => s.replace('event.stopPropagation();', 'event?.stopPropagation();')],
+    ['the stop only for a Planet', (s) => s.replace(/^\s*event\.stopPropagation\(\);\r?\n/m, '').replace('focusProject(body.id);', '{ event.stopPropagation(); focusProject(body.id); }')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
+    assert.notDeepEqual(auditPickRule(mutated), [], `"${name}" must be rejected`);
+  }
 });

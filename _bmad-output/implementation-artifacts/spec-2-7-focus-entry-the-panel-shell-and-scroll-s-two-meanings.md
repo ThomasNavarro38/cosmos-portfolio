@@ -77,6 +77,20 @@ context: []
 - Given Focus is held, when the visitor wheels anywhere over the scene or the panel, then `scrollProgress` does not change and the camera does not move off the focus pose
 - Given `npm run dev`, when a Project is focused and released, then the camera and panel move together as one eased move with no cut, the Planet sits in the free half, and focus lands on the panel and then back on the entry (perceptual, checked in a browser)
 
+### Review Findings
+
+- [x] [Review][Patch] An interrupted open→release desyncs panel and camera. Resolved: on a reversal, scale the camera's ease duration the way CSS's reversing-shortening rule scales the panel's, so both end together [src/render-scene/focus-model.ts]
+- [x] [Review][Patch] `auditPanel` does not pin the order of `focusMove` before the `previous.current` write, or the release-branch condition. Swapping the two lines, or inverting `move !== null`, still passes 22/22 [src/shell/panel-model.test.ts:305]
+- [x] [Review][Patch] Three new scans are never driven over bad forms, which violates the Always rule "each new scan is driven over bad forms": scene-pick purity, focus-motion purity, and the App.tsx mount order [src/render-scene/scene-pick.test.ts:79, src/shell/focus-motion.test.ts:77, src/shell/panel-model.test.ts:465]
+- [x] [Review][Patch] The shell README gives the panel width as `min(560px, 46%)`, but the code and its test use `46vw` [src/shell/README.md:21, src/shell/README.md:81]
+- [x] [Review][Patch] The `scene.tsx` header still says "no hover or pointer handler" beside the new `onClick`. The render-scene README heading "The scene writes nothing" reads against the Planet click → `focusProject` [src/render-scene/scene.tsx:9, src/render-scene/README.md:90]
+- [x] [Review][Patch] The docs say focus returns to "the index entry that opened it", but `focusMove` returns to the focused Project's own entry, which is what the spec intends (after a Planet click or A→B they differ) [src/shell/focus-panel.tsx:22]
+- [x] [Review][Patch] `aria-labelledby` points at a missing id until the first Focus renders the `<h2>` [src/shell/focus-panel.tsx:77]
+- [x] [Review][Defer] Touch/swipe gets neither meaning of scroll; both are wired to `wheel` only [src/shell/scene-host.tsx:174] — deferred, pre-existing
+- [x] [Review][Defer] A drag that ends over a Planet counts as a click (`onClick` with no movement threshold). It becomes reachable once 2.9 adds drag [src/render-scene/scene.tsx] — deferred, pre-existing
+- [x] [Review][Defer] A wheel over a panel whose content does not overflow can chain to document scroll, because `overscroll-behavior: contain` does not hold on a non-scrollable box [src/shell/panel-model.ts] — deferred, pre-existing
+- [x] [Review][Defer] The focus ease blends position and aim linearly and separately. Nothing proves the Planet stays in frame and in front of `near` mid-transition [src/render-scene/focus-model.ts] — deferred, pre-existing
+
 ## Design Notes
 
 Why the panel sits over a full-width canvas instead of shrinking it: DESIGN.md gives the scene the full viewport and has labels "under the panel column" suppressed (UX-DR17), which only makes sense if the scene continues under the column. Shifting the aim puts the Project at NDC −w: the free region spans [−1, 1−2w], and its centre is −w. The camera blend is time-based, so the CSS panel and the camera share one duration and one curve; the rig starts at most one frame behind the store change.
