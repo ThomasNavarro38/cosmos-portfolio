@@ -21,7 +21,9 @@ import {
   MOTE_LABEL_CHAR_PX,
   MOTE_LABEL_FONT_PX,
   MOTE_LABEL_GAP_PX,
+  MOTE_MIN_SCALE,
   MOTE_MIN_SLOTS,
+  MOTE_ORBIT_PHASES,
   MOTE_ORBIT_RADII,
   MOTE_ORBIT_RADIANS_PER_SECOND,
   MOTE_ORBIT_TILTS,
@@ -198,6 +200,12 @@ test('three orbits, ascending, inside FOCUS_REACH with the dot included, tilted 
   assert.ok(MOTE_SOURCE_ALPHA > 0 && MOTE_SOURCE_ALPHA < DUST_MEDIUM_PEAK_OPACITY, 'a source is in Dust that is there to see');
   assert.equal(MOTE_LABEL_CHAR_PX, MOTE_LABEL_FONT_PX * 0.6, 'a monospace advance');
   assert.equal(moteLabelStyle().font, `${MOTE_LABEL_FONT_PX}px monospace`, 'the estimate is of the font drawn');
+  assert.equal(MOTE_ORBIT_PHASES.length, MOTE_ORBIT_RADII.length, 'one phase per orbit, or requireOrbit throws in the frame loop');
+  const turns = MOTE_ORBIT_PHASES.map((phase) => ((phase % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI));
+  assert.ok(turns.every(Number.isFinite) && new Set(turns).size === turns.length, 'first slots do not line up across orbits');
+  assert.ok(MOTE_MIN_SCALE > 0 && MOTE_MIN_SCALE <= 1, 'a Mote at level 0 is smaller, never gone or inverted');
+  assert.ok(MOTE_SOURCE_SPREAD > 0, 'a source is outward of its slot');
+  assert.ok(MOTE_RESLOT_SECONDS > 0, 'a re-slot glides, never teleports');
 });
 
 // --- Seats --------------------------------------------------------------------
@@ -445,6 +453,20 @@ test('Release: every Mote decays to its source, retracing the curve, and the fie
       assert.ok(Math.abs(mote.level - moteNamed(condensing, mote.skill).level) < 1e-9, `${mote.skill} at ${k}`);
     }
   }
+  // Position, not only level: each Mote travels back along the blend to its Dust source.
+  for (const mote of released.motes) {
+    let away = distance(mote.position, mote.source);
+    assert.ok(away > 0.1, `${mote.skill} starts away from its source`);
+    for (let k = 1; k < MOVE_FRAMES; k += 1) {
+      const now = moteNamed(releasing[k] ?? released, mote.skill);
+      assert.deepEqual(now.source, mote.source, 'the source holds through the decay');
+      assert.deepEqual(now.position, blendMote(mote.from, mote.source, 1, 0, now.elapsed).position, `${mote.skill} on the blend at ${k}`);
+      const closer = distance(now.position, mote.source);
+      assert.ok(closer < away, `${mote.skill} nearer its source at ${k}`);
+      away = closer;
+    }
+    assert.ok(away < 1e-3, `${mote.skill} all but at its source on its last frame (${away})`);
+  }
   const beforeEnd = releasing[MOVE_FRAMES - 1];
   assert.ok(beforeEnd !== undefined);
   assert.equal(beforeEnd.motes.length, 9, 'not gone a frame early');
@@ -527,6 +549,18 @@ test('A → B: one Java Mote throughout, travelling from A’s slot to B’s; A-
   const penultimate = frames[MOVE_FRAMES - 1];
   assert.ok(penultimate !== undefined);
   assert.ok(penultimate.motes.some((mote) => mote.skill === 'Tomcat'), 'A-only is still decaying one frame before the end');
+  // A-only travels back into A's Dust, not in place and not toward B.
+  const tomcat = moteNamed(switched, 'Tomcat');
+  let away = distance(tomcat.position, tomcat.source);
+  assert.ok(away > 0.1, 'Tomcat starts away from its source');
+  for (const field of frames.slice(1, MOVE_FRAMES)) {
+    const now = moteNamed(field, 'Tomcat');
+    assert.deepEqual(now.position, blendMote(tomcat.from, tomcat.source, 1, 0, now.elapsed).position);
+    const closer = distance(now.position, tomcat.source);
+    assert.ok(closer < away, 'Tomcat nearer A’s Dust every frame');
+    away = closer;
+  }
+  assert.ok(away < 1e-3, `Tomcat all but in A’s Dust on its last frame (${away})`);
 });
 
 test('No place is written down: translating every Body translates every Mote, source and slot alike', () => {
@@ -665,34 +699,38 @@ function assertQuota(field: MoteField, frame: number): void {
 }
 
 /**
+ * The most one frame may move a Mote: an orbit's spin, or a glide half-way round
+ * the outermost orbit on the Focus curve's steepest slope over
+ * `MOTE_RESLOT_SECONDS` — far below a jump across the orbit.
+ */
+function glideStepBound(): number {
+  let steepest = 0;
+  for (let i = 1; i <= 4000; i += 1) steepest = Math.max(steepest, (easeFocus(i / 4000) - easeFocus((i - 1) / 4000)) * 4000);
+  const outer = MOTE_ORBIT_RADII[MOTE_ORBIT_RADII.length - 1] ?? 0;
+  const bound = outer * (Math.PI * steepest / MOTE_RESLOT_SECONDS + MOTE_ORBIT_RADIANS_PER_SECOND) * DT * 1.05;
+  assert.ok(bound < outer, 'the bound is well under a jump across the orbit');
+  return bound;
+}
+
+/**
  * A blocked label's whole path. Blocked is judged at the destination slot, so a
- * Mote whose slot label crosses is blocked from the entry frame, hidden while
- * blocked, and not moved in flight; on the step it condenses it is re-slotted to
- * the nearest free, quota-keeping, unblocked slot (or left where it is when
- * there is none, judged independently), gliding with no teleport, the quota and
- * the orbit counts held on every frame, and no label ever shown across the
- * panel. Returns how many blocked Motes moved on that first re-slot.
+ * Mote whose slot label crosses is blocked from the entry frame and hidden; on
+ * the next step — in flight — it is re-slotted to the nearest free,
+ * quota-keeping, unblocked slot (or left where it is when there is none, judged
+ * independently), gliding with no teleport, the quota and the orbit counts held
+ * on every frame, and no label ever shown across the panel. Returns how many
+ * blocked Motes moved on that first re-slot.
  */
 function blockedPath(skills: readonly string[], frameCount: number): { moved: number; frames: readonly MoteField[] } {
   const artifact = fixture({ a: skills });
   const scene = sceneOf(artifact);
   const view = viewOf(cameraFor(artifact, 'project:a/1'));
   const frames = run(null, scene, 'project:a/1', frameCount, view);
-  const entry = frames[0];
-  // The last frame in flight, and the one it condenses on.
-  const first = frames[MOVE_FRAMES - 1];
-  const second = frames[MOVE_FRAMES];
-  assert.ok(entry !== undefined && first !== undefined && second !== undefined);
-  for (const mote of second.motes) assert.equal(mote.elapsed, FOCUS_SECONDS, 'condensed on this frame');
-  // Nothing moves in flight: every slot is the entry frame's until condensation.
-  for (const field of frames.slice(0, MOVE_FRAMES)) {
-    for (const mote of field.motes) assert.equal(mote.slot, moteNamed(entry, mote.skill).slot, `${mote.skill} re-slotted in flight`);
-  }
-  assert.deepEqual(
-    entry.motes.filter((mote) => mote.blocked).map((mote) => mote.skill),
-    first.motes.filter((mote) => mote.blocked).map((mote) => mote.skill),
-    'blocked is a property of the destination, the same on entry as on arrival (orbits turn slowly)',
-  );
+  // The entry frame, where blocking is first judged, and the next step, which re-slots.
+  const first = frames[0];
+  const second = frames[1];
+  assert.ok(first !== undefined && second !== undefined);
+  for (const mote of second.motes) assert.ok(mote.elapsed < FOCUS_SECONDS && mote.level < 1, `${mote.skill} still in flight`);
   const blocked = first.motes.filter((mote) => mote.blocked);
   assert.ok(blocked.length > 0, 'a label this long, right of its dot, crosses the panel');
   const planet = projectNdc(planetAt(scene, 'project:a/1'), view.view, view.projection);
@@ -726,21 +764,15 @@ function blockedPath(skills: readonly string[], frameCount: number): { moved: nu
       continue;
     }
     moved += 1;
-    assert.equal(next.reslotElapsed, 0, `${mote.skill} re-slotted on the step it condensed, and just starting to glide`);
+    assert.equal(next.reslotElapsed, 0, `${mote.skill} re-slotted on the next step, in flight, and just starting to glide`);
     assert.ok(options.includes(next.slot), `${mote.skill} moved to a free, quota-keeping, unblocked slot`);
     const from = slotAngle(mote.slot, mote.slots);
     for (const option of options) {
       assert.ok(turn(from, slotAngle(next.slot, mote.slots)) <= turn(from, slotAngle(option, mote.slots)) + 1e-12, 'the nearest one');
     }
   }
-  // No teleport: every frame's step is bounded by the fastest the curves allow — an
-  // orbit's spin, or a glide half-way round the outermost orbit on the Focus curve's
-  // steepest slope over MOTE_RESLOT_SECONDS — far below a jump across the orbit.
-  let steepest = 0;
-  for (let i = 1; i <= 4000; i += 1) steepest = Math.max(steepest, (easeFocus(i / 4000) - easeFocus((i - 1) / 4000)) * 4000);
-  const outer = MOTE_ORBIT_RADII[MOTE_ORBIT_RADII.length - 1] ?? 0;
-  const stepBound = outer * (Math.PI * steepest / MOTE_RESLOT_SECONDS + MOTE_ORBIT_RADIANS_PER_SECOND) * DT * 1.05;
-  assert.ok(stepBound < outer, 'the bound is well under a jump across the orbit');
+  // No teleport: every frame's step is bounded by the fastest the curves allow.
+  const stepBound = glideStepBound();
   for (let i = 1; i < frames.length; i += 1) {
     const a = frames[i - 1];
     const b = frames[i];
@@ -757,7 +789,7 @@ function blockedPath(skills: readonly string[], frameCount: number): { moved: nu
   return { moved, frames };
 }
 
-test('Blocked at its slot: hidden, left alone in flight, then re-slotted to the nearest free, quota-keeping, unblocked slot, gliding there', () => {
+test('Blocked at its slot: hidden that frame, then re-slotted on the next step, in flight, to the nearest free, quota-keeping, unblocked slot, gliding there', () => {
   // One long label per orbit: each has seven free slots, so a blocked one always has somewhere to go.
   const { moved, frames } = blockedPath([LONG('a'), LONG('b'), LONG('c')], 1 + MOVE_FRAMES + 600);
   assert.ok(moved > 0, 'at least one blocked Mote had somewhere to go, or this test proves nothing');
@@ -835,6 +867,50 @@ test('Blocked with no slot free: the Mote stays, and its label stays hidden', ()
       assert.equal(mote.reslotElapsed, MOTE_RESLOT_SECONDS);
       if (mote.blocked) assert.equal(mote.labelVisible, false, `${mote.skill} stays hidden`);
     }
+  }
+});
+
+test('Resized while focused: blocking is re-judged at the new width, and a newly blocked Mote re-slots on the next step', () => {
+  const artifact = fixture();
+  const scene = sceneOf(artifact);
+  const settled = last(run(null, scene, 'project:a/1', 1 + MOVE_FRAMES + 30, viewOf(cameraFor(artifact, 'project:a/1'))));
+  assert.ok(settled.motes.every((mote) => !mote.blocked && mote.labelVisible), 'every label reads on the wide canvas');
+  const planetNdc = (view: MoteView): NdcPoint => projectNdc(planetAt(scene, 'project:a/1'), view.view, view.projection);
+  for (const width of [600, 390]) {
+    const view = viewOf(cameraFor(artifact, 'project:a/1', width), width);
+    const frames = run(settled, scene, 'project:a/1', 120, view);
+    const resized = frames[0];
+    const next = frames[1];
+    assert.ok(resized !== undefined && next !== undefined);
+    const newlyBlocked = resized.motes.filter((mote) => mote.blocked);
+    assert.ok(newlyBlocked.length > 0, `${width}px: the narrower panel edge blocks a label, or this test proves nothing`);
+    for (const mote of resized.motes) {
+      const atSlot = labelPlacement(projectNdc(restingSlot(scene, mote, resized.clock), view.view, view.projection), planetNdc(view), labelChars(mote.skill), width, true);
+      assert.equal(mote.blocked, atSlot.blocked, `${width}px: ${mote.skill} judged at the new width`);
+      if (mote.blocked) assert.equal(mote.labelVisible, false, `${width}px: ${mote.skill} hidden that frame`);
+    }
+    for (const mote of newlyBlocked) {
+      const moved = moteNamed(next, mote.skill);
+      if (width === 600) {
+        assert.notEqual(moved.slot, mote.slot, `${width}px: ${mote.skill} re-slotted on the next step`);
+        assert.equal(moved.reslotElapsed, 0, 'and just starting to glide');
+      } else {
+        assert.equal(moved.slot, mote.slot, `${width}px: no free, unblocked slot, so ${mote.skill} stays`);
+      }
+    }
+    frames.forEach((field, i) => {
+      assertQuota(field, i);
+      for (const mote of field.motes) {
+        assert.ok(distance(mote.position, moteNamed(frames[i - 1] ?? settled, mote.skill).position) < glideStepBound(), `${width}px: ${mote.skill} never jumps`);
+        if (mote.labelVisible) {
+          const drawn = labelPlacement(projectNdc(mote.position, view.view, view.projection), planetNdc(view), labelChars(mote.skill), width, true);
+          assert.equal(drawn.blocked, false, `${width}px: ${mote.skill} shown across the panel at ${i}`);
+        }
+      }
+    });
+    const end = last(frames);
+    if (width === 600) assert.ok(end.motes.every((mote) => mote.labelVisible), '600px: every label reads once the glide lands');
+    else assert.ok(end.motes.some((mote) => !mote.labelVisible), '390px: the degradation — a label with nowhere to go stays hidden');
   }
 });
 

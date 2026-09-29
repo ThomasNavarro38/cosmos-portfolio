@@ -28,8 +28,9 @@
  *     `id` on its title. The leaving ID is kept in a ref, written only on a render
  *     where the store's ID differs from the one the focus effect last recorded,
  *     so it is the same however often React repeats that render, and it survives
- *     any later re-render until the next Focus change (entry and release clear
- *     it) — the layer is never unmounted mid-fade.
+ *     any later re-render until the next Focus change. `leavingAfter` keeps it
+ *     through a release, so a fade still running finishes as the panel slides
+ *     out; entry clears it — the layer is never unmounted mid-fade.
  *   - **A layout effect for the cross-fade**, so it starts before the first paint
  *     of the swapped content: it fades the incoming layer in and the outgoing
  *     one out on `crossFadeTiming`, scrolls the outgoing layer to where the reader
@@ -58,6 +59,7 @@ import {
   crossFadeTiming,
   focusMove,
   indexEntryId,
+  leavingAfter,
   panelStyle,
   type PanelArtifact,
   type PanelBlock,
@@ -78,7 +80,7 @@ export function FocusPanel({ artifact }: FocusPanelProps) {
   const container = useRef<HTMLElement>(null);
   const previous = useRef<string | null>(null);
   const leavingId = useRef<string | null>(null);
-  if (focusedProjectId !== previous.current) leavingId.current = crossFade(previous.current, focusedProjectId);
+  if (focusedProjectId !== previous.current) leavingId.current = leavingAfter(leavingId.current, previous.current, focusedProjectId);
   const leaving = buildPanel(artifact, leavingId.current);
   const incoming = useRef<HTMLDivElement>(null);
   const outgoing = useRef<HTMLDivElement>(null);

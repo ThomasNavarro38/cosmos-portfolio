@@ -610,9 +610,10 @@ function retarget(motes: readonly Mote[], scene: MoteScene, focusedId: string | 
 function reslot(motes: readonly Mote[], scene: MoteScene, view: MoteView, clock: number): Mote[] {
   const current = [...motes];
   current.forEach((mote, index) => {
-    // Only once condensed: an in-flight Mote is judged by where it is going, and
-    // it is re-slotted, if at all, when it has arrived.
-    if (!mote.blocked || !mote.condensing || mote.elapsed < FOCUS_SECONDS || mote.reslotElapsed < MOTE_RESLOT_SECONDS) return;
+    // In flight too: `pose` blends toward the live, gliding slot, so a re-slot
+    // mid-condensation bends the path rather than cutting it. A decaying Mote
+    // has no slot to leave, and one glide runs to its end before the next.
+    if (!mote.blocked || !mote.condensing || mote.reslotElapsed < MOTE_RESLOT_SECONDS) return;
     const planet = planetOf(scene.bodies, mote.planetId);
     const planetNdc = projectNdc(planet.position, view.view, view.projection);
     const occupied = new Set(
@@ -651,7 +652,7 @@ function pose(mote: Mote, scene: MoteScene, clock: number): Mote {
 /**
  * A Mote's label this frame. The side, and whether the label crosses the panel
  * as drawn, come from the drawn pose. Whether the Mote is *blocked* — and so
- * re-slotted once condensed — is judged at its destination: the slot it rests
+ * re-slotted on the next step — is judged at its destination: the slot it rests
  * on (a condensing Mote only; a decaying one has no slot to be moved from). A
  * label is shown when neither the drawn pose nor the destination crosses.
  */
