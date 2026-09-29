@@ -33,10 +33,12 @@
  * this. Semantics only.
  */
 
+import { useRef } from 'react';
 import { useStore } from 'zustand/react';
+import { activateClient, activateProject, pullBack, returnToRail } from './activate.ts';
 import { buildDestinationIndex, type IndexArtifact } from './index-model.ts';
 import { indexEntryId } from './panel-model.ts';
-import { focusProject, navigationStore, selectClient } from './state.ts';
+import { navigationStore } from './state.ts';
 
 /** What the index needs: the artifact, and nothing else. */
 export interface DestinationNavProps {
@@ -65,17 +67,45 @@ export interface DestinationNavProps {
  * Each Project button carries `id={indexEntryId(project.id)}` (2.7), so releasing
  * Focus can return DOM focus to the released Project's own entry (UX-DR40). The ID
  * is the model's, never composed here.
+ *
+ * **Every button is a door in `activate.ts`** (2.9), the same doors the scene's
+ * picks call: a Client flies to its stop, a Project focuses (flying to its Client
+ * first when already in free flight), `overview` pulls back to frame the whole
+ * universe, and `↩ resume the journey` returns to the Rail where it was left. The
+ * return button exists only while `mode === 'freeflight'`, read through a second
+ * selector so a `scrollProgress` write re-renders nothing here either.
+ *
+ * Activating the return unmounts its own button, which would drop DOM focus to
+ * `<body>`. So its handler moves focus to `overview` — the button beside it that
+ * stays — through the one ref this renderer holds. A ref to an element, not a
+ * copy of any state.
  */
 export function DestinationNav({ artifact }: DestinationNavProps) {
   const index = buildDestinationIndex(artifact);
   const focusedProjectId = useStore(navigationStore, (state) => state.focusedProjectId);
+  const mode = useStore(navigationStore, (state) => state.mode);
+  const overview = useRef<HTMLButtonElement>(null);
 
   return (
     <nav aria-label="Destinations">
+      <button type="button" ref={overview} onClick={() => pullBack()}>
+        overview
+      </button>
+      {mode === 'freeflight' ? (
+        <button
+          type="button"
+          onClick={() => {
+            returnToRail();
+            overview.current?.focus();
+          }}
+        >
+          ↩ resume the journey
+        </button>
+      ) : null}
       <ul>
         {index.clients.map((client) => (
           <li key={client.id}>
-            <button type="button" onClick={() => selectClient(client.id)}>
+            <button type="button" onClick={() => activateClient(client.id)}>
               {client.name}
             </button>
             <ul>
@@ -85,7 +115,7 @@ export function DestinationNav({ artifact }: DestinationNavProps) {
                     type="button"
                     id={indexEntryId(project.id)}
                     aria-pressed={project.id === focusedProjectId}
-                    onClick={() => focusProject(project.id)}
+                    onClick={() => activateProject(project.id, client.id)}
                   >
                     <span>{project.title}</span> <span>{project.depth}</span>
                   </button>

@@ -11,8 +11,9 @@
  *
  * What it holds, and why each is here rather than in the model:
  *
- *   - **One selector subscription** — `focusedProjectId`, never the whole store,
- *     so the Rail's sixty progress writes a second re-render nothing.
+ *   - **Two selector subscriptions** — `focusedProjectId`, and the flight key
+ *     (`flightKey`: the mode, plus the target in free flight) — never the whole
+ *     store, so the Rail's sixty progress writes a second re-render nothing.
  *   - **A ref for the last shown Project**, so the panel keeps its content while
  *     it slides out after release. Reading the store alone, it would empty the
  *     moment Focus clears and slide out blank.
@@ -22,7 +23,10 @@
  *     so the label never points at an `id` not yet in the document), on release back to the released
  *     Project's own index entry (UX-DR40) — the one the visitor was reading,
  *     whether Focus came from the index, a Planet click or a move from another
- *     Project.
+ *     Project. Unless the release travelled: a Client, the overview or a Star
+ *     releases Focus and changes the flight key in the same batched render, and
+ *     then DOM focus stays on the door the visitor took. So the effect also
+ *     remembers the flight key it last saw, a ref beside the previous ID.
  *   - **The outgoing layer** (2.8): on `A → B`, `crossFade` names A, and A's
  *     blocks render once more in a layer over B's — `aria-hidden`, `inert`, no
  *     `id` on its title. The leaving ID is kept in a ref, written only on a render
@@ -57,6 +61,7 @@ import {
   crossFade,
   crossFadeLayerStyle,
   crossFadeTiming,
+  flightKey,
   focusMove,
   indexEntryId,
   leavingAfter,
@@ -74,6 +79,7 @@ export interface FocusPanelProps {
 /** The panel column. Always in the document; hidden, and out of the tab order, while closed. */
 export function FocusPanel({ artifact }: FocusPanelProps) {
   const focusedProjectId = useStore(navigationStore, (state) => state.focusedProjectId);
+  const flight = useStore(navigationStore, (state) => flightKey(state));
   const shown = useRef<string | null>(null);
   if (focusedProjectId !== null) shown.current = focusedProjectId;
   const panel = buildPanel(artifact, shown.current);
@@ -85,6 +91,7 @@ export function FocusPanel({ artifact }: FocusPanelProps) {
   const incoming = useRef<HTMLDivElement>(null);
   const outgoing = useRef<HTMLDivElement>(null);
   const scrolled = useRef(0);
+  const previousFlight = useRef(flight);
 
   useLayoutEffect(() => {
     const fade = crossFade(previous.current, focusedProjectId);
@@ -94,18 +101,19 @@ export function FocusPanel({ artifact }: FocusPanelProps) {
       outgoing.current?.animate(timing.outgoing, timing.options);
       outgoing.current?.scrollTo({ top: scrolled.current });
     }
-    if (focusMove(previous.current, focusedProjectId) === 'panel') container.current?.scrollTo({ top: 0 });
+    if (focusMove(previous.current, focusedProjectId, flight !== previousFlight.current) === 'panel') container.current?.scrollTo({ top: 0 });
   }, [focusedProjectId]);
 
   useEffect(() => {
-    const move = focusMove(previous.current, focusedProjectId);
+    const move = focusMove(previous.current, focusedProjectId, flight !== previousFlight.current);
     previous.current = focusedProjectId;
+    previousFlight.current = flight;
     if (move === 'panel') {
       container.current?.focus({ preventScroll: true });
     } else if (move !== null) {
       document.getElementById(indexEntryId(move.entry))?.focus();
     }
-  }, [focusedProjectId]);
+  }, [focusedProjectId, flight]);
 
   useEffect(() => {
     const element = container.current;

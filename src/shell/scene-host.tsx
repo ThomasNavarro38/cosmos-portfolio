@@ -36,12 +36,17 @@
  *
  * **The Rail's scroll input is here too** (2.5): a non-passive `wheel` listener on
  * a `<div>` wrapping the boundary asks `wheelIntent(...)` what the event means.
- * With nothing focused it is the Rail's, and the answer goes to `advanceScroll` —
- * the one writer of `scrollProgress`. With a Project focused (2.7) it scrolls the
+ * With nothing focused it is the Rail's, and the answer goes to `advanceScroll`,
+ * which writes `scrollProgress` (the `goHome` door is its other caller). With a Project focused (2.7) it scrolls the
  * panel, found by `FOCUS_PANEL_ID`, and the store is not written, so reading never
  * moves the camera. The meaning comes from the store alone, never from the event's
  * target. The rule itself lives in `rail-input.ts`, which is pure and tested, and
- * the camera rig only reads the field.
+ * the camera rig only reads the field. In free flight (2.9) an unfocused wheel is
+ * swallowed and writes nothing, and a `window` `keydown` listener gives the
+ * keyboard the same meanings through `keyAction`: ↑/↓ step between stops, `Home`
+ * returns to the Rail's opening frame through the `goHome` door
+ * (`activate.ts`). A key another handler already took, or one inside an IME
+ * composition, is left alone.
  *
  * **Capability detection is not here yet.** `src/render-fallback/` describes the
  * no-WebGL surface with absolute content parity and holds no code; story 4.1 owns
@@ -51,7 +56,8 @@
 
 import { Component, Suspense, lazy, useEffect, useRef, type ReactNode } from 'react';
 import { FOCUS_PANEL_ID } from './panel-model.ts';
-import { railStopCount, wheelIntent } from './rail-input.ts';
+import { goHome } from './activate.ts';
+import { keyAction, railStopCount, wheelIntent } from './rail-input.ts';
 import { advanceScroll, navigationStore } from './state.ts';
 
 /**
@@ -169,12 +175,18 @@ export function SceneHost({ artifact }: SceneHostProps) {
   // panel is never seen here, so both scroll natively. Registered by hand because
   // React attaches `wheel` passively, and a passive listener cannot stop the page
   // scrolling under the camera.
+  //
+  // The keyboard's equivalent (2.9) is on `window`, so ↑/↓/Home work wherever DOM
+  // focus is; `keyIntent` answers `null` while a Project is focused, so the panel
+  // keeps them. The arrows and the wheel reach the Rail through the one write
+  // path, `toRail`; Home goes through the `goHome` door.
   useEffect(() => {
     const element = host.current;
     if (element === null) return undefined;
+    const toRail = (progress: number): void => advanceScroll(progress);
     const onWheel = (event: WheelEvent): void => {
-      const { focusedProjectId, scrollProgress } = navigationStore.getState();
-      const intent = wheelIntent(focusedProjectId, scrollProgress, event, stopCount, window.innerHeight);
+      const { mode, focusedProjectId, scrollProgress } = navigationStore.getState();
+      const intent = wheelIntent(mode, focusedProjectId, scrollProgress, event, stopCount, window.innerHeight);
       // Not scroll's to take (a pinch-zoom, a horizontal-only wheel, noise): the
       // browser keeps it, and the store is not written.
       if (intent === null) return;
@@ -184,10 +196,31 @@ export function SceneHost({ artifact }: SceneHostProps) {
         document.getElementById(FOCUS_PANEL_ID)?.scrollBy({ top: intent.panel });
         return;
       }
-      advanceScroll(intent.rail);
+      // Free flight: swallowed, nothing written.
+      if ('inert' in intent) return;
+      toRail(intent.rail);
+    };
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const { mode, focusedProjectId, scrollProgress } = navigationStore.getState();
+      // Handled elsewhere, composing, modified or simply not the Rail's: `null`,
+      // and the event is left alone.
+      const key = keyAction(event, mode, focusedProjectId, scrollProgress, stopCount);
+      if (key === null) return;
+      event.preventDefault();
+      if ('inert' in key) return;
+      // Home is a door: `enterRail()` then the opening frame, executed in `activate.test.ts`.
+      if ('home' in key) {
+        goHome();
+        return;
+      }
+      toRail(key.rail);
     };
     element.addEventListener('wheel', onWheel, { passive: false });
-    return () => element.removeEventListener('wheel', onWheel);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      element.removeEventListener('wheel', onWheel);
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, [stopCount]);
 
   return (

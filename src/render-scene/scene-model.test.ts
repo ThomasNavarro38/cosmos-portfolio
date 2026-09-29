@@ -55,6 +55,7 @@ const SCENE_TSX = fileURLToPath(new URL('./scene.tsx', import.meta.url));
 const RAIL_MODEL_TS = fileURLToPath(new URL('./rail-model.ts', import.meta.url));
 const RAIL_CAMERA_TSX = fileURLToPath(new URL('./rail-camera.tsx', import.meta.url));
 const FOCUS_MODEL_TS = fileURLToPath(new URL('./focus-model.ts', import.meta.url));
+const FLIGHT_MODEL_TS = fileURLToPath(new URL('./flight-model.ts', import.meta.url));
 const SCENE_PICK_TS = fileURLToPath(new URL('./scene-pick.ts', import.meta.url));
 const MOTE_MODEL_TS = fileURLToPath(new URL('./mote-model.ts', import.meta.url));
 const MOTE_FIELD_TSX = fileURLToPath(new URL('./mote-field.tsx', import.meta.url));
@@ -764,7 +765,7 @@ test('no module here imports src/data/, src/derive/, the solver, or zustand/reac
   // package, so `zustand/react` and `zustand/vanilla` are both `zustand`, and a row
   // banning `zustand` would reject the navigation store this directory's README
   // explicitly permits.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX]) {
     assert.deepEqual(auditForbiddenImports(readFileSync(path, 'utf8')), [], `${path} must hold no forbidden import`);
   }
 });
@@ -806,7 +807,7 @@ test('the scene holds no classification or mapping-rule vocabulary of its own', 
   // A case-insensitive `\balpha\b` ban was dropped from this list deliberately — over
   // a pure-structure module it cannot fail by construction, and it would misfire on a
   // future token name or on a fixture Client named Alpha.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX]) {
     const code = codeOf(path);
     assert.doesNotMatch(code, /\bclassify\w*\s*\(|\bfunction\s+classify/i, 'no classification test');
     assert.doesNotMatch(code, /\b(?:luminance|mote|mass|rail)(?:Band|Tier|Of|For|From)?\s*\(/i, 'no mapping computed');
@@ -1103,7 +1104,7 @@ function auditConnectors(code: string): string[] {
 test('the renderer draws no line, edge, or connector between any two Bodies', () => {
   // The Rail's files too: a camera path drawn as a `<CatmullRomLine>` would be a
   // connector between two Clients by another name.
-  for (const path of [SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX]) {
+  for (const path of [SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX]) {
     assert.deepEqual(auditConnectors(readFileSync(path, 'utf8')), [], `${path}: orbit is a position, never a drawn ring`);
   }
 });
@@ -1567,7 +1568,7 @@ test('neither Rail file, nor the focus model, nor the Motes’ renderer, holds a
   // triples by nature, and this scan cannot tell them from a place. What the scan
   // stands for is proven there instead, by execution — translating every Body
   // translates every Mote (`mote-model.test.ts`).
-  for (const path of [RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, MOTE_FIELD_TSX]) {
+  for (const path of [RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, MOTE_FIELD_TSX]) {
     assert.deepEqual(coordinateLiterals(codeOf(path)), [], `${path} must resolve every pose from entities`);
   }
 });
@@ -1651,19 +1652,25 @@ function auditRig(source: string): string[] {
     'conststate=navigationStore.getState()',
     'constframe=railFrame(motion.current,rail,state.scrollProgress,size.width,size.height,delta)',
     'motion.current=frame.motion',
-    'focus.current=focusFrame(focus.current,rail,bodies,state.focusedProjectId,frame,size.width,delta)',
+    'constflown=flightFrame(flight.current,rail,state.mode,state.flightTarget,frame,delta)',
+    'flight.current=flown.motion',
+    'focus.current=focusFrame(focus.current,rail,bodies,state.focusedProjectId,flown.frame,size.width,delta)',
     'camera.position.set(focus.current.pose.position.x,focus.current.pose.position.y,focus.current.pose.position.z)',
     'camera.lookAt(focus.current.pose.target.x,focus.current.pose.target.y,focus.current.pose.target.z)',
   ];
   if (JSON.stringify(statements) !== JSON.stringify(expected)) {
     failures.push(
       'the frame loop is not exactly: read getState() once, railFrame(motion.current, rail, state.scrollProgress, ' +
-        'size.width, size.height, delta), write motion back, focusFrame(focus.current, rail, bodies, ' +
-        'state.focusedProjectId, frame, size.width, delta) written back, apply its position and aim',
+        'size.width, size.height, delta), write motion back, flightFrame(flight.current, rail, state.mode, ' +
+        'state.flightTarget, frame, delta) with its motion written back, focusFrame(focus.current, rail, bodies, ' +
+        'state.focusedProjectId, flown.frame, size.width, delta) written back, apply its position and aim',
     );
   }
   if (!/const\s+motion\s*=\s*useRef<RailMotion\s*\|\s*null>\(\s*null\s*\)/.test(code)) {
     failures.push('the carried motion is not a ref that starts empty');
+  }
+  if (!/const\s+flight\s*=\s*useRef<FlightMotion\s*\|\s*null>\(\s*null\s*\)/.test(code)) {
+    failures.push('the carried flight motion is not a ref that starts empty');
   }
   if (!/const\s+focus\s*=\s*useRef<FocusMotion\s*\|\s*null>\(\s*null\s*\)/.test(code)) {
     failures.push('the carried Focus motion is not a ref that starts empty');
@@ -1723,8 +1730,18 @@ test('the rig audit rejects the real rig with any one guarantee broken', () => {
     ['the Rail aim drawn over Focus', (s) => s.replace(AIM, 'camera.lookAt(frame.pose.target.x, frame.pose.target.y, frame.pose.target.z)')],
     ['a fresh Focus every frame', (s) => s.replace('focusFrame(focus.current,', 'focusFrame(null,')],
     ['the Focus write-back removed', (s) => s.replace('focus.current = focusFrame(', 'void focusFrame(')],
-    ['a constant panel width', (s) => s.replace('frame, size.width, delta)', 'frame, 1600, delta)')],
-    ['Focus without time', (s) => s.replace('frame, size.width, delta)', 'frame, size.width, 0)')],
+    ['a constant panel width', (s) => s.replace('flown.frame, size.width, delta)', 'flown.frame, 1600, delta)')],
+    ['Focus without time', (s) => s.replace('flown.frame, size.width, delta)', 'flown.frame, size.width, 0)')],
+    // Flight's half of the binding (2.9).
+    ['flight skipped: Focus over the bare Rail', (s) => s.replace('state.focusedProjectId, flown.frame,', 'state.focusedProjectId, frame,')],
+    ['flight not stepped', (s) => s.replace(/\s*const flown = flightFrame\([^;]*;\s*flight\.current = flown\.motion;/, '\n    const flown = { frame };')],
+    ['the mode ignored', (s) => s.replace('rail, state.mode, state.flightTarget', "rail, 'rail', state.flightTarget")],
+    ['the target ignored', (s) => s.replace('state.mode, state.flightTarget, frame', 'state.mode, null, frame')],
+    ['a fresh flight every frame', (s) => s.replace('flightFrame(flight.current,', 'flightFrame(null,')],
+    ['the flight write-back removed', (s) => s.replace('flight.current = flown.motion;', '')],
+    ['flight without time', (s) => s.replace('state.flightTarget, frame, delta)', 'state.flightTarget, frame, 0)')],
+    ['the flight ref started full', (s) => s.replace('useRef<FlightMotion | null>(null)', 'useRef<FlightMotion | null>(undefined!)')],
+    ['flight entered from the rig', (s) => s.replace('flight.current = flown.motion;', 'flight.current = flown.motion;\n    enterFreeFlight(null);')],
     ['Focus without the Bodies', (s) => s.replace('rail, bodies, state.focusedProjectId', 'rail, [], state.focusedProjectId')],
     ['a second store read', (s) => s.replace('state.focusedProjectId', 'navigationStore.getState().focusedProjectId')],
     ['the Focus ref started full', (s) => s.replace('useRef<FocusMotion | null>(null)', 'useRef<FocusMotion | null>(undefined!)')],
@@ -2086,6 +2103,10 @@ test('every module in this directory is covered by the scans above', () => {
     'mote-model.ts',
     'mote-model.test.ts',
     'mote-field.tsx',
+    // 2.9: named in the import, vocabulary, connector and coordinate-literal scans;
+    // its purity audit is in `flight-model.test.ts`.
+    'flight-model.ts',
+    'flight-model.test.ts',
     'README.md',
   ]);
   const found: string[] = [];
