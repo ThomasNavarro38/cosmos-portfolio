@@ -1,10 +1,15 @@
 /**
- * The Rail's scroll input: a wheel delta in, the next `scrollProgress` out.
+ * The scene's scroll input: a wheel event in, one of scroll's two meanings out
+ * (2.7). With nothing focused it is Rail travel — the next `scrollProgress`;
+ * with a Project focused it is reading — pixels to scroll the panel by, with
+ * `scrollProgress` untouched. `wheelIntent` chooses between them from
+ * `focusedProjectId` alone, and `null` means the event is scroll's in neither.
  *
  * **The one writer of `scrollProgress`.** `scene-host.tsx` listens for `wheel`
- * over the scene, asks this module for the next value and hands it to
- * `advanceScroll`. The camera rig only reads the field — see the one-writer table
- * in `state.ts`. Progress is measured **in stops**: 0 is the opening frame and
+ * over the scene, asks `wheelIntent` what the event means and, when it is the
+ * Rail's, hands the next value to `advanceScroll`; when it is the panel's, it
+ * scrolls the panel and writes nothing. The camera rig only reads the field —
+ * see the one-writer table in `state.ts`. Progress is measured **in stops**: 0 is the opening frame and
  * `k` is the `k`-th Client stop, present first, so the range is `[0, N]` for a
  * Rail of `N` Client stops.
  *
@@ -73,14 +78,60 @@ export function wheelProgress(
   stopCount: number,
   pageHeight: number,
 ): number | null {
-  if (wheel.ctrlKey || wheel.deltaY === 0) return null;
-  const pixels = toPixels(wheel.deltaY, wheel.deltaMode, pageHeight);
+  const pixels = scrollPixels(wheel, pageHeight);
   if (pixels === null) return null;
 
   const stops = Number.isFinite(stopCount) && stopCount > 0 ? Math.floor(stopCount) : 0;
   const clamp = (value: number): number => Math.min(Math.max(value, 0), stops);
   const from = clamp(Number.isFinite(current) ? current : 0);
   return clamp(from + pixels / WHEEL_PIXELS_PER_STOP);
+}
+
+/**
+ * What one wheel event over the scene means: travel along the Rail, or reading
+ * in the panel — or neither.
+ *
+ * **Scroll's two meanings, chosen by state alone** (AD-10, UX-DR33). The
+ * meaning is read off `focusedProjectId` and nothing else: never the event's
+ * target, never a hit test, never where the pointer is. With nothing focused
+ * the wheel is the Rail's, exactly as `wheelProgress` answers; with a Project
+ * focused it scrolls the panel by the wheel's distance in pixels, and
+ * `scrollProgress` is not touched — so reading cannot move the camera.
+ *
+ *   - `{ rail: next }` — the next progress; the handler writes `advanceScroll(next)`.
+ *   - `{ panel: pixels }` — the handler scrolls the panel by that many pixels
+ *     (positive is down) and writes nothing.
+ *   - `null` — not scroll's to take (a pinch-zoom, a horizontal-only wheel,
+ *     noise), in either meaning; the browser keeps the event.
+ *
+ * A wheel over the panel itself never reaches the scene's listener: the panel
+ * is its own scroll container and scrolls natively.
+ */
+export function wheelIntent(
+  focusedProjectId: string | null,
+  current: number,
+  wheel: RailWheel,
+  stopCount: number,
+  pageHeight: number,
+): { readonly rail: number } | { readonly panel: number } | null {
+  if (focusedProjectId === null) {
+    const next = wheelProgress(current, wheel, stopCount, pageHeight);
+    return next === null ? null : { rail: next };
+  }
+  const pixels = scrollPixels(wheel, pageHeight);
+  return pixels === null ? null : { panel: pixels };
+}
+
+/**
+ * The wheel's vertical travel in pixels, or `null` when the event is scroll's
+ * in neither meaning — the one rejection rule both `wheelProgress` and the panel
+ * branch of `wheelIntent` apply, so a new rejection cannot reach one meaning and
+ * miss the other: ctrl+wheel / pinch-zoom, a horizontal-only wheel, a
+ * non-finite delta, an unknown mode, a page delta with no usable page height.
+ */
+function scrollPixels(wheel: RailWheel, pageHeight: number): number | null {
+  if (wheel.ctrlKey || wheel.deltaY === 0) return null;
+  return toPixels(wheel.deltaY, wheel.deltaMode, pageHeight);
 }
 
 function toPixels(deltaY: number, deltaMode: number, pageHeight: number): number | null {

@@ -35,6 +35,7 @@
 
 import { useStore } from 'zustand/react';
 import { buildDestinationIndex, type IndexArtifact } from './index-model.ts';
+import { indexEntryId } from './panel-model.ts';
 import { focusProject, navigationStore, selectClient } from './state.ts';
 
 /** What the index needs: the artifact, and nothing else. */
@@ -60,6 +61,10 @@ export interface DestinationNavProps {
  * where `aria-label` is banned: the announced name is still the title plus
  * Deep/Shallow, with "pressed" alongside it. Exactly one button can report
  * pressed, because the store holds exactly one `focusedProjectId`.
+ *
+ * Each Project button carries `id={indexEntryId(project.id)}` (2.7), so releasing
+ * Focus can return DOM focus to the entry that opened the panel (UX-DR40). The ID
+ * is the model's, never composed here.
  */
 export function DestinationNav({ artifact }: DestinationNavProps) {
   const index = buildDestinationIndex(artifact);
@@ -78,6 +83,7 @@ export function DestinationNav({ artifact }: DestinationNavProps) {
                 <li key={project.id}>
                   <button
                     type="button"
+                    id={indexEntryId(project.id)}
                     aria-pressed={project.id === focusedProjectId}
                     onClick={() => focusProject(project.id)}
                   >

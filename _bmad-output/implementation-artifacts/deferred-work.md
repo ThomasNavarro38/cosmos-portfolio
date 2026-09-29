@@ -552,3 +552,18 @@ leaves open.
 ## Deferred from: code review of spec-2-6-client-stop-framing-and-derived-dwell (2026-09-28)
 
 - AC3's felt pace ("a stop slows perceptibly without reading as a stall") cannot be observed on the committed data. The Rail has one Client, so SNCF is the Rail's end: the camera arrives at it and clamps at progress 1, and never wheels *through* a stop. A browser run on `1607533` confirmed framing at SNCF at desktop (aspect 2.5) and phone (0.63), and the running module gives warp rate 0.45 at the stop against 1.55 mid-segment. Re-check by feel in `npm run dev` once a second Client is authored. Reason: needs data that does not exist yet.
+
+## Deferred from: spec-2-7-focus-entry-the-panel-shell-and-scroll-s-two-meanings (2026-09-29)
+
+- `FOCUS_SECONDS` (0.8) and `FOCUS_EASING` (`cubic-bezier(0.65, 0, 0.35, 1)`, symmetric so release is the same curve reversed) are greybox values. DESIGN.md and EXPERIENCE.md route every duration to M1 tuning ("shape and ratio, never milliseconds"); what 2.7 fixes is that there is one of each, shared by the CSS slide and the camera. Reduced motion (2.10) shortens both from the same constants.
+- `FOCUS_REACH` (3) is the sphere the focus pose keeps inside the free region. It covers the drawn Planet and leaves room for 2.8's Motes, but its size relative to Condensation is untested. Re-tune it when Motes exist.
+- The panel's share of the width is `panelFraction(size.width)` in the rig (R3F's canvas width) and `min(560px, 46vw)` in CSS (the viewport). The canvas is `width: 100%` of `<main>`, so the two differ by the body margin, a few pixels. Epic 3's layout, which gives the scene the full viewport, removes the gap.
+- At phone widths the panel is 46% of the viewport (179px at 390×844), which is a narrow reading column. DESIGN.md's own `[ASSUMPTION]` on panel width below ~1200px is unratified; the spec fixes the rule, and M1 should judge the result.
+- A resize while focused moves the focus pose with the *damped* aspect but the *live* width, so the panel share can step while the aspect eases. It is invisible at desktop sizes and small elsewhere. Damp the share too if it reads as a jump.
+- `focusPose` throws inside the frame loop for a focused ID no Planet carries. R3F's loop is not under the scene's error boundary, so the throw surfaces in the console rather than removing the canvas. No production path writes such an ID: the index and `activateBody` only hand over artifact IDs. The panel draws itself closed for the same ID.
+- The scene's wheel handler scrolls the panel with an instant `scrollBy`, while a wheel over the panel scrolls natively (and smoothly, where the browser does). The two feel slightly different. Pass `behavior: 'smooth'` if M1 wants them matched, at the cost of queued smooth scrolls on a fast wheel.
+- Escape to release, the `aria-pressed` versus toggle question filed under 2.2, and restoring focus when the release button itself is removed are 2.10's.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-7-focus-entry-the-panel-shell-and-scroll-s-two-meanings.md`
+  summary: At narrow widths the fixed full-height Focus panel covers the right side of the DOM destination index as well as the scene.
+  evidence: The panel is `position: fixed; top: 0; bottom: 0; right: 0` over the whole viewport; at 390×844 the Project entry's button is half under the open panel (browser check, 2026-09-29). Layout belongs with Epic 3's panel and Epic 4's narrow-viewport routing.
