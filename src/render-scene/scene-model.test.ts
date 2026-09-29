@@ -33,6 +33,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Frustum, Matrix4, PerspectiveCamera, Quaternion, Vector3 } from 'three';
 import { DUST_PARTICLE_RADIUS } from './dust-model.ts';
+import { FOCUS_REACH } from './focus-model.ts';
 import {
   BODY_MARGIN,
   DEFAULT_FOV,
@@ -52,6 +53,8 @@ const DUST_TS = fileURLToPath(new URL('./dust-model.ts', import.meta.url));
 const SCENE_TSX = fileURLToPath(new URL('./scene.tsx', import.meta.url));
 const RAIL_MODEL_TS = fileURLToPath(new URL('./rail-model.ts', import.meta.url));
 const RAIL_CAMERA_TSX = fileURLToPath(new URL('./rail-camera.tsx', import.meta.url));
+const FOCUS_MODEL_TS = fileURLToPath(new URL('./focus-model.ts', import.meta.url));
+const SCENE_PICK_TS = fileURLToPath(new URL('./scene-pick.ts', import.meta.url));
 const SRC_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SCENE_HOST_TSX = fileURLToPath(new URL('../shell/scene-host.tsx', import.meta.url));
 const APP_TSX = fileURLToPath(new URL('../App.tsx', import.meta.url));
@@ -683,6 +686,12 @@ test('the margins the framing and the Rail stops leave are at least the largest 
       radius <= STOP_MARGIN,
       `STOP_MARGIN (${STOP_MARGIN}) must cover the drawn radius ${radius}, or a Body clips at its stop`,
     );
+    // A focus pose keeps a sphere of `FOCUS_REACH` around the Planet inside the free
+    // region (`focus-model.ts`), so that sphere must cover the drawn one too.
+    assert.ok(
+      radius <= FOCUS_REACH,
+      `FOCUS_REACH (${FOCUS_REACH}) must cover the drawn radius ${radius}, or the focused Planet clips`,
+    );
     // Particles are kept `BODY_MARGIN` from a Body's *centre*. This makes that a
     // clearance between *surfaces*: no particle sphere touches a Body sphere.
     assert.ok(
@@ -746,7 +755,7 @@ test('no module here imports src/data/, src/derive/, the solver, or zustand/reac
   // package, so `zustand/react` and `zustand/vanilla` are both `zustand`, and a row
   // banning `zustand` would reject the navigation store this directory's README
   // explicitly permits.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, SCENE_PICK_TS]) {
     assert.deepEqual(auditForbiddenImports(readFileSync(path, 'utf8')), [], `${path} must hold no forbidden import`);
   }
 });
@@ -788,7 +797,7 @@ test('the scene holds no classification or mapping-rule vocabulary of its own', 
   // A case-insensitive `\balpha\b` ban was dropped from this list deliberately — over
   // a pure-structure module it cannot fail by construction, and it would misfire on a
   // future token name or on a fixture Client named Alpha.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, SCENE_PICK_TS]) {
     const code = codeOf(path);
     assert.doesNotMatch(code, /\bclassify\w*\s*\(|\bfunction\s+classify/i, 'no classification test');
     assert.doesNotMatch(code, /\b(?:luminance|mote|mass|rail)(?:Band|Tier|Of|For|From)?\s*\(/i, 'no mapping computed');
@@ -822,8 +831,25 @@ function auditRenderer(source: string): string[] {
   if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) {
     failures.push('writes the navigation store — every transition is a named event');
   }
-  if (/\braycast\w*|\bonClick\b|\bonPointer\w+|\bonWheel\b|\bonScroll\b/i.test(code)) {
-    failures.push('handles an interaction — the scene reacts to nothing in this story');
+  // One interaction, exactly: a Body mesh's click handed to `activateBody` (2.7),
+  // whose rule is executed in `scene-pick.test.ts`. Everything else — hover,
+  // pointer-over, pointer-missed, a click bound to anything but that, a raycast of
+  // its own — is still banned, and the permitted binding is allowed once, inside the
+  // Bodies' own map, where `body` is the Body clicked.
+  const pick = /\bonClick=\{\s*\(\s*event\s*\)\s*=>\s*activateBody\(\s*body\s*,\s*event\s*\)\s*\}/g;
+  const picks = code.match(pick) ?? [];
+  if (picks.length > 1) failures.push('binds the click more than once — one Body mesh carries it');
+  const picksInBodies = mapBlocks(code, 'bodies').reduce((sum, block) => sum + (block.match(pick) ?? []).length, 0);
+  if (picks.length !== picksInBodies) failures.push('binds the click outside the Bodies’ map — only a Body is picked');
+  const rest = code.replace(pick, '');
+  if (/\braycast\w*|\bonClick\b|\bonPointer\w+|\bonWheel\b|\bonScroll\b|\bonDoubleClick\b|\bonContextMenu\b|\bonUpdate\b/i.test(rest)) {
+    failures.push('handles an interaction beyond onClick → activateBody(body, event) — Focus is deliberate, never hover');
+  }
+  if (/\bactivateBody\b/.test(rest.replace(/import\s*\{[^}]*\}\s*from[^;]*;/g, ''))) {
+    failures.push('reaches activateBody other than through the one click binding');
+  }
+  if (/\bfocusProject\b|\breleaseFocus\b|\bselectClient\b|\badvanceScroll\b/.test(code)) {
+    failures.push('names a navigation event — the click reaches the store through activateBody alone');
   }
   if (/\bduration\b|\bnotable\b|\bweight\b|\btimeAxis\b/.test(code)) {
     failures.push('re-derives from an authored field');
@@ -855,6 +881,20 @@ test('the thinness audit rejects each form it names, including the ones that rea
     'navigationStore.setState({ mode: "free-flight" });',
     '<mesh onClick={() => focusProject(body.id)} />',
     '<mesh onPointerOver={() => setHovered(body.id)} />',
+    // 2.7's narrowing, driven: the one binding is allowed, and every neighbour of it
+    // — hover, pointer-missed, a second handler, a click bound to anything else, a
+    // click outside the Bodies — is still rejected.
+    'bodies.map((body) => <mesh key={body.id} onPointerOver={(event) => activateBody(body, event)} />)',
+    'bodies.map((body) => <mesh key={body.id} onPointerEnter={() => activateBody(body)} />)',
+    '<Canvas aria-hidden="true" onPointerMissed={() => releaseFocus()}>',
+    'bodies.map((body) => <mesh key={body.id} onPointerMissed={() => undefined} />)',
+    'bodies.map((body) => <mesh key={body.id} onDoubleClick={(event) => activateBody(body, event)} />)',
+    'bodies.map((body) => <mesh key={body.id} onClick={(event) => focusProject(body.id)} />)',
+    'bodies.map((body) => <mesh key={body.id} onClick={() => activateBody(body)} />)',
+    'particles.map((body) => <mesh key={body.id} onClick={(event) => activateBody(body, event)} />)',
+    'bodies.map((body) => <mesh key={body.id} onClick={(event) => activateBody(body, event)} onPointerOut={() => undefined} />)',
+    'bodies.map((body) => <mesh key={body.id} onClick={(event) => activateBody(body, event)} />); bodies.map((body) => <mesh key={body.id} onClick={(event) => activateBody(body, event)} />)',
+    'const pick = () => activateBody(bodies[0]);',
     'const w = window.innerWidth;',
     'const deep = body.notable !== null;',
   ]) {
@@ -868,10 +908,55 @@ test('the thinness audit rejects each form it names, including the ones that rea
     '<Canvas aria-hidden="true" camera={{ position: [1, 2, 3], rotation: [0, 0, 0] }} />',
     'const { bodies } = buildScene(artifact);',
     'return body.kind === "star" ? STAR_RADIUS : PLANET_RADIUS;',
+    'bodies.map((body) => <mesh key={body.id} onClick={(event) => activateBody(body, event)} />)',
+    "import { activateBody } from './scene-pick.ts';",
   ]) {
     assert.deepEqual(auditRenderer(form), [], `${form} is the mapping itself and must pass`);
   }
 });
+
+test('every Body mesh hands its click to activateBody, and that is the scene’s only handler', () => {
+  // Pinned positively: deleting the handler is a one-line edit every negative scan
+  // passes, and a Planet in the scene then cannot be picked (2.7). The rule the click
+  // runs is executed in `scene-pick.test.ts`; this holds the binding.
+  const real = readFileSync(SCENE_TSX, 'utf8');
+  assert.deepEqual(auditPick(real), []);
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['the click deleted', (source) => source.replace('onClick={(event) => activateBody(body, event)}', '')],
+    ['the event dropped', (source) => source.replace('activateBody(body, event)', 'activateBody(body)')],
+    ['the import dropped', (source) => source.replace("import { activateBody } from './scene-pick.ts';", '')],
+    ['a hover beside it', (source) => source.replace('onClick={(event)', 'onPointerOver={() => undefined}\n          onClick={(event)')],
+    ['a missed click releasing', (source) => source.replace(/<Canvas(?=\r?\n)/, '<Canvas onPointerMissed={() => undefined}')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped renderer`);
+    assert.notDeepEqual(auditPick(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
+/** The pick binding, positively: every Body mesh carries it, it comes from the pure rule, and the thinness audit holds. */
+function auditPick(source: string): string[] {
+  const code = blankProse(source);
+  const failures: string[] = [];
+  const blocks = mapBlocks(code, 'bodies');
+  if (blocks.length === 0) failures.push('the Bodies are not mapped');
+  for (const block of blocks) {
+    // The mesh's opening tag, read up to the first child element rather than to the
+    // first `>` — the handler's own `=>` would end a `[^>]*` match inside it.
+    const meshes = block.match(/<mesh\b[\s\S]*?>\s*</g) ?? [];
+    if (meshes.length === 0) failures.push('the Bodies are mapped to no mesh');
+    for (const mesh of meshes) {
+      if (!/\bonClick=\{\s*\(\s*event\s*\)\s*=>\s*activateBody\(\s*body\s*,\s*event\s*\)\s*\}/.test(mesh)) {
+        failures.push('a Body mesh does not hand its click, and the event, to activateBody');
+      }
+    }
+  }
+  if (!/import\s*\{\s*activateBody\s*\}\s*from\s*'\.\/scene-pick\.ts'/.test(blankComments(source))) {
+    failures.push('activateBody is not imported from the pure rule');
+  }
+  return [...failures, ...auditRenderer(source)];
+}
 
 test('the placeholder radius discriminates on kind, never on a missing mass', () => {
   // Pinned positively, because a negative scan cannot observe a correct form going
@@ -1009,7 +1094,7 @@ function auditConnectors(code: string): string[] {
 test('the renderer draws no line, edge, or connector between any two Bodies', () => {
   // The Rail's files too: a camera path drawn as a `<CatmullRomLine>` would be a
   // connector between two Clients by another name.
-  for (const path of [SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX]) {
+  for (const path of [SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, SCENE_PICK_TS]) {
     assert.deepEqual(auditConnectors(readFileSync(path, 'utf8')), [], `${path}: orbit is a position, never a drawn ring`);
   }
 });
@@ -1468,8 +1553,8 @@ function coordinateLiterals(code: string): string[] {
   return failures;
 }
 
-test('neither Rail file holds a world-coordinate literal', () => {
-  for (const path of [RAIL_MODEL_TS, RAIL_CAMERA_TSX]) {
+test('neither Rail file, nor the focus model, holds a world-coordinate literal', () => {
+  for (const path of [RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS]) {
     assert.deepEqual(coordinateLiterals(codeOf(path)), [], `${path} must resolve every pose from entities`);
   }
 });
@@ -1534,9 +1619,11 @@ function auditRig(source: string): string[] {
   if (/\.sort\s*\(|\.filter\s*\(|\.reverse\s*\(|\.slice\s*\(/.test(code)) failures.push('orders or selects');
   failures.push(...coordinateLiterals(code));
 
-  // The binding, exactly: the frame body is `railFrame` (executed in
-  // `rail-model.test.ts`), and the rig's only job is to hand it the right inputs
-  // and apply what comes back. Each clause is one way to hand it the wrong ones.
+  // The binding, exactly: the frame bodies are `railFrame` and `focusFrame`
+  // (executed in `rail-model.test.ts` and `focus-model.test.ts`), and the rig's only
+  // job is to hand them the right inputs and apply what comes back. One `getState()`
+  // read per frame, so the Rail and Focus see the same state. Each clause is one way
+  // to hand them the wrong ones.
   const loop = /\buseFrame\s*\(\s*\(\s*\{\s*camera\s*,\s*size\s*\}\s*,\s*delta\s*\)\s*=>\s*\{([\s\S]*?)\}\s*\)\s*;/.exec(code);
   if (loop === null) {
     failures.push('runs no frame loop taking ({ camera, size }, delta)');
@@ -1548,19 +1635,25 @@ function auditRig(source: string): string[] {
     .map((statement) => statement.replace(/\s+/g, ''))
     .filter((statement) => statement !== '');
   const expected = [
-    'constframe=railFrame(motion.current,rail,navigationStore.getState().scrollProgress,size.width,size.height,delta)',
+    'conststate=navigationStore.getState()',
+    'constframe=railFrame(motion.current,rail,state.scrollProgress,size.width,size.height,delta)',
     'motion.current=frame.motion',
-    'camera.position.set(frame.pose.position.x,frame.pose.position.y,frame.pose.position.z)',
-    'camera.lookAt(frame.pose.target.x,frame.pose.target.y,frame.pose.target.z)',
+    'focus.current=focusFrame(focus.current,rail,bodies,state.focusedProjectId,frame,size.width,delta)',
+    'camera.position.set(focus.current.pose.position.x,focus.current.pose.position.y,focus.current.pose.position.z)',
+    'camera.lookAt(focus.current.pose.target.x,focus.current.pose.target.y,focus.current.pose.target.z)',
   ];
   if (JSON.stringify(statements) !== JSON.stringify(expected)) {
     failures.push(
-      'the frame loop is not exactly: railFrame(motion.current, rail, getState().scrollProgress, size.width, ' +
-        'size.height, delta), write motion back, apply position and aim',
+      'the frame loop is not exactly: read getState() once, railFrame(motion.current, rail, state.scrollProgress, ' +
+        'size.width, size.height, delta), write motion back, focusFrame(focus.current, rail, bodies, ' +
+        'state.focusedProjectId, frame, size.width, delta) written back, apply its position and aim',
     );
   }
   if (!/const\s+motion\s*=\s*useRef<RailMotion\s*\|\s*null>\(\s*null\s*\)/.test(code)) {
     failures.push('the carried motion is not a ref that starts empty');
+  }
+  if (!/const\s+focus\s*=\s*useRef<FocusMotion\s*\|\s*null>\(\s*null\s*\)/.test(code)) {
+    failures.push('the carried Focus motion is not a ref that starts empty');
   }
   return failures;
 }
@@ -1573,6 +1666,9 @@ test('the rig audit rejects the real rig with any one guarantee broken', () => {
   // Mutations of the shipped file, each checked to have applied, so every bad form
   // is exactly one edit from what ships.
   const real = readFileSync(RAIL_CAMERA_TSX, 'utf8');
+  const POSITION =
+    'camera.position.set(focus.current.pose.position.x, focus.current.pose.position.y, focus.current.pose.position.z)';
+  const AIM = 'camera.lookAt(focus.current.pose.target.x, focus.current.pose.target.y, focus.current.pose.target.z)';
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
     [
       'a store write',
@@ -1583,35 +1679,42 @@ test('the rig audit rejects the real rig with any one guarantee broken', () => {
       'selecting a Client from scroll',
       (s) => s.replace('motion.current = frame.motion;', "motion.current = frame.motion;\n    selectClient('client:sncf');"),
     ],
+    ['releasing Focus from the loop', (s) => s.replace('motion.current = frame.motion;', 'motion.current = frame.motion;\n    releaseFocus();')],
     ['a subscription', (s) => s.replace('return null;', 'navigationStore.subscribe(() => {});\n  return null;')],
-    [
-      'a hook binding',
-      (s) => s.replace('navigationStore.getState().scrollProgress', 'useStore(navigationStore, (state) => state.scrollProgress)'),
-    ],
+    ['a hook binding', (s) => s.replace('state = navigationStore.getState()', 'state = useStore(navigationStore, (value) => value)')],
     ['reactive state', (s) => s.replace('const motion = useRef', 'const [, force] = useState(0);\n  const motion = useRef')],
     ['useThree', (s) => s.replace('const motion = useRef', 'const { size } = useThree();\n  const motion = useRef')],
     ['a DOM read', (s) => s.replace('size.width, size.height,', 'window.innerWidth, window.innerHeight,')],
-    [
-      'a literal position',
-      (s) =>
-        s.replace(
-          'camera.position.set(frame.pose.position.x, frame.pose.position.y, frame.pose.position.z)',
-          'camera.position.set(0, 5, 40)',
-        ),
-    ],
-    [
-      'a literal aim',
-      (s) => s.replace('camera.lookAt(frame.pose.target.x, frame.pose.target.y, frame.pose.target.z)', 'camera.lookAt(0, 0, 0)'),
-    ],
-    ['no getState read', (s) => s.replace('navigationStore.getState().scrollProgress', 'motion.current?.progress.value ?? 0')],
+    ['a literal position', (s) => s.replace(POSITION, 'camera.position.set(0, 5, 40)')],
+    ['a literal aim', (s) => s.replace(AIM, 'camera.lookAt(0, 0, 0)')],
+    ['no getState read', (s) => s.replace('state = navigationStore.getState()', 'state = { scrollProgress: 0, focusedProjectId: null }')],
     ['the write-back removed', (s) => s.replace('motion.current = frame.motion;', '')],
     ['delta dropped', (s) => s.replace('size.height, delta)', 'size.height, 0)')],
     ['a constant width', (s) => s.replace('scrollProgress, size.width,', 'scrollProgress, 1600,')],
     ['a constant height', (s) => s.replace('size.width, size.height,', 'size.width, 900,')],
     ['a fresh motion every frame', (s) => s.replace('railFrame(motion.current,', 'railFrame(null,')],
-    ['the aim applied as the position', (s) => s.replace('frame.pose.position.x, frame.pose.position.y', 'frame.pose.target.x, frame.pose.position.y')],
+    [
+      'the aim applied as the position',
+      (s) => s.replace('focus.current.pose.position.x, focus.current.pose.position.y', 'focus.current.pose.target.x, focus.current.pose.position.y'),
+    ],
     ['no model frame', (s) => s.replace(/railFrame\(motion\.current,[^;]*;/, "{ motion: motion.current!, pose: rail.keyframes[0]! };")],
     ['an interaction', (s) => s.replace('return null;', 'return <mesh onClick={() => undefined} />;')],
+    ['a pointer-missed release', (s) => s.replace('return null;', 'return <group onPointerMissed={() => undefined} />;')],
+    ['a hover', (s) => s.replace('return null;', 'return <mesh onPointerOver={() => undefined} />;')],
+    // Focus's half of the binding.
+    ['Focus ignored', (s) => s.replace('state.focusedProjectId', 'null')],
+    [
+      'the Rail pose drawn over Focus',
+      (s) => s.replace(POSITION, 'camera.position.set(frame.pose.position.x, frame.pose.position.y, frame.pose.position.z)'),
+    ],
+    ['the Rail aim drawn over Focus', (s) => s.replace(AIM, 'camera.lookAt(frame.pose.target.x, frame.pose.target.y, frame.pose.target.z)')],
+    ['a fresh Focus every frame', (s) => s.replace('focusFrame(focus.current,', 'focusFrame(null,')],
+    ['the Focus write-back removed', (s) => s.replace('focus.current = focusFrame(', 'void focusFrame(')],
+    ['a constant panel width', (s) => s.replace('frame, size.width, delta)', 'frame, 1600, delta)')],
+    ['Focus without time', (s) => s.replace('frame, size.width, delta)', 'frame, size.width, 0)')],
+    ['Focus without the Bodies', (s) => s.replace('rail, bodies, state.focusedProjectId', 'rail, [], state.focusedProjectId')],
+    ['a second store read', (s) => s.replace('state.focusedProjectId', 'navigationStore.getState().focusedProjectId')],
+    ['the Focus ref started full', (s) => s.replace('useRef<FocusMotion | null>(null)', 'useRef<FocusMotion | null>(undefined!)')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);
@@ -1636,7 +1739,9 @@ function auditRailMount(source: string): string[] {
     failures.push('the keyframes do not come from buildRail(artifact, bodies)');
   }
   const inside = /<Canvas\b[\s\S]*<\/Canvas>/.exec(code)?.[0] ?? '';
-  if (!/<RailCamera\s+rail=\{\s*rail\s*\}\s*\/>/.test(inside)) failures.push('the rig is not mounted inside the Canvas');
+  if (!/<RailCamera\s+rail=\{\s*rail\s*\}\s+bodies=\{\s*bodies\s*\}\s*\/>/.test(inside)) {
+    failures.push('the rig is not mounted inside the Canvas with the Rail and the Bodies');
+  }
   if (!/\bfar\s*:\s*Math\.max\(\s*framing\.far\s*,\s*railFarPlane\(\s*rail\s*,\s*bodies\s*\)\s*\)/.test(code)) {
     failures.push('the camera prop far plane does not include railFarPlane(rail, bodies)');
   }
@@ -1650,11 +1755,15 @@ test('the scene builds the Rail from the artifact and mounts the rig inside the 
 test('the mount audit rejects the real scene with any one guarantee removed', () => {
   const real = readFileSync(SCENE_TSX, 'utf8');
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
-    ['the rig unmounted', (s) => s.replace('<RailCamera rail={rail} />', '')],
+    ['the rig unmounted', (s) => s.replace('<RailCamera rail={rail} bodies={bodies} />', '')],
     [
       'the rig outside the Canvas',
-      (s) => s.replace('<RailCamera rail={rail} />', '').replace('</Canvas>', '</Canvas>\n      <RailCamera rail={rail} />'),
+      (s) =>
+        s
+          .replace('<RailCamera rail={rail} bodies={bodies} />', '')
+          .replace('</Canvas>', '</Canvas>\n      <RailCamera rail={rail} bodies={bodies} />'),
     ],
+    ['the rig without the Bodies', (s) => s.replace('<RailCamera rail={rail} bodies={bodies} />', '<RailCamera rail={rail} bodies={[]} />')],
     ['an empty Rail', (s) => s.replace('buildRail(artifact, bodies)', 'buildRail({ rail: [], shots: [] }, bodies)')],
     ['the opening far plane only', (s) => s.replace(/far:\s*Math\.max\(framing\.far,\s*railFarPlane\(rail,\s*bodies\)\)/, 'far: framing.far')],
     ['the far plane of no Bodies', (s) => s.replace('railFarPlane(rail, bodies)', 'railFarPlane(rail, [])')],
@@ -1738,6 +1847,12 @@ test('every module in this directory is covered by the scans above', () => {
     'rail-model.ts',
     'rail-model.test.ts',
     'rail-camera.tsx',
+    // 2.7: named in the import, vocabulary and connector scans (the focus model in the
+    // coordinate-literal scan too), and each carries its own purity audit.
+    'focus-model.ts',
+    'focus-model.test.ts',
+    'scene-pick.ts',
+    'scene-pick.test.ts',
     'README.md',
   ]);
   const found: string[] = [];

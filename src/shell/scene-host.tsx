@@ -35,10 +35,13 @@
  * different question from a stale chunk hash.
  *
  * **The Rail's scroll input is here too** (2.5): a non-passive `wheel` listener on
- * a `<div>` wrapping the boundary turns wheel travel over the scene into
- * `advanceScroll(wheelProgress(...))` when the event is the Rail's. It is the one writer of `scrollProgress`;
- * the rule itself lives in `rail-input.ts`, which is pure and tested, and the
- * camera rig only reads the field.
+ * a `<div>` wrapping the boundary asks `wheelIntent(...)` what the event means.
+ * With nothing focused it is the Rail's, and the answer goes to `advanceScroll` —
+ * the one writer of `scrollProgress`. With a Project focused (2.7) it scrolls the
+ * panel, found by `FOCUS_PANEL_ID`, and the store is not written, so reading never
+ * moves the camera. The meaning comes from the store alone, never from the event's
+ * target. The rule itself lives in `rail-input.ts`, which is pure and tested, and
+ * the camera rig only reads the field.
  *
  * **Capability detection is not here yet.** `src/render-fallback/` describes the
  * no-WebGL surface with absolute content parity and holds no code; story 4.1 owns
@@ -47,7 +50,8 @@
  */
 
 import { Component, Suspense, lazy, useEffect, useRef, type ReactNode } from 'react';
-import { railStopCount, wheelProgress } from './rail-input.ts';
+import { FOCUS_PANEL_ID } from './panel-model.ts';
+import { railStopCount, wheelIntent } from './rail-input.ts';
 import { advanceScroll, navigationStore } from './state.ts';
 
 /**
@@ -160,20 +164,26 @@ export function SceneHost({ artifact }: SceneHostProps) {
   const host = useRef<HTMLDivElement>(null);
   const stopCount = railStopCount(artifact.rail);
 
-  // The Rail's scroll input, over the scene only: a wheel over the index is never
-  // seen here, so the page scrolls normally there. Registered by hand because
+  // Scroll's two meanings, over the scene only: a wheel over the index or over the
+  // panel is never seen here, so both scroll natively. Registered by hand because
   // React attaches `wheel` passively, and a passive listener cannot stop the page
   // scrolling under the camera.
   useEffect(() => {
     const element = host.current;
     if (element === null) return undefined;
     const onWheel = (event: WheelEvent): void => {
-      const next = wheelProgress(navigationStore.getState().scrollProgress, event, stopCount, window.innerHeight);
-      // Not the Rail's (a pinch-zoom, a horizontal-only wheel, noise): the
+      const { focusedProjectId, scrollProgress } = navigationStore.getState();
+      const intent = wheelIntent(focusedProjectId, scrollProgress, event, stopCount, window.innerHeight);
+      // Not scroll's to take (a pinch-zoom, a horizontal-only wheel, noise): the
       // browser keeps it, and the store is not written.
-      if (next === null) return;
+      if (intent === null) return;
       event.preventDefault();
-      advanceScroll(next);
+      // Focus held: the wheel reads the panel, and the Rail does not move.
+      if ('panel' in intent) {
+        document.getElementById(FOCUS_PANEL_ID)?.scrollBy({ top: intent.panel });
+        return;
+      }
+      advanceScroll(intent.rail);
     };
     element.addEventListener('wheel', onWheel, { passive: false });
     return () => element.removeEventListener('wheel', onWheel);

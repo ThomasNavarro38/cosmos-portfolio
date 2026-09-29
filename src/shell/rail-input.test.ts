@@ -2,6 +2,10 @@
  * The Rail's scroll input: a wheel event → the next `scrollProgress`, or `null`
  * when the event is not the Rail's — executed.
  *
+ * Since 2.7 the same wheel has two meanings, chosen by `focusedProjectId` alone:
+ * `wheelIntent` answers `{ rail }`, `{ panel }` or `null`, and its matrix is here
+ * too.
+ *
  * The rule is pure and lives in `rail-input.ts`; the wiring is a few lines in
  * `scene-host.tsx`, which `node --test` cannot load, so it is pinned by a source
  * scan driven over mutations of the shipped file.
@@ -18,6 +22,7 @@ import {
   WHEEL_LINE_PIXELS,
   WHEEL_PIXELS_PER_STOP,
   railStopCount,
+  wheelIntent,
   wheelProgress,
   type RailWheel,
 } from './rail-input.ts';
@@ -78,6 +83,65 @@ test('the tuning values are named and sane', () => {
   assert.deepEqual([DOM_DELTA_PIXEL, DOM_DELTA_LINE, DOM_DELTA_PAGE], [0, 1, 2], 'the DOM’s own values');
 });
 
+// --- The matrix: scroll's two meanings -------------------------------------------
+
+test('with nothing focused the wheel is the Rail’s, exactly as wheelProgress answers', () => {
+  for (const [current, event, stops] of [
+    [0, wheel(WHEEL_PIXELS_PER_STOP / 2), 3],
+    [1, wheel(-200), 3],
+    [2.9, wheel(10_000), 3],
+    [0, wheel(3, DOM_DELTA_LINE), 5],
+    [0, wheel(1, DOM_DELTA_PAGE), 5],
+  ] as const) {
+    const next = wheelProgress(current, event, stops, PAGE);
+    assert.ok(next !== null);
+    assert.deepEqual(wheelIntent(null, current, event, stops, PAGE), { rail: next });
+  }
+});
+
+test('with a Project focused the wheel scrolls the panel by its distance in pixels, and never the Rail', () => {
+  // The I/O matrix row: focused A, wheel deltaY 120 → { panel: 120 }, store unchanged.
+  assert.deepEqual(wheelIntent('project:a', 0.5, wheel(120), 3, PAGE), { panel: 120 });
+  assert.deepEqual(wheelIntent('project:a', 0.5, wheel(-40), 3, PAGE), { panel: -40 }, 'up scrolls the panel up');
+  assert.deepEqual(wheelIntent('project:a', 0.5, wheel(3, DOM_DELTA_LINE), 3, PAGE), { panel: 3 * WHEEL_LINE_PIXELS });
+  assert.deepEqual(wheelIntent('project:a', 0.5, wheel(1, DOM_DELTA_PAGE), 3, PAGE), { panel: PAGE });
+  // The meaning does not depend on where the Rail is, nor on whether it could move:
+  // at either end, on an empty Rail, and with a progress the Rail would clamp.
+  for (const [current, stops] of [[0, 3], [3, 3], [0, 0], [Number.NaN, 3], [99, 1]] as const) {
+    assert.deepEqual(wheelIntent('project:a', current, wheel(120), stops, PAGE), { panel: 120 }, `at ${current} of ${stops}`);
+  }
+  // No result carries a Rail value, so the handler has nothing to write.
+  assert.equal('rail' in (wheelIntent('project:a', 0.5, wheel(120), 3, PAGE) ?? {}), false);
+});
+
+test('the meaning is chosen by the focused ID alone, never by the event', () => {
+  // The same event, the same Rail: only the focused ID differs, and it alone flips
+  // the answer.
+  const event = wheel(120);
+  assert.ok('rail' in (wheelIntent(null, 1, event, 3, PAGE) ?? {}));
+  assert.ok('panel' in (wheelIntent('project:a', 1, event, 3, PAGE) ?? {}));
+  assert.ok('panel' in (wheelIntent('project:b', 1, event, 3, PAGE) ?? {}), 'any focused Project, not one in particular');
+  // An event carrying extra fields — a DOM target among them — gets the same answer.
+  const withTarget = { ...event, target: { id: 'focus-panel' } } as RailWheel;
+  assert.deepEqual(wheelIntent(null, 1, withTarget, 3, PAGE), wheelIntent(null, 1, event, 3, PAGE));
+  assert.deepEqual(wheelIntent('project:a', 1, withTarget, 3, PAGE), wheelIntent('project:a', 1, event, 3, PAGE));
+});
+
+test('an event that is scroll’s in neither meaning returns null, focused or not', () => {
+  for (const focused of [null, 'project:a']) {
+    assert.equal(wheelIntent(focused, 1, wheel(120, DOM_DELTA_PIXEL, true), 3, PAGE), null, `${focused}: pinch-zoom`);
+    assert.equal(wheelIntent(focused, 1, wheel(0), 3, PAGE), null, `${focused}: horizontal-only`);
+    assert.equal(wheelIntent(focused, 1, wheel(-0), 3, PAGE), null, `${focused}: negative zero`);
+    for (const delta of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      assert.equal(wheelIntent(focused, 1, wheel(delta), 3, PAGE), null, `${focused}: delta ${delta}`);
+    }
+    assert.equal(wheelIntent(focused, 1, wheel(100, 7), 3, PAGE), null, `${focused}: an unknown deltaMode`);
+    for (const page of [0, -1, Number.NaN]) {
+      assert.equal(wheelIntent(focused, 1, wheel(1, DOM_DELTA_PAGE), 3, page), null, `${focused}: page height ${page}`);
+    }
+  }
+});
+
 // --- Purity and wiring ----------------------------------------------------------
 
 function blank(source: string): string {
@@ -125,10 +189,13 @@ test('the purity audit rejects the real rule with any one impurity added', () =>
  *
  * A non-passive `wheel` listener **on the host element** (never `window` or
  * `document`, which would capture the wheel over the index too), removed on
- * cleanup. It asks `wheelProgress` with the store's current progress, the event
- * unchanged, `railStopCount(artifact.rail)` and the page height; it returns
- * before touching anything when the answer is `null`, and only then prevents the
- * default and writes `advanceScroll(next)`.
+ * cleanup. It asks `wheelIntent` with the store's `focusedProjectId` and
+ * progress, the event unchanged, `railStopCount(artifact.rail)` and the page
+ * height; it returns before touching anything when the answer is `null`, and only
+ * then prevents the default. A `panel` answer scrolls the element named by
+ * `FOCUS_PANEL_ID` by exactly its pixels and returns; only a `rail` answer writes
+ * `advanceScroll`. Nothing reads the event's target or hit-tests: the meaning is
+ * the store's.
  */
 function auditWheelWiring(source: string): string[] {
   const code = blank(source);
@@ -151,25 +218,42 @@ function auditWheelWiring(source: string): string[] {
   }
   if (!/\belement\.removeEventListener\(\s*'wheel'\s*,\s*onWheel\s*\)/.test(code)) failures.push('the listener is never removed');
 
+  const read = /const\s*\{\s*focusedProjectId\s*,\s*scrollProgress\s*\}\s*=\s*navigationStore\.getState\(\)\s*;/.exec(code);
+  if (read === null) failures.push('the focused ID and the progress are not read from the store at the event');
   const call =
-    /const\s+next\s*=\s*wheelProgress\(\s*navigationStore\.getState\(\)\.scrollProgress\s*,\s*event\s*,\s*stopCount\s*,\s*window\.innerHeight\s*\)\s*;/.exec(
+    /const\s+intent\s*=\s*wheelIntent\(\s*focusedProjectId\s*,\s*scrollProgress\s*,\s*event\s*,\s*stopCount\s*,\s*window\.innerHeight\s*\)\s*;/.exec(
       code,
     );
   if (call === null) {
-    failures.push('wheelProgress is not asked with the store’s progress, the event unchanged, the stop count and the page height');
+    failures.push(
+      'wheelIntent is not asked with the store’s focused ID and progress, the event unchanged, the stop count and the page height',
+    );
   }
-  const guard = /if\s*\(\s*next\s*===\s*null\s*\)\s*return\s*;/.exec(code);
+  if (/\bwheelProgress\s*\(/.test(code)) failures.push('wheelProgress is asked directly — the meaning must go through wheelIntent');
+  const guard = /if\s*\(\s*intent\s*===\s*null\s*\)\s*return\s*;/.exec(code);
   const prevent = /\bevent\.preventDefault\(\s*\)\s*;/.exec(code);
-  const write = /\badvanceScroll\(\s*next\s*\)\s*;/.exec(code);
-  if (guard === null) failures.push('a null answer is not honoured — the Rail would swallow events that are not its own');
-  if (prevent === null) failures.push('the page still scrolls under the Rail');
-  if (write === null) failures.push('the wheel does not write advanceScroll(next)');
-  if (call !== null && guard !== null && prevent !== null && write !== null) {
-    if (!(call.index < guard.index && guard.index < prevent.index && prevent.index < write.index)) {
-      failures.push('out of order — ask, return on null, then preventDefault, then write');
+  const panel =
+    /if\s*\(\s*'panel'\s+in\s+intent\s*\)\s*\{\s*document\.getElementById\(\s*FOCUS_PANEL_ID\s*\)\?\.scrollBy\(\s*\{\s*top\s*:\s*intent\.panel\s*\}\s*\)\s*;\s*return\s*;\s*\}/.exec(
+      code,
+    );
+  const write = /\badvanceScroll\(\s*intent\.rail\s*\)\s*;/.exec(code);
+  if (guard === null) failures.push('a null answer is not honoured — scroll would swallow events that are not its own');
+  if (prevent === null) failures.push('the page still scrolls under the scene');
+  if (panel === null) {
+    failures.push('a panel answer does not scroll the FOCUS_PANEL_ID element by its pixels and return before the Rail');
+  }
+  if (write === null) failures.push('a rail answer does not write advanceScroll(intent.rail)');
+  if (read !== null && call !== null && guard !== null && prevent !== null && panel !== null && write !== null) {
+    const order = [read.index, call.index, guard.index, prevent.index, panel.index, write.index];
+    if (order.some((index, i) => i > 0 && index <= (order[i - 1] ?? 0))) {
+      failures.push('out of order — read, ask, return on null, preventDefault, scroll the panel and return, then write the Rail');
     }
   }
   if ((code.match(/\bpreventDefault\(/g) ?? []).length !== 1) failures.push('preventDefault is called other than once, after the guard');
+  if ((code.match(/\badvanceScroll\(/g) ?? []).length !== 1) failures.push('advanceScroll is called other than once, on the Rail branch');
+  if (/\.target\b|\bcurrentTarget\b|\bcomposedPath\b|\belementsFromPoint\b|\belementFromPoint\b|\.contains\(|\.closest\(/.test(code)) {
+    failures.push('inspects the event target or hit-tests — scroll’s meaning is the store’s alone');
+  }
   if (/\bselectClient\s*\(/.test(code)) failures.push('scroll selects a Client — railPosition is the index’s');
   if (/\bonWheel\s*=\s*\{/.test(code)) failures.push('a React onWheel prop — React attaches wheel passively');
   return failures;
@@ -185,20 +269,22 @@ test('the wiring audit rejects the real host with any one guarantee removed', ()
     ['passive', (s) => s.replace('{ passive: false }', '{ passive: true }')],
     ['no preventDefault', (s) => s.replace('event.preventDefault();', '')],
     ['never removed', (s) => s.replace("removeEventListener('wheel'", "removeEventListener('scroll'")],
-    ['a raw write', (s) => s.replace(/advanceScroll\(\s*next\s*\)/, 'advanceScroll(event.deltaY)')],
-    ['the null guard dropped', (s) => s.replace(/if\s*\(\s*next\s*===\s*null\s*\)\s*return\s*;/, '')],
+    ['a raw write', (s) => s.replace(/advanceScroll\(\s*intent\.rail\s*\)/, 'advanceScroll(event.deltaY)')],
+    ['the null guard dropped', (s) => s.replace(/if\s*\(\s*intent\s*===\s*null\s*\)\s*return\s*;/, '')],
     [
       'preventDefault before the guard',
       (s) =>
         s
           .replace('event.preventDefault();', '')
-          .replace(/(const\s+next\s*=)/, 'event.preventDefault();\n      $1'),
+          .replace(/(const\s+intent\s*=)/, 'event.preventDefault();\n      $1'),
     ],
     ['scroll selects a Client', (s) => s.replace('event.preventDefault();', "event.preventDefault();\n      selectClient('client:sncf');")],
     ['a React onWheel prop', (s) => s.replace('<div ref={host}>', '<div ref={host} onWheel={() => undefined}>')],
     ['a listener on window', (s) => s.replace("element.addEventListener('wheel'", "window.addEventListener('wheel'")],
     ['a listener on document', (s) => s.replace('const element = host.current;', 'const element = document.body;')],
-    ['a literal current progress', (s) => s.replace('wheelProgress(navigationStore.getState().scrollProgress,', 'wheelProgress(0,')],
+    ['a literal current progress', (s) => s.replace('focusedProjectId, scrollProgress, event,', 'focusedProjectId, 0, event,')],
+    ['Focus ignored', (s) => s.replace('wheelIntent(focusedProjectId,', 'wheelIntent(null,')],
+    ['the Rail asked directly', (s) => s.replace('wheelIntent(focusedProjectId, scrollProgress,', 'wheelProgress(scrollProgress,')],
     [
       'a negated delta',
       (s) => s.replace('scrollProgress, event, stopCount', 'scrollProgress, { ...event, deltaY: -event.deltaY }, stopCount'),
@@ -207,6 +293,17 @@ test('the wiring audit rejects the real host with any one guarantee removed', ()
     ['a constant page height', (s) => s.replace('stopCount, window.innerHeight)', 'stopCount, 800)')],
     ['the ref dropped', (s) => s.replace('<div ref={host}>', '<div>')],
     ['the ref on an empty sibling', (s) => s.replace('<div ref={host}>', '<div ref={host} />\n    <div>')],
+    ['the panel scrolled by a constant', (s) => s.replace('{ top: intent.panel }', '{ top: 120 }')],
+    ['the page scrolled instead of the panel', (s) => s.replace('document.getElementById(FOCUS_PANEL_ID)?.scrollBy(', 'window.scrollBy(')],
+    ['the panel branch falls through to the Rail', (s) => s.replace(/(scrollBy\(\{ top: intent\.panel \}\);)\s*return;/, '$1')],
+    [
+      'the Rail also moves while reading',
+      (s) => s.replace('scrollBy({ top: intent.panel });', 'scrollBy({ top: intent.panel });\n        advanceScroll(scrollProgress);'),
+    ],
+    [
+      'the meaning read off the target',
+      (s) => s.replace("if ('panel' in intent)", "if ((event.target as Element).closest('#focus-panel') !== null || 'panel' in intent)"),
+    ],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);

@@ -12,7 +12,10 @@
  * The 3D surface arrives beside it through `./shell/scene-host.tsx`, which holds
  * the `lazy(() => import('../render-scene/scene.tsx'))` edge and the error boundary
  * that keeps the index in the document when the renderer cannot. One element here,
- * no responsibility — the rule below is unchanged.
+ * no responsibility — the rule below is unchanged. The Focus panel (2.7) is one
+ * more element after it, for the same reason: `./shell/focus-panel.tsx` holds the
+ * responsibility, and it comes last in document order because it is read after a
+ * destination is chosen.
  *
  * `generated/layout.generated.json` resolves outside `src/`, so importing it
  * crosses no declared boundary — `src/shell/` names it explicitly as a permitted
@@ -24,6 +27,7 @@
  */
 
 import artifact from '../generated/layout.generated.json';
+import { FocusPanel } from './shell/focus-panel.tsx';
 import { DestinationNav } from './shell/index-nav.tsx';
 import { SceneHost } from './shell/scene-host.tsx';
 
@@ -38,6 +42,7 @@ export function App() {
     <main>
       <DestinationNav artifact={artifact} />
       <SceneHost artifact={artifact} />
+      <FocusPanel artifact={artifact} />
     </main>
   );
 }

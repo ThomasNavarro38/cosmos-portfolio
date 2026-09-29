@@ -6,7 +6,7 @@
  * the camera stands and how it is turned — lives in `scene-model.ts`, which is
  * pure and fully executed under `node --test`. This file turns that list into
  * meshes and makes no decision of its own: no sort, no filter, no local state, no
- * store subscription, no `useFrame`, no raycast, no re-derivation. That residual
+ * store subscription, no `useFrame`, no hover or pointer handler, no re-derivation. That residual
  * is ratcheted by source scans in `scene-model.test.ts`, which fail the moment
  * this file grows a rule.
  *
@@ -35,8 +35,11 @@
  * the surface *exists* and whether the Bodies are inside the frustum are this
  * story's own acceptance; colour, tokens and typography are Epic 3's.
  *
- * **Nothing here reacts to anything.** No interaction, no hover, no click-to-fly,
- * no Motes, no Focus — those are 2.7 through 2.10. Rail traversal (2.5), with
+ * **One interaction, bound and nothing more.** A Body mesh's `onClick` hands the
+ * Body to `activateBody` (`scene-pick.ts`, 2.7): a Planet enters Focus, a Star
+ * does nothing, and the click stops at the nearest Body. No hover, no
+ * pointer-over, no pointer-missed, no click-to-fly, no Motes — those are 2.8
+ * through 2.10. The camera's Focus move lives with the rig. Rail traversal (2.5), with
  * its stop framing and Dwell pacing (2.6), is mounted here as `<RailCamera>`, and
  * every rule it obeys lives in `rail-model.ts`; this file only builds the
  * keyframes and hands them over. The
@@ -70,6 +73,7 @@ import {
   mediumSpriteScale,
 } from './dust-model.ts';
 import { RailCamera } from './rail-camera.tsx';
+import { activateBody } from './scene-pick.ts';
 import { buildRail, railFarPlane } from './rail-model.ts';
 import { BODY_RENDER_ORDER, buildScene, frameBodies, type Body, type SceneArtifact } from './scene-model.ts';
 
@@ -174,8 +178,8 @@ export function Scene({ artifact }: SceneProps) {
         camera can see head-on, which is the flat silhouette the second source
         exists to prevent. Placeholder lighting; Epic 3 owns how this looks.
       */}
-      {/* The rig: the one thing that moves the camera. It reads, it never writes the store. */}
-      <RailCamera rail={rail} />
+      {/* The rig: the one thing that moves the camera, along the Rail and into Focus. It reads, it never writes the store. */}
+      <RailCamera rail={rail} bodies={bodies} />
       <ambientLight intensity={0.6} />
       <directionalLight
         position={[
@@ -220,12 +224,14 @@ export function Scene({ artifact }: SceneProps) {
       {/*
         Bodies: in the transparent pass at opacity 1, so `renderOrder` places them
         after the Dust — see this file's header for why an opaque Body would lose.
+        A click is `activateBody`'s: a Planet focuses its Project, a Star does nothing.
       */}
       {bodies.map((body) => (
         <mesh
           key={body.id}
           position={[body.position.x, body.position.y, body.position.z]}
           renderOrder={BODY_RENDER_ORDER}
+          onClick={(event) => activateBody(body, event)}
         >
           <sphereGeometry args={[radiusOf(body), 24, 16]} />
           <meshStandardMaterial transparent opacity={1} />
