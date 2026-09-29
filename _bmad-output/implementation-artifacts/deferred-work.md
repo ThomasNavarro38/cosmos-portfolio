@@ -571,7 +571,7 @@ leaves open.
 ## Deferred from: code review of spec-2-7-focus-entry-the-panel-shell-and-scroll-s-two-meanings (2026-09-29)
 
 - Touch and swipe input get neither meaning of scroll. The Rail and the focused panel are both driven by `wheel` only (`src/shell/scene-host.tsx`), so on a phone a swipe over the scene neither travels the Rail nor scrolls the open panel. This has been true since 2.5; it needs a touch story.
-- A drag that ends over a Planet counts as a click: `activateBody` runs on every R3F `onClick` with no movement threshold. Once 2.9 adds drag or free flight, that would enter Focus by accident. Gate on `event.delta` then.
+- ~~A drag that ends over a Planet counts as a click~~ — **closed by 2.9**: `activateBody` returns after stopping propagation when R3F's `event.delta` exceeds `PICK_DRAG_PX` (`src/render-scene/scene-pick.ts`), and `scene-pick.test.ts` drives it at and past the threshold.
 - A wheel over a Focus panel whose content does not overflow (a short Shallow Project) can chain to document scroll. `overscroll-behavior: contain` only holds on a box that can actually scroll. `scrollProgress` stays untouched, but the page can scroll under a focused reader.
 - The focus ease blends position and aim linearly and separately (`stepFocus`). Only the rest poses are proven to contain the Planet. Nothing asserts that the Planet stays on screen and in front of `near` mid-transition between a wide Rail pose and a tight focus pose.
 
@@ -626,3 +626,18 @@ leaves open.
 - The Mote pool holds one mesh and one drei `Html` per distinct Skill in the whole artifact; each `Html` projects and `applyMoteDraw` writes styles every frame, even at rest. Cost grows with `career.json`, not with the focused Project (`src/render-scene/mote-field.tsx`).
 - A focused Project's Skills are visual only (labels live in the `aria-hidden` canvas) until the panel's Skills list lands in 3.5.
 - The Motes' orbits spin indefinitely while a Project is focused (`MOTE_ORBIT_RADIANS_PER_SECOND`) — auto-playing motion over 5s with no pause (WCAG 2.2.2). 2.10's reduced-motion work must stop or pause it.
+
+## Deferred from: spec-2-9-free-flight-in-three-layers (2026-09-29)
+
+- `selectClient` has no caller now. The index's Client button flies (`activateClient` → `enterFreeFlight`) instead of selecting a stop, and nothing else wrote `railPosition`, so the field stays at `null` in every shipped path. The event stays exported and in the writer audit. Whether the Rail should follow a Client flown to, or `railPosition` should go, is an open question for the story that next reads it.
+- `↩ resume the journey` renders while a Project is focused too, and pressing it calls `enterRail()` without releasing Focus. `focusOrigin` then still says `freeflight` while `mode` is `rail`, and releasing lands on the Rail (the goal beneath Focus is the live Rail pose). The stale origin is 2.10's to settle with Escape precedence.
+- `flightPose` throws inside the frame loop for a `flightTarget` the Rail has no stop for, like `focusPose`. No shipped door writes such an ID: the index and `activateBody` only hand over artifact Client IDs, and the store rejects an empty one.
+- The flight move blends position and aim linearly and separately, as the focus ease does. Only the rest poses are proven to frame their systems; nothing asserts containment mid-flight, e.g. between the opening frame and a close stop.
+- `FLIGHT_SECONDS` (1.6s) is greybox and not tied to `FOCUS_SECONDS`, so a Project activated in free flight moves the flight layer for 1.6s under a 0.8s Focus ease; the camera arrives at the focus pose on time, but the pose beneath it keeps moving until the flight settles. Tune at M1 by looking.
+- The keyboard listener is on `window` and never reads the event target, per the spec. So ↑/↓/Home are taken from any focused control while unfocused — a `<button>` in the index has no native use for them, but a future text field or `<select>` in the shell would. Revisit when one exists.
+- The wheel in free flight is swallowed over the scene only; a wheel over the index still scrolls the page natively, as on the Rail.
+- Reduced motion (2.10) must shorten or drop the flight ease as it will the Focus ease.
+
+## Deferred from: code review of spec-2-9-free-flight-in-three-layers (2026-09-30)
+
+- A travelled release is told from a plain one by the flight key changing in the same render (`flightKey`, `focusMove(previous, next, travelled)` in `src/shell/panel-model.ts`). Re-activating the Client already being flown to, with one of its Projects focused (the Client's index button or its Star), releases Focus without changing the key, so DOM focus still returns to the released entry, as a plain release does (browser check, 2026-09-30). Closing it needs the release itself to carry its cause, which is 2.10's to settle with Escape precedence.

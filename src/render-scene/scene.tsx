@@ -37,9 +37,10 @@
  * story's own acceptance; colour, tokens and typography are Epic 3's.
  *
  * **One interaction, bound and nothing more.** A Body mesh's `onClick` hands the
- * Body to `activateBody` (`scene-pick.ts`, 2.7): a Planet enters Focus, a Star
- * does nothing, and the click stops at the nearest Body. No hover, no
- * pointer-over, no pointer-missed, no click-to-fly — those are 2.9 and 2.10.
+ * Body to `activateBody` (`scene-pick.ts`, 2.7, 2.9): a Star flies to its
+ * Client, a Planet enters Focus, a drag does nothing, and the click stops at the
+ * nearest Body. No hover, no pointer-over, no pointer-missed — a click on the
+ * void changes nothing.
  * The camera's Focus move lives with the rig, and the focused Project's Motes
  * (2.8) with `<MoteField>`, mounted after the rig so it projects through the
  * camera the rig has just moved; every rule it obeys lives in `mote-model.ts`.
@@ -231,7 +232,7 @@ export function Scene({ artifact }: SceneProps) {
       {/*
         Bodies: in the transparent pass at opacity 1, so `renderOrder` places them
         after the Dust — see this file's header for why an opaque Body would lose.
-        A click is `activateBody`'s: a Planet focuses its Project, a Star does nothing.
+        A click is `activateBody`'s: a Star flies to its Client, a Planet focuses its Project.
       */}
       {bodies.map((body) => (
         <mesh

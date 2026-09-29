@@ -200,12 +200,34 @@ function paragraphsOf(text: string): string[] {
  *     container, which carries `tabindex="-1"` and is labelled by its title.
  *   - Focus released: `{ entry: previous }` — the index entry of the Project
  *     that was open, never the document root and never the canvas.
+ *   - Focus released by travel (`travelled`: the flight key changed in the same
+ *     transition — a Client, the overview or a Star): `null`. The visitor took a
+ *     door elsewhere, and pulling DOM focus back to the entry would take it off
+ *     the button they just pressed.
  *   - No change: `null`, and DOM focus is left where the visitor put it.
+ *
+ * `travelled` is required, so a binding that forgets it is a type error rather
+ * than a release that quietly always returns to the entry.
  */
-export function focusMove(previous: string | null, next: string | null): 'panel' | { readonly entry: string } | null {
+export function focusMove(
+  previous: string | null,
+  next: string | null,
+  travelled: boolean,
+): 'panel' | { readonly entry: string } | null {
   if (previous === next) return null;
   if (next !== null) return 'panel';
-  return previous === null ? null : { entry: previous };
+  return previous === null || travelled ? null : { entry: previous };
+}
+
+/**
+ * Where the camera is being sent, as one comparable value: the mode, plus the
+ * target in free flight. On the Rail the standing `flightTarget` is not read —
+ * nothing there frames it — so returning to the Rail is one key whatever was
+ * flown to last. A string, so a selector returning it re-renders only when it
+ * changes.
+ */
+export function flightKey(state: { readonly mode: 'rail' | 'freeflight'; readonly flightTarget: string | null }): string {
+  return JSON.stringify(state.mode === 'freeflight' ? [state.mode, state.flightTarget] : [state.mode]);
 }
 
 /**

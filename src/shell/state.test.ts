@@ -29,6 +29,7 @@ import {
   focusProject,
   navigationStore,
   releaseFocus,
+  requireId,
   resetNavigation,
   selectClient,
 } from './state.ts';
@@ -54,6 +55,7 @@ test('a visitor arrives on the Rail, at no stop, with nothing focused', () => {
 
   assert.deepEqual(navigationStore.getState(), {
     mode: 'rail',
+    flightTarget: null,
     railPosition: null,
     scrollProgress: 0,
     focusedProjectId: null,
@@ -99,7 +101,7 @@ test('focusing a Project from free flight records free flight as its origin', ()
   // at entry rather than assumed. A store that hardcoded `'rail'` would pass the
   // test above and strand every free-flight visitor on release.
   resetNavigation();
-  enterFreeFlight();
+  enterFreeFlight(null);
   focusProject('project-a');
 
   assert.equal(navigationStore.getState().focusOrigin, 'freeflight');
@@ -132,7 +134,7 @@ test('re-focusing the Project already focused does not move its origin', () => {
   focusProject('project-a');
   assert.equal(navigationStore.getState().focusOrigin, 'rail');
 
-  enterFreeFlight();
+  enterFreeFlight(null);
   focusProject('project-a');
 
   const state = navigationStore.getState();
@@ -148,7 +150,7 @@ test('focusing B while A is focused re-stores the origin from the mode at that e
   focusProject('project-a');
   assert.equal(navigationStore.getState().focusOrigin, 'rail');
 
-  enterFreeFlight();
+  enterFreeFlight(null);
   focusProject('project-b');
 
   assert.equal(navigationStore.getState().focusOrigin, 'freeflight');
@@ -159,7 +161,7 @@ test('releasing Focus clears the Project and leaves the origin readable', () => 
   // *after* the release, to know where to return the visitor. Clearing it here
   // would destroy the answer exactly when it is needed.
   resetNavigation();
-  enterFreeFlight();
+  enterFreeFlight(null);
   focusProject('project-a');
   releaseFocus();
 
@@ -173,7 +175,7 @@ test('the origin is the mode at entry, not the mode at release', () => {
   // consumer reading `mode` at release would get wrong.
   resetNavigation();
   focusProject('project-a');
-  enterFreeFlight();
+  enterFreeFlight(null);
   releaseFocus();
 
   const state = navigationStore.getState();
@@ -198,7 +200,7 @@ test('leaving the Rail for free flight retains the stop, so the Rail is re-enter
   // were.
   resetNavigation();
   selectClient('client-mid');
-  enterFreeFlight();
+  enterFreeFlight(null);
 
   assert.equal(navigationStore.getState().mode, 'freeflight');
   assert.equal(navigationStore.getState().railPosition, 'client-mid', 'the stop is retained');
@@ -206,6 +208,60 @@ test('leaving the Rail for free flight retains the stop, so the Rail is re-enter
   enterRail();
   assert.equal(navigationStore.getState().mode, 'rail');
   assert.equal(navigationStore.getState().railPosition, 'client-mid');
+});
+
+test('entering free flight names what it frames, in one transition with the mode', () => {
+  // A Client, or `null` for the whole universe. One notification carries both
+  // fields, so no subscriber sees free flight aimed at the previous target.
+  resetNavigation();
+  const seen: [string, string | null][] = [];
+  const unsubscribe = navigationStore.subscribe((state) => seen.push([state.mode, state.flightTarget]));
+  enterFreeFlight('client-zulu');
+  enterFreeFlight(null);
+  enterFreeFlight('  client-mid  ');
+  unsubscribe();
+
+  assert.deepEqual(seen, [
+    ['freeflight', 'client-zulu'],
+    ['freeflight', null],
+    ['freeflight', 'client-mid'],
+  ]);
+});
+
+test('flight never writes the Rail’s progress or stop, so the return lands where the Rail was left', () => {
+  // The matrix's Return row, at the store: progress 2.3 survives a flight and
+  // the return, and `enterRail` writes `mode` alone.
+  resetNavigation();
+  selectClient('client-mid');
+  advanceScroll(2.3);
+  enterFreeFlight('client-zulu');
+  enterFreeFlight(null);
+  enterRail();
+
+  const state = navigationStore.getState();
+  assert.equal(state.mode, 'rail');
+  assert.equal(state.scrollProgress, 2.3);
+  assert.equal(state.railPosition, 'client-mid');
+});
+
+test('a malformed flight target is rejected naming the field and the value, with no partial write', () => {
+  resetNavigation();
+  const before = navigationStore.getState();
+
+  assert.throws(
+    () => enterFreeFlight(''),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /enterFreeFlight/, 'the failure names the field');
+      assert.match(error.message, /""/, 'and the offending value');
+      return true;
+    },
+  );
+  assert.throws(() => enterFreeFlight('   '), /enterFreeFlight/);
+  assert.throws(() => enterFreeFlight(undefined as unknown as string), /enterFreeFlight/);
+  assert.throws(() => (enterFreeFlight as unknown as () => void)(), /enterFreeFlight/, 'no argument is not the overview');
+
+  assert.deepEqual(navigationStore.getState(), before, 'none of them wrote anything');
 });
 
 // --- Writer separation ------------------------------------------------------
@@ -298,13 +354,25 @@ const WRITERS: ReadonlyArray<{
     writes: ['focusedProjectId'],
   },
   {
+    // `mode` and `flightTarget` are one transition. Primed from the Rail with a
+    // standing target, so both writes are observable.
     name: 'enterFreeFlight',
     prime: () => {
       populate();
       enterRail();
     },
-    fire: () => enterFreeFlight(),
-    writes: ['mode'],
+    fire: () => enterFreeFlight('client-next'),
+    writes: ['mode', 'flightTarget'],
+  },
+  {
+    // The overview: `null` is a target, and writing it is still only these two fields.
+    name: 'enterFreeFlight (null, the overview)',
+    prime: () => {
+      populate();
+      enterRail();
+    },
+    fire: () => enterFreeFlight(null),
+    writes: ['mode', 'flightTarget'],
   },
   {
     name: 'enterRail',
@@ -316,7 +384,7 @@ const WRITERS: ReadonlyArray<{
     name: 'resetNavigation',
     prime: () => populate(),
     fire: () => resetNavigation(),
-    writes: ['mode', 'railPosition', 'scrollProgress', 'focusedProjectId', 'focusOrigin'],
+    writes: ['mode', 'flightTarget', 'railPosition', 'scrollProgress', 'focusedProjectId', 'focusOrigin'],
   },
 ];
 
@@ -334,7 +402,7 @@ function populate(): void {
   selectClient('client-start');
   advanceScroll(0.1);
   focusProject('project-start');
-  enterFreeFlight();
+  enterFreeFlight('client-flight');
 }
 
 test('no event writes a field belonging to another writer, and every event writes something', () => {
@@ -404,14 +472,31 @@ test('the writer table names every event the store exports, so none escapes the 
 
   // And the other direction, read off the source: a named export in `state.ts`
   // that the list above does not carry means this test is stale rather than
-  // passing. `requireId` and `requireProgress` are module-private and so absent
-  // from the scan by construction.
+  // passing. `requireProgress` is module-private and so absent from the scan by
+  // construction. `requireId` is exported (2.9) for the doors in `activate.ts`,
+  // and it is named here as the one exported *validator*: it writes nothing, which
+  // the test below executes.
+  const validators = ['requireId'];
   const declared = [...sourceOf(STATE_TS).matchAll(/export function (\w+)/g)].map((m) => m[1]);
   assert.deepEqual(
     [...declared].sort(),
-    [...exported].sort(),
+    [...exported, ...validators].sort(),
     'state.ts exports a function the writer audit does not know about',
   );
+});
+
+test('the exported validator writes nothing and notifies nobody, valid or not', () => {
+  resetNavigation();
+  enterFreeFlight('client-flight');
+  const before = navigationStore.getState();
+  let notified = 0;
+  const unsubscribe = navigationStore.subscribe(() => notified++);
+  assert.equal(requireId('door', '  client-zulu  '), 'client-zulu', 'the trimmed ID, as the events store it');
+  assert.throws(() => requireId('door', ''), /door.*""/);
+  assert.throws(() => requireId('door', undefined as unknown as string), /door/);
+  unsubscribe();
+  assert.equal(notified, 0);
+  assert.equal(navigationStore.getState(), before);
 });
 
 // --- Unknown IDs ------------------------------------------------------------
@@ -609,7 +694,7 @@ test('a redundant transition still notifies, and the selector is what absorbs it
   );
   assert.deepEqual(
     navigationStore.getState(),
-    { mode: 'rail', railPosition: 'client-alpha', scrollProgress: 0, focusedProjectId: null, focusOrigin: null },
+    { mode: 'rail', flightTarget: null, railPosition: 'client-alpha', scrollProgress: 0, focusedProjectId: null, focusOrigin: null },
     'and none of them changed anything',
   );
 });

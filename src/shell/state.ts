@@ -29,14 +29,15 @@
  * | Field | Writer | Meaning |
  * | --- | --- | --- |
  * | `mode` | `enterRail` / `enterFreeFlight` | Rail travel or free flight |
- * | `railPosition` | `selectClient` — the index | The discrete Client the Rail stops at, never a ProjectId (AD-4a) |
- * | `scrollProgress` | `advanceScroll` — the Rail's scroll input (`rail-input.ts`) | Continuous progress along the Rail, in stops: 0 is the opening frame, `k` the `k`-th Client stop, present first |
+ * | `flightTarget` | `enterFreeFlight`, with `mode` as one transition | What free flight frames: a Client, or `null` for the whole universe |
+ * | `railPosition` | `selectClient` — no caller since 2.9 (the index's Client button flies instead) | The discrete Client the Rail stops at, never a ProjectId (AD-4a) |
+ * | `scrollProgress` | `advanceScroll` — the scroll input's handlers in `scene-host.tsx` (rules in `rail-input.ts`) and the `goHome` door (`activate.ts`) | Continuous progress along the Rail, in stops: 0 is the opening frame, `k` the `k`-th Client stop, present first |
  * | `focusedProjectId` | `focusProject` / `releaseFocus` | The one Project focused, or none |
  * | `focusOrigin` | `focusProject`, at entry | The mode Focus was entered from |
  *
  * No event writes two writers' fields. The scroll input advancing
- * `scrollProgress` must not move `railPosition`, and an index selecting a Client
- * must not invent a scroll value. Collapsing them into one field would make "the
+ * `scrollProgress` must not move `railPosition`, and selecting a Client must not
+ * invent a scroll value. Collapsing them into one field would make "the
  * Rail is between two Clients" and "the Rail stops at this Client" the same
  * statement, and the two writers would fight over it every frame. The camera
  * writes neither: it reads `scrollProgress` and moves the Three camera, nothing
@@ -123,6 +124,17 @@ export interface NavigationState {
   /** Rail travel or free flight. Written by `enterRail` / `enterFreeFlight`. */
   readonly mode: NavigationMode;
   /**
+   * What free flight frames: a Client's stop, or `null` for the whole universe
+   * (the overview). Written by `enterFreeFlight` only, together with `mode`.
+   *
+   * It is not cleared by `enterRail`: on the Rail nothing reads it, and the next
+   * `enterFreeFlight` names a target anyway. Keeping `enterRail` a one-field
+   * write is what keeps the return to the Rail from touching anything else —
+   * and `scrollProgress` and `railPosition` are never written by flight at all,
+   * so the return lands where the Rail was left.
+   */
+  readonly flightTarget: ClientId | null;
+  /**
    * The discrete Client the Rail stops at. Written by `selectClient` only.
    *
    * Never a ProjectId (AD-4a): the Rail's stops are Clients, and a Project is
@@ -132,8 +144,9 @@ export interface NavigationState {
   readonly railPosition: ClientId | null;
   /**
    * Continuous progress along the Rail, **in stops**. Written by
-   * `advanceScroll` only, and its caller is the Rail's scroll input
-   * (`rail-input.ts`, wired by `scene-host.tsx`).
+   * `advanceScroll` only. Its callers are the Rail's scroll input — the wheel
+   * and key handlers in `scene-host.tsx`, whose rules are `rail-input.ts`'s —
+   * and the `goHome` door in `activate.ts` (2.9), which writes `0`.
    *
    * `0` is the opening frame and `k` is the `k`-th Client stop, present first,
    * so a Rail of `N` Client stops runs over `[0, N]`. The camera rig reads it
@@ -164,11 +177,12 @@ export interface NavigationState {
  *
  * `railPosition: null` rather than the first Client, because "which Client is
  * first" is an ordering question and the shell answers none of those (AD-3). The
- * first consumer to know the Rail's order — the index, reading the artifact —
- * selects a stop.
+ * Rail's order is known only to consumers reading the artifact. Since 2.9 no
+ * shipped path selects a stop: the index's Client button flies instead.
  */
 const INITIAL_STATE: NavigationState = {
   mode: 'rail',
+  flightTarget: null,
   railPosition: null,
   scrollProgress: 0,
   focusedProjectId: null,
@@ -198,8 +212,12 @@ export const navigationStore = createStore<NavigationState>(() => INITIAL_STATE)
  * `startsAt` takes in the derive layer: a silent no-op would leave a consumer
  * believing a transition happened, and a default would send the camera somewhere
  * nobody asked for.
+ *
+ * Exported (2.9) so the doors in `activate.ts` validate every ID they take with
+ * this one rule, before any write, rather than a hand-copied second one. It
+ * writes nothing: a validator, not a transition.
  */
-function requireId(field: string, id: string): string {
+export function requireId(field: string, id: string): string {
   if (typeof id !== 'string' || id.trim() === '') {
     throw new Error(`${field} needs a destination ID; received ${JSON.stringify(id)}.`);
   }
@@ -294,7 +312,7 @@ export function releaseFocus(): void {
  * The Rail's scroll input advances along the Rail.
  *
  * Writes `scrollProgress` and nothing else — in particular not `railPosition`,
- * which keeps the index as its one writer. Scrolling does not select a Client:
+ * which keeps `selectClient` as its one writer. Scrolling does not select a Client:
  * the continuous position and the discrete stop stay two quantities, and if one
  * should ever follow the other that is two named transitions rather than one
  * event quietly writing two writers' fields.
@@ -309,18 +327,32 @@ export function advanceScroll(progress: number): void {
 }
 
 /**
- * Leave the Rail for free flight.
+ * Enter free flight framing `target`: a Client, or `null` for the whole
+ * universe.
  *
- * `railPosition` is retained, so the Rail is re-enterable exactly where it was
- * left. Clearing it would make free flight a one-way door: a visitor who drifted
- * off and came back would land wherever the default is rather than where they
- * were.
+ * `mode` and `flightTarget` are one transition, written together, so no
+ * subscriber ever sees free flight with a stale target or a target with no
+ * flight. Retargeting while already in free flight is the same event.
+ *
+ * `railPosition` and `scrollProgress` are retained, so the Rail is re-enterable
+ * exactly where it was left. Clearing either would make free flight a one-way
+ * door: a visitor who drifted off and came back would land wherever the default
+ * is rather than where they were.
+ *
+ * @throws if `target` is neither `null` nor a non-empty string, naming the field
+ * and the value. `null` is the overview, and it is the only non-ID accepted.
  */
-export function enterFreeFlight(): void {
-  navigationStore.setState({ mode: 'freeflight' });
+export function enterFreeFlight(target: ClientId | null): void {
+  const flightTarget = target === null ? null : requireId('enterFreeFlight', target);
+  navigationStore.setState({ mode: 'freeflight', flightTarget });
 }
 
-/** Return to the Rail, at the stop it was left at. */
+/**
+ * Return to the Rail, at the stop and progress it was left at.
+ *
+ * Writes `mode` only: `flightTarget` is left standing because nothing on the
+ * Rail reads it.
+ */
 export function enterRail(): void {
   navigationStore.setState({ mode: 'rail' });
 }

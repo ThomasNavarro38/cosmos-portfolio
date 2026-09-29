@@ -23,6 +23,7 @@ import {
   crossFade,
   crossFadeLayerStyle,
   crossFadeTiming,
+  flightKey,
   focusMove,
   leavingAfter,
   indexEntryId,
@@ -238,11 +239,30 @@ test('the panel paints its own column and nothing else — no scrim, no backdrop
 // --- DOM focus -------------------------------------------------------------------
 
 test('DOM focus moves to the panel on entry and on A → B, back to the entry on release, and nowhere otherwise', () => {
-  assert.equal(focusMove(null, 'project:a'), 'panel');
-  assert.equal(focusMove('project:a', 'project:b'), 'panel', 'focus stays in the panel as its content swaps');
-  assert.deepEqual(focusMove('project:a', null), { entry: 'project:a' }, 'the released Project’s own entry');
-  assert.equal(focusMove('project:a', 'project:a'), null);
-  assert.equal(focusMove(null, null), null);
+  assert.equal(focusMove(null, 'project:a', false), 'panel');
+  assert.equal(focusMove('project:a', 'project:b', false), 'panel', 'focus stays in the panel as its content swaps');
+  assert.deepEqual(focusMove('project:a', null, false), { entry: 'project:a' }, 'the released Project’s own entry');
+  assert.equal(focusMove('project:a', 'project:a', false), null);
+  assert.equal(focusMove(null, null, false), null);
+});
+
+test('a release that travelled leaves DOM focus on the door the visitor took; travel changes no other move', () => {
+  assert.equal(focusMove('project:a', null, true), null, 'a Client, the overview or a Star took the visitor elsewhere');
+  assert.equal(focusMove(null, 'project:a', true), 'panel', 'a Project focused in flight still opens the panel');
+  assert.equal(focusMove('project:a', 'project:b', true), 'panel', 'and a move between Projects still stays in it');
+  assert.equal(focusMove('project:a', 'project:a', true), null);
+  assert.equal(focusMove(null, null, true), null);
+});
+
+test('the flight key changes exactly when the camera is sent somewhere new', () => {
+  const rail = flightKey({ mode: 'rail', flightTarget: null });
+  assert.equal(flightKey({ mode: 'rail', flightTarget: 'client:c' }), rail, 'on the Rail the standing target is not read');
+  const overview = flightKey({ mode: 'freeflight', flightTarget: null });
+  const client = flightKey({ mode: 'freeflight', flightTarget: 'client:c' });
+  const other = flightKey({ mode: 'freeflight', flightTarget: 'client:d' });
+  assert.equal(new Set([rail, overview, client, other]).size, 4, 'the Rail, the overview and each Client are distinct');
+  assert.equal(flightKey({ mode: 'freeflight', flightTarget: 'client:c' }), client, 'and a key is a value: equal state, equal key');
+  assert.notEqual(flightKey({ mode: 'freeflight', flightTarget: 'null' }), overview, 'a Client named "null" is not the overview');
 });
 
 // --- The A → B cross-fade (2.8) -----------------------------------------------------
@@ -255,7 +275,7 @@ test('only A → B cross-fades: entry and release slide the panel, and no change
   assert.equal(crossFade('project:a', 'project:a'), null);
   assert.equal(crossFade(null, null), null);
   // DOM focus is unchanged by the fade: A → B still lands on the panel.
-  assert.equal(focusMove('project:a', 'project:b'), 'panel');
+  assert.equal(focusMove('project:a', 'project:b', false), 'panel');
 });
 
 test('the outgoing layer is held through a release, so a running A → B fade finishes as the panel slides out', () => {
@@ -363,9 +383,9 @@ test('the model audit rejects the real model with any one impurity added', () =>
 
 /**
  * `focus-panel.tsx` as a pure function over its source: the thin mapping the
- * header describes, and the three things it is allowed to hold — one selector
- * subscription, a ref for the last shown Project, an effect applying
- * `focusMove` — each pinned positively.
+ * header describes, and the things it is allowed to hold — two selector
+ * subscriptions (Focus, and the flight key), a ref for the last shown Project,
+ * an effect applying `focusMove` — each pinned positively.
  */
 function auditPanel(source: string): string[] {
   const code = blank(source);
@@ -373,7 +393,11 @@ function auditPanel(source: string): string[] {
   if (!/const\s+focusedProjectId\s*=\s*useStore\(\s*navigationStore\s*,\s*\(\s*(\w+)\s*\)\s*=>\s*\1\.focusedProjectId\s*\)/.test(code)) {
     failures.push('does not subscribe to focusedProjectId with a selector');
   }
-  if ((code.match(/\buseStore\s*\(/g) ?? []).length !== 1) failures.push('subscribes other than once');
+  if (!/const\s+flight\s*=\s*useStore\(\s*navigationStore\s*,\s*\(\s*(\w+)\s*\)\s*=>\s*flightKey\(\s*\1\s*\)\s*\)/.test(code)) {
+    failures.push('does not subscribe to the flight key with a selector — a travelled release cannot be told from a plain one');
+  }
+  if ((code.match(/\buseStore\s*\(/g) ?? []).length !== 2) failures.push('subscribes other than twice');
+  if (!/const\s+previousFlight\s*=\s*useRef\(\s*flight\s*\)/.test(code)) failures.push('the flight key last seen is not a ref seeded at mount');
   if (/\buseState\b|\buseReducer\b|\buseMemo\b|\bsubscribe\s*\(/.test(code)) {
     failures.push('keeps state of its own — the store is the one authority');
   }
@@ -450,13 +474,16 @@ function auditPanel(source: string): string[] {
     if (!/const\s+fade\s*=\s*crossFade\(\s*previous\.current\s*,\s*focusedProjectId\s*\)/.test(body)) {
       failures.push('the layout effect does not ask crossFade(previous, next)');
     }
-    if (/previous\.current\s*=/.test(body)) failures.push('the layout effect writes the previous ID — the focus effect after it would read the new one');
+    if (/previous(?:Flight)?\.current\s*=/.test(body)) {
+      failures.push('the layout effect writes the previous ID or flight key — the focus effect after it would read the new one');
+    }
     const fadeBlock =
       /if\s*\(\s*fade\s*!==\s*null\s*&&\s*incoming\.current\s*!==\s*null\s*\)\s*\{\s*const\s+timing\s*=\s*crossFadeTiming\(\s*getComputedStyle\(\s*incoming\.current\s*\)\.opacity\s*\)\s*;\s*incoming\.current\.animate\(\s*timing\.incoming\s*,\s*timing\.options\s*\)\s*;\s*outgoing\.current\?\.animate\(\s*timing\.outgoing\s*,\s*timing\.options\s*\)\s*;\s*outgoing\.current\?\.scrollTo\(\s*\{\s*top\s*:\s*scrolled\.current\s*\}\s*\)\s*;\s*\}/;
     if (!fadeBlock.test(body)) {
       failures.push('A → B does not fade both layers on crossFadeTiming and keep the outgoing one where the reader was');
     }
-    const reset = /if\s*\(\s*focusMove\(\s*previous\.current\s*,\s*focusedProjectId\s*\)\s*===\s*'panel'\s*\)\s*container\.current\?\.scrollTo\(\s*\{\s*top\s*:\s*0\s*\}\s*\)\s*;/;
+    const reset =
+      /if\s*\(\s*focusMove\(\s*previous\.current\s*,\s*focusedProjectId\s*,\s*flight\s*!==\s*previousFlight\.current\s*\)\s*===\s*'panel'\s*\)\s*container\.current\?\.scrollTo\(\s*\{\s*top\s*:\s*0\s*\}\s*\)\s*;/;
     if (!reset.test(body)) failures.push('entry does not reset the panel to its top — B would open at A’s reading position');
     if ((code.match(/scrollTo\(\s*\{\s*top\s*:\s*0\s*\}\s*\)/g) ?? []).length !== 1) failures.push('the panel is reset to its top other than once');
     if (body.search(reset) !== -1 && body.search(fadeBlock) !== -1 && body.search(reset) < body.search(fadeBlock)) {
@@ -514,13 +541,19 @@ function auditPanel(source: string): string[] {
     !/const\s+panel\s*=\s*buildPanel\(\s*artifact\s*,\s*shown\.current\s*\)/.test(code)) {
     failures.push('the content is not the last shown Project — the panel would slide out blank');
   }
-  const effect = /useEffect\(\s*\(\)\s*=>\s*\{([\s\S]*?)\}\s*,\s*\[\s*focusedProjectId\s*\]\s*\)/.exec(code);
+  const effect = /useEffect\(\s*\(\)\s*=>\s*\{([\s\S]*?)\}\s*,\s*\[\s*focusedProjectId\s*,\s*flight\s*\]\s*\)/.exec(code);
   if (effect === null) {
-    failures.push('no effect keyed on focusedProjectId');
+    failures.push('no effect keyed on focusedProjectId and flight — a flight change alone would leave the last key stale');
   } else {
     const body = effect[1] ?? '';
-    if (!/const\s+move\s*=\s*focusMove\(\s*previous\.current\s*,\s*focusedProjectId\s*\)/.test(body)) {
-      failures.push('the effect does not ask focusMove(previous, next)');
+    if (!/const\s+move\s*=\s*focusMove\(\s*previous\.current\s*,\s*focusedProjectId\s*,\s*flight\s*!==\s*previousFlight\.current\s*\)/.test(body)) {
+      failures.push('the effect does not ask focusMove(previous, next, travelled)');
+    }
+    if ((body.match(/previousFlight\.current\s*=\s*flight\s*;/g) ?? []).length !== 1) failures.push('the effect does not remember the flight key exactly once');
+    const travelAsked = body.search(/focusMove\(/);
+    const flightRemembered = body.search(/previousFlight\.current\s*=/);
+    if (travelAsked !== -1 && flightRemembered !== -1 && flightRemembered < travelAsked) {
+      failures.push('the flight key is overwritten before focusMove reads it — no release would ever count as travel');
     }
     if (!/previous\.current\s*=\s*focusedProjectId/.test(body)) failures.push('the effect does not remember the previous ID');
     if ((body.match(/previous\.current\s*=/g) ?? []).length > 1) failures.push('the effect writes the previous ID more than once');
@@ -592,7 +625,7 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
       (s) =>
         s.replace(
           '    const fade = crossFade(',
-          "    if (focusMove(previous.current, focusedProjectId) === 'panel') container.current?.scrollTo({ top: 0 });\n    const fade = crossFade(",
+          "    if (focusMove(previous.current, focusedProjectId, flight !== previousFlight.current) === 'panel') container.current?.scrollTo({ top: 0 });\n    const fade = crossFade(",
         ),
     ],
     ['a fade in the focus effect too', (s) => s.replace('container.current?.focus({ preventScroll: true });', 'container.current?.focus({ preventScroll: true });\n      incoming.current?.animate([], {});')],
@@ -624,12 +657,34 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
       'the previous ID overwritten before it is read',
       (s) =>
         s.replace(
-          /(const move = focusMove\(previous\.current, focusedProjectId\);)(\r?\n\s*)(previous\.current = focusedProjectId;)/,
+          /(const move = focusMove\(previous\.current, focusedProjectId, flight !== previousFlight\.current\);)(\r?\n\s*)(previous\.current = focusedProjectId;)/,
           '$3$2$1',
         ),
     ],
     ['the release branch inverted', (s) => s.replace('} else if (move !== null) {', '} else if (move === null) {')],
     ['the release branch unguarded', (s) => s.replace('} else if (move !== null) {', '} else {')],
+    // A release by travel leaves DOM focus on the door taken.
+    ['the flight key not subscribed', (s) => s.replace('useStore(navigationStore, (state) => flightKey(state))', "'rail'")],
+    ['a whole-store flight subscription', (s) => s.replace('useStore(navigationStore, (state) => flightKey(state))', 'flightKey(useStore(navigationStore))')],
+    [
+      'travel ignored',
+      (s) => s.replace('const move = focusMove(previous.current, focusedProjectId, flight !== previousFlight.current);', 'const move = focusMove(previous.current, focusedProjectId, false);'),
+    ],
+    [
+      'every release counted as travel',
+      (s) => s.replace('const move = focusMove(previous.current, focusedProjectId, flight !== previousFlight.current);', 'const move = focusMove(previous.current, focusedProjectId, true);'),
+    ],
+    ['the flight key never remembered', (s) => s.replace('previousFlight.current = flight;', '')],
+    [
+      'the flight key remembered before it is read',
+      (s) =>
+        s
+          .replace('previousFlight.current = flight;', '')
+          .replace('    const move = focusMove(', '    previousFlight.current = flight;\n    const move = focusMove('),
+    ],
+    ['the focus effect blind to flight', (s) => s.replace('}, [focusedProjectId, flight]);', '}, [focusedProjectId]);')],
+    ['the last flight key seeded blank', (s) => s.replace('const previousFlight = useRef(flight);', "const previousFlight = useRef('');")],
+    ['the layout effect remembers the flight key', (s) => s.replace('    const fade = crossFade(', '    previousFlight.current = flight;\n    const fade = crossFade(')],
     ['the previous ID written twice', (s) => s.replace('previous.current = focusedProjectId;', 'previous.current = focusedProjectId;\n    previous.current = null;')],
   ];
   for (const [name, mutate] of mutations) {
@@ -644,7 +699,7 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
 function auditEntryIds(source: string): string[] {
   const code = blank(source);
   const failures: string[] = [];
-  const projectButton = /<button\b([^>]*\bonClick=\{\s*\(\)\s*=>\s*focusProject\(\s*project\.id\s*\)\s*\}[^>]*)>/.exec(code);
+  const projectButton = /<button\b([^>]*\bonClick=\{\s*\(\)\s*=>\s*activateProject\(\s*project\.id\s*,\s*client\.id\s*\)\s*\}[^>]*)>/.exec(code);
   if (projectButton === null) return ['no Project button'];
   if (!/\bid=\{\s*indexEntryId\(\s*project\.id\s*\)\s*\}/.test(projectButton[1] ?? '')) {
     failures.push('the Project button does not carry id={indexEntryId(project.id)} — focus cannot return to it');

@@ -1,14 +1,22 @@
 /**
- * The scene's scroll input: a wheel event in, one of scroll's two meanings out
- * (2.7). With nothing focused it is Rail travel — the next `scrollProgress`;
- * with a Project focused it is reading — pixels to scroll the panel by, with
- * `scrollProgress` untouched. `wheelIntent` chooses between them from
- * `focusedProjectId` alone, and `null` means the event is scroll's in neither.
+ * The scene's input rules: a wheel event or a key press in, what it means out.
  *
- * **The one writer of `scrollProgress`.** `scene-host.tsx` listens for `wheel`
- * over the scene, asks `wheelIntent` what the event means and, when it is the
- * Rail's, hands the next value to `advanceScroll`; when it is the panel's, it
- * scrolls the panel and writes nothing. The camera rig only reads the field —
+ * **The wheel** (2.5, 2.7, 2.9). With nothing focused on the Rail it is Rail
+ * travel — the next `scrollProgress`; with a Project focused it is reading —
+ * pixels to scroll the panel by, with `scrollProgress` untouched; in free flight
+ * with nothing focused it is swallowed and writes nothing. `wheelIntent` chooses
+ * from `mode` and `focusedProjectId` alone, and `null` means the event is not
+ * scroll's at all.
+ *
+ * **The keyboard** (2.9). `keyIntent` gives keys the same meanings: ↑/↓ step
+ * between whole stops on the Rail and are swallowed in free flight, `Home`
+ * returns to the Rail's opening frame from either mode, and nothing is the
+ * Rail's while a Project is focused or a modifier is held.
+ *
+ * **Rules here, handlers in `scene-host.tsx`.** The host listens for `wheel` over
+ * the scene and `keydown` on `window`, asks these rules, and writes: the wheel
+ * and the arrows through `advanceScroll`, `Home` through the `goHome` door in
+ * `activate.ts`, the panel by scrolling it. The camera rig only reads the field —
  * see the one-writer table in `state.ts`. Progress is measured **in stops**: 0 is the opening frame and
  * `k` is the `k`-th Client stop, present first, so the range is `[0, N]` for a
  * Rail of `N` Client stops.
@@ -87,39 +95,121 @@ export function wheelProgress(
   return clamp(from + pixels / WHEEL_PIXELS_PER_STOP);
 }
 
+/** Rail travel or free flight, restated: this module imports nothing, not even the store's type. */
+export type InputMode = 'rail' | 'freeflight';
+
 /**
- * What one wheel event over the scene means: travel along the Rail, or reading
- * in the panel — or neither.
+ * What one wheel event over the scene means: travel along the Rail, reading in
+ * the panel, nothing at all in free flight — or not scroll's to take.
  *
- * **Scroll's two meanings, chosen by state alone** (AD-10, UX-DR33). The
- * meaning is read off `focusedProjectId` and nothing else: never the event's
- * target, never a hit test, never where the pointer is. With nothing focused
- * the wheel is the Rail's, exactly as `wheelProgress` answers; with a Project
- * focused it scrolls the panel by the wheel's distance in pixels, and
- * `scrollProgress` is not touched — so reading cannot move the camera.
+ * **Scroll's meanings, chosen by state alone** (AD-10, UX-DR33). The meaning is
+ * read off `focusedProjectId` and `mode` and nothing else: never the event's
+ * target, never a hit test, never where the pointer is.
  *
- *   - `{ rail: next }` — the next progress; the handler writes `advanceScroll(next)`.
- *   - `{ panel: pixels }` — the handler scrolls the panel by that many pixels
- *     (positive is down) and writes nothing.
+ *   - `{ panel: pixels }` — a Project is focused, in either mode: the handler
+ *     scrolls the panel by that many pixels (positive is down) and writes
+ *     nothing, so reading cannot move the camera.
+ *   - `{ inert: true }` — free flight with nothing focused (2.9). The wheel is
+ *     swallowed — the handler prevents the default and writes nothing — because
+ *     free flight has no Rail to travel and the page must not scroll under it.
+ *   - `{ rail: next }` — on the Rail, nothing focused: the next progress, exactly
+ *     as `wheelProgress` answers; the handler writes `advanceScroll(next)`.
  *   - `null` — not scroll's to take (a pinch-zoom, a horizontal-only wheel,
- *     noise), in either meaning; the browser keeps the event.
+ *     noise), in any meaning; the browser keeps the event.
  *
  * A wheel over the panel itself never reaches the scene's listener: the panel
  * is its own scroll container and scrolls natively.
  */
 export function wheelIntent(
+  mode: InputMode,
   focusedProjectId: string | null,
   current: number,
   wheel: RailWheel,
   stopCount: number,
   pageHeight: number,
-): { readonly rail: number } | { readonly panel: number } | null {
-  if (focusedProjectId === null) {
-    const next = wheelProgress(current, wheel, stopCount, pageHeight);
-    return next === null ? null : { rail: next };
-  }
+): { readonly rail: number } | { readonly panel: number } | { readonly inert: true } | null {
   const pixels = scrollPixels(wheel, pageHeight);
-  return pixels === null ? null : { panel: pixels };
+  if (pixels === null) return null;
+  if (focusedProjectId !== null) return { panel: pixels };
+  if (mode === 'freeflight') return { inert: true };
+  const next = wheelProgress(current, wheel, stopCount, pageHeight);
+  return next === null ? null : { rail: next };
+}
+
+/**
+ * What one key press means for the Rail (2.9): the keyboard's equivalent of the
+ * wheel, bound on `window` so it works wherever DOM focus is.
+ *
+ *   - `null` — the key is not the Rail's: a Project is focused (the panel reads
+ *     ↑/↓/Home natively), a modifier is held (the browser's and the reader's
+ *     shortcuts), or it is any other key. The handler leaves the event alone.
+ *   - `{ rail: stop }` — `ArrowDown` steps to the next whole stop into the past,
+ *     `min(⌊c⌋ + 1, N)`; `ArrowUp` to the previous, `max(⌈c⌉ − 1, 0)`. From
+ *     between two stops each lands on the nearer stop in its direction, and at
+ *     either end it holds there.
+ *   - `{ inert: true }` — `ArrowDown` / `ArrowUp` in free flight, unfocused:
+ *     swallowed, nothing written, as the wheel is.
+ *   - `{ home: 0 }` — `Home`, from the Rail or from free flight: the handler
+ *     returns to the Rail (`enterRail()`) and to its opening frame
+ *     (`advanceScroll(0)`).
+ *
+ * Pure: the key, whether a modifier is held, and the store's values are passed
+ * in, and the event's target is never read.
+ */
+export function keyIntent(
+  key: string,
+  modifierHeld: boolean,
+  mode: InputMode,
+  focusedProjectId: string | null,
+  current: number,
+  stopCount: number,
+): { readonly rail: number } | { readonly inert: true } | { readonly home: 0 } | null {
+  if (focusedProjectId !== null || modifierHeld) return null;
+  if (key === 'Home') return { home: 0 };
+  if (key !== 'ArrowDown' && key !== 'ArrowUp') return null;
+  if (mode === 'freeflight') return { inert: true };
+
+  const stops = Number.isFinite(stopCount) && stopCount > 0 ? Math.floor(stopCount) : 0;
+  const from = Math.min(Math.max(Number.isFinite(current) ? current : 0, 0), stops);
+  return key === 'ArrowDown'
+    ? { rail: Math.min(Math.floor(from) + 1, stops) }
+    : { rail: Math.max(Math.ceil(from) - 1, 0) };
+}
+
+/** The part of a `KeyboardEvent` the keyboard's rule reads — never its target. */
+export interface RailKey {
+  readonly key: string;
+  readonly altKey: boolean;
+  readonly ctrlKey: boolean;
+  readonly metaKey: boolean;
+  readonly shiftKey: boolean;
+  /** Another handler already took the key. */
+  readonly defaultPrevented: boolean;
+  /** The key is part of an IME composition, not a command. */
+  readonly isComposing: boolean;
+}
+
+/**
+ * What one `keydown` means, from the event as it arrives: `keyIntent`'s answer,
+ * after the two things the event itself settles.
+ *
+ *   - A key another handler already prevented, or one inside an IME
+ *     composition, is not ours: `null`, before anything else is asked.
+ *   - A modifier is any of alt, ctrl, meta and shift. Shift counts because
+ *     Shift+↑/↓/Home are the browser's selection keys.
+ *
+ * The handler reads the store, asks this, and dispatches the answer.
+ */
+export function keyAction(
+  event: RailKey,
+  mode: InputMode,
+  focusedProjectId: string | null,
+  current: number,
+  stopCount: number,
+): ReturnType<typeof keyIntent> {
+  if (event.defaultPrevented || event.isComposing) return null;
+  const modifierHeld = event.altKey || event.ctrlKey || event.metaKey || event.shiftKey;
+  return keyIntent(event.key, modifierHeld, mode, focusedProjectId, current, stopCount);
 }
 
 /**
