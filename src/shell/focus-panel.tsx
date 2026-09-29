@@ -23,6 +23,19 @@
  *     Project's own index entry (UX-DR40) — the one the visitor was reading,
  *     whether Focus came from the index, a Planet click or a move from another
  *     Project.
+ *   - **The outgoing layer** (2.8): on `A → B`, `crossFade` names A, and A's
+ *     blocks render once more in a layer over B's — `aria-hidden`, `inert`, no
+ *     `id` on its title. The leaving ID is kept in a ref, written only on a render
+ *     where the store's ID differs from the one the focus effect last recorded,
+ *     so it is the same however often React repeats that render, and it survives
+ *     any later re-render until the next Focus change (entry and release clear
+ *     it) — the layer is never unmounted mid-fade.
+ *   - **A layout effect for the cross-fade**, so it starts before the first paint
+ *     of the swapped content: it fades the incoming layer in and the outgoing
+ *     one out on `crossFadeTiming`, scrolls the outgoing layer to where the reader
+ *     was in A, and only then returns the panel to its top for B. The reading
+ *     position is tracked by a passive `scroll` listener rather than read after
+ *     the swap, because by then the browser may have clamped it to B's length.
  *
  * **No scrim, no backdrop, no modal** (UX-DR20). The panel paints its own column
  * and nothing else; the scene stays visible and interactive beside it. The
@@ -34,16 +47,20 @@
  * and the editorial rule are Epic 3's.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useStore } from 'zustand/react';
 import {
   FOCUS_PANEL_ID,
   FOCUS_PANEL_TITLE_ID,
   buildPanel,
+  crossFade,
+  crossFadeLayerStyle,
+  crossFadeTiming,
   focusMove,
   indexEntryId,
   panelStyle,
   type PanelArtifact,
+  type PanelBlock,
 } from './panel-model.ts';
 import { navigationStore, releaseFocus } from './state.ts';
 
@@ -60,17 +77,43 @@ export function FocusPanel({ artifact }: FocusPanelProps) {
   const panel = buildPanel(artifact, shown.current);
   const container = useRef<HTMLElement>(null);
   const previous = useRef<string | null>(null);
+  const leavingId = useRef<string | null>(null);
+  if (focusedProjectId !== previous.current) leavingId.current = crossFade(previous.current, focusedProjectId);
+  const leaving = buildPanel(artifact, leavingId.current);
+  const incoming = useRef<HTMLDivElement>(null);
+  const outgoing = useRef<HTMLDivElement>(null);
+  const scrolled = useRef(0);
+
+  useLayoutEffect(() => {
+    const fade = crossFade(previous.current, focusedProjectId);
+    if (fade !== null && incoming.current !== null) {
+      const timing = crossFadeTiming(getComputedStyle(incoming.current).opacity);
+      incoming.current.animate(timing.incoming, timing.options);
+      outgoing.current?.animate(timing.outgoing, timing.options);
+      outgoing.current?.scrollTo({ top: scrolled.current });
+    }
+    if (focusMove(previous.current, focusedProjectId) === 'panel') container.current?.scrollTo({ top: 0 });
+  }, [focusedProjectId]);
 
   useEffect(() => {
     const move = focusMove(previous.current, focusedProjectId);
     previous.current = focusedProjectId;
     if (move === 'panel') {
-      container.current?.scrollTo({ top: 0 });
       container.current?.focus({ preventScroll: true });
     } else if (move !== null) {
       document.getElementById(indexEntryId(move.entry))?.focus();
     }
   }, [focusedProjectId]);
+
+  useEffect(() => {
+    const element = container.current;
+    if (element === null) return undefined;
+    const track = (): void => {
+      scrolled.current = element.scrollTop;
+    };
+    element.addEventListener('scroll', track, { passive: true });
+    return () => element.removeEventListener('scroll', track);
+  }, []);
 
   return (
     <aside
@@ -80,45 +123,61 @@ export function FocusPanel({ artifact }: FocusPanelProps) {
       aria-labelledby={panel === null ? undefined : FOCUS_PANEL_TITLE_ID}
       style={panelStyle(focusedProjectId !== null && panel !== null)}
     >
-      {panel?.blocks.map((block) => {
-        switch (block.kind) {
-          case 'kicker':
-            return <p key={block.kind}>{block.text}</p>;
-          case 'title':
-            return (
-              <h2 key={block.kind} id={FOCUS_PANEL_TITLE_ID}>
-                {block.text}
-              </h2>
-            );
-          case 'reading':
-            return (
-              <div key={block.kind}>
-                {block.paragraphs.map((paragraph, index) => (
-                  <p key={index}>{paragraph}</p>
-                ))}
-              </div>
-            );
-          case 'fields':
-            return (
-              <table key={block.kind}>
-                <tbody>
-                  {block.rows.map((row) => (
-                    <tr key={row.label}>
-                      <th scope="row">{row.label}</th>
-                      <td>{row.value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            );
-          case 'release':
-            return (
-              <button key={block.kind} type="button" className="panel-release" onClick={releaseFocus}>
-                {block.label}
-              </button>
-            );
-        }
-      })}
+      <div ref={incoming}>{panel === null ? null : <PanelBlocks blocks={panel.blocks} titleId={FOCUS_PANEL_TITLE_ID} />}</div>
+      {leaving === null ? null : (
+        <div ref={outgoing} aria-hidden="true" inert style={crossFadeLayerStyle()}>
+          <PanelBlocks blocks={leaving.blocks} titleId={undefined} />
+        </div>
+      )}
     </aside>
   );
+}
+
+interface PanelBlocksProps {
+  readonly blocks: readonly PanelBlock[];
+  /** The title's `id`: the panel's, on the incoming layer only, so the label points at one `<h2>`. */
+  readonly titleId: string | undefined;
+}
+
+/** One Project's blocks, in the model's order. */
+function PanelBlocks({ blocks, titleId }: PanelBlocksProps) {
+  return blocks.map((block) => {
+    switch (block.kind) {
+      case 'kicker':
+        return <p key={block.kind}>{block.text}</p>;
+      case 'title':
+        return (
+          <h2 key={block.kind} id={titleId}>
+            {block.text}
+          </h2>
+        );
+      case 'reading':
+        return (
+          <div key={block.kind}>
+            {block.paragraphs.map((paragraph, index) => (
+              <p key={index}>{paragraph}</p>
+            ))}
+          </div>
+        );
+      case 'fields':
+        return (
+          <table key={block.kind}>
+            <tbody>
+              {block.rows.map((row) => (
+                <tr key={row.label}>
+                  <th scope="row">{row.label}</th>
+                  <td>{row.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        );
+      case 'release':
+        return (
+          <button key={block.kind} type="button" className="panel-release" onClick={releaseFocus}>
+            {block.label}
+          </button>
+        );
+    }
+  });
 }
