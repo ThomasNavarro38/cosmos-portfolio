@@ -17,8 +17,12 @@ import {
   FOCUS_PANEL_TITLE_ID,
   PANEL_FRACTION,
   PANEL_MAX_PX,
+  PANEL_PADDING,
   RELEASE_LABEL,
   buildPanel,
+  crossFade,
+  crossFadeLayerStyle,
+  crossFadeTiming,
   focusMove,
   indexEntryId,
   panelFraction,
@@ -240,6 +244,56 @@ test('DOM focus moves to the panel on entry and on A → B, back to the entry on
   assert.equal(focusMove(null, null), null);
 });
 
+// --- The A → B cross-fade (2.8) -----------------------------------------------------
+
+test('only A → B cross-fades: entry and release slide the panel, and no change changes nothing', () => {
+  assert.equal(crossFade('project:a', 'project:b'), 'project:a', 'the outgoing Project is the one left');
+  assert.equal(crossFade('project:b', 'project:a'), 'project:b');
+  assert.equal(crossFade(null, 'project:a'), null, 'entry slides');
+  assert.equal(crossFade('project:a', null), null, 'release slides');
+  assert.equal(crossFade('project:a', 'project:a'), null);
+  assert.equal(crossFade(null, null), null);
+  // DOM focus is unchanged by the fade: A → B still lands on the panel.
+  assert.equal(focusMove('project:a', 'project:b'), 'panel');
+});
+
+test('the cross-fade runs on the Focus duration and curve, incoming 0 → 1 and outgoing from where it was drawn → 0', () => {
+  const timing = crossFadeTiming('1');
+  assert.deepEqual(timing.incoming, [{ opacity: 0 }, { opacity: 1 }]);
+  assert.deepEqual(timing.outgoing, [{ opacity: 1 }, { opacity: 0 }]);
+  assert.equal(timing.options.duration, FOCUS_SECONDS * 1000, 'WAAPI counts milliseconds');
+  assert.equal(timing.options.easing, focusEasingCss(), 'the camera’s and the Motes’ curve');
+  assert.equal(timing.options.fill, 'forwards', 'the end holds, so the outgoing layer stays gone');
+  // B → C during A → B: B fades out from the opacity it had reached, never from a cut to full.
+  assert.deepEqual(crossFadeTiming('0.35').outgoing, [{ opacity: 0.35 }, { opacity: 0 }]);
+  assert.deepEqual(crossFadeTiming(0.6).outgoing, [{ opacity: 0.6 }, { opacity: 0 }]);
+  const odd: readonly (readonly [string | number, number])[] = [
+    ['', 1],
+    ['auto', 1],
+    ['NaN', 1],
+    ['-2', 0],
+    ['7', 1],
+    [Number.NaN, 1],
+    [Number.POSITIVE_INFINITY, 1],
+  ];
+  for (const [drawn, expected] of odd) {
+    assert.deepEqual(crossFadeTiming(drawn).outgoing[0], { opacity: expected }, `drawn ${String(drawn)}`);
+  }
+});
+
+test('the outgoing layer lies over the incoming content, clipped to the panel, and takes no pointer', () => {
+  const layer = crossFadeLayerStyle();
+  assert.equal(layer.position, 'absolute');
+  assert.equal(layer.top, 0);
+  assert.equal(layer.left, 0);
+  assert.equal(layer.right, 0);
+  assert.equal(layer.padding, PANEL_PADDING, 'the panel’s own padding, so the two layers align');
+  assert.equal(panelStyle(true).padding, PANEL_PADDING);
+  assert.equal(layer.height, '100%');
+  assert.equal(layer.overflow, 'hidden', 'a longer outgoing Project never lengthens the panel’s scroll');
+  assert.equal(layer.pointerEvents, 'none');
+});
+
 test('an index entry’s id is unique per Project, whitespace-free, and not the panel’s', () => {
   const ids = ['project:sncf/client-referential-mdm-replacement', 'project:a/1', 'project:a/2'].map(indexEntryId);
   assert.equal(new Set(ids).size, ids.length);
@@ -309,9 +363,11 @@ function auditPanel(source: string): string[] {
     failures.push('does not subscribe to focusedProjectId with a selector');
   }
   if ((code.match(/\buseStore\s*\(/g) ?? []).length !== 1) failures.push('subscribes other than once');
-  if (/\buseState\b|\buseReducer\b|\buseMemo\b|\buseLayoutEffect\b|\bsubscribe\s*\(/.test(code)) {
+  if (/\buseState\b|\buseReducer\b|\buseMemo\b|\bsubscribe\s*\(/.test(code)) {
     failures.push('keeps state of its own — the store is the one authority');
   }
+  // One layout effect, for the cross-fade alone (2.8): it must start before paint.
+  if ((code.match(/\buseLayoutEffect\s*\(/g) ?? []).length !== 1) failures.push('a layout effect other than the cross-fade’s');
   if (/\.sort\s*\(|\.filter\s*\(|\.reverse\s*\(|\.slice\s*\(/.test(code)) failures.push('orders or selects — the model owns the order');
   if (/\bisDeep\b|\bnotable\b|\bteam_size\b|\bcontent\s*\./.test(code)) failures.push('reads the artifact directly — the model owns the blocks');
   if (/\bwindow\b|innerWidth|innerHeight|getBoundingClientRect|matchMedia/.test(code)) failures.push('reads the viewport');
@@ -326,8 +382,86 @@ function auditPanel(source: string): string[] {
   if (/\bonMouse\w+|\bonPointer\w+|\bonFocus\b|\bonBlur\b|\bonWheel\b|\bonScroll\b/.test(code)) {
     failures.push('reacts to hover, pointer, focus or scroll — Focus is deliberate, and the panel scrolls natively');
   }
-  if (/\bscrim\b|\bbackdrop\b|\boverlay\b|aria-modal|role=["']dialog|<dialog\b|\binert\b|showModal/i.test(code)) {
+  if (/\bscrim\b|\bbackdrop\b|\boverlay\b|aria-modal|role=["']dialog|<dialog\b|showModal/i.test(code)) {
     failures.push('a scrim, backdrop, overlay or modal — the scene is never occluded');
+  }
+  // `inert` exactly once, on the outgoing layer (2.8). Anywhere else it is the
+  // modal half of a dialog: the page behind the panel made unreachable.
+  if ((code.match(/\binert\b/g) ?? []).length !== 1) failures.push('inert other than once, on the outgoing layer — a modal by another name');
+  const layer = /<div\b([^>]*\bref=\{\s*outgoing\s*\}[^>]*)>([\s\S]*?)<\/div>/.exec(code);
+  if (layer === null) {
+    failures.push('no outgoing layer — A → B would swap its content with no transition');
+  } else {
+    const attributes = layer[1] ?? '';
+    if (!/\baria-hidden="true"/.test(attributes)) failures.push('the outgoing layer is not aria-hidden="true" — A would be read beside B');
+    if (!/\binert(?![\w=-])/.test(attributes)) failures.push('the outgoing layer is not inert — its release button stays in the tab order');
+    if (/\bid=/.test(attributes)) failures.push('the outgoing layer carries an id — two elements would answer to it');
+    if (!/\bstyle=\{\s*crossFadeLayerStyle\(\s*\)\s*\}/.test(attributes)) failures.push('the outgoing layer is not laid over the content');
+    if (!/<PanelBlocks\s+blocks=\{\s*leaving\.blocks\s*\}\s+titleId=\{\s*undefined\s*\}\s*\/>/.test(layer[2] ?? '')) {
+      failures.push('the outgoing layer does not render the leaving Project’s blocks with no title id');
+    }
+  }
+  if (!/\{\s*leaving\s*===\s*null\s*\?\s*null\s*:\s*\(\s*<div\b[^>]*\bref=\{\s*outgoing\s*\}/.test(code)) {
+    failures.push('the outgoing layer is not rendered exactly while a Project is leaving');
+  }
+  // The leaving Project is held, not derived: written only on a render where the
+  // store's ID differs from the one the focus effect last recorded, so a re-render
+  // after the effect commits cannot recompute it as null and unmount A mid-fade.
+  if (!/const\s+leavingId\s*=\s*useRef<string\s*\|\s*null>\(\s*null\s*\)/.test(code)) failures.push('the leaving Project is not held in a ref');
+  if (
+    !/if\s*\(\s*focusedProjectId\s*!==\s*previous\.current\s*\)\s*leavingId\.current\s*=\s*crossFade\(\s*previous\.current\s*,\s*focusedProjectId\s*\)\s*;/.test(
+      code,
+    )
+  ) {
+    failures.push('the leaving Project is not crossFade(previous, next), written only when Focus has changed');
+  }
+  if ((code.match(/\bleavingId\.current\s*=/g) ?? []).length !== 1) failures.push('the leaving Project is written other than once');
+  if (!/const\s+leaving\s*=\s*buildPanel\(\s*artifact\s*,\s*leavingId\.current\s*\)/.test(code)) {
+    failures.push('the outgoing layer is not the held leaving Project');
+  }
+  // The reading position, tracked as the reader scrolls: read after the swap, the
+  // browser may already have clamped it to the incoming Project's length.
+  if (!/const\s+scrolled\s*=\s*useRef\(\s*0\s*\)/.test(code)) failures.push('the reading position is not a ref');
+  const listener = /useEffect\(\s*\(\)\s*=>\s*\{([\s\S]*?)\}\s*,\s*\[\s*\]\s*\)/.exec(code)?.[1] ?? '';
+  if (
+    !/const\s+element\s*=\s*container\.current\s*;/.test(listener) ||
+    !/scrolled\.current\s*=\s*element\.scrollTop\s*;/.test(listener) ||
+    !/element\.addEventListener\(\s*'scroll'\s*,\s*track\s*,\s*\{\s*passive\s*:\s*true\s*\}\s*\)/.test(listener) ||
+    !/return\s*\(\)\s*=>\s*element\.removeEventListener\(\s*'scroll'\s*,\s*track\s*\)/.test(listener)
+  ) {
+    failures.push('the reading position is not tracked by a passive scroll listener on the panel, removed on unmount');
+  }
+  const layout = /useLayoutEffect\(\s*\(\)\s*=>\s*\{([\s\S]*?)\}\s*,\s*\[\s*focusedProjectId\s*\]\s*\)/.exec(code);
+  if (layout === null) {
+    failures.push('no layout effect keyed on focusedProjectId — the fade would start after a frame of A and B at full');
+  } else {
+    const body = layout[1] ?? '';
+    if (!/const\s+fade\s*=\s*crossFade\(\s*previous\.current\s*,\s*focusedProjectId\s*\)/.test(body)) {
+      failures.push('the layout effect does not ask crossFade(previous, next)');
+    }
+    if (/previous\.current\s*=/.test(body)) failures.push('the layout effect writes the previous ID — the focus effect after it would read the new one');
+    const fadeBlock =
+      /if\s*\(\s*fade\s*!==\s*null\s*&&\s*incoming\.current\s*!==\s*null\s*\)\s*\{\s*const\s+timing\s*=\s*crossFadeTiming\(\s*getComputedStyle\(\s*incoming\.current\s*\)\.opacity\s*\)\s*;\s*incoming\.current\.animate\(\s*timing\.incoming\s*,\s*timing\.options\s*\)\s*;\s*outgoing\.current\?\.animate\(\s*timing\.outgoing\s*,\s*timing\.options\s*\)\s*;\s*outgoing\.current\?\.scrollTo\(\s*\{\s*top\s*:\s*scrolled\.current\s*\}\s*\)\s*;\s*\}/;
+    if (!fadeBlock.test(body)) {
+      failures.push('A → B does not fade both layers on crossFadeTiming and keep the outgoing one where the reader was');
+    }
+    const reset = /if\s*\(\s*focusMove\(\s*previous\.current\s*,\s*focusedProjectId\s*\)\s*===\s*'panel'\s*\)\s*container\.current\?\.scrollTo\(\s*\{\s*top\s*:\s*0\s*\}\s*\)\s*;/;
+    if (!reset.test(body)) failures.push('entry does not reset the panel to its top — B would open at A’s reading position');
+    if ((code.match(/scrollTo\(\s*\{\s*top\s*:\s*0\s*\}\s*\)/g) ?? []).length !== 1) failures.push('the panel is reset to its top other than once');
+    if (body.search(reset) !== -1 && body.search(fadeBlock) !== -1 && body.search(reset) < body.search(fadeBlock)) {
+      failures.push('the panel is reset before the outgoing layer takes the reading position');
+    }
+  }
+  if (
+    !/<div\s+ref=\{\s*incoming\s*\}\s*>\s*\{\s*panel\s*===\s*null\s*\?\s*null\s*:\s*<PanelBlocks\s+blocks=\{\s*panel\.blocks\s*\}\s+titleId=\{\s*FOCUS_PANEL_TITLE_ID\s*\}\s*\/>\s*\}\s*<\/div>/.test(
+      code,
+    )
+  ) {
+    failures.push('the incoming layer does not render the shown Project’s blocks with the title id');
+  }
+  if ((code.match(/<PanelBlocks\b/g) ?? []).length !== 2) failures.push('the blocks are rendered other than once per layer');
+  if ((code.match(/\bFOCUS_PANEL_TITLE_ID\b/g) ?? []).length !== 3) {
+    failures.push('FOCUS_PANEL_TITLE_ID is used other than in the import, the label and the incoming title');
   }
   const container = /<aside\b([^>]*)>/.exec(code);
   if (container === null) {
@@ -344,8 +478,8 @@ function auditPanel(source: string): string[] {
       failures.push('the style is not panelStyle(open), open exactly while a known Project is focused');
     }
   }
-  if (!/<h2\b[^>]*\bid=\{\s*FOCUS_PANEL_TITLE_ID\s*\}[^>]*>\s*\{\s*block\.text\s*\}\s*<\/h2>/.test(code)) {
-    failures.push('the title is not the <h2> carrying FOCUS_PANEL_TITLE_ID');
+  if (!/<h2\b[^>]*\bid=\{\s*titleId\s*\}[^>]*>\s*\{\s*block\.text\s*\}\s*<\/h2>/.test(code)) {
+    failures.push('the title is not the <h2> carrying its layer’s title id');
   }
   if (!/case\s*'kicker'\s*:\s*return\s*\(?\s*<p\b[^>]*>\s*\{\s*block\.text\s*\}\s*<\/p>/.test(code)) {
     failures.push('the kicker case does not render block.text');
@@ -390,12 +524,10 @@ function auditPanel(source: string): string[] {
     if (!/if\s*\(\s*move\s*===\s*'panel'\s*\)\s*\{[\s\S]*container\.current\?\.focus\(/.test(body)) {
       failures.push('entry does not move DOM focus to the panel container');
     }
-    if (!/if\s*\(\s*move\s*===\s*'panel'\s*\)\s*\{\s*container\.current\?\.scrollTo\(\s*\{\s*top\s*:\s*0\s*\}\s*\)\s*;/.test(body)) {
-      failures.push('entry does not reset the panel to its top — B would open at A’s reading position');
-    }
     if (!/document\.getElementById\(\s*indexEntryId\(\s*move\.entry\s*\)\s*\)\?\.focus\(\s*\)/.test(body)) {
       failures.push('release does not return DOM focus to the released Project’s entry');
     }
+    if (/\.animate\(|scrollTo\(/.test(body)) failures.push('the focus effect fades or scrolls — after paint, a frame late');
   }
   return failures;
 }
@@ -420,7 +552,46 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
     ['unlabelled', (s) => s.replace('aria-labelledby={panel === null ? undefined : FOCUS_PANEL_TITLE_ID}', '')],
     ['labelled before any title exists', (s) => s.replace('aria-labelledby={panel === null ? undefined : FOCUS_PANEL_TITLE_ID}', 'aria-labelledby={FOCUS_PANEL_TITLE_ID}')],
     ['the wrong id', (s) => s.replace('id={FOCUS_PANEL_ID}', 'id="panel"')],
-    ['the title unmarked', (s) => s.replace('<h2 key={block.kind} id={FOCUS_PANEL_TITLE_ID}>', '<h2 key={block.kind}>')],
+    ['the title unmarked', (s) => s.replace('<h2 key={block.kind} id={titleId}>', '<h2 key={block.kind}>')],
+    // 2.8's cross-fade, one guarantee removed at a time.
+    ['the outgoing layer dropped', (s) => s.replace(/\{leaving === null \? null : \([\s\S]*?\)\}\r?\n/, '')],
+    ['the outgoing layer narrated', (s) => s.replace('<div ref={outgoing} aria-hidden="true" inert', '<div ref={outgoing} inert')],
+    ['the outgoing layer focusable', (s) => s.replace('<div ref={outgoing} aria-hidden="true" inert', '<div ref={outgoing} aria-hidden="true"')],
+    ['the outgoing title keeps the id', (s) => s.replace('titleId={undefined}', 'titleId={FOCUS_PANEL_TITLE_ID}')],
+    ['the outgoing layer carries an id', (s) => s.replace('<div ref={outgoing}', '<div ref={outgoing} id="focus-panel-outgoing"')],
+    ['the outgoing layer in flow', (s) => s.replace(' style={crossFadeLayerStyle()}', '')],
+    ['the outgoing layer shows the incoming Project', (s) => s.replace('blocks={leaving.blocks}', 'blocks={panel.blocks}')],
+    ['a fade on every change', (s) => s.replace('buildPanel(artifact, leavingId.current)', 'buildPanel(artifact, previous.current)')],
+    ['the leaving Project recomputed on every render', (s) => s.replace('if (focusedProjectId !== previous.current) leavingId.current =', 'leavingId.current =')],
+    [
+      'the leaving Project derived at render',
+      (s) => s.replace('const leaving = buildPanel(artifact, leavingId.current);', 'const leaving = buildPanel(artifact, crossFade(previous.current, focusedProjectId));'),
+    ],
+    ['the fade after paint', (s) => s.replace('useLayoutEffect(() => {', 'useEffect(() => {')],
+    ['the reading position dropped from the outgoing layer', (s) => s.replace('outgoing.current?.scrollTo({ top: scrolled.current });', '')],
+    ['the reading position read after the swap', (s) => s.replace('{ top: scrolled.current }', '{ top: container.current?.scrollTop ?? 0 }')],
+    ['the reading position never tracked', (s) => s.replace('scrolled.current = element.scrollTop;', '')],
+    ['the listener never removed', (s) => s.replace("return () => element.removeEventListener('scroll', track);", 'return undefined;')],
+    [
+      'the reset before the reading position is taken',
+      (s) =>
+        s.replace(
+          '    const fade = crossFade(',
+          "    if (focusMove(previous.current, focusedProjectId) === 'panel') container.current?.scrollTo({ top: 0 });\n    const fade = crossFade(",
+        ),
+    ],
+    ['a fade in the focus effect too', (s) => s.replace('container.current?.focus({ preventScroll: true });', 'container.current?.focus({ preventScroll: true });\n      incoming.current?.animate([], {});')],
+    ['the incoming title loses the id', (s) => s.replace('titleId={FOCUS_PANEL_TITLE_ID}', 'titleId={undefined}')],
+    ['no incoming fade', (s) => s.replace('incoming.current.animate(timing.incoming, timing.options);', '')],
+    ['no outgoing fade', (s) => s.replace('outgoing.current?.animate(timing.outgoing, timing.options);', '')],
+    ['the fade on its own timing', (s) => s.replace('animate(timing.incoming, timing.options)', 'animate(timing.incoming, { duration: 300 })')],
+    ['the fade from full every time', (s) => s.replace('crossFadeTiming(getComputedStyle(incoming.current).opacity)', "crossFadeTiming('1')")],
+    ['a fade on entry too', (s) => s.replace('if (fade !== null && incoming.current !== null)', 'if (incoming.current !== null)')],
+    [
+      'the previous ID overwritten before the fade reads it',
+      (s) => s.replace('    const fade = crossFade(', '    previous.current = focusedProjectId;\n    const fade = crossFade('),
+    ],
+    ['inert on the whole panel', (s) => s.replace('tabIndex={-1}', 'tabIndex={-1}\n      inert')],
     ['always open', (s) => s.replace('panelStyle(focusedProjectId !== null && panel !== null)', 'panelStyle(true)')],
     ['blank on close', (s) => s.replace('buildPanel(artifact, shown.current)', 'buildPanel(artifact, focusedProjectId)')],
     ['no focus on entry', (s) => s.replace('container.current?.focus({ preventScroll: true });', '')],

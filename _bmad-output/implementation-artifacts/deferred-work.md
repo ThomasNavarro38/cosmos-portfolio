@@ -574,3 +574,45 @@ leaves open.
 - A drag that ends over a Planet counts as a click: `activateBody` runs on every R3F `onClick` with no movement threshold. Once 2.9 adds drag or free flight, that would enter Focus by accident. Gate on `event.delta` then.
 - A wheel over a Focus panel whose content does not overflow (a short Shallow Project) can chain to document scroll. `overscroll-behavior: contain` only holds on a box that can actually scroll. `scrollProgress` stays untouched, but the page can scroll under a focused reader.
 - The focus ease blends position and aim linearly and separately (`stepFocus`). Only the rest poses are proven to contain the Planet. Nothing asserts that the Planet stays on screen and in front of `near` mid-transition between a wide Rail pose and a tight focus pose.
+
+## Deferred from: spec-2-8-condensation-and-decay (2026-09-29)
+
+- The orbit a Skill sits on is greybox composition by list index: Skill `i` (deduplicated, in the Project's `skills` order) goes to orbit `i mod 3`, slot `2⌊i/3⌋`. 3.5 replaces this with the artifact's derived Mote tier. Nothing in `src/render-scene/` reads `moteTier` yet.
+- When a label is blocked and no free slot keeps the no-adjacency rule, the Mote stays and its label stays hidden. That happens on a crowded orbit, where every free slot is next to an occupied one. At 390×844 it hides `technical leadership` and `code review` on the committed Project (browser check, 2026-09-29). The fix belongs with 3.5's tiering and typography, not with more slots.
+- Only right-hand labels are checked, and only against the panel edge. A left-hand label can run off the canvas's left edge: at 390×844, `Spring Boot` and `Tomcat` start at negative x. The spec checks the panel edge only. A left-edge rule would mirror `labelPlacement`.
+- Label width is estimated as `chars × 0.6em` (a monospace advance at 12px). A different monospace font, or Epic 3's typography, changes the real width. Re-derive `MOTE_LABEL_CHAR_PX` from the font that ships.
+- drei's `<Html>` projects its position in its own frame callback. R3F runs that callback before `MoteField`'s, because a child subscribes first. So a label trails its dot by one frame while the camera moves. It is invisible at the orbit's spin speed.
+- The orbits turn continuously, so on a Project with long labels a Mote that turns into the region by the panel is blocked, then glides to a free slot. That repeats as the orbits turn. Tune `MOTE_ORBIT_RADIANS_PER_SECOND` and `MOTE_RESLOT_SECONDS` at M1 by looking.
+- Orbits tilt about world `x`, not about the focus camera's axis. Under a steep Shot angle the +26° orbit reads flatter than the other two (−16° and −46°).
+- Decay always takes `FOCUS_SECONDS`. When a release reverses a panel slide that is still running, the camera's ease is shortened by the reversing factor, but the Motes' decay is not. The spec fixes `FOCUS_SECONDS` for both directions.
+- `stepMotes` throws for a focused ID the artifact does not carry, inside the frame loop, like `focusPose`. The same caveat applies: no shipped path writes such an ID.
+- After an A → B cross-fade, the outgoing panel layer stays mounted at opacity 0 until the next Focus change. It is `aria-hidden`, `inert`, clipped to the panel and ignores the pointer, so it holds no scroll, focus or reading position.
+- The A → B browser check needs a second Project, and the committed artifact has only one. The hand-off, concurrency and cross-fade rules are executed in `mote-model.test.ts` and `panel-model.test.ts` over in-memory fixtures. The two-Project fixture was not viewed in a browser, because adding it means editing `career.json`, which the spec marks Ask First.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-condensation-and-decay.md`
+  summary: Mote labels on different orbits can project to nearly the same screen point and overlap; the quota is per orbit only.
+  evidence: 2.8 review — MOTE_ORBIT_PHASES separates only each orbit's first slot; no cross-orbit screen check exists (3.5 legibility).
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-condensation-and-decay.md`
+  summary: Mote labels are checked only against the panel edge, not the canvas's top and bottom edges.
+  evidence: 2.8 review — labelPlacement tests the right-hand panel edge alone; the left edge is already recorded.
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-condensation-and-decay.md`
+  summary: A label sitting at the panel-edge threshold switches visibility instantly and can flicker between frames; no fade or hysteresis.
+  evidence: 2.8 review — labelVisibility toggles 'visible'/'hidden' directly as the orbits turn.
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-condensation-and-decay.md`
+  summary: Dust sources are guaranteed visible by alpha only, not on screen, in front of the camera, or clear of the panel.
+  evidence: 2.8 review — dustSource clamps into the medium's opaque region with no view check.
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-condensation-and-decay.md`
+  summary: The A → B hand-off flies a shared Mote in a straight line between Planets with no check that the path stays framed and clear of Bodies.
+  evidence: 2.8 review — blendMote is linear between slots; the fixture Clients are ~30 units apart.
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-condensation-and-decay.md`
+  summary: Skill identity is the exact string, so "Java", "java" and "Java " become three Motes.
+  evidence: 2.8 review — motePool keys on the raw string; the schema allows any non-blank string (a normalisation would be a derive/schema change).
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-condensation-and-decay.md`
+  summary: stepMotes allocates heavily every frame (motePool rebuilt, planetOf linear finds, spread copies, Maps).
+  evidence: 2.8 review — steady GC pressure in the render loop; not yet measured.
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-condensation-and-decay.md`
+  summary: A second Focus change during a running cross-fade (B → C during A → B) swaps the outgoing layer's content abruptly.
+  evidence: 2.8 review — one unkeyed outgoing layer; A vanishes from its partial opacity.
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-8-condensation-and-decay.md`
+  summary: The panel cross-fade's DOM behaviour is verified by source audits only; nothing renders FocusPanel.
+  evidence: 2.8 review — no DOM test runner in the closed dependency set; auditPanel is a regex over the source.

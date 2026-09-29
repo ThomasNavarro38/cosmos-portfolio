@@ -39,13 +39,15 @@
  * **One interaction, bound and nothing more.** A Body mesh's `onClick` hands the
  * Body to `activateBody` (`scene-pick.ts`, 2.7): a Planet enters Focus, a Star
  * does nothing, and the click stops at the nearest Body. No hover, no
- * pointer-over, no pointer-missed, no click-to-fly, no Motes — those are 2.8
- * through 2.10. The camera's Focus move lives with the rig. Rail traversal (2.5), with
- * its stop framing and Dwell pacing (2.6), is mounted here as `<RailCamera>`, and
- * every rule it obeys lives in `rail-model.ts`; this file only builds the
- * keyframes and hands them over. The
- * `camera` prop stays keyframe 0, so the first frame is the opening frame whether
- * or not the rig has run yet.
+ * pointer-over, no pointer-missed, no click-to-fly — those are 2.9 and 2.10.
+ * The camera's Focus move lives with the rig, and the focused Project's Motes
+ * (2.8) with `<MoteField>`, mounted after the rig so it projects through the
+ * camera the rig has just moved; every rule it obeys lives in `mote-model.ts`.
+ * Rail traversal (2.5), with its stop framing and Dwell pacing (2.6), is mounted
+ * here as `<RailCamera>`, and every rule it obeys lives in `rail-model.ts`; this
+ * file only builds the keyframes and hands them over. The `camera` prop stays
+ * keyframe 0, so the first frame is the opening frame whether or not the rig has
+ * run yet.
  *
  * **Dust is drawn strictly behind every Body** (FR-15). The model in
  * `dust-model.ts` decides what Dust exists; this file only guarantees the draw
@@ -73,6 +75,8 @@ import {
   mediumFalloff,
   mediumSpriteScale,
 } from './dust-model.ts';
+import { MoteField } from './mote-field.tsx';
+import type { MoteArtifact } from './mote-model.ts';
 import { RailCamera } from './rail-camera.tsx';
 import { activateBody } from './scene-pick.ts';
 import { buildRail, railFarPlane } from './rail-model.ts';
@@ -96,9 +100,9 @@ MEDIUM_TEXTURE.magFilter = LinearFilter;
 MEDIUM_TEXTURE.minFilter = LinearFilter;
 MEDIUM_TEXTURE.needsUpdate = true;
 
-/** What the scene needs: the artifact, and nothing else. */
+/** What the scene needs: the artifact, and nothing else — the Bodies' slice and the Motes'. */
 export interface SceneProps {
-  readonly artifact: SceneArtifact;
+  readonly artifact: SceneArtifact & MoteArtifact;
 }
 
 /**
@@ -181,6 +185,8 @@ export function Scene({ artifact }: SceneProps) {
       */}
       {/* The rig: the one thing that moves the camera, along the Rail and into Focus. It reads, it never writes the store. */}
       <RailCamera rail={rail} bodies={bodies} />
+      {/* The Motes: after the rig, so they project through this frame's camera. They read, they never write the store. */}
+      <MoteField artifact={artifact} bodies={bodies} media={media} />
       <ambientLight intensity={0.6} />
       <directionalLight
         position={[

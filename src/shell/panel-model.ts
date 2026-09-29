@@ -20,6 +20,16 @@
  * be present — `entities.ts` is the one classifier, and a second one here is
  * the divergence AD-3 exists to prevent.
  *
+ * **A → B cross-fades** (2.8, UX-DR31). Moving Focus from one Project to
+ * another keeps the panel open, so its content changes in place: the outgoing
+ * Project's blocks fade out in a layer over the incoming ones as they fade in,
+ * over `FOCUS_SECONDS` on the Focus curve — the duration the camera moves and
+ * the Motes condense in, so the three surfaces are one transition. `crossFade`
+ * names the outgoing Project, and only for `A → B`; entry and release slide the
+ * panel instead. The outgoing layer is `aria-hidden` and `inert` and carries no
+ * `id`, so the accessibility tree, the tab order and the title's label see only
+ * the incoming Project, and DOM focus moves exactly as `focusMove` says.
+ *
  * **Pure.** No React, no DOM, no store, no artifact import: the document
  * arrives as an argument and the element IDs leave as strings.
  */
@@ -31,6 +41,9 @@ export const PANEL_MAX_PX = 560;
 
 /** The panel's share of the viewport width once 560px is more than that share (DESIGN.md: 46%). */
 export const PANEL_FRACTION = 0.46;
+
+/** The panel's padding, shared by the column and the outgoing layer so their content aligns. */
+export const PANEL_PADDING = '56px clamp(16px, 5vw, 40px) 60px';
 
 /** The panel element's `id`: where the wheel handler scrolls and where DOM focus lands on entry. */
 export const FOCUS_PANEL_ID = 'focus-panel';
@@ -195,6 +208,90 @@ export function focusMove(previous: string | null, next: string | null): 'panel'
   return previous === null ? null : { entry: previous };
 }
 
+/**
+ * The Project whose content fades out as Focus changes from `previous` to
+ * `next`: `previous`, exactly when both are Projects and they differ (`A → B`),
+ * and `null` otherwise — entering and releasing slide the panel, and no change
+ * changes nothing.
+ */
+export function crossFade(previous: string | null, next: string | null): string | null {
+  return previous !== null && next !== null && previous !== next ? previous : null;
+}
+
+/**
+ * One WAAPI keyframe of the cross-fade. Mutable, because that is what
+ * `Element.animate` takes, and a type alias rather than an interface, because
+ * only an alias is assignable to the DOM's index-signed `Keyframe`.
+ */
+export type CrossFadeKeyframe = { opacity: number };
+
+/** The cross-fade, as `Element.animate` takes it: both layers' keyframes and their shared timing. */
+export interface CrossFadeTiming {
+  readonly incoming: CrossFadeKeyframe[];
+  readonly outgoing: CrossFadeKeyframe[];
+  readonly options: {
+    readonly duration: number;
+    readonly easing: string;
+    readonly fill: 'forwards';
+  };
+}
+
+/**
+ * The cross-fade's keyframes and timing: the incoming layer from 0 to 1 and the
+ * outgoing one from `drawn` to 0, over `FOCUS_SECONDS` (in milliseconds, as
+ * WAAPI counts) on `focusEasingCss()`, holding the end.
+ *
+ * `drawn` is the opacity the outgoing content was on screen at — the incoming
+ * layer's computed opacity as the swap happens, a string because that is what
+ * `getComputedStyle` returns — so a `B → C` during `A → B` fades B out from
+ * where it had faded in to, rather than cutting it to full. It is clamped to
+ * `[0, 1]`, and anything that does not parse reads as 1.
+ */
+export function crossFadeTiming(drawn: string | number): CrossFadeTiming {
+  const parsed = typeof drawn === 'number' ? drawn : drawn.trim() === '' ? Number.NaN : Number(drawn);
+  const from = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), 1) : 1;
+  return {
+    incoming: [{ opacity: 0 }, { opacity: 1 }],
+    outgoing: [{ opacity: from }, { opacity: 0 }],
+    options: { duration: FOCUS_SECONDS * 1000, easing: focusEasingCss(), fill: 'forwards' },
+  };
+}
+
+/** The outgoing layer's inline style. */
+export interface CrossFadeLayerStyle {
+  readonly position: 'absolute';
+  readonly top: 0;
+  readonly left: 0;
+  readonly right: 0;
+  readonly height: '100%';
+  readonly boxSizing: 'border-box';
+  readonly overflow: 'hidden';
+  readonly padding: string;
+  readonly pointerEvents: 'none';
+}
+
+/**
+ * The outgoing layer: laid over the incoming content — the panel's own padding,
+ * from its top — and clipped to the panel's height, so a longer outgoing Project
+ * never lengthens the panel's scroll. The renderer scrolls the layer itself to
+ * the reader's position in the outgoing Project before the panel returns to its
+ * top, so A fades where it was read rather than jumping to its start. It takes
+ * no pointer.
+ */
+export function crossFadeLayerStyle(): CrossFadeLayerStyle {
+  return {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '100%',
+    boxSizing: 'border-box',
+    overflow: 'hidden',
+    padding: PANEL_PADDING,
+    pointerEvents: 'none',
+  };
+}
+
 /** The panel container's inline style: the whole of what it paints. */
 export interface PanelStyle {
   readonly position: 'fixed';
@@ -241,7 +338,7 @@ export function panelStyle(open: boolean): PanelStyle {
     boxSizing: 'border-box',
     overflowY: 'auto',
     overscrollBehavior: 'contain',
-    padding: '56px clamp(16px, 5vw, 40px) 60px',
+    padding: PANEL_PADDING,
     background: 'Canvas',
     color: 'CanvasText',
     borderLeft: '1px solid GrayText',

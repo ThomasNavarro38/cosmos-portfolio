@@ -34,6 +34,7 @@ import { fileURLToPath } from 'node:url';
 import { Frustum, Matrix4, PerspectiveCamera, Quaternion, Vector3 } from 'three';
 import { DUST_PARTICLE_RADIUS } from './dust-model.ts';
 import { FOCUS_REACH } from './focus-model.ts';
+import { MOTE_ORBIT_RADII, MOTE_RADIUS } from './mote-model.ts';
 import {
   BODY_MARGIN,
   DEFAULT_FOV,
@@ -55,6 +56,8 @@ const RAIL_MODEL_TS = fileURLToPath(new URL('./rail-model.ts', import.meta.url))
 const RAIL_CAMERA_TSX = fileURLToPath(new URL('./rail-camera.tsx', import.meta.url));
 const FOCUS_MODEL_TS = fileURLToPath(new URL('./focus-model.ts', import.meta.url));
 const SCENE_PICK_TS = fileURLToPath(new URL('./scene-pick.ts', import.meta.url));
+const MOTE_MODEL_TS = fileURLToPath(new URL('./mote-model.ts', import.meta.url));
+const MOTE_FIELD_TSX = fileURLToPath(new URL('./mote-field.tsx', import.meta.url));
 const SRC_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SCENE_HOST_TSX = fileURLToPath(new URL('../shell/scene-host.tsx', import.meta.url));
 const APP_TSX = fileURLToPath(new URL('../App.tsx', import.meta.url));
@@ -692,6 +695,12 @@ test('the margins the framing and the Rail stops leave are at least the largest 
       radius <= FOCUS_REACH,
       `FOCUS_REACH (${FOCUS_REACH}) must cover the drawn radius ${radius}, or the focused Planet clips`,
     );
+    // The innermost Mote orbit (`mote-model.ts`) clears the drawn Body it circles, dot
+    // included, so no Mote ever passes through its Planet.
+    assert.ok(
+      (MOTE_ORBIT_RADII[0] ?? 0) - MOTE_RADIUS > radius,
+      `the innermost Mote orbit (${MOTE_ORBIT_RADII[0]} − ${MOTE_RADIUS}) must clear the drawn radius ${radius}`,
+    );
     // Particles are kept `BODY_MARGIN` from a Body's *centre*. This makes that a
     // clearance between *surfaces*: no particle sphere touches a Body sphere.
     assert.ok(
@@ -755,7 +764,7 @@ test('no module here imports src/data/, src/derive/, the solver, or zustand/reac
   // package, so `zustand/react` and `zustand/vanilla` are both `zustand`, and a row
   // banning `zustand` would reject the navigation store this directory's README
   // explicitly permits.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, SCENE_PICK_TS]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX]) {
     assert.deepEqual(auditForbiddenImports(readFileSync(path, 'utf8')), [], `${path} must hold no forbidden import`);
   }
 });
@@ -797,7 +806,7 @@ test('the scene holds no classification or mapping-rule vocabulary of its own', 
   // A case-insensitive `\balpha\b` ban was dropped from this list deliberately — over
   // a pure-structure module it cannot fail by construction, and it would misfire on a
   // future token name or on a fixture Client named Alpha.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, SCENE_PICK_TS]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX]) {
     const code = codeOf(path);
     assert.doesNotMatch(code, /\bclassify\w*\s*\(|\bfunction\s+classify/i, 'no classification test');
     assert.doesNotMatch(code, /\b(?:luminance|mote|mass|rail)(?:Band|Tier|Of|For|From)?\s*\(/i, 'no mapping computed');
@@ -1094,7 +1103,7 @@ function auditConnectors(code: string): string[] {
 test('the renderer draws no line, edge, or connector between any two Bodies', () => {
   // The Rail's files too: a camera path drawn as a `<CatmullRomLine>` would be a
   // connector between two Clients by another name.
-  for (const path of [SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, SCENE_PICK_TS]) {
+  for (const path of [SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX]) {
     assert.deepEqual(auditConnectors(readFileSync(path, 'utf8')), [], `${path}: orbit is a position, never a drawn ring`);
   }
 });
@@ -1553,8 +1562,12 @@ function coordinateLiterals(code: string): string[] {
   return failures;
 }
 
-test('neither Rail file, nor the focus model, holds a world-coordinate literal', () => {
-  for (const path of [RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS]) {
+test('neither Rail file, nor the focus model, nor the Motes’ renderer, holds a world-coordinate literal', () => {
+  // `mote-model.ts` is not in this list: its orbit radii and tilts are numeric
+  // triples by nature, and this scan cannot tell them from a place. What the scan
+  // stands for is proven there instead, by execution — translating every Body
+  // translates every Mote (`mote-model.test.ts`).
+  for (const path of [RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, MOTE_FIELD_TSX]) {
     assert.deepEqual(coordinateLiterals(codeOf(path)), [], `${path} must resolve every pose from entities`);
   }
 });
@@ -1828,6 +1841,220 @@ test('the Rail-importer scan rejects every edge form from outside, and ignores p
   );
 });
 
+// --- The Motes (2.8) --------------------------------------------------------
+
+/**
+ * `mote-field.tsx`'s contract, as a pure function over its source.
+ *
+ * Every rule of Condensation is executed in `mote-model.test.ts`; this holds the
+ * binding. Negatively: no store write and no named event, no subscription or
+ * reactive hook, no DOM, no interaction, no ordering or selection, no connector,
+ * no coordinate literal, no live region. Positively: a frame loop that is
+ * *exactly* — update the camera's matrices, one `getState()` read, `moteFrame`
+ * handed the carried field, the artifact, the Bodies, the media, the focused ID,
+ * both matrices and the canvas width and written back, and each draw applied
+ * with `applyMoteDraw` to its own pooled handles; one mesh per `motePool` entry
+ * keyed by Skill, drawn at `BODY_RENDER_ORDER` in the transparent pass writing
+ * no depth; one drei `<Html>` label each, at `zIndexRange={[0, 0]}` with no
+ * pointer events, styled by the model.
+ */
+function auditMoteField(source: string): string[] {
+  const code = blankProse(source);
+  const quoted = blankComments(source);
+  const failures: string[] = [];
+
+  if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) failures.push('writes the store with setState');
+  if (/\b(?:advanceScroll|selectClient|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation)\b/.test(code)) {
+    failures.push('names a navigation event — the Motes read the store and write only their own handles');
+  }
+  if (/\buseStore\b|\bsubscribe\b|\buseSyncExternalStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {
+    failures.push('subscribes to the store — a frame loop reads getState()');
+  }
+  if (/\buseThree\b|\buseState\b|\buseReducer\b|\buseEffect\b|\buseLayoutEffect\b|\buseMemo\b/.test(code)) {
+    failures.push('holds reactive state or an effect — the carried field is a ref, the loop is useFrame');
+  }
+  if (/\bwindow\b|\bdocument\b|innerWidth|innerHeight|getBoundingClientRect|addEventListener|matchMedia/.test(code)) {
+    failures.push('reads the DOM — the width arrives as R3F’s size');
+  }
+  if (/\braycast\w*|\bonClick\b|\bonPointer\w+|\bonWheel\b|\bonScroll\b|\bonDoubleClick\b|\bonContextMenu\b/i.test(code)) {
+    failures.push('handles an interaction — a Mote is never hovered or clicked');
+  }
+  if (/\.sort\s*\(|\.filter\s*\(|\.reverse\s*\(|\.slice\s*\(|\.find\s*\(/.test(code)) {
+    failures.push('orders or selects — which Skills show, and where, is the model’s');
+  }
+  if (/aria-live|role\s*=\s*["'](?:status|alert|log|marquee|timer)["']/.test(quoted)) {
+    failures.push('announces — the Motes are inside the aria-hidden canvas root, and no live region exists');
+  }
+  failures.push(...auditConnectors(source));
+  failures.push(...coordinateLiterals(code));
+
+  const loop = /\buseFrame\s*\(\s*\(\s*\{\s*camera\s*,\s*size\s*\}\s*,\s*delta\s*\)\s*=>\s*\{([\s\S]*?)\}\s*\)\s*;/.exec(code);
+  if (loop === null) {
+    failures.push('runs no frame loop taking ({ camera, size }, delta)');
+  } else {
+    const statements = (loop[1] ?? '')
+      .split(';')
+      .map((statement) => statement.replace(/\s+/g, ''))
+      .filter((statement) => statement !== '');
+    const expected = [
+      'camera.updateMatrixWorld()',
+      'conststate=navigationStore.getState()',
+      'field.current=moteFrame(field.current,artifact,bodies,media,state.focusedProjectId,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size.width,delta)',
+      'field.current.draws.forEach((draw,index)=>applyMoteDraw(dots.current[index],labels.current[index],draw))',
+    ];
+    if (JSON.stringify(statements) !== JSON.stringify(expected)) {
+      failures.push(
+        'the frame loop is not exactly: camera.updateMatrixWorld(), one getState() read, moteFrame(field.current, artifact, ' +
+          'bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, ' +
+          'size.width, delta) written back, and every draw applied to its own handles',
+      );
+    }
+  }
+  if ((code.match(/\buseFrame\s*\(/g) ?? []).length !== 1) failures.push('runs other than one frame loop');
+  if (!/const\s+field\s*=\s*useRef<MoteFieldState\s*\|\s*null>\(\s*null\s*\)/.test(code)) {
+    failures.push('the carried field is not a ref that starts empty');
+  }
+
+  // The pool: one mesh per distinct Skill, keyed by it.
+  const pools = mapBlocks(code, 'motePool\\(\\s*artifact\\s*\\)');
+  if (pools.length !== 1) failures.push(`maps motePool(artifact) ${pools.length} times — one pooled dot per distinct Skill`);
+  const pool = pools[0] ?? '';
+  if (!/^motePool\(\s*artifact\s*\)\s*\.\s*map\s*\(\s*\(\s*skill\s*,\s*index\s*\)\s*=>/.test(pool)) {
+    failures.push('the pool is not mapped as (skill, index)');
+  }
+  const meshes = pool.match(/<mesh\b[\s\S]*?>\s*</g) ?? [];
+  if (meshes.length !== 1) failures.push('the pool is not one mesh per Skill');
+  const mesh = meshes[0] ?? '';
+  if (!/\bkey=\{\s*skill\s*\}/.test(mesh)) failures.push('a pooled dot is not keyed by its Skill');
+  if (!/\bref=\{\s*\(\s*dot\b[^)]*\)\s*=>\s*\{\s*dots\.current\[\s*index\s*\]\s*=\s*dot\s*;?\s*\}\s*\}/.test(mesh)) {
+    failures.push('a pooled dot’s handle is not stored at its pool index');
+  }
+  if (!/\brenderOrder\s*=\s*\{\s*BODY_RENDER_ORDER\s*\}/.test(mesh)) failures.push('a Mote is not drawn at BODY_RENDER_ORDER — after the Dust');
+  if ((code.match(/\brenderOrder\s*=/g) ?? []).length !== 1) failures.push('a renderOrder other than the Mote’s');
+  const materials = pool.match(/<\w+Material\b[^>]*>/g) ?? [];
+  if (materials.length !== 1) failures.push('a Mote is not drawn with exactly one material');
+  for (const material of materials) {
+    if (!/\btransparent(?:\s*=\s*\{\s*true\s*\}|(?![\w-]|\s*=))/.test(material)) {
+      failures.push('a Mote material is opaque — three draws the opaque list first, before the Dust');
+    }
+    if (!/\bdepthWrite\s*=\s*\{\s*false\s*\}/.test(material)) failures.push('a Mote writes depth — a faded dot would cut into what is behind it');
+  }
+  const labels = pool.match(/<Html\b[^>]*>/g) ?? [];
+  if (labels.length !== 1 || (code.match(/<Html\b/g) ?? []).length !== 1) failures.push('not one drei <Html> label per pooled dot');
+  const html = labels[0] ?? '';
+  if (!/\bzIndexRange=\{\s*\[\s*0\s*,\s*0\s*\]\s*\}/.test(html)) failures.push('the label is not at zIndexRange [0, 0] — it could stack over the panel');
+  // Read with its strings kept: the value is a string, which the prose blanking erases.
+  const quotedHtml = mapBlocks(quoted, 'motePool\\(\\s*artifact\\s*\\)')[0]?.match(/<Html\b[^>]*>/)?.[0] ?? '';
+  if (!/\bpointerEvents="none"/.test(quotedHtml)) {
+    failures.push('the label takes pointer events');
+  }
+  if (!/<div\s+ref=\{\s*\(\s*label\s*\)\s*=>\s*\{\s*labels\.current\[\s*index\s*\]\s*=\s*label\s*;?\s*\}\s*\}\s+style=\{\s*moteLabelStyle\(\s*\)\s*\}\s*>\s*\{\s*skill\s*\}\s*<\/div>/.test(pool)) {
+    failures.push('the label is not the Skill’s name, in the model’s style, stored at its pool index');
+  }
+  if (!/import\s*\{\s*Html\s*\}\s*from\s*'@react-three\/drei'/.test(quoted)) failures.push('the label is not drei’s Html');
+  return failures;
+}
+
+test('the Motes’ renderer binds the model and holds no rule of its own', () => {
+  assert.deepEqual(auditMoteField(readFileSync(MOTE_FIELD_TSX, 'utf8')), []);
+});
+
+test('the Mote audit rejects the real renderer with any one guarantee broken', () => {
+  const real = readFileSync(MOTE_FIELD_TSX, 'utf8');
+  const CALL =
+    'moteFrame(field.current, artifact, bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.width, delta)';
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['a store write', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    navigationStore.setState({ focusedProjectId: null });')],
+    ['a named event', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    releaseFocus();')],
+    ['a subscription', (s) => s.replace('return (', 'navigationStore.subscribe(() => {});\n  return (')],
+    ['a hook binding', (s) => s.replace('state = navigationStore.getState()', 'state = useStore(navigationStore, (value) => value)')],
+    ['reactive state', (s) => s.replace('const field = useRef', 'const [, force] = useState(0);\n  const field = useRef')],
+    ['useThree', (s) => s.replace('const field = useRef', 'const { size } = useThree();\n  const field = useRef')],
+    ['a DOM read', (s) => s.replace('size.width, delta)', 'window.innerWidth, delta)')],
+    ['stale matrices', (s) => s.replace('camera.updateMatrixWorld();', '')],
+    ['the matrices swapped', (s) => s.replace('camera.matrixWorldInverse.elements, camera.projectionMatrix.elements', 'camera.projectionMatrix.elements, camera.matrixWorldInverse.elements')],
+    ['the world matrix for the view', (s) => s.replace('camera.matrixWorldInverse.elements', 'camera.matrixWorld.elements')],
+    ['a constant width', (s) => s.replace('size.width, delta)', '1600, delta)')],
+    ['no time', (s) => s.replace('size.width, delta)', 'size.width, 0)')],
+    ['Focus ignored', (s) => s.replace('state.focusedProjectId', 'null')],
+    ['no Dust to condense from', (s) => s.replace('artifact, bodies, media, state', 'artifact, bodies, [], state')],
+    ['a fresh field every frame', (s) => s.replace('moteFrame(field.current,', 'moteFrame(null,')],
+    ['the write-back removed', (s) => s.replace(`field.current = ${CALL};`, `void ${CALL};`)],
+    ['nothing applied', (s) => s.replace(/\n\s*field\.current\.draws\.forEach\([^\n]*\n/, '\n')],
+    ['the wrong handle', (s) => s.replace('applyMoteDraw(dots.current[index], labels.current[index], draw)', 'applyMoteDraw(dots.current[0], labels.current[index], draw)')],
+    ['a second store read', (s) => s.replace('state.focusedProjectId', 'navigationStore.getState().focusedProjectId')],
+    ['a click', (s) => s.replace('visible={false}', 'visible={false}\n          onClick={() => undefined}')],
+    ['a hover', (s) => s.replace('visible={false}', 'visible={false}\n          onPointerOver={() => undefined}')],
+    ['an orbit line', (s) => s.replace('return (\n    <>', "return (\n    <>\n      <lineLoop />").replace('return (\r\n    <>', 'return (\r\n    <>\r\n      <lineLoop />')],
+    ['a drei connector', (s) => s.replace("import { Html } from '@react-three/drei';", "import { Html, Line } from '@react-three/drei';")],
+    ['a selection of Skills', (s) => s.replace('motePool(artifact).map(', 'motePool(artifact).filter((skill) => skill !== "").map(')],
+    ['a sort of Skills', (s) => s.replace('motePool(artifact).map(', 'motePool(artifact).sort().map(')],
+    ['the pool keyed by index', (s) => s.replace('key={skill}', 'key={index}')],
+    ['the handle not stored', (s) => s.replace('dots.current[index] = dot;', 'void dot;')],
+    ['no draw order', (s) => s.replace('renderOrder={BODY_RENDER_ORDER}', '')],
+    ['a literal draw order', (s) => s.replace('renderOrder={BODY_RENDER_ORDER}', 'renderOrder={3}')],
+    ['an opaque Mote', (s) => s.replace('transparent opacity={0}', 'opacity={0}')],
+    ['a Mote writing depth', (s) => s.replace('depthWrite={false}', 'depthWrite')],
+    ['the label over the panel', (s) => s.replace('<Html zIndexRange={[0, 0]}', '<Html zIndexRange={[16777271, 0]}')],
+    ['the label default z', (s) => s.replace('<Html zIndexRange={[0, 0]} ', '<Html ')],
+    ['a clickable label', (s) => s.replace('pointerEvents="none"', 'pointerEvents="auto"')],
+    ['the label unstyled', (s) => s.replace('style={moteLabelStyle()}', '')],
+    ['the label shows the wrong text', (s) => s.replace('{skill}\n            </div>', '{index}\n            </div>').replace('{skill}\r\n            </div>', '{index}\r\n            </div>')],
+    ['a live region', (s) => s.replace('style={moteLabelStyle()}', 'style={moteLabelStyle()}\n              aria-live="polite"')],
+    ['no label', (s) => s.replace(/<Html\b[\s\S]*?<\/Html>/, '')],
+    ['the field ref started full', (s) => s.replace('useRef<MoteFieldState | null>(null)', 'useRef<MoteFieldState | null>(undefined!)')],
+    ['a coordinate literal', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    camera.position.set(0, 5, 40);')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped renderer`);
+    assert.notDeepEqual(auditMoteField(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
+/**
+ * The Motes' mount in `scene.tsx`: inside the `<Canvas>` (outside it, `useFrame`
+ * has no loop to join), after the rig (R3F runs frame callbacks in mount order,
+ * so the Motes project through the camera the rig has just moved), once, and
+ * handed the artifact, the Bodies and the Dust media the scene built.
+ */
+function auditMoteMount(source: string): string[] {
+  const code = blankProse(source);
+  const failures: string[] = [];
+  const inside = /<Canvas\b[\s\S]*<\/Canvas>/.exec(code)?.[0] ?? '';
+  const mount = /<MoteField\s+artifact=\{\s*artifact\s*\}\s+bodies=\{\s*bodies\s*\}\s+media=\{\s*media\s*\}\s*\/>/;
+  if (!mount.test(inside)) failures.push('the Motes are not mounted inside the Canvas with the artifact, the Bodies and the media');
+  if ((code.match(/<MoteField\b/g) ?? []).length !== 1) failures.push('the Motes are mounted other than once');
+  const rig = inside.search(/<RailCamera\b/);
+  const motes = inside.search(/<MoteField\b/);
+  if (rig === -1 || motes === -1 || motes < rig) failures.push('the Motes are mounted before the rig — they would project last frame’s camera');
+  if (!/const\s*\{\s*media\s*,\s*particles\s*\}\s*=\s*buildDust\(\s*bodies\s*\)/.test(code)) failures.push('the media are not the Dust the scene draws');
+  if (!/import\s*\{\s*MoteField\s*\}\s*from\s*'\.\/mote-field\.tsx'/.test(blankComments(source))) failures.push('MoteField is not imported');
+  return failures;
+}
+
+test('the scene mounts the Motes inside the Canvas, after the rig', () => {
+  assert.deepEqual(auditMoteMount(readFileSync(SCENE_TSX, 'utf8')), []);
+});
+
+test('the Mote mount audit rejects the real scene with any one guarantee removed', () => {
+  const real = readFileSync(SCENE_TSX, 'utf8');
+  const MOUNT = '<MoteField artifact={artifact} bodies={bodies} media={media} />';
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['unmounted', (s) => s.replace(MOUNT, '')],
+    ['before the rig', (s) => s.replace(MOUNT, '').replace('<RailCamera rail={rail} bodies={bodies} />', `${MOUNT}\n      <RailCamera rail={rail} bodies={bodies} />`)],
+    ['outside the Canvas', (s) => s.replace(MOUNT, '').replace('</Canvas>', `</Canvas>\n      ${MOUNT}`)],
+    ['no Dust', (s) => s.replace(MOUNT, '<MoteField artifact={artifact} bodies={bodies} media={[]} />')],
+    ['no Bodies', (s) => s.replace(MOUNT, '<MoteField artifact={artifact} bodies={[]} media={media} />')],
+    ['mounted twice', (s) => s.replace(MOUNT, `${MOUNT}\n      ${MOUNT}`)],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped scene`);
+    assert.notDeepEqual(auditMoteMount(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
 // --- Directory coverage ----------------------------------------------------
 
 test('every module in this directory is covered by the scans above', () => {
@@ -1853,6 +2080,12 @@ test('every module in this directory is covered by the scans above', () => {
     'focus-model.test.ts',
     'scene-pick.ts',
     'scene-pick.test.ts',
+    // 2.8: named in the import, vocabulary and connector scans (the field in the
+    // coordinate-literal scan too); the field has its own audit below, the model
+    // its purity audit in `mote-model.test.ts`.
+    'mote-model.ts',
+    'mote-model.test.ts',
+    'mote-field.tsx',
     'README.md',
   ]);
   const found: string[] = [];
