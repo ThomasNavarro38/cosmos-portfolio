@@ -105,6 +105,27 @@ export function easeFocus(t: number): number {
   return cubicBezier(FOCUS_EASING, t);
 }
 
+/**
+ * How much of its full duration a transition reversed mid-flight takes: CSS
+ * Transitions' *reversing shortening factor*, which the browser applies to the
+ * panel's slide on its own.
+ *
+ * A transition interrupted by a change back to its start value does not run the
+ * whole duration again — it runs `duration × factor`, where `factor` is the
+ * running transition's output progress (how far it had actually moved, after
+ * easing) weighted by its own factor: `|progress·factor + 1 − factor|`, clamped
+ * to `[0, 1]`. The camera applies the same rule to its half of the move, so a
+ * release mid-slide ends when the panel does rather than a full duration later.
+ *
+ * `progress` and `factor` are clamped to `[0, 1]`; a non-finite one reads as 1,
+ * the uninterrupted transition.
+ */
+export function reversingFactor(progress: number, factor: number): number {
+  const p = Number.isFinite(progress) ? Math.min(Math.max(progress, 0), 1) : 1;
+  const f = Number.isFinite(factor) ? Math.min(Math.max(factor, 0), 1) : 1;
+  return Math.min(Math.max(Math.abs(p * f + (1 - f)), 0), 1);
+}
+
 /** The Focus curve as CSS: the panel's half of the one curve. */
 export function focusEasingCss(): string {
   return `cubic-bezier(${FOCUS_EASING.join(', ')})`;

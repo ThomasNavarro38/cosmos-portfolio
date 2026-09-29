@@ -63,7 +63,7 @@ export interface DestinationNavProps {
  * pressed, because the store holds exactly one `focusedProjectId`.
  *
  * Each Project button carries `id={indexEntryId(project.id)}` (2.7), so releasing
- * Focus can return DOM focus to the entry that opened the panel (UX-DR40). The ID
+ * Focus can return DOM focus to the released Project's own entry (UX-DR40). The ID
  * is the model's, never composed here.
  */
 export function DestinationNav({ artifact }: DestinationNavProps) {

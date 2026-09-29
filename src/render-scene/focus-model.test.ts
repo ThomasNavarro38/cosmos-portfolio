@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Frustum, Matrix4, PerspectiveCamera, Vector3 } from 'three';
-import { FOCUS_SECONDS, easeFocus } from '../shell/focus-motion.ts';
+import { FOCUS_SECONDS, easeFocus, reversingFactor } from '../shell/focus-motion.ts';
 import { PANEL_FRACTION, panelFraction } from '../shell/panel-model.ts';
 import { FOCUS_REACH, FOCUS_WIDEST_ASPECT, focusFrame, focusPose, stepFocus, type FocusMotion } from './focus-model.ts';
 import { RAIL_MAX_FRAME_SECONDS, buildRail, railFrame, railPose, type Rail, type RailPose } from './rail-model.ts';
@@ -317,6 +317,74 @@ test('a change mid-transition restarts from the pose at that instant — C0, nev
   // Released mid-way just the same.
   const released = stepFocus(partway, null, railA, poseOf, DT);
   assert.deepEqual(released.pose, partway.pose);
+});
+
+/** Frames until `motion` is at rest on `goal`, stepping `focused`; fails past `limit`. */
+function framesToRest(motion: FocusMotion, focused: string | null, goal: RailPose, limit = 2 * settleFrames): number {
+  let current = motion;
+  for (let i = 1; i <= limit; i += 1) {
+    current = stepFocus(current, focused, railA, poseOf, DT);
+    if (current.elapsed >= current.seconds) {
+      assert.deepEqual(current.pose, goal, 'at rest on the goal exactly');
+      return i;
+    }
+  }
+  assert.fail('never came to rest');
+}
+
+test('a release while the panel slides in ends when CSS ends the panel’s reversed slide', () => {
+  const rest = last(run(null, null, 3));
+  const partway = last(run(rest, 'p-a', Math.round((0.3 * FOCUS_SECONDS) / DT)));
+  const progress = easeFocus(partway.slide.elapsed / partway.slide.seconds);
+  assert.ok(progress > 0 && progress < 1, 'released mid-slide');
+  const released = stepFocus(partway, null, railA, poseOf, DT);
+  assert.equal(released.slide.open, false);
+  assert.equal(released.slide.factor, progress, 'the first reversal’s factor is how far the slide had moved');
+  assert.equal(released.seconds, FOCUS_SECONDS * progress, 'the camera’s ease is as short as the slide’s');
+  assert.equal(released.seconds, released.slide.seconds);
+  const frames = framesToRest(released, null, railA);
+  assert.equal(frames, Math.ceil(released.seconds / DT), 'rests the frame the slide ends, not a full duration later');
+  assert.ok(frames < Math.ceil(FOCUS_SECONDS / DT));
+});
+
+test('a reversal of a reversal compounds its factor as CSS does', () => {
+  const rest = last(run(null, null, 3));
+  const opening = last(run(rest, 'p-a', Math.round((0.5 * FOCUS_SECONDS) / DT)));
+  const closing = last(run(stepFocus(opening, null, railA, poseOf, DT), null, 6));
+  const f1 = closing.slide.factor;
+  const p2 = easeFocus(closing.slide.elapsed / closing.slide.seconds);
+  const reopened = stepFocus(closing, 'p-a', railA, poseOf, DT);
+  assert.equal(reopened.slide.factor, reversingFactor(p2, f1));
+  assert.equal(reopened.seconds, FOCUS_SECONDS * reversingFactor(p2, f1));
+  assert.ok(Math.abs(reopened.slide.factor - Math.abs(p2 * f1 + 1 - f1)) < 1e-12);
+});
+
+test('A → B keeps the panel’s slide running and takes the full duration; the release then reverses that slide', () => {
+  const rest = last(run(null, null, 3));
+  const partway = last(run(rest, 'p-a', Math.round((0.3 * FOCUS_SECONDS) / DT)));
+  const switched = stepFocus(partway, 'project-bb', railA, poseOf, DT);
+  assert.equal(switched.seconds, FOCUS_SECONDS, 'the panel stays open, so the camera is not shortened');
+  assert.deepEqual(switched.slide, partway.slide, 'the slide is not restarted');
+  const onward = last(run(switched, 'project-bb', 6));
+  assert.equal(onward.slide.elapsed, partway.slide.elapsed + 6 * DT, 'the slide runs on beneath A → B');
+  const released = stepFocus(onward, null, railA, poseOf, DT);
+  assert.equal(released.seconds, FOCUS_SECONDS * easeFocus(onward.slide.elapsed / onward.slide.seconds));
+});
+
+test('a release after the slide has settled, or a reversal on its first frame, is not a mid-flight reversal', () => {
+  const rest = last(run(null, null, 3));
+  const settled = last(run(rest, 'p-a', settleFrames));
+  const released = stepFocus(settled, null, railA, poseOf, DT);
+  assert.equal(released.seconds, FOCUS_SECONDS, 'a settled slide runs its whole length back');
+  assert.equal(released.slide.factor, 1);
+  // Entered and released before the slide moved at all: CSS runs a zero-length
+  // reversal, and the camera is at its goal on its next step with nothing to cut.
+  const entered = stepFocus(rest, 'p-a', railA, poseOf, DT);
+  const instant = stepFocus(entered, null, railA, poseOf, DT);
+  assert.equal(instant.seconds, 0);
+  const next = stepFocus(instant, null, railA, poseOf, DT);
+  assert.deepEqual(next.pose, railA);
+  assert.ok(Number.isFinite(next.pose.position.x));
 });
 
 test('release eases to the live Rail pose — wherever the Rail is now, not where it was', () => {

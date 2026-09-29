@@ -21,7 +21,9 @@
  * the new goal over `FOCUS_SECONDS` on `easeFocus`, the same duration and curve
  * the panel slides on in CSS. The goal on release is the *live* Rail pose, so
  * the camera lands wherever the Rail is now, not where it was. An interruption
- * restarts from the captured pose, so nothing ever cuts. At rest the pose *is*
+ * restarts from the captured pose, so nothing ever cuts, and a release while the
+ * panel is still sliding in is shortened exactly as CSS shortens the panel's
+ * reversed slide, so the two still end together. At rest the pose *is*
  * its goal, so with nothing focused the camera is the Rail's alone.
  *
  * **The Rail keeps running underneath.** The rig still steps the Rail's springs
@@ -34,7 +36,7 @@
  * runs under `node --test`, and the rig (`rail-camera.tsx`) only binds it.
  */
 
-import { FOCUS_SECONDS, easeFocus } from '../shell/focus-motion.ts';
+import { FOCUS_SECONDS, easeFocus, reversingFactor } from '../shell/focus-motion.ts';
 import { PANEL_FRACTION, panelFraction } from '../shell/panel-model.ts';
 import { RAIL_MAX_FRAME_SECONDS, type Rail, type RailFrame, type RailPose } from './rail-model.ts';
 import { DEFAULT_FOV, DEFAULT_NEAR, NARROWEST_ASPECT, type Body, type ScenePosition } from './scene-model.ts';
@@ -138,18 +140,54 @@ export function focusPose(
 }
 
 /**
+ * The panel's CSS slide, mirrored: open or closed, how far into its current
+ * transition, how long that transition runs and the reversing factor it ran
+ * with. The browser keeps this state for the panel; the camera keeps a copy so
+ * a reversed slide and the camera's reversed ease end together.
+ */
+export interface FocusSlide {
+  readonly open: boolean;
+  /** Seconds into the current slide, capped at `seconds`. */
+  readonly elapsed: number;
+  /** How long the current slide runs: `FOCUS_SECONDS × factor`. */
+  readonly seconds: number;
+  /** Its reversing shortening factor — 1 unless it reversed a running slide. */
+  readonly factor: number;
+}
+
+/**
  * What the rig carries between frames for Focus: the goal it is easing toward,
- * where the ease started, how far into it, and the pose drawn last.
+ * where the ease started, how far into it and for how long, the panel's slide,
+ * and the pose drawn last.
  */
 export interface FocusMotion {
   /** The focused Project the camera is heading for, or `null` for the Rail. */
   readonly id: string | null;
   /** The pose captured when `id` last changed: where this ease starts. */
   readonly from: RailPose;
-  /** Seconds since `id` last changed, capped at `FOCUS_SECONDS`. */
+  /** Seconds since `id` last changed, capped at `seconds`. */
   readonly elapsed: number;
+  /** How long this ease runs: `FOCUS_SECONDS`, or the reversed slide's length. */
+  readonly seconds: number;
+  /** The panel's slide, as the browser runs it. */
+  readonly slide: FocusSlide;
   /** The pose drawn this frame. */
   readonly pose: RailPose;
+}
+
+function settledSlide(open: boolean): FocusSlide {
+  return { open, elapsed: FOCUS_SECONDS, seconds: FOCUS_SECONDS, factor: 1 };
+}
+
+/**
+ * The slide that starts when the panel's open state flips. A slide still
+ * running is reversed, and runs only as long as CSS runs a reversal; a settled
+ * one starts afresh at full length.
+ */
+function flipSlide(slide: FocusSlide, open: boolean): FocusSlide {
+  const running = slide.elapsed < slide.seconds;
+  const factor = running ? reversingFactor(easeFocus(slide.elapsed / slide.seconds), slide.factor) : 1;
+  return { open, elapsed: 0, seconds: FOCUS_SECONDS * factor, factor };
 }
 
 /**
@@ -164,10 +202,15 @@ export interface FocusMotion {
  *     never cuts.
  *   - **The ID changed:** capture the pose drawn last frame and hold it; the
  *     ease to the new goal starts from exactly there. A change mid-ease is C0.
+ *     When the change opens or closes the panel (`null ↔ A`), the ease lasts as
+ *     long as the panel's slide: `FOCUS_SECONDS`, or — if the slide was still
+ *     running and CSS reverses it — `FOCUS_SECONDS × reversingFactor`, so the
+ *     two halves of an interrupted move still end together. `A → B` leaves the
+ *     panel open, so its slide runs on and the camera takes the full duration.
  *   - **Otherwise:** advance by `dt` (clamped to `[0, RAIL_MAX_FRAME_SECONDS]`,
  *     so a background tab resumes as a glide) and blend from the captured pose
- *     to the goal by `easeFocus(elapsed / FOCUS_SECONDS)`. At `FOCUS_SECONDS`
- *     the pose is the goal, exactly.
+ *     to the goal by `easeFocus(elapsed / seconds)`. At `seconds` the pose is
+ *     the goal, exactly; a zero-length ease is at its goal on its first step.
  *
  * Position and aim are blended linearly and separately. Every goal keeps its
  * camera on the `+z` side of its aim — a Rail offset has `z > 0`, and a focus
@@ -182,20 +225,31 @@ export function stepFocus(
   dt: number,
 ): FocusMotion {
   if (previous === null) {
-    return { id: focusedId, from: railPose, elapsed: focusedId === null ? FOCUS_SECONDS : 0, pose: railPose };
+    return {
+      id: focusedId,
+      from: railPose,
+      elapsed: focusedId === null ? FOCUS_SECONDS : 0,
+      seconds: FOCUS_SECONDS,
+      slide: settledSlide(focusedId !== null),
+      pose: railPose,
+    };
   }
   if (focusedId !== previous.id) {
-    return { id: focusedId, from: previous.pose, elapsed: 0, pose: previous.pose };
+    const open = focusedId !== null;
+    const slide = open === previous.slide.open ? previous.slide : flipSlide(previous.slide, open);
+    const seconds = slide === previous.slide ? FOCUS_SECONDS : slide.seconds;
+    return { id: focusedId, from: previous.pose, elapsed: 0, seconds, slide, pose: previous.pose };
   }
   const step = Number.isFinite(dt) ? Math.min(Math.max(dt, 0), RAIL_MAX_FRAME_SECONDS) : 0;
-  const elapsed = Math.min(previous.elapsed + step, FOCUS_SECONDS);
+  const elapsed = Math.min(previous.elapsed + step, previous.seconds);
+  const slide = { ...previous.slide, elapsed: Math.min(previous.slide.elapsed + step, previous.slide.seconds) };
   const goal = focusedId === null ? railPose : focusPoseOf(focusedId);
-  const eased = easeFocus(elapsed / FOCUS_SECONDS);
+  const eased = previous.seconds > 0 ? easeFocus(elapsed / previous.seconds) : 1;
   const pose =
     eased >= 1
       ? goal
       : { position: blend(previous.from.position, goal.position, eased), target: blend(previous.from.target, goal.target, eased) };
-  return { id: focusedId, from: previous.from, elapsed, pose };
+  return { id: focusedId, from: previous.from, elapsed, seconds: previous.seconds, slide, pose };
 }
 
 /**

@@ -235,7 +235,7 @@ test('the panel paints its own column and nothing else — no scrim, no backdrop
 test('DOM focus moves to the panel on entry and on A → B, back to the entry on release, and nowhere otherwise', () => {
   assert.equal(focusMove(null, 'project:a'), 'panel');
   assert.equal(focusMove('project:a', 'project:b'), 'panel', 'focus stays in the panel as its content swaps');
-  assert.deepEqual(focusMove('project:a', null), { entry: 'project:a' }, 'the entry that opened it');
+  assert.deepEqual(focusMove('project:a', null), { entry: 'project:a' }, 'the released Project’s own entry');
   assert.equal(focusMove('project:a', 'project:a'), null);
   assert.equal(focusMove(null, null), null);
 });
@@ -336,7 +336,9 @@ function auditPanel(source: string): string[] {
     const attributes = container[1] ?? '';
     if (!/\bid=\{\s*FOCUS_PANEL_ID\s*\}/.test(attributes)) failures.push('the container is not FOCUS_PANEL_ID — the wheel cannot find it');
     if (!/\btabIndex=\{\s*-1\s*\}/.test(attributes)) failures.push('the container is not tabindex="-1" — focus cannot land on it');
-    if (!/\baria-labelledby=\{\s*FOCUS_PANEL_TITLE_ID\s*\}/.test(attributes)) failures.push('the container is not labelled by its title');
+    if (!/\baria-labelledby=\{\s*panel\s*===\s*null\s*\?\s*undefined\s*:\s*FOCUS_PANEL_TITLE_ID\s*\}/.test(attributes)) {
+      failures.push('the container is not labelled by its title exactly while the title is rendered');
+    }
     if (!/\bref=\{\s*container\s*\}/.test(attributes)) failures.push('the container is not the element focus moves to');
     if (!/\bstyle=\{\s*panelStyle\(\s*focusedProjectId\s*!==\s*null\s*&&\s*panel\s*!==\s*null\s*\)\s*\}/.test(attributes)) {
       failures.push('the style is not panelStyle(open), open exactly while a known Project is focused');
@@ -376,6 +378,15 @@ function auditPanel(source: string): string[] {
       failures.push('the effect does not ask focusMove(previous, next)');
     }
     if (!/previous\.current\s*=\s*focusedProjectId/.test(body)) failures.push('the effect does not remember the previous ID');
+    if ((body.match(/previous\.current\s*=/g) ?? []).length > 1) failures.push('the effect writes the previous ID more than once');
+    const asked = body.search(/focusMove\(/);
+    const remembered = body.search(/previous\.current\s*=/);
+    if (asked !== -1 && remembered !== -1 && remembered < asked) {
+      failures.push('the previous ID is overwritten before focusMove reads it — every move would be null');
+    }
+    if (!/\}\s*else\s+if\s*\(\s*move\s*!==\s*null\s*\)\s*\{\s*document\.getElementById\(\s*indexEntryId\(\s*move\.entry\s*\)\s*\)/.test(body)) {
+      failures.push('release is not exactly the branch where move is { entry } — the else of `panel`, guarded by `move !== null`');
+    }
     if (!/if\s*\(\s*move\s*===\s*'panel'\s*\)\s*\{[\s\S]*container\.current\?\.focus\(/.test(body)) {
       failures.push('entry does not move DOM focus to the panel container');
     }
@@ -383,7 +394,7 @@ function auditPanel(source: string): string[] {
       failures.push('entry does not reset the panel to its top — B would open at A’s reading position');
     }
     if (!/document\.getElementById\(\s*indexEntryId\(\s*move\.entry\s*\)\s*\)\?\.focus\(\s*\)/.test(body)) {
-      failures.push('release does not return DOM focus to the entry that opened the panel');
+      failures.push('release does not return DOM focus to the released Project’s entry');
     }
   }
   return failures;
@@ -406,7 +417,8 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
     ['a scrim', (s) => s.replace('<aside', '<div className="scrim" />\n    <aside')],
     ['a modal', (s) => s.replace('tabIndex={-1}', 'tabIndex={-1}\n      aria-modal="true"')],
     ['not focusable', (s) => s.replace('tabIndex={-1}', '')],
-    ['unlabelled', (s) => s.replace('aria-labelledby={FOCUS_PANEL_TITLE_ID}', '')],
+    ['unlabelled', (s) => s.replace('aria-labelledby={panel === null ? undefined : FOCUS_PANEL_TITLE_ID}', '')],
+    ['labelled before any title exists', (s) => s.replace('aria-labelledby={panel === null ? undefined : FOCUS_PANEL_TITLE_ID}', 'aria-labelledby={FOCUS_PANEL_TITLE_ID}')],
     ['the wrong id', (s) => s.replace('id={FOCUS_PANEL_ID}', 'id="panel"')],
     ['the title unmarked', (s) => s.replace('<h2 key={block.kind} id={FOCUS_PANEL_TITLE_ID}>', '<h2 key={block.kind}>')],
     ['always open', (s) => s.replace('panelStyle(focusedProjectId !== null && panel !== null)', 'panelStyle(true)')],
@@ -422,6 +434,17 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
     ['the label not a header cell', (s) => s.replace('<th scope="row">{row.label}</th>', '<td>{row.label}</td>')],
     ['the value replaced by the label', (s) => s.replace('<td>{row.value}</td>', '<td>{row.label}</td>')],
     ['no scroll reset on entry', (s) => s.replace('container.current?.scrollTo({ top: 0 });', '')],
+    [
+      'the previous ID overwritten before it is read',
+      (s) =>
+        s.replace(
+          /(const move = focusMove\(previous\.current, focusedProjectId\);)(\r?\n\s*)(previous\.current = focusedProjectId;)/,
+          '$3$2$1',
+        ),
+    ],
+    ['the release branch inverted', (s) => s.replace('} else if (move !== null) {', '} else if (move === null) {')],
+    ['the release branch unguarded', (s) => s.replace('} else if (move !== null) {', '} else {')],
+    ['the previous ID written twice', (s) => s.replace('previous.current = focusedProjectId;', 'previous.current = focusedProjectId;\n    previous.current = null;')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);
@@ -462,9 +485,33 @@ test('each Project entry in the index carries the id focus returns to', () => {
   }
 });
 
+function auditMount(source: string): string[] {
+  const code = blank(source);
+  const failures: string[] = [];
+  if (!/import\s*\{\s*FocusPanel\s*\}\s*from\s*'\.\/shell\/focus-panel\.tsx'/.test(code)) failures.push('FocusPanel is not imported from the shell');
+  const mounts = code.match(/<FocusPanel\b[^>]*>/g) ?? [];
+  if (mounts.length !== 1) failures.push(`FocusPanel is mounted ${mounts.length} times`);
+  if (!/<FocusPanel\s+artifact=\{\s*artifact\s*\}\s*\/>/.test(code)) failures.push('FocusPanel is not handed the artifact');
+  const scene = code.indexOf('<SceneHost');
+  const panel = code.indexOf('<FocusPanel');
+  if (scene === -1 || panel === -1 || panel < scene) failures.push('the panel does not follow the scene in document order');
+  return failures;
+}
+
 test('App.tsx mounts the panel after the scene host', () => {
-  const code = blank(readFileSync(APP_TSX, 'utf8'));
-  assert.match(code, /import\s*\{\s*FocusPanel\s*\}\s*from\s*'\.\/shell\/focus-panel\.tsx'/);
-  assert.match(code, /<FocusPanel\s+artifact=\{\s*artifact\s*\}\s*\/>/);
-  assert.ok(code.indexOf('<SceneHost') < code.indexOf('<FocusPanel'), 'the panel follows the scene in document order');
+  const real = readFileSync(APP_TSX, 'utf8');
+  assert.deepEqual(auditMount(real), []);
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['the panel not mounted', (s) => s.replace(/^\s*<FocusPanel artifact=\{artifact\} \/>\r?\n/m, '')],
+    ['the panel before the scene', (s) => s.replace('<SceneHost artifact={artifact} />', '<FocusPanel artifact={artifact} />\n      <SceneHost artifact={artifact} />').replace(/(<SceneHost artifact=\{artifact\} \/>\s*)<FocusPanel artifact=\{artifact\} \/>/, '$1')],
+    ['the scene removed', (s) => s.replace(/^\s*<SceneHost artifact=\{artifact\} \/>\r?\n/m, '')],
+    ['mounted twice', (s) => s.replace('<FocusPanel artifact={artifact} />', '<FocusPanel artifact={artifact} />\n      <FocusPanel artifact={artifact} />')],
+    ['no artifact', (s) => s.replace('<FocusPanel artifact={artifact} />', '<FocusPanel artifact={{ clients: [] }} />')],
+    ['imported from elsewhere', (s) => s.replace("from './shell/focus-panel.tsx'", "from './panel.tsx'")],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
+    assert.notDeepEqual(auditMount(mutated), [], `"${name}" must be rejected`);
+  }
 });
