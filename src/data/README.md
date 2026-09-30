@@ -100,9 +100,3 @@ They are equivalent in *meaning*, but not identical in *parsed shape*: an absent
 Run `npm test` too if you touched the schema rather than only the data.
 
 Nothing else needs touching — no layout, no camera, no position, no Dwell value. That is the maintenance guarantee this epic exists to deliver.
-
-## Known placeholder
-
-The SNCF entry's `duration` (`2019-01` → `2021-01`) is a **placeholder**. The approved inventory draft records no dates, but `duration` is required because two mapping rules derive from it, so the entry ships with marked placeholder months to keep the story shippable and the schema exercised against real content. Thomas replaces them with the actual engagement months; no schema or structural change is involved.
-
-`company` is `null` for the same entry: the intermediate consultancy is recorded in the inventory as *(intermediate — to fill)*. `null` is deliberate rather than a placeholder string, which the Colophon (Epic 5) would otherwise render verbatim. Filling it later needs no schema change.
