@@ -11,8 +11,10 @@
  * camera's matrices (the rig, mounted before this, has just moved it), read
  * `navigationStore.getState()` once, hand `moteFrame` the carried field, the
  * artifact, the Bodies, the Dust media, the focused ID, the camera's matrices
- * and R3F's canvas width, keep the result, and apply each draw with
- * `applyMoteDraw`. It writes no store field and subscribes to nothing.
+ * and R3F's canvas width, the frame `delta` and the reduced-motion preference
+ * (`reducedMotion()`, read once per frame — 2.10), keep the result, and apply
+ * each draw with `applyMoteDraw`. It writes no store field and subscribes to
+ * nothing.
  *
  * **A pool, keyed by Skill.** One mesh per `motePool` entry, mounted once and
  * shown or hidden per frame, so one Skill is one object — the `A → B` hand-off
@@ -31,6 +33,7 @@ import { Html } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { useRef } from 'react';
 import type { Mesh, MeshBasicMaterial, SphereGeometry } from 'three';
+import { reducedMotion } from '../shell/motion-preference.ts';
 import { navigationStore } from '../shell/state.ts';
 import type { DustMedium } from './dust-model.ts';
 import {
@@ -60,7 +63,7 @@ export function MoteField({ artifact, bodies, media }: MoteFieldProps) {
   useFrame(({ camera, size }, delta) => {
     camera.updateMatrixWorld();
     const state = navigationStore.getState();
-    field.current = moteFrame(field.current, artifact, bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.width, delta);
+    field.current = moteFrame(field.current, artifact, bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.width, delta, reducedMotion());
     field.current.draws.forEach((draw, index) => applyMoteDraw(dots.current[index], labels.current[index], draw));
   });
 

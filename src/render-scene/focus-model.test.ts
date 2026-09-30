@@ -12,6 +12,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Frustum, Matrix4, PerspectiveCamera, Vector3 } from 'three';
 import { FOCUS_SECONDS, easeFocus, reversingFactor } from '../shell/focus-motion.ts';
+import { motionPace } from '../shell/motion-preference.ts';
 import { PANEL_FRACTION, panelFraction } from '../shell/panel-model.ts';
 import { FOCUS_REACH, FOCUS_WIDEST_ASPECT, focusFrame, focusPose, stepFocus, type FocusMotion } from './focus-model.ts';
 import { RAIL_MAX_FRAME_SECONDS, buildRail, railFrame, railPose, type Rail, type RailPose } from './rail-model.ts';
@@ -413,6 +414,87 @@ test('a long frame advances at most RAIL_MAX_FRAME_SECONDS, and a non-finite one
   assert.equal(stepFocus(entered, 'p-a', railA, poseOf, -1).elapsed, 0);
 });
 
+// --- Reduced motion (2.10) --------------------------------------------------------
+
+test('reduced: entering Focus completes at exactly FOCUS_SECONDS × pace, on the same curve, and not a frame before', () => {
+  const pace = motionPace(true);
+  const rest = last(run(null, null, 3));
+  const entered = stepFocus(rest, 'p-a', railA, poseOf, DT, true);
+  assert.deepEqual(entered.pose, railA, 'the change frame holds the pose on screen: no cut');
+  const n = 24;
+  const step = (FOCUS_SECONDS * pace) / n;
+  let motion = entered;
+  for (let i = 1; i <= n; i += 1) {
+    motion = stepFocus(motion, 'p-a', railA, poseOf, step, true);
+    if (i < n) {
+      const u = easeFocus((i * step) / pace / FOCUS_SECONDS);
+      const expected = railA.position.x + (poseOf('p-a').position.x - railA.position.x) * u;
+      assert.ok(Math.abs(motion.pose.position.x - expected) < 1e-9, `at ${i}/${n} it is on the curve`);
+      assert.notDeepEqual(motion.pose, poseOf('p-a'), `not there at ${i}/${n}`);
+    } else {
+      assert.ok(Math.abs(motion.elapsed - FOCUS_SECONDS) < 1e-9);
+      assert.deepEqual(motion.pose, poseOf('p-a'), 'at rest on the goal exactly');
+    }
+  }
+});
+
+test('reduced: a release mid-slide still ends with the (shorter) reversed slide', () => {
+  const pace = motionPace(true);
+  const rest = last(run(null, null, 3));
+  let motion = stepFocus(rest, 'p-a', railA, poseOf, DT, true);
+  for (let i = 0; i < 4; i += 1) motion = stepFocus(motion, 'p-a', railA, poseOf, DT, true);
+  const released = stepFocus(motion, null, railA, poseOf, DT, true);
+  const progress = easeFocus(motion.slide.elapsed / motion.slide.seconds);
+  assert.equal(released.seconds, FOCUS_SECONDS * progress, 'the factor is a ratio, so it is the same at any pace');
+  let frames = 0;
+  let current = released;
+  while (current.elapsed < current.seconds) {
+    current = stepFocus(current, null, railA, poseOf, DT, true);
+    frames += 1;
+  }
+  assert.equal(frames, Math.ceil((released.seconds * pace) / DT - 1e-9), 'rests when CSS’s reversed slide at FOCUS_SECONDS × pace ends');
+  assert.deepEqual(current.pose, railA);
+});
+
+test('reduced toggled mid-move: it continues from the drawn pose, faster — C0', () => {
+  const rest = last(run(null, null, 3));
+  const partway = last(run(rest, 'p-a', Math.round((0.3 * FOCUS_SECONDS) / DT)));
+  const faster = stepFocus(partway, 'p-a', railA, poseOf, DT, true);
+  const slower = stepFocus(partway, 'p-a', railA, poseOf, DT, false);
+  assert.equal(faster.from, partway.from, 'the same move, not a new one');
+  assert.ok(faster.elapsed > slower.elapsed, 'faster');
+  // One reduced frame covers DT / pace of the curve: bounded by its steepest slope,
+  // as any frame of a full-length move is — a step, never a jump to the goal.
+  const whole = distance(railA.position, poseOf('p-a').position);
+  const bound = (whole * 3 * DT) / motionPace(true) / FOCUS_SECONDS;
+  assert.ok(distance(faster.pose.position, partway.pose.position) < bound, 'a bounded step from the drawn pose, not a cut');
+  assert.ok(bound < distance(partway.pose.position, poseOf('p-a').position) / 2, 'and the bound is well short of the goal');
+  assert.ok(distance(faster.pose.position, partway.pose.position) > distance(slower.pose.position, partway.pose.position));
+  const settled = last(run(faster, 'p-a', settleFrames));
+  assert.deepEqual(settled.pose, poseOf('p-a'), 'and the rest pose is the same goal');
+});
+
+test('reduced: at rest nothing moves — the rest poses are identical', () => {
+  const railRest = last(run(null, null, 3));
+  assert.deepEqual(stepFocus(railRest, null, railA, poseOf, DT, true).pose, stepFocus(railRest, null, railA, poseOf, DT).pose);
+  const focused = last(run(railRest, 'p-a', settleFrames));
+  assert.deepEqual(stepFocus(focused, 'p-a', railA, poseOf, DT, true).pose, poseOf('p-a'));
+  // A long frame is still clamped before it is dilated: a background tab resumes as a glide.
+  const entered = stepFocus(railRest, 'p-a', railA, poseOf, DT);
+  assert.equal(stepFocus(entered, 'p-a', railA, poseOf, 5, true).elapsed, RAIL_MAX_FRAME_SECONDS / motionPace(true));
+  assert.equal(stepFocus(entered, 'p-a', railA, poseOf, Number.NaN, true).elapsed, 0);
+});
+
+test('focusFrame hands its reduced to the step', () => {
+  const { rail, bodies } = railOf(fixture());
+  const frame = railFrame(null, rail, 1, 1600, 900, DT);
+  const id = 'project:client:a/1';
+  const entered = focusFrame(focusFrame(null, rail, bodies, null, frame, 1600, DT), rail, bodies, id, frame, 1600, DT);
+  const full = focusFrame(entered, rail, bodies, id, frame, 1600, DT);
+  const reduced = focusFrame(entered, rail, bodies, id, frame, 1600, DT, true);
+  assert.ok(Math.abs(reduced.elapsed - full.elapsed / motionPace(true)) < 1e-12);
+});
+
 test('the camera stays on the +z side of its aim throughout a real move between Rail and Focus', () => {
   const { rail, bodies } = railOf(fixture());
   const id = 'project:client:b/1';
@@ -443,7 +525,7 @@ test('focusFrame binds the Rail’s frame, its damped aspect and the panel’s s
 function auditFocusModel(source: string): string[] {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
   const failures: string[] = [];
-  const allowed = new Set(['../shell/focus-motion.ts', '../shell/panel-model.ts', './rail-model.ts', './scene-model.ts']);
+  const allowed = new Set(['../shell/focus-motion.ts', '../shell/motion-preference.ts', '../shell/panel-model.ts', './rail-model.ts', './scene-model.ts']);
   for (const [, specifier] of code.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {
     if (!allowed.has(specifier ?? '')) failures.push(`imports ${specifier}`);
   }

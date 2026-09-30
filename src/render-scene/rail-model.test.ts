@@ -19,6 +19,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Frustum, Matrix4, PerspectiveCamera, Vector3 } from 'three';
+import { motionPace } from '../shell/motion-preference.ts';
 import { railStopCount as inputStopCount } from '../shell/rail-input.ts';
 import {
   DWELL_SLOWDOWN,
@@ -1128,6 +1129,75 @@ test('a resize eases: the aspect is damped, and the framing moves a little each 
   assert.equal(stepRailMotion(null, rail, 0, 0, 0.016).aspect.value, NARROWEST_ASPECT, 'first frame: the floor, the safest frame');
 });
 
+// --- Reduced motion (2.10) --------------------------------------------------------
+
+test('reduced: the spring runs on RAIL_SPRING_SECONDS × pace — the same curve in pace × the time, for progress and aspect', () => {
+  const { rail } = railOf(fiveStops());
+  const pace = motionPace(true);
+  const dt = 1 / 60;
+  assert.ok(dt / pace <= RAIL_MAX_FRAME_SECONDS, 'the comparison stays under the clamp');
+  let reduced: RailMotion = stepRailMotion(null, rail, 0, 1.5, dt);
+  let full: RailMotion = reduced;
+  for (let i = 0; i < 90; i += 1) {
+    reduced = stepRailMotion(reduced, rail, 3, 0.6, dt, true);
+    full = stepRailMotion(full, rail, 3, 0.6, dt / pace);
+    // For a critically damped spring, `seconds × pace` over dt is `seconds` over dt / pace.
+    assert.ok(Math.abs(reduced.progress.value - full.progress.value) < 1e-9, `progress at frame ${i}`);
+    assert.ok(Math.abs(reduced.aspect.value - full.aspect.value) < 1e-9, `aspect at frame ${i}`);
+  }
+  // Explicitly: the step is dampProgress on the shortened time constant.
+  const from = { value: 1, velocity: 0.2 };
+  const one = stepRailMotion({ progress: from, aspect: { value: 1.5, velocity: 0 } }, rail, 2, 1.5, dt, true);
+  assert.deepEqual(one.progress, dampProgress(from, 2, dt, RAIL_SPRING_SECONDS * pace));
+});
+
+test('reduced: the spring settles sooner, continuously — no frame is a cut', () => {
+  const { rail } = railOf(fiveStops());
+  const settle = (reduced: boolean): { frames: number; largest: number } => {
+    let motion: RailMotion = stepRailMotion(null, rail, 0, 1.5, 0.016);
+    let largest = 0;
+    for (let i = 1; i <= 2000; i += 1) {
+      const next = stepRailMotion(motion, rail, 3, 1.5, 1 / 60, reduced);
+      largest = Math.max(largest, Math.abs(next.progress.value - motion.progress.value));
+      motion = next;
+      if (Math.abs(motion.progress.value - 3) < 1e-3) return { frames: i, largest };
+    }
+    return assert.fail('never settled');
+  };
+  const full = settle(false);
+  const reduced = settle(true);
+  assert.ok(reduced.frames < full.frames * 0.3, `reduced settles in ${reduced.frames} frames against ${full.frames}`);
+  assert.ok(reduced.largest < 1, `the largest step, ${reduced.largest} stops, is well short of the 3-stop jump`);
+});
+
+test('reduced toggled mid-spring: velocity is carried, so the value is continuous', () => {
+  const { rail } = railOf(fiveStops());
+  let motion: RailMotion = stepRailMotion(null, rail, 0, 1.5, 0.016);
+  for (let i = 0; i < 20; i += 1) motion = stepRailMotion(motion, rail, 3, 1.5, 1 / 60);
+  const faster = stepRailMotion(motion, rail, 3, 1.5, 1 / 60, true);
+  const slower = stepRailMotion(motion, rail, 3, 1.5, 1 / 60);
+  assert.ok(faster.progress.value > slower.progress.value, 'faster');
+  assert.ok(faster.progress.value - motion.progress.value < 0.5, 'a step, not a jump to the goal');
+});
+
+test('reduced: rest and the Dwell are untouched — the pose at rest is identical, and a settled spring stays put', () => {
+  const { rail } = railOf(fiveStops());
+  let motion = railFrame(null, rail, 0, 1600, 900, 0.016).motion;
+  for (let i = 0; i < 600; i += 1) motion = railFrame(motion, rail, 2.4, 1600, 900, 1 / 60).motion;
+  const full = railFrame(motion, rail, 2.4, 1600, 900, 1 / 60);
+  const reduced = railFrame(motion, rail, 2.4, 1600, 900, 1 / 60, true);
+  assert.ok(Math.abs(full.motion.progress.value - reduced.motion.progress.value) < 1e-9);
+  assertNear(reduced.pose.position, full.pose.position, 'the pose at rest', 1e-6);
+  // The Dwell is the warp, and the warp reads progress alone: the same progress is the same pose.
+  assert.deepEqual(
+    railPose(rail, reduced.motion.progress.value, reduced.motion.aspect.value),
+    reduced.pose,
+    'the pose is railPose of the damped values, whatever the pace',
+  );
+  const atRest = { progress: { value: 2, velocity: 0 }, aspect: { value: 1.5, velocity: 0 } };
+  assert.deepEqual(stepRailMotion(atRest, rail, 2, 1.5, 1 / 60, true), atRest, 'a spring at rest is not moved by the pace');
+});
+
 // --- Purity --------------------------------------------------------------------
 
 /** The model's imports and globals, as a pure function over its source. */
@@ -1136,7 +1206,9 @@ function auditRailModel(source: string): string[] {
   const failures: string[] = [];
   const specifiers = [...code.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)].map((match) => match[1]);
   for (const specifier of specifiers) {
-    if (specifier !== './scene-model.ts') failures.push(`imports ${specifier} — the Rail model imports ./scene-model.ts only`);
+    if (specifier !== './scene-model.ts' && specifier !== '../shell/motion-preference.ts') {
+      failures.push(`imports ${specifier} — the Rail model imports ./scene-model.ts and the pace only`);
+    }
   }
   if (/\brequire\s*\(/.test(code)) failures.push('requires a module');
   if (/\bwindow\b|\bdocument\b|\bnavigator\b/.test(code)) failures.push('reads a DOM global');
@@ -1148,7 +1220,7 @@ function auditRailModel(source: string): string[] {
   return failures;
 }
 
-test('the Rail model imports ./scene-model.ts only and reads no clock, DOM or store', () => {
+test('the Rail model imports ./scene-model.ts and the pace only, and reads no clock, DOM or store', () => {
   assert.deepEqual(auditRailModel(readFileSync(MODEL_TS, 'utf8')), []);
 });
 

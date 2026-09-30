@@ -271,8 +271,10 @@ export interface CrossFadeTiming {
 
 /**
  * The cross-fade's keyframes and timing: the incoming layer from 0 to 1 and the
- * outgoing one from `drawn` to 0, over `FOCUS_SECONDS` (in milliseconds, as
- * WAAPI counts) on `focusEasingCss()`, holding the end.
+ * outgoing one from `drawn` to 0, over `FOCUS_SECONDS × pace` (in milliseconds,
+ * as WAAPI counts) on `focusEasingCss()`, holding the end. `pace` is the
+ * reduced-motion pace (2.10, `motionPace`): `1` at full motion, shorter —
+ * never `0` — reduced, as the camera's moves are.
  *
  * `drawn` is the opacity the outgoing content was on screen at — the incoming
  * layer's computed opacity as the swap happens, a string because that is what
@@ -280,13 +282,14 @@ export interface CrossFadeTiming {
  * where it had faded in to, rather than cutting it to full. It is clamped to
  * `[0, 1]`, and anything that does not parse reads as 1.
  */
-export function crossFadeTiming(drawn: string | number): CrossFadeTiming {
+export function crossFadeTiming(drawn: string | number, pace = 1): CrossFadeTiming {
+  const seconds = FOCUS_SECONDS * usablePace(pace);
   const parsed = typeof drawn === 'number' ? drawn : drawn.trim() === '' ? Number.NaN : Number(drawn);
   const from = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), 1) : 1;
   return {
     incoming: [{ opacity: 0 }, { opacity: 1 }],
     outgoing: [{ opacity: from }, { opacity: 0 }],
-    options: { duration: FOCUS_SECONDS * 1000, easing: focusEasingCss(), fill: 'forwards' },
+    options: { duration: seconds * 1000, easing: focusEasingCss(), fill: 'forwards' },
   };
 }
 
@@ -356,11 +359,16 @@ export interface PanelStyle {
  * so the panel is visible for the whole slide and hidden exactly once it ends,
  * with no `transitionend` listener to miss.
  *
+ * Both the slide and the visibility delay run on `FOCUS_SECONDS × pace` (2.10),
+ * the reduced-motion pace the camera's Focus ease is dilated by, so the two
+ * halves still start and end together.
+ *
  * Greybox: CSS system colours and a hairline, no token. It paints its own
  * column and nothing else — no scrim, no backdrop, no overlay.
  */
-export function panelStyle(open: boolean): PanelStyle {
-  const curve = `${FOCUS_SECONDS}s ${focusEasingCss()}`;
+export function panelStyle(open: boolean, pace = 1): PanelStyle {
+  const seconds = FOCUS_SECONDS * usablePace(pace);
+  const curve = `${seconds}s ${focusEasingCss()}`;
   return {
     position: 'fixed',
     top: 0,
@@ -377,6 +385,15 @@ export function panelStyle(open: boolean): PanelStyle {
     borderLeft: '1px solid GrayText',
     transform: open ? 'translateX(0)' : 'translateX(100%)',
     visibility: open ? 'visible' : 'hidden',
-    transition: `transform ${curve}, visibility 0s linear ${open ? 0 : FOCUS_SECONDS}s`,
+    transition: `transform ${curve}, visibility 0s linear ${open ? 0 : seconds}s`,
   };
+}
+
+/**
+ * A pace a duration can be multiplied by: a positive finite number, else `1`.
+ * A `0` would be a cut and a `NaN` an invalid CSS time, which the browser drops
+ * silently — so anything unusable reads as full motion rather than as either.
+ */
+function usablePace(pace: number): number {
+  return Number.isFinite(pace) && pace > 0 ? pace : 1;
 }

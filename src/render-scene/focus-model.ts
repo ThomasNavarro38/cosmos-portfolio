@@ -38,6 +38,7 @@
 
 import { FOCUS_SECONDS, easeFocus, reversingFactor } from '../shell/focus-motion.ts';
 import { PANEL_FRACTION, panelFraction } from '../shell/panel-model.ts';
+import { motionPace } from '../shell/motion-preference.ts';
 import { RAIL_MAX_FRAME_SECONDS, type Rail, type RailFrame, type RailPose } from './rail-model.ts';
 import { DEFAULT_FOV, DEFAULT_NEAR, NARROWEST_ASPECT, type Body, type ScenePosition } from './scene-model.ts';
 
@@ -208,9 +209,12 @@ function flipSlide(slide: FocusSlide, open: boolean): FocusSlide {
  *     two halves of an interrupted move still end together. `A → B` leaves the
  *     panel open, so its slide runs on and the camera takes the full duration.
  *   - **Otherwise:** advance by `dt` (clamped to `[0, RAIL_MAX_FRAME_SECONDS]`,
- *     so a background tab resumes as a glide) and blend from the captured pose
- *     to the goal by `easeFocus(elapsed / seconds)`. At `seconds` the pose is
- *     the goal, exactly; a zero-length ease is at its goal on its first step.
+ *     so a background tab resumes as a glide, then divided by the reduced-motion
+ *     pace, 2.10) and blend from the captured pose to the goal by
+ *     `easeFocus(elapsed / seconds)`. At `seconds` the pose is the goal,
+ *     exactly; a zero-length ease is at its goal on its first step. Reduced, the
+ *     ease and the slide it tracks complete at `seconds × pace` — the panel's CSS
+ *     runs on `FOCUS_SECONDS × pace` too, so they still end together.
  *
  * Position and aim are blended linearly and separately. Every goal keeps its
  * camera on the `+z` side of its aim — a Rail offset has `z > 0`, and a focus
@@ -223,6 +227,7 @@ export function stepFocus(
   railPose: RailPose,
   focusPoseOf: (id: string) => RailPose,
   dt: number,
+  reduced = false,
 ): FocusMotion {
   if (previous === null) {
     return {
@@ -240,7 +245,7 @@ export function stepFocus(
     const seconds = slide === previous.slide ? FOCUS_SECONDS : slide.seconds;
     return { id: focusedId, from: previous.pose, elapsed: 0, seconds, slide, pose: previous.pose };
   }
-  const step = Number.isFinite(dt) ? Math.min(Math.max(dt, 0), RAIL_MAX_FRAME_SECONDS) : 0;
+  const step = (Number.isFinite(dt) ? Math.min(Math.max(dt, 0), RAIL_MAX_FRAME_SECONDS) : 0) / motionPace(reduced);
   const elapsed = Math.min(previous.elapsed + step, previous.seconds);
   const slide = { ...previous.slide, elapsed: Math.min(previous.slide.elapsed + step, previous.slide.seconds) };
   const goal = focusedId === null ? railPose : focusPoseOf(focusedId);
@@ -269,10 +274,11 @@ export function focusFrame(
   frame: RailFrame,
   width: number,
   delta: number,
+  reduced = false,
 ): FocusMotion {
   const aspect = frame.motion.aspect.value;
   const fraction = panelFraction(width);
-  return stepFocus(previous, focusedId, frame.pose, (id) => focusPose(rail, bodies, id, aspect, fraction), delta);
+  return stepFocus(previous, focusedId, frame.pose, (id) => focusPose(rail, bodies, id, aspect, fraction), delta, reduced);
 }
 
 function along(origin: ScenePosition, direction: ScenePosition, scale: number): ScenePosition {

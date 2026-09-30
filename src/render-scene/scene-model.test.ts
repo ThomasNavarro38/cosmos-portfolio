@@ -1650,20 +1650,21 @@ function auditRig(source: string): string[] {
     .filter((statement) => statement !== '');
   const expected = [
     'conststate=navigationStore.getState()',
-    'constframe=railFrame(motion.current,rail,state.scrollProgress,size.width,size.height,delta)',
+    'constreduced=reducedMotion()',
+    'constframe=railFrame(motion.current,rail,state.scrollProgress,size.width,size.height,delta,reduced)',
     'motion.current=frame.motion',
-    'constflown=flightFrame(flight.current,rail,state.mode,state.flightTarget,frame,delta)',
+    'constflown=flightFrame(flight.current,rail,state.mode,state.flightTarget,frame,delta,reduced)',
     'flight.current=flown.motion',
-    'focus.current=focusFrame(focus.current,rail,bodies,state.focusedProjectId,flown.frame,size.width,delta)',
+    'focus.current=focusFrame(focus.current,rail,bodies,state.focusedProjectId,flown.frame,size.width,delta,reduced)',
     'camera.position.set(focus.current.pose.position.x,focus.current.pose.position.y,focus.current.pose.position.z)',
     'camera.lookAt(focus.current.pose.target.x,focus.current.pose.target.y,focus.current.pose.target.z)',
   ];
   if (JSON.stringify(statements) !== JSON.stringify(expected)) {
     failures.push(
-      'the frame loop is not exactly: read getState() once, railFrame(motion.current, rail, state.scrollProgress, ' +
-        'size.width, size.height, delta), write motion back, flightFrame(flight.current, rail, state.mode, ' +
-        'state.flightTarget, frame, delta) with its motion written back, focusFrame(focus.current, rail, bodies, ' +
-        'state.focusedProjectId, flown.frame, size.width, delta) written back, apply its position and aim',
+      'the frame loop is not exactly: read getState() once, read reducedMotion() once, railFrame(motion.current, rail, ' +
+        'state.scrollProgress, size.width, size.height, delta, reduced), write motion back, flightFrame(flight.current, ' +
+        'rail, state.mode, state.flightTarget, frame, delta, reduced) with its motion written back, focusFrame(focus.current, ' +
+        'rail, bodies, state.focusedProjectId, flown.frame, size.width, delta, reduced) written back, apply its position and aim',
     );
   }
   if (!/const\s+motion\s*=\s*useRef<RailMotion\s*\|\s*null>\(\s*null\s*\)/.test(code)) {
@@ -1709,7 +1710,15 @@ test('the rig audit rejects the real rig with any one guarantee broken', () => {
     ['a literal aim', (s) => s.replace(AIM, 'camera.lookAt(0, 0, 0)')],
     ['no getState read', (s) => s.replace('state = navigationStore.getState()', 'state = { scrollProgress: 0, focusedProjectId: null }')],
     ['the write-back removed', (s) => s.replace('motion.current = frame.motion;', '')],
-    ['delta dropped', (s) => s.replace('size.height, delta)', 'size.height, 0)')],
+    ['delta dropped', (s) => s.replace('size.height, delta, reduced)', 'size.height, 0, reduced)')],
+    // Reduced motion's half of the binding (2.10).
+    ['the Rail at full motion always', (s) => s.replace('size.height, delta, reduced)', 'size.height, delta)')],
+    ['flight at full motion always', (s) => s.replace('state.flightTarget, frame, delta, reduced)', 'state.flightTarget, frame, delta)')],
+    ['Focus at full motion always', (s) => s.replace('flown.frame, size.width, delta, reduced)', 'flown.frame, size.width, delta)')],
+    ['a constant preference', (s) => s.replace('const reduced = reducedMotion();', 'const reduced = true;')],
+    ['the preference read per model', (s) => s.replace('state.flightTarget, frame, delta, reduced)', 'state.flightTarget, frame, delta, reducedMotion())')],
+    ['the preference subscribed', (s) => s.replace('const motion = useRef', 'const reduced0 = useSyncExternalStore(subscribeReducedMotion, reducedMotion);\n  const motion = useRef')],
+    ['the preference written from the loop', (s) => s.replace('const reduced = reducedMotion();', 'const reduced = reducedMotion();\n    setReducedMotion(false);')],
     ['a constant width', (s) => s.replace('scrollProgress, size.width,', 'scrollProgress, 1600,')],
     ['a constant height', (s) => s.replace('size.width, size.height,', 'size.width, 900,')],
     ['a fresh motion every frame', (s) => s.replace('railFrame(motion.current,', 'railFrame(null,')],
@@ -1730,8 +1739,8 @@ test('the rig audit rejects the real rig with any one guarantee broken', () => {
     ['the Rail aim drawn over Focus', (s) => s.replace(AIM, 'camera.lookAt(frame.pose.target.x, frame.pose.target.y, frame.pose.target.z)')],
     ['a fresh Focus every frame', (s) => s.replace('focusFrame(focus.current,', 'focusFrame(null,')],
     ['the Focus write-back removed', (s) => s.replace('focus.current = focusFrame(', 'void focusFrame(')],
-    ['a constant panel width', (s) => s.replace('flown.frame, size.width, delta)', 'flown.frame, 1600, delta)')],
-    ['Focus without time', (s) => s.replace('flown.frame, size.width, delta)', 'flown.frame, size.width, 0)')],
+    ['a constant panel width', (s) => s.replace('flown.frame, size.width, delta, reduced)', 'flown.frame, 1600, delta, reduced)')],
+    ['Focus without time', (s) => s.replace('flown.frame, size.width, delta, reduced)', 'flown.frame, size.width, 0, reduced)')],
     // Flight's half of the binding (2.9).
     ['flight skipped: Focus over the bare Rail', (s) => s.replace('state.focusedProjectId, flown.frame,', 'state.focusedProjectId, frame,')],
     ['flight not stepped', (s) => s.replace(/\s*const flown = flightFrame\([^;]*;\s*flight\.current = flown\.motion;/, '\n    const flown = { frame };')],
@@ -1739,7 +1748,7 @@ test('the rig audit rejects the real rig with any one guarantee broken', () => {
     ['the target ignored', (s) => s.replace('state.mode, state.flightTarget, frame', 'state.mode, null, frame')],
     ['a fresh flight every frame', (s) => s.replace('flightFrame(flight.current,', 'flightFrame(null,')],
     ['the flight write-back removed', (s) => s.replace('flight.current = flown.motion;', '')],
-    ['flight without time', (s) => s.replace('state.flightTarget, frame, delta)', 'state.flightTarget, frame, 0)')],
+    ['flight without time', (s) => s.replace('state.flightTarget, frame, delta, reduced)', 'state.flightTarget, frame, 0, reduced)')],
     ['the flight ref started full', (s) => s.replace('useRef<FlightMotion | null>(null)', 'useRef<FlightMotion | null>(undefined!)')],
     ['flight entered from the rig', (s) => s.replace('flight.current = flown.motion;', 'flight.current = flown.motion;\n    enterFreeFlight(null);')],
     ['Focus without the Bodies', (s) => s.replace('rail, bodies, state.focusedProjectId', 'rail, [], state.focusedProjectId')],
@@ -1916,14 +1925,14 @@ function auditMoteField(source: string): string[] {
     const expected = [
       'camera.updateMatrixWorld()',
       'conststate=navigationStore.getState()',
-      'field.current=moteFrame(field.current,artifact,bodies,media,state.focusedProjectId,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size.width,delta)',
+      'field.current=moteFrame(field.current,artifact,bodies,media,state.focusedProjectId,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size.width,delta,reducedMotion())',
       'field.current.draws.forEach((draw,index)=>applyMoteDraw(dots.current[index],labels.current[index],draw))',
     ];
     if (JSON.stringify(statements) !== JSON.stringify(expected)) {
       failures.push(
         'the frame loop is not exactly: camera.updateMatrixWorld(), one getState() read, moteFrame(field.current, artifact, ' +
           'bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, ' +
-          'size.width, delta) written back, and every draw applied to its own handles',
+          'size.width, delta, reducedMotion()) written back, and every draw applied to its own handles',
       );
     }
   }
@@ -1979,7 +1988,7 @@ test('the Motes’ renderer binds the model and holds no rule of its own', () =>
 test('the Mote audit rejects the real renderer with any one guarantee broken', () => {
   const real = readFileSync(MOTE_FIELD_TSX, 'utf8');
   const CALL =
-    'moteFrame(field.current, artifact, bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.width, delta)';
+    'moteFrame(field.current, artifact, bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.width, delta, reducedMotion())';
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
     ['a store write', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    navigationStore.setState({ focusedProjectId: null });')],
     ['a named event', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    releaseFocus();')],
@@ -1987,12 +1996,16 @@ test('the Mote audit rejects the real renderer with any one guarantee broken', (
     ['a hook binding', (s) => s.replace('state = navigationStore.getState()', 'state = useStore(navigationStore, (value) => value)')],
     ['reactive state', (s) => s.replace('const field = useRef', 'const [, force] = useState(0);\n  const field = useRef')],
     ['useThree', (s) => s.replace('const field = useRef', 'const { size } = useThree();\n  const field = useRef')],
-    ['a DOM read', (s) => s.replace('size.width, delta)', 'window.innerWidth, delta)')],
+    ['a DOM read', (s) => s.replace('size.width, delta, reducedMotion())', 'window.innerWidth, delta, reducedMotion())')],
     ['stale matrices', (s) => s.replace('camera.updateMatrixWorld();', '')],
     ['the matrices swapped', (s) => s.replace('camera.matrixWorldInverse.elements, camera.projectionMatrix.elements', 'camera.projectionMatrix.elements, camera.matrixWorldInverse.elements')],
     ['the world matrix for the view', (s) => s.replace('camera.matrixWorldInverse.elements', 'camera.matrixWorld.elements')],
-    ['a constant width', (s) => s.replace('size.width, delta)', '1600, delta)')],
-    ['no time', (s) => s.replace('size.width, delta)', 'size.width, 0)')],
+    ['a constant width', (s) => s.replace('size.width, delta, reducedMotion())', '1600, delta, reducedMotion())')],
+    ['no time', (s) => s.replace('size.width, delta, reducedMotion())', 'size.width, 0, reducedMotion())')],
+    // Reduced motion (2.10).
+    ['the orbits spin always', (s) => s.replace('size.width, delta, reducedMotion())', 'size.width, delta)')],
+    ['a constant preference', (s) => s.replace('size.width, delta, reducedMotion())', 'size.width, delta, false)')],
+    ['the preference subscribed', (s) => s.replace('const field = useRef', 'const reduced = useSyncExternalStore(subscribeReducedMotion, reducedMotion);\n  const field = useRef')],
     ['Focus ignored', (s) => s.replace('state.focusedProjectId', 'null')],
     ['no Dust to condense from', (s) => s.replace('artifact, bodies, media, state', 'artifact, bodies, [], state')],
     ['a fresh field every frame', (s) => s.replace('moteFrame(field.current,', 'moteFrame(null,')],
@@ -2129,5 +2142,100 @@ test('every module in this directory is covered by the scans above', () => {
     found.filter((name) => !known.has(name)).sort(),
     [],
     'a new module here inherits none of the scans above — widen them, then add it to this list',
+  );
+});
+
+// --- Who reads the reduced-motion preference (2.10) -------------------------------
+
+/** The files that may reference the preference, by role. Everything else is a finding. */
+const PREFERENCE_ROLES: Readonly<Record<string, 'writer' | 'reader' | 'model'>> = {
+  'src/shell/scene-host.tsx': 'writer',
+  'src/render-scene/rail-camera.tsx': 'reader',
+  'src/render-scene/mote-field.tsx': 'reader',
+  'src/shell/focus-panel.tsx': 'reader',
+  'src/render-scene/rail-model.ts': 'model',
+  'src/render-scene/flight-model.ts': 'model',
+  'src/render-scene/focus-model.ts': 'model',
+  'src/render-scene/mote-model.ts': 'model',
+};
+
+/**
+ * Every non-test `.ts`/`.tsx` file under `src/` that references the reduced-motion
+ * preference, as a pure function over files.
+ *
+ * A reference is an import of `motion-preference` in any form, or any of its
+ * names. Only the set in `PREFERENCE_ROLES` may hold one, so no capability
+ * judgement (story 4.1) can read it: the preference paces motion and decides
+ * nothing else. Within the set, each role names only its own part — the writer
+ * `setReducedMotion` and the query, a reader `reducedMotion` (and, in React,
+ * `subscribeReducedMotion`), a model `motionPace` alone, taking `reduced` as an
+ * argument rather than reading the preference itself.
+ */
+function preferenceReaders(files: readonly { readonly path: string; readonly source: string }[]): string[] {
+  const failures: string[] = [];
+  const names = /\b(?:reducedMotion|subscribeReducedMotion|setReducedMotion|motionPace|REDUCED_MOTION_PACE|REDUCED_MOTION_QUERY)\b/;
+  for (const file of files) {
+    if (file.path === 'src/shell/motion-preference.ts' || /\.test\.ts$/.test(file.path)) continue;
+    const code = blankComments(file.source);
+    const imports = [...code.matchAll(/(?:\bfrom|\bimport|\brequire)\s*\(?\s*['"`]([^'"`]+)['"`]/g)].some((match) =>
+      /(?:^|\/)motion-preference(?:\.tsx?)?$/.test(match[1] ?? ''),
+    );
+    if (!imports && !names.test(code)) continue;
+    const role = PREFERENCE_ROLES[file.path];
+    if (role === undefined) {
+      failures.push(`${file.path} references the reduced-motion preference — only the pacing surfaces may`);
+      continue;
+    }
+    const writes = /\b(?:setReducedMotion|REDUCED_MOTION_QUERY)\b/.test(code);
+    const reads = /\b(?:reducedMotion|subscribeReducedMotion)\b/.test(code);
+    if (role !== 'writer' && writes) failures.push(`${file.path} writes the preference — scene-host.tsx is its one writer`);
+    if (role !== 'reader' && reads) failures.push(`${file.path} reads the preference — a ${role} takes what a reader hands it`);
+    if (role === 'model' && !/\breduced\s*=\s*false\b/.test(code)) failures.push(`${file.path} takes no trailing reduced = false`);
+  }
+  return failures;
+}
+
+function sourceFiles(): { path: string; source: string }[] {
+  return readdirSync(SRC_ROOT, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && /\.tsx?$/.test(entry.name))
+    .map((entry) => join(entry.parentPath, entry.name))
+    .map((path) => ({ path: `src/${relative(SRC_ROOT, path).split(sep).join('/')}`, source: readFileSync(path, 'utf8') }));
+}
+
+test('only the pacing surfaces reference the reduced-motion preference, each in its own role', () => {
+  const files = sourceFiles();
+  for (const path of Object.keys(PREFERENCE_ROLES)) {
+    const file = files.find((entry) => entry.path === path);
+    assert.ok(file !== undefined, `${path} is walked`);
+    assert.match(blankComments(file.source), /motion-preference\.ts/, `${path} does reference it — the set is not stale`);
+  }
+  assert.deepEqual(preferenceReaders(files), []);
+});
+
+test('the preference-reader audit rejects each bad form, and ignores prose, tests and the module itself', () => {
+  const at = (path: string, source: string) => [{ path, source }];
+  for (const [path, source] of [
+    ['src/shell/capability.ts', "import { reducedMotion } from './motion-preference.ts';"],
+    ['src/shell/entry.ts', "const pref = await import('./motion-preference.ts');"],
+    ['src/render-fallback/index.ts', "import * as motion from '../shell/motion-preference';"],
+    ['src/shell/index-nav.tsx', 'const reduced = reducedMotion();'],
+    ['src/render-scene/scene.tsx', 'const pace = motionPace(true);'],
+    ['src/render-scene/rail-camera.tsx', "import { setReducedMotion } from '../shell/motion-preference.ts';\nsetReducedMotion(true);"],
+    ['src/shell/focus-panel.tsx', 'window.matchMedia(REDUCED_MOTION_QUERY);'],
+    ['src/render-scene/flight-model.ts', 'export function stepFlight(dt: number, reduced = false) { return dt / motionPace(reducedMotion()); }'],
+    ['src/shell/scene-host.tsx', 'setReducedMotion(true); const r = reducedMotion();'],
+    ['src/render-scene/mote-model.ts', 'const pace = motionPace(true);'],
+  ] as const) {
+    assert.notDeepEqual(preferenceReaders(at(path, source)), [], `${path}: ${source} must be rejected`);
+  }
+  assert.deepEqual(
+    preferenceReaders([
+      { path: 'src/shell/motion-preference.ts', source: 'export function reducedMotion() {}' },
+      { path: 'src/shell/state.test.ts', source: "import { reducedMotion } from './motion-preference.ts';" },
+      { path: 'src/shell/state.ts', source: '// reducedMotion() is read by the rig, not here.' },
+      { path: 'src/render-scene/rail-model.ts', source: "import { motionPace } from '../shell/motion-preference.ts';\nfunction f(dt: number, reduced = false) { return motionPace(reduced); }" },
+      { path: 'src/shell/scene-host.tsx', source: "import { REDUCED_MOTION_QUERY, setReducedMotion } from './motion-preference.ts';" },
+    ]),
+    [],
   );
 });

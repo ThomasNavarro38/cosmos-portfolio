@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { easeFocus } from '../shell/focus-motion.ts';
+import { motionPace } from '../shell/motion-preference.ts';
 import { panelFraction } from '../shell/panel-model.ts';
 import { FLIGHT_SECONDS, flightFrame, flightPose, stepFlight, type FlightMotion } from './flight-model.ts';
 import { focusFrame, focusPose } from './focus-model.ts';
@@ -264,6 +265,67 @@ test('a non-finite or negative dt advances nothing, and a huge one is clamped to
   assert.equal(stepFlight(retarget, 'freeflight', 'client:c', railA, goals, 60).elapsed, RAIL_MAX_FRAME_SECONDS);
 });
 
+// --- Reduced motion (2.10) --------------------------------------------------------
+
+test('reduced: the move completes at exactly FLIGHT_SECONDS × pace, on the same curve, and not a frame before', () => {
+  const pace = motionPace(true);
+  const start = stepFlight(null, 'rail', null, railA, goals, DT, true);
+  const retarget = stepFlight(start, 'freeflight', 'client:c', railA, goals, DT, true);
+  assert.deepEqual(retarget.pose, railA, 'the change of key holds the drawn pose: no cut');
+  const n = 24;
+  const step = (FLIGHT_SECONDS * pace) / n;
+  assert.ok(step <= RAIL_MAX_FRAME_SECONDS);
+  let motion = retarget;
+  for (let i = 1; i <= n; i += 1) {
+    motion = stepFlight(motion, 'freeflight', 'client:c', railA, goals, step, true);
+    if (i < n) {
+      const eased = easeFocus((i * step) / pace / FLIGHT_SECONDS);
+      const expected = railA.position.z + (goalC.position.z - railA.position.z) * eased;
+      assert.ok(Math.abs(motion.pose.position.z - expected) < 1e-9, `at ${i}/${n} it is on the curve`);
+      assert.notDeepEqual(motion.pose, goalC, `not there at ${i}/${n}`);
+    } else {
+      assert.ok(Math.abs(motion.elapsed - FLIGHT_SECONDS) < 1e-9);
+      assert.deepEqual(motion.pose, goalC, 'exactly the goal at FLIGHT_SECONDS × pace');
+    }
+  }
+});
+
+test('reduced toggled mid-flight at 0.3·T: it continues from the drawn pose, faster — C0', () => {
+  let motion = stepFlight(stepFlight(null, 'rail', null, railA, goals, DT), 'freeflight', 'client:c', railA, goals, DT);
+  motion = run(motion, 'freeflight', 'client:c', railA, Math.round((0.3 * FLIGHT_SECONDS) / DT));
+  const drawn = motion.pose;
+  const faster = stepFlight(motion, 'freeflight', 'client:c', railA, goals, DT, true);
+  const slower = stepFlight(motion, 'freeflight', 'client:c', railA, goals, DT, false);
+  assert.equal(faster.from, motion.from, 'the same move, not a restart');
+  assert.ok(faster.elapsed > slower.elapsed);
+  const bound = (poseGap(railA, goalC) * 3 * DT) / motionPace(true) / FLIGHT_SECONDS;
+  assert.ok(poseGap(faster.pose, drawn) < bound, 'a bounded step from the drawn pose, not a cut');
+  assert.ok(poseGap(faster.pose, drawn) > poseGap(slower.pose, drawn), 'faster');
+  let settled = faster;
+  for (let i = 0; i < Math.ceil(FLIGHT_SECONDS / DT); i += 1) settled = stepFlight(settled, 'freeflight', 'client:c', railA, goals, DT, true);
+  assert.deepEqual(settled.pose, goalC, 'the same goal, reached sooner');
+});
+
+test('reduced: at rest the poses are identical, and a long frame is clamped before it is dilated', () => {
+  const onRail = stepFlight(stepFlight(null, 'rail', null, railA, goals, DT), 'rail', null, railB, goals, DT, true);
+  assert.deepEqual(onRail.pose, railB, 'on the Rail, the Rail’s pose exactly');
+  let flown = stepFlight(null, 'freeflight', 'client:c', railA, goals, DT);
+  flown = run(flown, 'freeflight', 'client:c', railA, Math.ceil(FLIGHT_SECONDS / DT) + 2);
+  assert.deepEqual(stepFlight(flown, 'freeflight', 'client:c', railA, goals, DT, true).pose, goalC);
+  const retarget = stepFlight(stepFlight(null, 'rail', null, railA, goals, DT), 'freeflight', 'client:c', railA, goals, DT);
+  assert.equal(stepFlight(retarget, 'freeflight', 'client:c', railA, goals, 60, true).elapsed, RAIL_MAX_FRAME_SECONDS / motionPace(true));
+  assert.equal(stepFlight(retarget, 'freeflight', 'client:c', railA, goals, Number.NaN, true).elapsed, 0);
+});
+
+test('flightFrame hands its reduced to the step', () => {
+  const { rail } = railOf(fixture());
+  const frame = railFrame(null, rail, 2, 1600, 900, DT);
+  const started = flightFrame(flightFrame(null, rail, 'rail', null, frame, DT).motion, rail, 'freeflight', 'client:b', frame, DT);
+  const full = flightFrame(started.motion, rail, 'freeflight', 'client:b', frame, DT);
+  const reduced = flightFrame(started.motion, rail, 'freeflight', 'client:b', frame, DT, true);
+  assert.ok(Math.abs(reduced.motion.elapsed - full.motion.elapsed / motionPace(true)) < 1e-12);
+});
+
 // --- The frame binding ----------------------------------------------------------
 
 test('flightFrame binds the Rail frame and its damped aspect, and hands Focus the flight-composed frame', () => {
@@ -301,7 +363,7 @@ test('an unknown flight target throws from the frame, naming it', () => {
 function auditFlightModel(source: string): string[] {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
   const failures: string[] = [];
-  const allowed = new Set(['../shell/focus-motion.ts', './rail-model.ts']);
+  const allowed = new Set(['../shell/focus-motion.ts', '../shell/motion-preference.ts', './rail-model.ts']);
   for (const [, specifier] of code.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {
     if (!allowed.has(specifier ?? '')) failures.push(`imports ${specifier}`);
   }

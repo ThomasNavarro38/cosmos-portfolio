@@ -207,11 +207,12 @@ const press = (key: string, extra: Partial<RailKey> = {}): RailKey => ({
   shiftKey: false,
   defaultPrevented: false,
   isComposing: false,
+  repeat: false,
   ...extra,
 });
 
 test('a plain key press means exactly what keyIntent says it means', () => {
-  for (const key of ['ArrowDown', 'ArrowUp', 'Home', 'End', 'j']) {
+  for (const key of ['ArrowDown', 'ArrowUp', 'Home', 'Escape', 'End', 'j']) {
     for (const mode of ['rail', 'freeflight'] as const) {
       for (const focused of [null, 'project:a']) {
         assert.deepEqual(
@@ -243,11 +244,70 @@ test('any one of the four modifiers makes a key not the Rail’s', () => {
 });
 
 test('any other key is not the Rail’s', () => {
-  for (const key of ['End', 'PageDown', 'PageUp', ' ', 'Enter', 'Tab', 'Escape', 'ArrowLeft', 'ArrowRight', 'j', '']) {
+  for (const key of ['End', 'PageDown', 'PageUp', ' ', 'Enter', 'Tab', 'Esc', 'escape', 'ArrowLeft', 'ArrowRight', 'j', '']) {
     for (const mode of ['rail', 'freeflight'] as const) {
       assert.equal(keyIntent(key, false, mode, null, 1, 3), null, `${JSON.stringify(key)} in ${mode}`);
     }
   }
+});
+
+// --- Escape (2.10) ------------------------------------------------------------------
+
+test('Escape releases a layer while Focused (either mode) or in free flight, and is inert on the bare Rail', () => {
+  assert.deepEqual(keyIntent('Escape', false, 'freeflight', 'project:a', 1, 3), { release: true }, 'Focused in flight');
+  assert.deepEqual(keyIntent('Escape', false, 'rail', 'project:a', 2.3, 3), { release: true }, 'Focused on the Rail');
+  assert.deepEqual(keyIntent('Escape', false, 'freeflight', null, 1, 3), { release: true }, 'free flight, unfocused');
+  assert.equal(keyIntent('Escape', false, 'rail', null, 2.3, 3), null, 'the Rail, nothing Focused: not prevented, nothing written');
+});
+
+test('Escape with any modifier, already handled, or composing is left alone, in all four states', () => {
+  for (const mode of ['rail', 'freeflight'] as const) {
+    for (const focused of [null, 'project:a']) {
+      const where = `${mode}, focused ${String(focused)}`;
+      assert.equal(keyIntent('Escape', true, mode, focused, 1, 3), null, `modifier held — asked first: ${where}`);
+      for (const modifier of ['altKey', 'ctrlKey', 'metaKey', 'shiftKey'] as const) {
+        assert.equal(keyAction(press('Escape', { [modifier]: true }), mode, focused, 1, 3), null, `${modifier} + Escape: ${where}`);
+      }
+      assert.equal(keyAction(press('Escape', { isComposing: true }), mode, focused, 1, 3), null, `IME: ${where}`);
+      assert.equal(keyAction(press('Escape', { defaultPrevented: true }), mode, focused, 1, 3), null, `handled: ${where}`);
+      assert.deepEqual(keyAction(press('Escape'), mode, focused, 1, 3), keyIntent('Escape', false, mode, focused, 1, 3), `plain: ${where}`);
+    }
+  }
+});
+
+test('a held Escape releases one layer: its auto-repeats are left alone, in all four states', () => {
+  for (const mode of ['rail', 'freeflight'] as const) {
+    for (const focused of [null, 'project:a']) {
+      assert.equal(keyAction(press('Escape', { repeat: true }), mode, focused, 1, 3), null, `repeat in ${mode}, focused ${String(focused)}`);
+    }
+  }
+  // The first press still releases, so one physical press is one layer.
+  assert.deepEqual(keyAction(press('Escape'), 'freeflight', 'project:a', 1, 3), { release: true });
+});
+
+test('a held arrow keeps travelling: a repeated ↑/↓/Home means what a fresh one does', () => {
+  for (const key of ['ArrowDown', 'ArrowUp', 'Home']) {
+    for (const mode of ['rail', 'freeflight'] as const) {
+      assert.deepEqual(
+        keyAction(press(key, { repeat: true }), mode, null, 1.4, 3),
+        keyAction(press(key), mode, null, 1.4, 3),
+        `${key} repeated in ${mode}`,
+      );
+    }
+  }
+  assert.deepEqual(keyAction(press('ArrowDown', { repeat: true }), 'rail', null, 1.4, 3), { rail: 2 });
+});
+
+test('the rules that were there are unchanged by Escape', () => {
+  // Focus still takes ↑/↓/Home from the Rail, whatever the mode.
+  for (const key of ['ArrowDown', 'ArrowUp', 'Home']) {
+    for (const mode of ['rail', 'freeflight'] as const) {
+      assert.equal(keyIntent(key, false, mode, 'project:a', 1, 3), null, `${key} Focused in ${mode}`);
+    }
+  }
+  assert.deepEqual(keyIntent('Home', false, 'freeflight', null, 1, 3), { home: 0 });
+  assert.deepEqual(keyIntent('ArrowDown', false, 'rail', null, 1.4, 3), { rail: 2 });
+  assert.deepEqual(keyIntent('ArrowUp', false, 'freeflight', null, 1, 3), { inert: true });
 });
 
 // --- Purity and wiring ----------------------------------------------------------
@@ -309,12 +369,14 @@ test('the purity audit rejects the real rule with any one impurity added', () =>
  * a handled or composing key and the four-modifier fold are `keyAction`'s,
  * executed above, and never restated here; `null` returns untouched, anything
  * else is prevented. `inert` returns, `home` calls the `goHome()` door (imported
- * from `activate.ts`, executed in `activate.test.ts`) and returns, and `rail`
- * reaches the Rail at `key.rail`.
+ * from `activate.ts`, executed in `activate.test.ts`) and returns, `release`
+ * (2.10, `Escape`) calls the `releaseLayer()` door from the same import and
+ * returns, and `rail` reaches the Rail at `key.rail`.
  *
  * **One write path for the Rail in the handlers:** `advanceScroll(` appears exactly
  * once, as the body of `toRail`, and the wheel and the arrows go through it; Home
- * goes through its door, and the host calls no `enterRail` of its own. Nothing reads the event's
+ * and Escape go through their doors, and the host calls no `enterRail` or
+ * `releaseFocus` of its own. Nothing reads the event's
  * target or hit-tests: the meaning is the store's.
  */
 function auditWheelWiring(source: string): string[] {
@@ -416,12 +478,13 @@ function auditKeyWiring(source: string): string[] {
   const prevent = /\bevent\.preventDefault\(\s*\)\s*;/.exec(body);
   const inert = /if\s*\(\s*'inert'\s+in\s+key\s*\)\s*return\s*;/.exec(body);
   const home = /if\s*\(\s*'home'\s+in\s+key\s*\)\s*\{\s*goHome\(\s*\)\s*;\s*return\s*;\s*\}/.exec(body);
+  const release = /if\s*\(\s*'release'\s+in\s+key\s*\)\s*\{\s*releaseLayer\(\s*\)\s*;\s*return\s*;\s*\}/.exec(body);
   const write = /\btoRail\(\s*key\.rail\s*\)\s*;/.exec(body);
   if (read === null) failures.push('the mode, the focused ID and the progress are not read from the store at the key event');
   if (call === null) failures.push('keyAction is not asked with the event unchanged and the store’s values');
   // The event's own settling — handled, composing, modified — is keyAction's,
   // executed in this file; restated here it would be a second rule nobody runs.
-  if (/\b(?:defaultPrevented|isComposing|altKey|ctrlKey|metaKey|shiftKey)\b/.test(body)) {
+  if (/\b(?:defaultPrevented|isComposing|repeat|altKey|ctrlKey|metaKey|shiftKey)\b/.test(body)) {
     failures.push('the host settles the event itself — that rule is keyAction’s');
   }
   if (/\bkeyIntent\s*\(/.test(code)) failures.push('keyIntent is asked directly — the event must go through keyAction');
@@ -429,15 +492,22 @@ function auditKeyWiring(source: string): string[] {
   if (prevent === null) failures.push('a Rail key is not prevented — the page scrolls too');
   if (inert === null) failures.push('an inert key does not return before the Rail');
   if (home === null) failures.push('Home is not the goHome() door, returning before the arrows');
-  if (!/import\s*\{\s*goHome\s*\}\s*from\s*'\.\/activate\.ts'/.test(code)) failures.push('goHome is not the door from activate.ts');
+  if (release === null) failures.push('Escape is not the releaseLayer() door, returning before the arrows');
+  if (!/import\s*\{\s*goHome\s*,\s*releaseLayer\s*\}\s*from\s*'\.\/activate\.ts'/.test(code)) {
+    failures.push('goHome and releaseLayer are not the doors from activate.ts');
+  }
   if (write === null) failures.push('an arrow does not reach toRail(key.rail)');
   if ((body.match(/\bpreventDefault\(/g) ?? []).length !== 1) failures.push('the key prevents its default other than once, after the guard');
   if (/\benterRail\b/.test(code)) failures.push('the host enters the Rail itself — Home is the goHome door’s');
   if ((code.match(/\bgoHome\(/g) ?? []).length !== 1) failures.push('goHome is called other than once, on Home');
-  if (read !== null && call !== null && guard !== null && prevent !== null && inert !== null && home !== null && write !== null) {
-    const order = [read.index, call.index, guard.index, prevent.index, inert.index, home.index, write.index];
+  if ((code.match(/\breleaseLayer\(/g) ?? []).length !== 1) failures.push('releaseLayer is called other than once, on Escape');
+  if (/\b(?:releaseFocus|pullBack|returnToRail)\b/.test(code)) failures.push('the host releases a layer itself — Escape is the releaseLayer door’s');
+  if (
+    read !== null && call !== null && guard !== null && prevent !== null && inert !== null && home !== null && release !== null && write !== null
+  ) {
+    const order = [read.index, call.index, guard.index, prevent.index, inert.index, home.index, release.index, write.index];
     if (order.some((index, i) => i > 0 && index <= (order[i - 1] ?? 0))) {
-      failures.push('out of order — read, ask, return on null, preventDefault, the inert return, Home, then the arrows');
+      failures.push('out of order — read, ask, return on null, preventDefault, the inert return, Home, Escape, then the arrows');
     }
   }
   return failures;
@@ -508,7 +578,21 @@ test('the wiring audits reject the real host with any one guarantee removed', ()
     ['Home composed by hand', (s) => s.replace(/goHome\(\);(\s*return;)/, 'enterRail();\n        toRail(key.home);$1')],
     ['Home only scrolls', (s) => s.replace(/goHome\(\);(\s*return;)/, 'toRail(0);$1')],
     ['Home falls through to the arrows', (s) => s.replace(/(goHome\(\);)\s*return;/, '$1')],
-    ['Home not imported from the doors', (s) => s.replace("import { goHome } from './activate.ts';", "import { goHome } from './home.ts';")],
+    ['Home not imported from the doors', (s) => s.replace("import { goHome, releaseLayer } from './activate.ts';", "import { goHome, releaseLayer } from './home.ts';")],
+    // Escape (2.10).
+    ['the repeat settled in the host', (s) => s.replace('const key = keyAction(', 'if (event.repeat) return;\n      const key = keyAction(')],
+    ['Escape dropped', (s) => s.replace(/if \('release' in key\) \{\s*releaseLayer\(\);\s*return;\s*\}/, '')],
+    ['Escape falls through to the arrows', (s) => s.replace(/(releaseLayer\(\);)\s*return;/, '$1')],
+    ['Escape releases Focus by hand', (s) => s.replace(/releaseLayer\(\);(\s*return;)/, 'releaseFocus();$1')],
+    ['Escape returns to the Rail by hand', (s) => s.replace(/releaseLayer\(\);(\s*return;)/, 'returnToRail();$1')],
+    ['Escape goes home', (s) => s.replace(/releaseLayer\(\);(\s*return;)/, 'goHome();$1')],
+    [
+      'Escape before the inert return',
+      (s) =>
+        s
+          .replace(/\s*if \('release' in key\) \{\s*releaseLayer\(\);\s*return;\s*\}/, '')
+          .replace("if ('inert' in key) return;", "if ('release' in key) {\n        releaseLayer();\n        return;\n      }\n      if ('inert' in key) return;"),
+    ],
     ['the rule bypassed for keyIntent', (s) => s.replace('keyAction(event, mode,', "keyIntent(event.key, false, mode,")],
     ['a second skip restated in the host', (s) => s.replace('const key = keyAction(', 'if (event.isComposing) return;\n      const key = keyAction(')],
     ['the event rewritten', (s) => s.replace('keyAction(event, mode,', 'keyAction({ ...event, key: event.code }, mode,')],
@@ -523,5 +607,63 @@ test('the wiring audits reject the real host with any one guarantee removed', ()
     const mutated = mutate(real);
     assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
     assert.notDeepEqual(audit(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
+/**
+ * The reduced-motion preference's one writer (2.10), over the same source: an
+ * effect with no dependencies that returns early when `matchMedia` is absent,
+ * asks `window.matchMedia(REDUCED_MOTION_QUERY)`, writes `setReducedMotion`
+ * with the query's `matches` once on mount and on every `change`, and removes
+ * that listener on cleanup. Exactly one `setReducedMotion` write path.
+ */
+function auditPreferenceWriter(source: string): string[] {
+  const code = blank(source);
+  const failures: string[] = [];
+  if (!/import\s*\{\s*REDUCED_MOTION_QUERY\s*,\s*setReducedMotion\s*\}\s*from\s*'\.\/motion-preference\.ts'/.test(code)) {
+    failures.push('the query and the event are not imported from motion-preference.ts');
+  }
+  const effect = /useEffect\(\s*\(\)\s*=>\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}\s*,\s*\[\s*\]\s*\)/.exec(code);
+  if (effect === null) return [...failures, 'no mount effect for the media query'];
+  const body = effect[1] ?? '';
+  const guard = /if\s*\(\s*typeof\s+window\.matchMedia\s*!==\s*'function'\s*\)\s*return\s+undefined\s*;/.exec(body);
+  const query = /const\s+query\s*=\s*window\.matchMedia\(\s*REDUCED_MOTION_QUERY\s*\)\s*;/.exec(body);
+  const write = /const\s+onChange\s*=\s*\(\s*\)\s*:\s*void\s*=>\s*setReducedMotion\(\s*query\.matches\s*\)\s*;/.exec(body);
+  const initial = /(?:^|;)\s*onChange\(\s*\)\s*;/.exec(body);
+  const listen = /query\.addEventListener\(\s*'change'\s*,\s*onChange\s*\)\s*;/.exec(body);
+  const cleanup = /return\s*\(\)\s*=>\s*query\.removeEventListener\(\s*'change'\s*,\s*onChange\s*\)\s*;/.exec(body);
+  if (guard === null) failures.push('matchMedia is not guarded — a browser without it would throw in an effect');
+  if (query === null) failures.push('the media query is not window.matchMedia(REDUCED_MOTION_QUERY)');
+  if (write === null) failures.push('the preference is not written as setReducedMotion(query.matches)');
+  if (initial === null) failures.push('the preference is not read on mount — a visitor who already prefers it gets full motion');
+  if (listen === null) failures.push('a change of the preference is not heard');
+  if (cleanup === null) failures.push('the change listener is never removed');
+  if (guard !== null && query !== null && guard.index > query.index) failures.push('the guard comes after the query');
+  if ((code.match(/\bsetReducedMotion\(/g) ?? []).length !== 1) failures.push('setReducedMotion is written other than once, in onChange');
+  if (/\breducedMotion\(|\bsubscribeReducedMotion\b|\bmotionPace\b/.test(code)) failures.push('the writer reads the preference too');
+  return failures;
+}
+
+test('the scene host is the reduced-motion preference’s one writer, a guarded matchMedia listener', () => {
+  assert.deepEqual(auditPreferenceWriter(readFileSync(SCENE_HOST_TSX, 'utf8')), []);
+});
+
+test('the writer audit rejects the real host with any one guarantee removed', () => {
+  const real = readFileSync(SCENE_HOST_TSX, 'utf8');
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['unguarded', (s) => s.replace("if (typeof window.matchMedia !== 'function') return undefined;", '')],
+    ['a literal query', (s) => s.replace('window.matchMedia(REDUCED_MOTION_QUERY)', "window.matchMedia('(prefers-color-scheme: dark)')")],
+    ['always reduced', (s) => s.replace('setReducedMotion(query.matches)', 'setReducedMotion(true)')],
+    ['inverted', (s) => s.replace('setReducedMotion(query.matches)', 'setReducedMotion(!query.matches)')],
+    ['not read on mount', (s) => s.replace(/(=> setReducedMotion\(query\.matches\);)\s*onChange\(\);/, '$1')],
+    ['never listening', (s) => s.replace("query.addEventListener('change', onChange);", '')],
+    ['never removed', (s) => s.replace("return () => query.removeEventListener('change', onChange);", 'return undefined;')],
+    ['a second writer', (s) => s.replace('onChange();', 'onChange();\n    setReducedMotion(false);')],
+    ['the writer reads too', (s) => s.replace('onChange();', 'onChange();\n    void reducedMotion();')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
+    assert.notDeepEqual(auditPreferenceWriter(mutated), [], `"${name}" must be rejected`);
   }
 });

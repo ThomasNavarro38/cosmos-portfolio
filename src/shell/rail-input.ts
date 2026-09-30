@@ -11,12 +11,15 @@
  * **The keyboard** (2.9). `keyIntent` gives keys the same meanings: ↑/↓ step
  * between whole stops on the Rail and are swallowed in free flight, `Home`
  * returns to the Rail's opening frame from either mode, and nothing is the
- * Rail's while a Project is focused or a modifier is held.
+ * Rail's while a Project is focused or a modifier is held. `Escape` (2.10)
+ * releases the innermost layer — Focus, else free flight — and is inert on the
+ * Rail with nothing focused.
  *
  * **Rules here, handlers in `scene-host.tsx`.** The host listens for `wheel` over
  * the scene and `keydown` on `window`, asks these rules, and writes: the wheel
  * and the arrows through `advanceScroll`, `Home` through the `goHome` door in
- * `activate.ts`, the panel by scrolling it. The camera rig only reads the field —
+ * `activate.ts`, `Escape` through the `releaseLayer` door, the panel by
+ * scrolling it. The camera rig only reads the field —
  * see the one-writer table in `state.ts`. Progress is measured **in stops**: 0 is the opening frame and
  * `k` is the `k`-th Client stop, present first, so the range is `[0, N]` for a
  * Rail of `N` Client stops.
@@ -140,9 +143,14 @@ export function wheelIntent(
  * What one key press means for the Rail (2.9): the keyboard's equivalent of the
  * wheel, bound on `window` so it works wherever DOM focus is.
  *
- *   - `null` — the key is not the Rail's: a Project is focused (the panel reads
- *     ↑/↓/Home natively), a modifier is held (the browser's and the reader's
- *     shortcuts), or it is any other key. The handler leaves the event alone.
+ *   - `null` — the key is not the Rail's: a modifier is held (the browser's and
+ *     the reader's shortcuts) — asked first, before any key — a Project is
+ *     focused (the panel reads ↑/↓/Home natively), it is `Escape` on the Rail
+ *     with nothing focused (there is no layer to release), or it is any other
+ *     key. The handler leaves the event alone.
+ *   - `{ release: true }` — `Escape` (2.10), while a Project is focused or in
+ *     free flight: the handler calls the `releaseLayer()` door, which releases
+ *     the innermost layer and only that one.
  *   - `{ rail: stop }` — `ArrowDown` steps to the next whole stop into the past,
  *     `min(⌊c⌋ + 1, N)`; `ArrowUp` to the previous, `max(⌈c⌉ − 1, 0)`. From
  *     between two stops each lands on the nearer stop in its direction, and at
@@ -163,8 +171,10 @@ export function keyIntent(
   focusedProjectId: string | null,
   current: number,
   stopCount: number,
-): { readonly rail: number } | { readonly inert: true } | { readonly home: 0 } | null {
-  if (focusedProjectId !== null || modifierHeld) return null;
+): { readonly rail: number } | { readonly inert: true } | { readonly home: 0 } | { readonly release: true } | null {
+  if (modifierHeld) return null;
+  if (key === 'Escape') return focusedProjectId !== null || mode === 'freeflight' ? { release: true } : null;
+  if (focusedProjectId !== null) return null;
   if (key === 'Home') return { home: 0 };
   if (key !== 'ArrowDown' && key !== 'ArrowUp') return null;
   if (mode === 'freeflight') return { inert: true };
@@ -187,14 +197,20 @@ export interface RailKey {
   readonly defaultPrevented: boolean;
   /** The key is part of an IME composition, not a command. */
   readonly isComposing: boolean;
+  /** The key is held and auto-repeating: not a new press. */
+  readonly repeat: boolean;
 }
 
 /**
  * What one `keydown` means, from the event as it arrives: `keyIntent`'s answer,
- * after the two things the event itself settles.
+ * after the things the event itself settles.
  *
  *   - A key another handler already prevented, or one inside an IME
  *     composition, is not ours: `null`, before anything else is asked.
+ *   - A repeated `Escape` (the key held, auto-repeating) is `null` (2.10): one
+ *     press releases one layer, so holding it after a Focus in flight does not
+ *     go on to leave free flight too. The arrows keep repeating — they are
+ *     travel, and a held arrow is a held journey.
  *   - A modifier is any of alt, ctrl, meta and shift. Shift counts because
  *     Shift+↑/↓/Home are the browser's selection keys.
  *
@@ -208,6 +224,7 @@ export function keyAction(
   stopCount: number,
 ): ReturnType<typeof keyIntent> {
   if (event.defaultPrevented || event.isComposing) return null;
+  if (event.repeat && event.key === 'Escape') return null;
   const modifierHeld = event.altKey || event.ctrlKey || event.metaKey || event.shiftKey;
   return keyIntent(event.key, modifierHeld, mode, focusedProjectId, current, stopCount);
 }

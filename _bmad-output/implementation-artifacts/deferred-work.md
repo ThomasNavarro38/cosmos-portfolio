@@ -369,7 +369,7 @@ this file.
   evidence: `selectClient` writes `railPosition` on every Client click and `index-nav.tsx` reflects only `aria-pressed` on Projects. `aria-current` on the selected Client is the standard answer and the new `auditAria` fixture already treats it as permitted state. Story 2.6 owns Client-stop framing and is the natural home; flagged by two review layers.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
-  summary: `enterFreeFlight`/`enterRail` while a Project is focused leaves `focusOrigin` naming a mode that is no longer current, so the pair `(focusedProjectId, focusOrigin)` can read as contradictory to a consumer that checks only the second.
+  summary: ~~`enterFreeFlight`/`enterRail` while a Project is focused leaves `focusOrigin` naming a mode that is no longer current, so the pair `(focusedProjectId, focusOrigin)` can read as contradictory to a consumer that checks only the second.~~ — **closed by 2.10**: every door that changes `mode` (`activateClient`, `pullBack`, `returnToRail`, `goHome`) releases Focus first, so while a Project is focused `mode === focusOrigin`. `activate.test.ts` executes the invariant over every sequence of up to four doors (plus the panel's `releaseFocus` and the scroll input). The raw store events can still produce the pair, and a test pins that they do; no shipped surface calls them for travel.
   evidence: Probed directly: focusing then entering free flight yields `focusedProjectId: 'p-1'` with `focusOrigin: 'rail'`. This is intended per AD-16 (origin stored at entry, never inferred at release) and is documented, but Story 2.10 builds Escape precedence on exactly this field and should read it only in the release path.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
@@ -384,7 +384,7 @@ the acceptance-audit axis. Every item below was proven by execution against the 
 module, not inferred.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
-  summary: `focusOrigin` cannot return to `null` through any production path, though its own docstring describes that state as reachable ("`null` before any Focus has happened").
+  summary: ~~`focusOrigin` cannot return to `null` through any production path, though its own docstring describes that state as reachable ("`null` before any Focus has happened").~~ — **closed by 2.10, by decision**: release does not record itself. `null` is reachable exactly as documented — before any Focus — and the field is not a Focus-active flag. Escape's release path (`releaseLayer`) reads `focusedProjectId` and `mode`, not `focusOrigin`: with the invariant above, the layer Focus was entered from is the layer it is drawn over, so a release returns there without writing `mode`.
   evidence: Probed — after `focusProject('p-3')` then `releaseFocus()`, `focusOrigin` remains `'rail'` indefinitely; only `resetNavigation()`, documented as existing for tests, clears it. The type `NavigationMode | null` invites reading the field as "is a Focus active", which it is not. Overlaps the already-filed item on the contradictory `(focusedProjectId, focusOrigin)` pair; Story 2.10 owns the release path that reads it and should be the one to decide whether release records itself.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
@@ -555,14 +555,14 @@ leaves open.
 
 ## Deferred from: spec-2-7-focus-entry-the-panel-shell-and-scroll-s-two-meanings (2026-09-29)
 
-- `FOCUS_SECONDS` (0.8) and `FOCUS_EASING` (`cubic-bezier(0.65, 0, 0.35, 1)`, symmetric so release is the same curve reversed) are greybox values. DESIGN.md and EXPERIENCE.md route every duration to M1 tuning ("shape and ratio, never milliseconds"); what 2.7 fixes is that there is one of each, shared by the CSS slide and the camera. Reduced motion (2.10) shortens both from the same constants.
+- `FOCUS_SECONDS` (0.8) and `FOCUS_EASING` (`cubic-bezier(0.65, 0, 0.35, 1)`, symmetric so release is the same curve reversed) are greybox values. DESIGN.md and EXPERIENCE.md route every duration to M1 tuning ("shape and ratio, never milliseconds"); what 2.7 fixes is that there is one of each, shared by the CSS slide and the camera. ~~Reduced motion (2.10) shortens both from the same constants.~~ — **done in 2.10**: both run on `FOCUS_SECONDS × pace` (`motion-preference.ts`, `REDUCED_MOTION_PACE` 0.25, itself greybox).
 - `FOCUS_REACH` (3) is the sphere the focus pose keeps inside the free region. It covers the drawn Planet and leaves room for 2.8's Motes, but its size relative to Condensation is untested. Re-tune it when Motes exist.
 - The panel's share of the width is `panelFraction(size.width)` in the rig (R3F's canvas width) and `min(560px, 46vw)` in CSS (the viewport). The canvas is `width: 100%` of `<main>`, so the two differ by the body margin, a few pixels. Epic 3's layout, which gives the scene the full viewport, removes the gap.
 - At phone widths the panel is 46% of the viewport (179px at 390×844), which is a narrow reading column. DESIGN.md's own `[ASSUMPTION]` on panel width below ~1200px is unratified; the spec fixes the rule, and M1 should judge the result.
 - A resize while focused moves the focus pose with the *damped* aspect but the *live* width, so the panel share can step while the aspect eases. It is invisible at desktop sizes and small elsewhere. Damp the share too if it reads as a jump.
 - `focusPose` throws inside the frame loop for a focused ID no Planet carries. R3F's loop is not under the scene's error boundary, so the throw surfaces in the console rather than removing the canvas. No production path writes such an ID: the index and `activateBody` only hand over artifact IDs. The panel draws itself closed for the same ID.
 - The scene's wheel handler scrolls the panel with an instant `scrollBy`, while a wheel over the panel scrolls natively (and smoothly, where the browser does). The two feel slightly different. Pass `behavior: 'smooth'` if M1 wants them matched, at the cost of queued smooth scrolls on a fast wheel.
-- Escape to release, the `aria-pressed` versus toggle question filed under 2.2, and restoring focus when the release button itself is removed are 2.10's.
+- ~~Escape to release~~ and ~~restoring focus when the release button itself is removed~~ — **closed by 2.10**: `Escape` releases the innermost layer through `releaseLayer()`, and a Focus release returns DOM focus to the released Project's entry as before. The panel's release button is inside the panel, which stays in the document (hidden, not unmounted), and DOM focus has already moved to the entry by the time it hides; the return button, which *does* unmount, hands focus to `overview` from a ref cleanup. The `aria-pressed` versus toggle question filed under 2.2 stays deferred.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-7-focus-entry-the-panel-shell-and-scroll-s-two-meanings.md`
   summary: At narrow widths the fixed full-height Focus panel covers the right side of the DOM destination index as well as the scene.
@@ -625,19 +625,31 @@ leaves open.
 - `labelChars` counts code points at 0.6em each; emoji, CJK and ZWJ sequences render wider, so such a label could cross the panel edge unblocked. Authored Skills are Latin today (`src/render-scene/mote-model.ts` `labelChars`).
 - The Mote pool holds one mesh and one drei `Html` per distinct Skill in the whole artifact; each `Html` projects and `applyMoteDraw` writes styles every frame, even at rest. Cost grows with `career.json`, not with the focused Project (`src/render-scene/mote-field.tsx`).
 - A focused Project's Skills are visual only (labels live in the `aria-hidden` canvas) until the panel's Skills list lands in 3.5.
-- The Motes' orbits spin indefinitely while a Project is focused (`MOTE_ORBIT_RADIANS_PER_SECOND`) — auto-playing motion over 5s with no pause (WCAG 2.2.2). 2.10's reduced-motion work must stop or pause it.
+- The Motes' orbits spin indefinitely while a Project is focused (`MOTE_ORBIT_RADIANS_PER_SECOND`) — auto-playing motion over 5s with no pause (WCAG 2.2.2). 2.10's reduced-motion work must stop or pause it. — **Partly addressed by 2.10, still open:** under `prefers-reduced-motion: reduce` the orbit clock does not advance, so the Motes hold their angles (WCAG 2.3.3, Animation from Interactions). WCAG 2.2.2 (Pause, Stop, Hide) needs a control for everyone, and at full motion there is none; see the 2.10 section below.
 
 ## Deferred from: spec-2-9-free-flight-in-three-layers (2026-09-29)
 
 - `selectClient` has no caller now. The index's Client button flies (`activateClient` → `enterFreeFlight`) instead of selecting a stop, and nothing else wrote `railPosition`, so the field stays at `null` in every shipped path. The event stays exported and in the writer audit. Whether the Rail should follow a Client flown to, or `railPosition` should go, is an open question for the story that next reads it.
-- `↩ resume the journey` renders while a Project is focused too, and pressing it calls `enterRail()` without releasing Focus. `focusOrigin` then still says `freeflight` while `mode` is `rail`, and releasing lands on the Rail (the goal beneath Focus is the live Rail pose). The stale origin is 2.10's to settle with Escape precedence.
+- ~~`↩ resume the journey` renders while a Project is focused too, and pressing it calls `enterRail()` without releasing Focus. `focusOrigin` then still says `freeflight` while `mode` is `rail`, and releasing lands on the Rail (the goal beneath Focus is the live Rail pose). The stale origin is 2.10's to settle with Escape precedence.~~ — **closed by 2.10**: `returnToRail()` releases Focus first, then enters the Rail. `goHome()` goes through it, defensively — the keyboard never reaches Home while focused.
 - `flightPose` throws inside the frame loop for a `flightTarget` the Rail has no stop for, like `focusPose`. No shipped door writes such an ID: the index and `activateBody` only hand over artifact Client IDs, and the store rejects an empty one.
 - The flight move blends position and aim linearly and separately, as the focus ease does. Only the rest poses are proven to frame their systems; nothing asserts containment mid-flight, e.g. between the opening frame and a close stop.
 - `FLIGHT_SECONDS` (1.6s) is greybox and not tied to `FOCUS_SECONDS`, so a Project activated in free flight moves the flight layer for 1.6s under a 0.8s Focus ease; the camera arrives at the focus pose on time, but the pose beneath it keeps moving until the flight settles. Tune at M1 by looking.
 - The keyboard listener is on `window` and never reads the event target, per the spec. So ↑/↓/Home are taken from any focused control while unfocused — a `<button>` in the index has no native use for them, but a future text field or `<select>` in the shell would. Revisit when one exists.
 - The wheel in free flight is swallowed over the scene only; a wheel over the index still scrolls the page natively, as on the Rail.
-- Reduced motion (2.10) must shorten or drop the flight ease as it will the Focus ease.
+- ~~Reduced motion (2.10) must shorten or drop the flight ease as it will the Focus ease.~~ — **closed by 2.10**: the flight ease runs at `FLIGHT_SECONDS × pace` (time dilated after the frame clamp), as the Focus ease, Condensation and the Rail spring do.
 
 ## Deferred from: code review of spec-2-9-free-flight-in-three-layers (2026-09-30)
 
 - A travelled release is told from a plain one by the flight key changing in the same render (`flightKey`, `focusMove(previous, next, travelled)` in `src/shell/panel-model.ts`). Re-activating the Client already being flown to, with one of its Projects focused (the Client's index button or its Star), releases Focus without changing the key, so DOM focus still returns to the released entry, as a plain release does (browser check, 2026-09-30). Closing it needs the release itself to carry its cause, which is 2.10's to settle with Escape precedence.
+
+## Deferred from: spec-2-10-escape-precedence-and-reduced-motion (2026-09-30)
+
+- `REDUCED_MOTION_PACE` (0.25) is greybox, like every duration it scales. Tune at M1 by looking; it must stay above 0 — no cut.
+- A running CSS transition keeps the duration it started with, so toggling the preference mid-slide desyncs the panel from the camera by a few frames for that one move. Accepted in the spec.
+- The same-key travelled release (above, `flightKey`) and the `aria-pressed` versus toggle question stay deferred; 2.10 does not change either.
+- `Escape` is bound on `window` and never reads the event target, as ↑/↓/Home are. A future text field or dialog in the shell that wants `Escape` for itself must prevent it first (`keyAction` leaves a prevented key alone).
+- WCAG 2.2.2 (Pause, Stop, Hide) is not met: at full motion the Motes still orbit with no pause control, and 2.2.2 asks for one on auto-playing motion over 5s. Reduced motion stops them (2.3.3), which is not the same thing; a visible pause for everyone is not in 2.10's scope.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-10-escape-precedence-and-reduced-motion.md`
+  summary: The reduced-motion preference's one writer is the `matchMedia` effect in `SceneHost`, so a surface that renders the panel without the 3D host (story 4.1's Fallback) would read `reducedMotion()` as `false` forever.
+  evidence: `focus-panel.tsx` reads the preference through `useSyncExternalStore`, but only `scene-host.tsx` calls `setReducedMotion`; the preference is page-wide, not the scene's. Move the writer to the app root when 4.1 lands a second surface.

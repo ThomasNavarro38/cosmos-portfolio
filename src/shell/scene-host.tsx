@@ -46,7 +46,14 @@
  * keyboard the same meanings through `keyAction`: ↑/↓ step between stops, `Home`
  * returns to the Rail's opening frame through the `goHome` door
  * (`activate.ts`). A key another handler already took, or one inside an IME
- * composition, is left alone.
+ * composition, is left alone. `Escape` (2.10) releases the innermost layer
+ * through the `releaseLayer` door — Focus, else free flight — and is left alone
+ * on the Rail with nothing focused.
+ *
+ * **The reduced-motion preference's one writer is here too** (2.10): a
+ * `matchMedia(REDUCED_MOTION_QUERY)` listener calling `setReducedMotion`, so the
+ * rig, the Mote field and the panel read the visitor's preference and nothing
+ * else writes it (`motion-preference.ts`).
  *
  * **Capability detection is not here yet.** `src/render-fallback/` describes the
  * no-WebGL surface with absolute content parity and holds no code; story 4.1 owns
@@ -56,7 +63,8 @@
 
 import { Component, Suspense, lazy, useEffect, useRef, type ReactNode } from 'react';
 import { FOCUS_PANEL_ID } from './panel-model.ts';
-import { goHome } from './activate.ts';
+import { goHome, releaseLayer } from './activate.ts';
+import { REDUCED_MOTION_QUERY, setReducedMotion } from './motion-preference.ts';
 import { keyAction, railStopCount, wheelIntent } from './rail-input.ts';
 import { advanceScroll, navigationStore } from './state.ts';
 
@@ -213,6 +221,12 @@ export function SceneHost({ artifact }: SceneHostProps) {
         goHome();
         return;
       }
+      // Escape (2.10) is a door too: it releases the innermost layer, and only
+      // that one — executed in `activate.test.ts`.
+      if ('release' in key) {
+        releaseLayer();
+        return;
+      }
       toRail(key.rail);
     };
     element.addEventListener('wheel', onWheel, { passive: false });
@@ -222,6 +236,18 @@ export function SceneHost({ artifact }: SceneHostProps) {
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [stopCount]);
+
+  // The reduced-motion preference's one writer (2.10): the media query, read on
+  // mount and on every change. Guarded where `matchMedia` is absent, which then
+  // leaves the preference at its default, full motion.
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined;
+    const query = window.matchMedia(REDUCED_MOTION_QUERY);
+    const onChange = (): void => setReducedMotion(query.matches);
+    onChange();
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
 
   return (
     <div ref={host}>

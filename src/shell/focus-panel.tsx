@@ -14,6 +14,10 @@
  *   - **Two selector subscriptions** — `focusedProjectId`, and the flight key
  *     (`flightKey`: the mode, plus the target in free flight) — never the whole
  *     store, so the Rail's sixty progress writes a second re-render nothing.
+ *   - **The reduced-motion pace** (2.10), read with `useSyncExternalStore` from
+ *     `motion-preference.ts` and handed to `panelStyle` and `crossFadeTiming`,
+ *     so the slide, its visibility delay and the cross-fade run on
+ *     `FOCUS_SECONDS × pace`, as the camera's Focus ease does.
  *   - **A ref for the last shown Project**, so the panel keeps its content while
  *     it slides out after release. Reading the store alone, it would empty the
  *     moment Focus clears and slide out blank.
@@ -52,7 +56,7 @@
  * and the editorial rule are Epic 3's.
  */
 
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { useStore } from 'zustand/react';
 import {
   FOCUS_PANEL_ID,
@@ -69,6 +73,7 @@ import {
   type PanelArtifact,
   type PanelBlock,
 } from './panel-model.ts';
+import { motionPace, reducedMotion, subscribeReducedMotion } from './motion-preference.ts';
 import { navigationStore, releaseFocus } from './state.ts';
 
 /** What the panel needs: the artifact, and nothing else. */
@@ -80,6 +85,7 @@ export interface FocusPanelProps {
 export function FocusPanel({ artifact }: FocusPanelProps) {
   const focusedProjectId = useStore(navigationStore, (state) => state.focusedProjectId);
   const flight = useStore(navigationStore, (state) => flightKey(state));
+  const pace = motionPace(useSyncExternalStore(subscribeReducedMotion, reducedMotion));
   const shown = useRef<string | null>(null);
   if (focusedProjectId !== null) shown.current = focusedProjectId;
   const panel = buildPanel(artifact, shown.current);
@@ -96,7 +102,7 @@ export function FocusPanel({ artifact }: FocusPanelProps) {
   useLayoutEffect(() => {
     const fade = crossFade(previous.current, focusedProjectId);
     if (fade !== null && incoming.current !== null) {
-      const timing = crossFadeTiming(getComputedStyle(incoming.current).opacity);
+      const timing = crossFadeTiming(getComputedStyle(incoming.current).opacity, pace);
       incoming.current.animate(timing.incoming, timing.options);
       outgoing.current?.animate(timing.outgoing, timing.options);
       outgoing.current?.scrollTo({ top: scrolled.current });
@@ -131,7 +137,7 @@ export function FocusPanel({ artifact }: FocusPanelProps) {
       ref={container}
       tabIndex={-1}
       aria-labelledby={panel === null ? undefined : FOCUS_PANEL_TITLE_ID}
-      style={panelStyle(focusedProjectId !== null && panel !== null)}
+      style={panelStyle(focusedProjectId !== null && panel !== null, pace)}
     >
       <div ref={incoming}>{panel === null ? null : <PanelBlocks blocks={panel.blocks} titleId={FOCUS_PANEL_TITLE_ID} />}</div>
       {leaving === null ? null : (

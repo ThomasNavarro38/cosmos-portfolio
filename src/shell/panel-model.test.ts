@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { FOCUS_SECONDS, focusEasingCss } from './focus-motion.ts';
+import { motionPace } from './motion-preference.ts';
 import {
   FIELD_LABELS,
   FOCUS_PANEL_ID,
@@ -287,6 +288,35 @@ test('the outgoing layer is held through a release, so a running A → B fade fi
   assert.equal(leavingAfter(null, null, 'project:a'), null);
 });
 
+test('reduced motion: the slide, its visibility delay and the cross-fade run on FOCUS_SECONDS × pace — brief, never cut', () => {
+  const pace = motionPace(true);
+  const seconds = FOCUS_SECONDS * pace;
+  assert.ok(seconds > 0 && seconds < FOCUS_SECONDS);
+  const curve = `${seconds}s ${focusEasingCss()}`;
+  assert.equal(panelStyle(true, pace).transition, `transform ${curve}, visibility 0s linear 0s`);
+  assert.equal(panelStyle(false, pace).transition, `transform ${curve}, visibility 0s linear ${seconds}s`, 'hidden exactly when the shorter slide ends');
+  assert.equal(crossFadeTiming('1', pace).options.duration, seconds * 1000);
+  assert.equal(crossFadeTiming('0.4', pace).options.easing, focusEasingCss(), 'the same curve, only shorter');
+  assert.deepEqual(crossFadeTiming('0.4', pace).outgoing, crossFadeTiming('0.4').outgoing, 'and the same keyframes');
+  // At full motion the pace is 1, and the default is full motion.
+  assert.deepEqual(panelStyle(false, motionPace(false)), panelStyle(false));
+  assert.deepEqual(crossFadeTiming('1', motionPace(false)), crossFadeTiming('1'));
+  // Open and closed differ only in the three fields they always did.
+  const open = panelStyle(true, pace);
+  assert.equal(open.visibility, 'visible');
+  assert.equal(panelStyle(false, pace).visibility, 'hidden');
+});
+
+test('a pace that is not a positive finite number reads as 1 — never a 0s or NaN duration', () => {
+  for (const pace of [0, -0.25, -1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+    assert.deepEqual(panelStyle(true, pace), panelStyle(true, 1), `open at ${pace}`);
+    assert.deepEqual(panelStyle(false, pace), panelStyle(false, 1), `closed at ${pace}`);
+    assert.deepEqual(crossFadeTiming('0.5', pace), crossFadeTiming('0.5', 1), `cross-fade at ${pace}`);
+    assert.doesNotMatch(panelStyle(false, pace).transition, /NaN|Infinity/);
+    assert.ok(crossFadeTiming('1', pace).options.duration > 0);
+  }
+});
+
 test('the cross-fade runs on the Focus duration and curve, incoming 0 → 1 and outgoing from where it was drawn → 0', () => {
   const timing = crossFadeTiming('1');
   assert.deepEqual(timing.incoming, [{ opacity: 0 }, { opacity: 1 }]);
@@ -397,6 +427,14 @@ function auditPanel(source: string): string[] {
     failures.push('does not subscribe to the flight key with a selector — a travelled release cannot be told from a plain one');
   }
   if ((code.match(/\buseStore\s*\(/g) ?? []).length !== 2) failures.push('subscribes other than twice');
+  // The reduced-motion pace (2.10): read from the preference module, once, through
+  // useSyncExternalStore, and handed to both the slide and the cross-fade.
+  if (!/const\s+pace\s*=\s*motionPace\(\s*useSyncExternalStore\(\s*subscribeReducedMotion\s*,\s*reducedMotion\s*\)\s*\)\s*;/.test(code)) {
+    failures.push('the pace is not motionPace of the preference, read through useSyncExternalStore');
+  }
+  if ((code.match(/\buseSyncExternalStore\s*\(/g) ?? []).length !== 1) failures.push('the preference is read other than once');
+  if ((code.match(/\bpace\b/g) ?? []).length !== 3) failures.push('the pace is used other than by the slide and the cross-fade');
+  if (/\bsetReducedMotion\b/.test(code)) failures.push('the panel writes the preference — scene-host.tsx is its one writer');
   if (!/const\s+previousFlight\s*=\s*useRef\(\s*flight\s*\)/.test(code)) failures.push('the flight key last seen is not a ref seeded at mount');
   if (/\buseState\b|\buseReducer\b|\buseMemo\b|\bsubscribe\s*\(/.test(code)) {
     failures.push('keeps state of its own — the store is the one authority');
@@ -478,7 +516,7 @@ function auditPanel(source: string): string[] {
       failures.push('the layout effect writes the previous ID or flight key — the focus effect after it would read the new one');
     }
     const fadeBlock =
-      /if\s*\(\s*fade\s*!==\s*null\s*&&\s*incoming\.current\s*!==\s*null\s*\)\s*\{\s*const\s+timing\s*=\s*crossFadeTiming\(\s*getComputedStyle\(\s*incoming\.current\s*\)\.opacity\s*\)\s*;\s*incoming\.current\.animate\(\s*timing\.incoming\s*,\s*timing\.options\s*\)\s*;\s*outgoing\.current\?\.animate\(\s*timing\.outgoing\s*,\s*timing\.options\s*\)\s*;\s*outgoing\.current\?\.scrollTo\(\s*\{\s*top\s*:\s*scrolled\.current\s*\}\s*\)\s*;\s*\}/;
+      /if\s*\(\s*fade\s*!==\s*null\s*&&\s*incoming\.current\s*!==\s*null\s*\)\s*\{\s*const\s+timing\s*=\s*crossFadeTiming\(\s*getComputedStyle\(\s*incoming\.current\s*\)\.opacity\s*,\s*pace\s*\)\s*;\s*incoming\.current\.animate\(\s*timing\.incoming\s*,\s*timing\.options\s*\)\s*;\s*outgoing\.current\?\.animate\(\s*timing\.outgoing\s*,\s*timing\.options\s*\)\s*;\s*outgoing\.current\?\.scrollTo\(\s*\{\s*top\s*:\s*scrolled\.current\s*\}\s*\)\s*;\s*\}/;
     if (!fadeBlock.test(body)) {
       failures.push('A → B does not fade both layers on crossFadeTiming and keep the outgoing one where the reader was');
     }
@@ -512,8 +550,8 @@ function auditPanel(source: string): string[] {
       failures.push('the container is not labelled by its title exactly while the title is rendered');
     }
     if (!/\bref=\{\s*container\s*\}/.test(attributes)) failures.push('the container is not the element focus moves to');
-    if (!/\bstyle=\{\s*panelStyle\(\s*focusedProjectId\s*!==\s*null\s*&&\s*panel\s*!==\s*null\s*\)\s*\}/.test(attributes)) {
-      failures.push('the style is not panelStyle(open), open exactly while a known Project is focused');
+    if (!/\bstyle=\{\s*panelStyle\(\s*focusedProjectId\s*!==\s*null\s*&&\s*panel\s*!==\s*null\s*,\s*pace\s*\)\s*\}/.test(attributes)) {
+      failures.push('the style is not panelStyle(open, pace), open exactly while a known Project is focused');
     }
   }
   if (!/<h2\b[^>]*\bid=\{\s*titleId\s*\}[^>]*>\s*\{\s*block\.text\s*\}\s*<\/h2>/.test(code)) {
@@ -633,14 +671,21 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
     ['no incoming fade', (s) => s.replace('incoming.current.animate(timing.incoming, timing.options);', '')],
     ['no outgoing fade', (s) => s.replace('outgoing.current?.animate(timing.outgoing, timing.options);', '')],
     ['the fade on its own timing', (s) => s.replace('animate(timing.incoming, timing.options)', 'animate(timing.incoming, { duration: 300 })')],
-    ['the fade from full every time', (s) => s.replace('crossFadeTiming(getComputedStyle(incoming.current).opacity)', "crossFadeTiming('1')")],
+    ['the fade from full every time', (s) => s.replace('crossFadeTiming(getComputedStyle(incoming.current).opacity, pace)', "crossFadeTiming('1', pace)")],
+    // 2.10's pace.
+    ['the fade at full length always', (s) => s.replace('crossFadeTiming(getComputedStyle(incoming.current).opacity, pace)', 'crossFadeTiming(getComputedStyle(incoming.current).opacity)')],
+    ['the slide at full length always', (s) => s.replace('panelStyle(focusedProjectId !== null && panel !== null, pace)', 'panelStyle(focusedProjectId !== null && panel !== null)')],
+    ['the slide cut', (s) => s.replace('panelStyle(focusedProjectId !== null && panel !== null, pace)', 'panelStyle(focusedProjectId !== null && panel !== null, 0)')],
+    ['the pace ignoring the preference', (s) => s.replace('motionPace(useSyncExternalStore(subscribeReducedMotion, reducedMotion))', 'motionPace(false)')],
+    ['the preference read without subscribing', (s) => s.replace('motionPace(useSyncExternalStore(subscribeReducedMotion, reducedMotion))', 'motionPace(reducedMotion())')],
+    ['the preference written from the panel', (s) => s.replace('const container = useRef', 'setReducedMotion(true);\n  const container = useRef')],
     ['a fade on entry too', (s) => s.replace('if (fade !== null && incoming.current !== null)', 'if (incoming.current !== null)')],
     [
       'the previous ID overwritten before the fade reads it',
       (s) => s.replace('    const fade = crossFade(', '    previous.current = focusedProjectId;\n    const fade = crossFade('),
     ],
     ['inert on the whole panel', (s) => s.replace('tabIndex={-1}', 'tabIndex={-1}\n      inert')],
-    ['always open', (s) => s.replace('panelStyle(focusedProjectId !== null && panel !== null)', 'panelStyle(true)')],
+    ['always open', (s) => s.replace('panelStyle(focusedProjectId !== null && panel !== null, pace)', 'panelStyle(true, pace)')],
     ['blank on close', (s) => s.replace('buildPanel(artifact, shown.current)', 'buildPanel(artifact, focusedProjectId)')],
     ['no focus on entry', (s) => s.replace('container.current?.focus({ preventScroll: true });', '')],
     ['no focus on release', (s) => s.replace('document.getElementById(indexEntryId(move.entry))?.focus();', '')],

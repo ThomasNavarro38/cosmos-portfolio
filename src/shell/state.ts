@@ -116,6 +116,14 @@ export type NavigationMode = 'rail' | 'freeflight';
  * It outlives the Focus it describes: `releaseFocus` clears
  * `focusedProjectId` and leaves this standing, so the releasing consumer can
  * read where to return the visitor. A Focus entered later overwrites it.
+ *
+ * While a Project is focused it is consistent with `mode` (2.10): every door in
+ * `activate.ts` that changes `mode` releases Focus first, so the layer Focus was
+ * entered from is the layer it is still drawn over, and a release returns there
+ * without writing `mode`. `activate.test.ts` executes that over every door
+ * sequence up to length 4. The raw events below can still break it — calling
+ * `enterRail` under a Focus entered in flight — which is why travel goes through
+ * the doors. Outside a Focus it is history, not state: not a Focus-active flag.
  */
 export type FocusOrigin = NavigationMode | null;
 

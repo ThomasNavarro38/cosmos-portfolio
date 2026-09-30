@@ -33,7 +33,7 @@
  * this. Semantics only.
  */
 
-import { useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { useStore } from 'zustand/react';
 import { activateClient, activateProject, pullBack, returnToRail } from './activate.ts';
 import { buildDestinationIndex, type IndexArtifact } from './index-model.ts';
@@ -75,16 +75,28 @@ export interface DestinationNavProps {
  * return button exists only while `mode === 'freeflight'`, read through a second
  * selector so a `scrollProgress` write re-renders nothing here either.
  *
- * Activating the return unmounts its own button, which would drop DOM focus to
- * `<body>`. So its handler moves focus to `overview` — the button beside it that
- * stays — through the one ref this renderer holds. A ref to an element, not a
- * copy of any state.
+ * Leaving free flight unmounts the return button, which would drop DOM focus to
+ * `<body>` if the button held it. That happens on a click and on `Escape`
+ * (2.10) alike, so it is handled where the unmount is, not in either handler: a
+ * React 19 ref cleanup on the button hands DOM focus to `overview` — the button
+ * beside it that stays, through the one `useRef` this renderer holds — exactly
+ * when the button still has focus as it goes. The callback is stable
+ * (`useCallback`, no dependencies), so its cleanup runs on unmount and never on a
+ * re-render. Refs to elements, not copies of any state.
  */
 export function DestinationNav({ artifact }: DestinationNavProps) {
   const index = buildDestinationIndex(artifact);
   const focusedProjectId = useStore(navigationStore, (state) => state.focusedProjectId);
   const mode = useStore(navigationStore, (state) => state.mode);
   const overview = useRef<HTMLButtonElement>(null);
+  // Stable, so React calls its cleanup only when the button unmounts — an inline
+  // callback would be cleaned up on every re-render and move focus spuriously.
+  const handBack = useCallback(
+    (button: HTMLButtonElement | null) => () => {
+      if (button?.matches(':focus') === true) overview.current?.focus();
+    },
+    [],
+  );
 
   return (
     <nav aria-label="Destinations">
@@ -92,13 +104,7 @@ export function DestinationNav({ artifact }: DestinationNavProps) {
         overview
       </button>
       {mode === 'freeflight' ? (
-        <button
-          type="button"
-          onClick={() => {
-            returnToRail();
-            overview.current?.focus();
-          }}
-        >
+        <button type="button" ref={handBack} onClick={() => returnToRail()}>
           ↩ resume the journey
         </button>
       ) : null}

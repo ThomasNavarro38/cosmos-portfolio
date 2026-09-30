@@ -14,6 +14,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { FOCUS_SECONDS, easeFocus } from '../shell/focus-motion.ts';
+import { motionPace } from '../shell/motion-preference.ts';
 import { panelFraction } from '../shell/panel-model.ts';
 import { DUST_MEDIUM_PEAK_OPACITY, buildDust, mediumAlphaAt, type DustMedium } from './dust-model.ts';
 import { FOCUS_REACH, focusPose } from './focus-model.ts';
@@ -646,6 +647,105 @@ test('dt is clamped as the Rail clamps it, and a non-finite dt does not advance'
   assert.equal(moteNamed(stepMotes(entered, scene, 'project:a/1', view, 5), 'Java').elapsed, RAIL_MAX_FRAME_SECONDS);
 });
 
+// --- Reduced motion (2.10) --------------------------------------------------------
+
+function runReduced(start: MoteField | null, scene: MoteScene, focused: string | null, frames: number, view: MoteView): MoteField[] {
+  const out: MoteField[] = [];
+  let field = start;
+  for (let i = 0; i < frames; i += 1) {
+    field = stepMotes(field, scene, focused, view, DT, true);
+    out.push(field);
+  }
+  return out;
+}
+
+test('reduced: Condensation completes at FOCUS_SECONDS × pace, and not a frame before', () => {
+  const pace = motionPace(true);
+  const scene = sceneOf(fixture());
+  const view = viewOf(cameraFor(scene.artifact as Artifact, 'project:a/1'));
+  const rest = last(runReduced(null, scene, null, 3, view));
+  const frames = runReduced(rest, scene, 'project:a/1', 1 + MOVE_FRAMES, view);
+  const k = Math.ceil((FOCUS_SECONDS * pace) / DT - 1e-9);
+  assert.ok(k < MOVE_FRAMES / 2, 'visibly brief');
+  const before = frames[k - 1];
+  const done = frames[k];
+  assert.ok(before !== undefined && done !== undefined);
+  for (const mote of before.motes) assert.ok(mote.level > 0 && mote.level < 1 - 1e-6, `${mote.skill} mid-condensation`);
+  // At frame k the dilated time has summed to FOCUS_SECONDS — to the last ulp of
+  // twelve additions of 1/15 — so the level and the pose are at their goal to
+  // float precision; the next frame caps them exactly.
+  for (const mote of done.motes) {
+    assert.ok(Math.abs(mote.elapsed - FOCUS_SECONDS) < 1e-12, `${mote.skill} has run FOCUS_SECONDS of the curve`);
+    assert.ok(Math.abs(mote.level - 1) < 1e-9, `${mote.skill} condensed`);
+    assert.ok(distance(mote.position, restingSlot(scene, mote, done.clock)) < 1e-9, `${mote.skill} on its slot`);
+  }
+  const capped = frames[k + 1];
+  assert.ok(capped !== undefined);
+  for (const mote of capped.motes) assert.equal(mote.level, 1, `${mote.skill} exactly condensed`);
+});
+
+test('reduced at rest: the orbit clock stops, and every Mote holds its angle', () => {
+  const scene = sceneOf(fixture());
+  const view = viewOf(cameraFor(scene.artifact as Artifact, 'project:a/1'));
+  const settled = last(run(null, scene, 'project:a/1', MOVE_FRAMES + 120, view));
+  const frames = runReduced(settled, scene, 'project:a/1', 90, view);
+  for (const field of frames) assert.equal(field.clock, settled.clock, 'the clock does not advance');
+  // A glide already under way finishes; after it, nothing moves.
+  const late = frames.slice(Math.ceil(MOTE_RESLOT_SECONDS / DT) + 1);
+  for (let i = 1; i < late.length; i += 1) {
+    const a = late[i - 1];
+    const b = late[i];
+    assert.ok(a !== undefined && b !== undefined);
+    for (const mote of b.motes) assert.deepEqual(mote.position, moteNamed(a, mote.skill).position, `${mote.skill} holds`);
+  }
+  // And at full motion the same field turns again.
+  const resumed = stepMotes(last(frames), scene, 'project:a/1', view, DT);
+  assert.ok(resumed.clock > settled.clock);
+});
+
+test('reduced toggled mid-Condensation at 0.3·T: it continues from the drawn pose and level, faster — C0', () => {
+  const scene = sceneOf(fixture());
+  const view = viewOf(cameraFor(scene.artifact as Artifact, 'project:a/1'));
+  const partway = last(run(null, scene, 'project:a/1', 1 + Math.round((0.3 * FOCUS_SECONDS) / DT), view));
+  const faster = stepMotes(partway, scene, 'project:a/1', view, DT, true);
+  const slower = stepMotes(partway, scene, 'project:a/1', view, DT);
+  for (const mote of faster.motes) {
+    const was = moteNamed(partway, mote.skill);
+    const slow = moteNamed(slower, mote.skill);
+    assert.deepEqual(mote.from, was.from, `${mote.skill}: the same move — its captured start unchanged`);
+    assert.deepEqual(mote.source, was.source, `${mote.skill}: and its source unchanged`);
+    assert.equal(mote.condensing, was.condensing, `${mote.skill}: still condensing, not restarted`);
+    assert.ok(mote.elapsed > was.elapsed, `${mote.skill}: its time runs on from where it was`);
+    assert.ok(mote.level > slow.level, `${mote.skill} condenses faster`);
+    assert.ok(mote.level - was.level < 0.5, `${mote.skill}: a step in level, not a cut`);
+    const whole = distance(was.source, restingSlot(scene, was, partway.clock));
+    assert.ok(distance(mote.position, was.position) < whole * 0.5, `${mote.skill}: a step in space, not a cut`);
+  }
+});
+
+test('reduced: a long frame is clamped before it is dilated, and the clock holds whatever dt', () => {
+  const pace = motionPace(true);
+  const scene = sceneOf(fixture());
+  const view = viewOf(cameraFor(scene.artifact as Artifact, 'project:a/1'));
+  const entered = stepMotes(null, scene, 'project:a/1', view, DT);
+  const long = stepMotes(entered, scene, 'project:a/1', view, 5, true);
+  assert.equal(long.clock, entered.clock);
+  assert.equal(moteNamed(long, 'Java').elapsed, RAIL_MAX_FRAME_SECONDS / pace);
+  assert.equal(moteNamed(stepMotes(entered, scene, 'project:a/1', view, Number.NaN, true), 'Java').elapsed, 0);
+});
+
+test('moteFrame hands its reduced to the step', () => {
+  const scene = sceneOf(fixture());
+  const camera = cameraFor(scene.artifact as Artifact, 'project:a/1');
+  const view = viewOf(camera);
+  const entered = stepMotes(null, scene, 'project:a/1', view, DT);
+  const reduced = moteFrame(entered, scene.artifact, scene.bodies, scene.media, 'project:a/1', view.view, view.projection, view.width, DT, true);
+  const full = moteFrame(entered, scene.artifact, scene.bodies, scene.media, 'project:a/1', view.view, view.projection, view.width, DT);
+  assert.equal(reduced.clock, entered.clock);
+  assert.ok(full.clock > entered.clock);
+  assert.ok(Math.abs(moteNamed(reduced, 'Java').elapsed - moteNamed(full, 'Java').elapsed / motionPace(true)) < 1e-12);
+});
+
 // --- Labels -------------------------------------------------------------------------
 
 const ndc = (x: number, front = true): NdcPoint => ({ x, y: 0, z: 0.5, front });
@@ -1008,6 +1108,7 @@ function auditMoteModel(source: string): string[] {
   const failures: string[] = [];
   const allowed = new Set([
     '../shell/focus-motion.ts',
+    '../shell/motion-preference.ts',
     '../shell/panel-model.ts',
     './dust-model.ts',
     './rail-model.ts',
