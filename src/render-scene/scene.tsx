@@ -67,7 +67,8 @@
 import { Canvas } from '@react-three/fiber';
 import { DataTexture, LinearFilter } from 'three';
 import {
-  DUST_COLOR,
+  DUST_MEDIUM_COLOR,
+  DUST_PARTICLE_COLOR,
   DUST_MEDIUM_TEXTURE_SIZE,
   DUST_PARTICLE_OPACITY,
   DUST_PARTICLE_RADIUS,
@@ -82,6 +83,7 @@ import { RailCamera } from './rail-camera.tsx';
 import { activateBody } from './scene-pick.ts';
 import { buildRail, railFarPlane } from './rail-model.ts';
 import { BODY_RENDER_ORDER, buildScene, frameBodies, type Body, type SceneArtifact } from './scene-model.ts';
+import { tokens } from '../tokens/tokens.ts';
 
 /**
  * The medium's falloff texture: one GPU texture, shared by every medium.
@@ -177,6 +179,12 @@ export function Scene({ artifact }: SceneProps) {
       }}
     >
       {/*
+        The ground: `surface-base`, so the strokes read as designed — light line on
+        a near-black void — rather than as dark dots on the white document behind a
+        transparent canvas. From the generated tokens, never a literal (AD-12).
+      */}
+      <color attach="background" args={[tokens.colors['surface-base-dark']]} />
+      {/*
         Two sources, because one leaves every sphere a flat disc: an ambient fill
         so nothing is pure black, and a directional light *offset* from the camera
         so the spheres read as spheres. Offset is the load-bearing word — a
@@ -211,7 +219,7 @@ export function Scene({ artifact }: SceneProps) {
         >
           <spriteMaterial
             map={MEDIUM_TEXTURE}
-            color={DUST_COLOR}
+            color={DUST_MEDIUM_COLOR}
             opacity={medium.opacity}
             transparent
             depthWrite={false}
@@ -226,7 +234,7 @@ export function Scene({ artifact }: SceneProps) {
           renderOrder={DUST_RENDER_ORDER}
         >
           <sphereGeometry args={[DUST_PARTICLE_RADIUS, 8, 6]} />
-          <meshBasicMaterial color={DUST_COLOR} opacity={DUST_PARTICLE_OPACITY} transparent depthWrite={false} />
+          <meshBasicMaterial color={DUST_PARTICLE_COLOR} opacity={DUST_PARTICLE_OPACITY} transparent depthWrite={false} />
         </mesh>
       ))}
       {/*

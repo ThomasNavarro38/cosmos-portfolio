@@ -16,9 +16,11 @@ import { PerspectiveCamera, Vector3 } from 'three';
 import { FOCUS_SECONDS, easeFocus } from '../shell/focus-motion.ts';
 import { motionPace } from '../shell/motion-preference.ts';
 import { panelFraction } from '../shell/panel-model.ts';
+import { tokens } from '../tokens/tokens.ts';
 import { DUST_MEDIUM_PEAK_OPACITY, buildDust, mediumAlphaAt, type DustMedium } from './dust-model.ts';
 import { FOCUS_REACH, focusPose } from './focus-model.ts';
 import {
+  MOTE_COLOR,
   MOTE_LABEL_CHAR_PX,
   MOTE_LABEL_FONT_PX,
   MOTE_LABEL_GAP_PX,
@@ -1117,6 +1119,7 @@ function auditMoteModel(source: string): string[] {
     './dust-model.ts',
     './rail-model.ts',
     './scene-model.ts',
+    '../tokens/tokens.ts',
   ]);
   for (const [, specifier] of code.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {
     if (!allowed.has(specifier ?? '')) failures.push(`imports ${specifier}`);
@@ -1154,4 +1157,11 @@ test('the mote model is pure: no Three, no React, no store, no clock, no tier', 
   ]) {
     assert.notDeepEqual(auditMoteModel(form), [], `${form} must be rejected`);
   }
+});
+
+// --- Colour, from the tokens ---------------------------------------------------------
+
+test('a Mote, dot and label, is stroke-active from the generated tokens (DESIGN.md mote.fillTier1)', () => {
+  assert.equal(MOTE_COLOR, tokens.colors['stroke-active-dark']);
+  assert.equal(moteLabelStyle().color, MOTE_COLOR);
 });

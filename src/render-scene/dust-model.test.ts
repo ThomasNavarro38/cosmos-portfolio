@@ -20,8 +20,11 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { tokens } from '../tokens/tokens.ts';
 import {
   DUST_MEDIUM_BREADTH,
+  DUST_MEDIUM_COLOR,
+  DUST_PARTICLE_COLOR,
   DUST_MEDIUM_MARGIN,
   DUST_MEDIUM_PEAK_OPACITY,
   DUST_MEDIUM_TEXTURE_SIZE,
@@ -522,8 +525,8 @@ function auditDustModel(source: string): string[] {
 
   for (const match of code.matchAll(/\bfrom\s*['"]([^'"]+)['"]|\brequire\s*\(/g)) {
     const specifier = match[1];
-    if (specifier !== './scene-model.ts') {
-      failures.push(`imports ${specifier ?? 'through require'} — Dust reads the scene model and nothing else`);
+    if (specifier !== './scene-model.ts' && specifier !== '../tokens/tokens.ts') {
+      failures.push(`imports ${specifier ?? 'through require'} — Dust reads the scene model and the generated tokens, nothing else`);
     }
   }
   // Any dynamic import, whatever the specifier's quoting — a template literal passed a
@@ -589,4 +592,14 @@ test('the Dust-model audit rejects each form it names', () => {
   ]) {
     assert.deepEqual(auditDustModel(form), [], `${form} is permitted and must pass`);
   }
+});
+
+// --- Colour, from the tokens ---------------------------------------------------
+
+test('Dust reads its two colours from the generated tokens (DESIGN.md dust-field)', () => {
+  // Particles at `stroke-dust`, the medium at `stroke-rest` — the shipped `-dark`
+  // values, since the canvas is drawn on `surface-base-dark`.
+  assert.equal(DUST_PARTICLE_COLOR, tokens.colors['stroke-dust-dark']);
+  assert.equal(DUST_MEDIUM_COLOR, tokens.colors['stroke-rest-dark']);
+  assert.notEqual(DUST_PARTICLE_COLOR, DUST_MEDIUM_COLOR, 'two steps of the ladder, not one value twice');
 });

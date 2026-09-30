@@ -1,0 +1,153 @@
+// GENERATED FILE — do not edit by hand. Produced by scripts/tokens.ts from _bmad-output/planning-artifacts/ux-designs/ux-cosmos-portfolio-2026-09-01/DESIGN.md; run `npm run tokens` to regenerate.
+
+/**
+ * The design tokens, for code that cannot read a CSS custom property — scene
+ * materials above all. The same values as `tokens.css`, from the same source.
+ * Colours are pairs: the bare key is the future light theme, `-dark` the shipped one.
+ */
+export const tokens = {
+  colors: {
+    'surface-base': '#F2EFE9',
+    'surface-base-dark': '#08080A',
+    'surface-raised': '#E7E3DA',
+    'surface-raised-dark': '#0D0D10',
+    'surface-edge': '#DCD7CB',
+    'surface-edge-dark': '#1D1D22',
+    'stroke-dust': '#BCB6A8',
+    'stroke-dust-dark': '#1D1D22',
+    'stroke-rest': '#8C8579',
+    'stroke-rest-dark': '#2C2C33',
+    'stroke-near': '#5C574D',
+    'stroke-near-dark': '#45454E',
+    'stroke-active': '#2E2B25',
+    'stroke-active-dark': '#B6B6BE',
+    'stroke-focus': '#16150F',
+    'stroke-focus-dark': '#F2F2F4',
+    'ink-faint': '#BCB6A8',
+    'ink-faint-dark': '#2C2C33',
+    'ink-quiet': '#8C8579',
+    'ink-quiet-dark': '#5E5E68',
+    'ink-label': '#5C574D',
+    'ink-label-dark': '#8A8A94',
+    'ink-prose': '#2E2B25',
+    'ink-prose-dark': '#B6B6BE',
+    'ink-lift': '#16150F',
+    'ink-lift-dark': '#F2F2F4',
+    vignette: '#F2EFE9',
+    'vignette-dark': '#08080A',
+  },
+  typography: {
+    fontFamily: {
+      sans: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      'sans-light-theme': '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif',
+    },
+    chrome: {
+      fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      fontSize: '9.5px',
+      fontWeight: 300,
+      lineHeight: 1.4,
+      letterSpacing: '0.34em',
+    },
+    'scene-label-client': {
+      fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      fontSize: '11px',
+      fontWeight: 300,
+      lineHeight: 1.3,
+      letterSpacing: '0.36em',
+    },
+    'scene-label-project': {
+      fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      fontSize: '12px',
+      fontWeight: 300,
+      lineHeight: 1.3,
+      letterSpacing: '0.12em',
+    },
+    'scene-label-secondary': {
+      fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      fontSize: '9.5px',
+      fontWeight: 300,
+      lineHeight: 1.4,
+      letterSpacing: '0.17em',
+    },
+    'mote-label': {
+      fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      fontSize: '9.5px',
+      fontWeight: 300,
+      lineHeight: 1.2,
+      letterSpacing: '0.16em',
+    },
+    'panel-kicker': {
+      fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      fontSize: '9.5px',
+      fontWeight: 300,
+      lineHeight: 1.4,
+      letterSpacing: '0.4em',
+    },
+    'panel-title': {
+      fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      fontSize: '23px',
+      fontWeight: 200,
+      lineHeight: 1.35,
+      letterSpacing: '0.01em',
+    },
+    'notable-prose': {
+      fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      fontSize: '16px',
+      fontWeight: 300,
+      lineHeight: 1.85,
+      letterSpacing: '0',
+    },
+    'editorial-rule': {
+      fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      fontSize: '13.5px',
+      fontWeight: 300,
+      lineHeight: 1.8,
+      letterSpacing: '0',
+    },
+    'field-label': {
+      fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      fontSize: '9.5px',
+      fontWeight: 300,
+      lineHeight: 1.4,
+      letterSpacing: '0.24em',
+    },
+    'field-value': {
+      fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      fontSize: '13.5px',
+      fontWeight: 300,
+      lineHeight: 1.65,
+      letterSpacing: '0',
+    },
+  },
+  spacing: {
+    hair: '4px',
+    xs: '8px',
+    sm: '12px',
+    md: '20px',
+    lg: '28px',
+    xl: '40px',
+    xxl: '52px',
+    xxxl: '56px',
+    'panel-pad-x': '56px',
+    'panel-pad-top': '56px',
+    'panel-pad-bottom': '60px',
+    'measure-prose': '56ch',
+    'measure-rule': '48ch',
+    'measure-title': '22ch',
+  },
+  rounded: {
+    none: '0',
+    circle: '50%',
+  },
+  components: {
+    'stroke-weight': {
+      hairline: '0.7px',
+      'hairline-leader': '0.6px',
+      'body-near': '0.8px',
+      'body-client': '0.9px',
+      'body-focus': '1.0px',
+    },
+  },
+} as const;
+
+export type Tokens = typeof tokens;

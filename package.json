@@ -9,12 +9,13 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run gate && vite build",
-    "gate": "node src/derive/index.ts --check",
+    "gate": "node src/derive/index.ts --check && node scripts/tokens.ts --check",
     "solve": "node src/derive/index.ts",
+    "tokens": "node scripts/tokens.ts",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "validate": "node src/data/validate.ts",
-    "test": "node --test \"src/**/*.test.ts\""
+    "test": "node --test \"src/**/*.test.ts\" \"scripts/**/*.test.ts\""
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",
