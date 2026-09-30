@@ -178,21 +178,28 @@ test('the stops follow rail read from the end, not the clients[] order', () => {
   ]);
 });
 
-test('committed: one Client yields the opening frame and the SNCF stop, progress over [0, 1]', () => {
-  const { rail, bodies } = railOf(committed());
-  assert.deepEqual(subjectsOf(rail), [null, 'client:sncf']);
-  assert.equal(railStopCount(rail), 1);
+test('committed: the opening frame, then one stop per Client present → past, including the SNCF stop', () => {
+  // Counts and order are read off the artifact rather than pinned, so adding a
+  // career entry does not fail this test; the SNCF stop is checked wherever it falls.
+  // The artifact emits the Rail oldest first and the camera travels present → past.
+  const artifact = committed();
+  const { rail, bodies } = railOf(artifact);
+  const presentToPast = [...new Set(artifact.rail)].reverse();
+  assert.deepEqual(subjectsOf(rail), [null, ...presentToPast]);
+  assert.equal(railStopCount(rail), presentToPast.length);
+  const sncfStop = subjectsOf(rail).indexOf('client:sncf');
+  assert.ok(sncfStop > 0, 'SNCF has a stop');
 
   const framing = frameBodies(bodies);
   const opening = railPose(rail, 0, DESKTOP_ASPECT);
   assertNear(opening.position, framing.position, 'progress 0 is the opening frame the camera prop shows');
   assertNear(opening.target, framing.target, 'and it aims where the framing aims');
 
-  const shot = committed().shots[0];
+  const shot = artifact.shots.find((entry) => entry.subject === 'client:sncf');
   assert.ok(shot !== undefined);
   const star = bodies.find((body) => body.kind === 'star' && body.id === 'client:sncf');
   assert.ok(star !== undefined);
-  const stop = railPose(rail, 1, DESKTOP_ASPECT);
+  const stop = railPose(rail, sncfStop, DESKTOP_ASPECT);
   assertNear(stop.target, star.position, 'the stop looks at the SNCF Star, wherever it was solved');
   const reach = distance(stop.position, stop.target);
   assert.ok(reach >= shot.distance - 1e-9, 'never closer than the Shot’s distance');
@@ -200,15 +207,19 @@ test('committed: one Client yields the opening frame and the SNCF stop, progress
     Math.abs(Math.asin((stop.position.y - stop.target.y) / reach) - shot.angle) < 1e-9,
     'at the Shot’s elevation',
   );
-  const sncf = rail.keyframes[1];
+  const sncf = rail.keyframes[sncfStop];
   assert.ok(sncf !== undefined);
-  assert.equal(sncf.slowdown, DWELL_SLOWDOWN['dwell-steady'], 'paced by its artifact tempo, dwell-steady');
+  const tempo = artifact.dwell.find((entry) => entry.subject === 'client:sncf')?.tempo as keyof typeof DWELL_SLOWDOWN;
+  assert.equal(sncf.slowdown, DWELL_SLOWDOWN[tempo], `paced by its artifact tempo, ${tempo}`);
   assert.equal(rail.keyframes[0]?.slowdown, RAIL_OPENING_SLOWDOWN, 'the opening frame has its own slowdown');
   for (const aspect of [DESKTOP_ASPECT, NARROWEST_ASPECT]) {
-    assert.deepEqual(outsideAtStop(rail, bodies, 1, aspect), [], `the Star and the Planet are framed at ${aspect}`);
+    for (let i = 1; i <= railStopCount(rail); i += 1) {
+      assert.deepEqual(outsideAtStop(rail, bodies, i, aspect), [], `stop ${i}'s Star and Planets are framed at ${aspect}`);
+    }
   }
 
-  assertNear(railPose(rail, 7, DESKTOP_ASPECT).position, stop.position, 'progress past the end clamps to 1');
+  const last = railPose(rail, railStopCount(rail), DESKTOP_ASPECT);
+  assertNear(railPose(rail, railStopCount(rail) + 6, DESKTOP_ASPECT).position, last.position, 'progress past the end clamps to the last stop');
 });
 
 test('empty rail: the opening keyframe only, and progress clamps to 0 without throwing', () => {

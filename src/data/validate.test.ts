@@ -431,13 +431,16 @@ test('the CLI exits 1 and writes to stderr on invalid data', () => {
   };
   const first = broken.projects[0];
   assert.ok(first !== undefined);
-  first['notabel'] = first['notable'];
+  // Set rather than renamed: a Shallow first entry has no `notable` to rename,
+  // and `JSON.stringify` would drop a `notabel: undefined` without a trace.
+  first['notabel'] = first['notable'] ?? 'Problem, constraint, decision.';
   delete first['notable'];
+  const client = String(first['client']);
 
   const result = runValidate(writeTemp(JSON.stringify(broken, null, 2)));
   assert.equal(result.status, 1, `expected exit 1, got ${result.status}`);
   assert.match(result.stderr, /notabel/, 'the failure must reach stderr');
-  assert.match(result.stderr, /SNCF/, 'the failing entry must be named on stderr');
+  assert.ok(result.stderr.includes(client), `the failing entry (${client}) must be named on stderr`);
 });
 
 test('no test writes into src/, so the suites can run in parallel', () => {

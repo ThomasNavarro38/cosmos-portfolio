@@ -220,13 +220,16 @@ test('N Clients and ΣP Projects yield exactly N + ΣP Bodies, one Star each and
   );
 });
 
-test('the committed artifact yields one Star and one Planet — the shape shipping today', () => {
-  // Degenerate on cardinality but not on structure, and it is what a visitor
-  // actually sees. A model keyed on there being more than one of anything would
-  // only fail once real career content landed.
-  const { bodies } = buildScene(committedArtifact());
-  assert.equal(bodies.length, 2);
-  assert.deepEqual(bodies.map((body) => body.kind), ['star', 'planet']);
+test('the committed artifact yields one Star per Client and one Planet per Project — the shape shipping today', () => {
+  // It is what a visitor actually sees. Counts are read off the artifact rather
+  // than pinned, so adding a career entry does not fail this test.
+  const artifact = committedArtifact();
+  const { bodies } = buildScene(artifact);
+  const projects = artifact.clients.flatMap((entry) => entry.projects);
+  assert.ok(artifact.clients.length > 0, 'the committed artifact is not empty');
+  assert.equal(bodies.filter((body) => body.kind === 'star').length, artifact.clients.length, 'one Star per Client');
+  assert.equal(bodies.filter((body) => body.kind === 'planet').length, projects.length, 'one Planet per Project');
+  assert.equal(bodies.length, artifact.clients.length + projects.length, 'and no third kind of Body');
 });
 
 test('an artifact with no Clients yields no Bodies rather than throwing', () => {
@@ -559,10 +562,19 @@ test('the containment assertion fails when the camera is aimed at the origin ins
   // tests green. An axis-aligned containment check around the camera's own `x`/`y` is
   // valid only if the camera looks down `-z`, so it could not see that.
   //
-  // Asserted over the committed artifact because that is the document where the bug
-  // was real: centre `[5, 0, …]`, so aiming at the origin is off by five units and
-  // the Planet at `x: 10` leaves the frustum.
-  const { bodies } = buildScene(committedArtifact());
+  // Asserted over the committed Bodies because that is the document where the bug
+  // was real, then shifted off the origin: the bug needs a centre away from the
+  // origin, and where the committed centre falls moves with every career entry —
+  // with three Clients it sat close enough that aiming at the origin lost nothing.
+  // A shift of twice the framing distance turns the aim well past the frustum's edge.
+  const committed = buildScene(committedArtifact()).bodies;
+  const framing = frameBodies(committed);
+  const shift = 2 * Math.hypot(
+    framing.position.x - framing.target.x,
+    framing.position.y - framing.target.y,
+    framing.position.z - framing.target.z,
+  );
+  const bodies = committed.map((body) => ({ ...body, position: { ...body.position, x: body.position.x + shift } }));
   const { frustum } = cameraAt(bodies, new Vector3(0, 0, 0));
   assert.notDeepEqual(
     outsideOf(frustum, bodies),

@@ -371,10 +371,14 @@ test('Rest: nothing focused, at any time, is zero Motes and every pooled dot hid
   }
 });
 
-test('Enter: nine Motes at level 0 on visible-Dust sources, then level 1 on their slots at FOCUS_SECONDS exactly', () => {
+test('Enter: one Mote per Skill at level 0 on visible-Dust sources, then level 1 on their slots at FOCUS_SECONDS exactly', () => {
   for (const artifact of [fixture(), committed()]) {
     const scene = sceneOf(artifact);
-    const id = artifact.clients[0]?.projects[0]?.id ?? '';
+    const project = artifact.clients[0]?.projects[0];
+    const id = project?.id ?? '';
+    // Read off the Project rather than pinned: the committed Skills change whenever career.json does.
+    const skills = [...new Set(project?.content.skills ?? [])];
+    assert.ok(skills.length > 0, 'the focused Project has Skills to condense');
     const clientId = artifact.clients[0]?.id ?? '';
     const view = viewOf(cameraFor(artifact, id));
     const rest = last(run(null, scene, null, 3, view));
@@ -384,8 +388,8 @@ test('Enter: nine Motes at level 0 on visible-Dust sources, then level 1 on thei
     for (const field of [rest, ...frames]) assert.deepEqual(field.draws.map((draw) => draw.skill), pool);
     const entered = frames[0];
     assert.ok(entered !== undefined);
-    assert.equal(entered.motes.length, 9);
-    assert.deepEqual(new Set(entered.motes.map((mote) => mote.skill)), new Set(NINE));
+    assert.equal(entered.motes.length, skills.length);
+    assert.deepEqual(new Set(entered.motes.map((mote) => mote.skill)), new Set(skills));
     for (const mote of entered.motes) {
       assert.equal(mote.level, 0, `${mote.skill} starts as Dust`);
       assert.deepEqual(mote.position, mote.source, `${mote.skill} starts at its source`);
@@ -404,7 +408,7 @@ test('Enter: nine Motes at level 0 on visible-Dust sources, then level 1 on thei
       assert.ok(Math.abs(distance(mote.position, planetAt(scene, id)) - (MOTE_ORBIT_RADII[mote.orbit] ?? 0)) < 1e-9);
     }
     // The dots drawn are the Motes, pool-aligned, and never two for one Skill.
-    for (const draw of done.draws) assert.equal(draw.visible, NINE.includes(draw.skill), draw.skill);
+    for (const draw of done.draws) assert.equal(draw.visible, skills.includes(draw.skill), draw.skill);
   }
 });
 
