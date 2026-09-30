@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 09-30-2026
+last_updated: 09-30-2026 13:17
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -46,7 +46,7 @@ development_status:
   1-8-enforced-boundaries-and-the-maintenance-contract: done
   epic-1-retrospective: done
 
-  epic-2: in-progress
+  epic-2: done
   2-1-the-dom-destination-index: done
   2-2-the-navigation-state-machine: done
   2-3-bodies-at-rest-in-the-3d-scene: done
@@ -57,7 +57,7 @@ development_status:
   2-8-condensation-and-decay: done
   2-9-free-flight-in-three-layers: done
   2-10-escape-precedence-and-reduced-motion: done
-  epic-2-retrospective: optional
+  epic-2-retrospective: done
 
   epic-3: backlog
   3-1-generated-design-tokens-from-a-single-source: backlog
@@ -136,7 +136,7 @@ action_items:
     action: "Close the boundary-table gaps: neverPackages on shell/ROOT_RULE/derive,
       R3F on render-fallback, cross-renderer edge, narrow src/types exemption to .d.ts"
     owner: "Thomas"
-    status: open
+    status: in-progress
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-7-boundary-parser-loud"
     epic: 1
@@ -212,15 +212,84 @@ action_items:
       and src/derive/ there. Needs the README.md:45 sentence first — boundaries.ts
       deliberately states nothing the prose does not"
     owner: "Thomas"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/spec-2-1-the-dom-destination-index.md"
   - id: "story-2-1-review-item-3-empty-client-renders-empty-list"
     epic: 2
     action: "index-nav.tsx renders an empty <ul> for a Client carrying no Projects
-      — an empty list announced to assistive technology. Unreachable through the
-      pipeline (deriveEntities folds Projects into Clients, and startsAt throws naming
-      the Client), so it needs either a conditional in the renderer or a note recording
+      — an empty list announced to assistive technology. Unreachable through the pipeline
+      (deriveEntities folds Projects into Clients, and startsAt throws naming the
+      Client), so it needs either a conditional in the renderer or a note recording
       the case as accepted"
     owner: "Thomas"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/spec-2-1-the-dom-destination-index.md"
+  - id: "epic-2-retro-item-1-author-content-and-m1-judgement"
+    epic: 2
+    action: "Author real career content (~5-6 Clients, ~10 Projects), re-solve, and
+      run the M1 pacing judgement in the browser (Dwell through stops, A->B hand-off,
+      overview, label density); then work the 'tune at M1' deferrals. Gates Epic 3"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
+  - id: "epic-2-retro-item-2-no-cut-on-refocus-during-release"
+    epic: 2
+    action: "Fix the camera cut when a different Project is focused during a release
+      slide-out (focus-model.ts:242-246): shorten only when reopening the ID the slide
+      closed from; add a stepFocus test with B far from A"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
+  - id: "epic-2-retro-item-3-panel-visibility-on-reversed-slide"
+    epic: 2
+    action: "Make the panel's close visibility delay follow the reversed slide rather
+      than the full duration (panel-model.ts:388); test pairing panelStyle with flipSlide"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
+  - id: "epic-2-retro-item-4-keyboard-only-while-scene-mounted"
+    epic: 2
+    action: "Bind keyboard (and wheel) Rail input only while the scene is mounted
+      (scene-host.tsx:191-238); extend auditKeyWiring/keyAction with a scene-absent
+      case"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
+  - id: "epic-2-retro-item-5-review-story-2-10"
+    epic: 2
+    action: "Run the skipped code review on story 2.10 (fa581dc) and record the reduced-motion
+      manual check result in its spec"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
+  - id: "epic-2-retro-item-6-schedule-retro-items-as-stories"
+    epic: 2
+    action: "Turn Epic 1's open retro items into scheduled stories before Epic 3 (CI
+      and bundle assertion first); from now on add retro items to development_status,
+      not only action_items"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
+  - id: "epic-2-retro-item-7-doc-drift"
+    epic: 2
+    action: "Fix doc drift: release goal is the pose beneath Focus (focus-model.ts:22-31,
+      render-scene/README.md), Home is the goHome door (scene-host.tsx:219, rail-input.ts:160-162,
+      shell/README.md:81), render-scene/README.md:5 lists its five shell imports"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
+  - id: "epic-2-retro-item-8-decide-railposition"
+    epic: 2
+    action: "Decide railPosition: the Rail follows a Client flown to, or drop the
+      field from AC 2.2 / AD-4a (spec reconciliation)"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
+  - id: "epic-2-retro-item-9-test-support-home"
+    epic: 2
+    action: "Give test utilities a sanctioned home (one walker, one single-pass stripper);
+      collapse the 7 directory walkers and parameterise the renderer scans over the
+      directory"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
