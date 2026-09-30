@@ -2,27 +2,231 @@
   "asOf": "2026-09",
   "projects": [
     {
-      "client": "SNCF",
-      "project": "Client referential — MDM replacement",
+      "client": "SIMSU",
+      "project": "Chamilo paper-handling app",
       "company": null,
+      "role": "Product owner and sole developer",
+      "built": "Android app bridging the Chamilo e-learning platform and a PDF annotation app already on teachers' tablets: it downloaded student papers from Chamilo, handed them to the annotation app for grading, and uploaded the corrected files back to the platform.",
+      "team_size": 1,
+      "duration": {
+        "start": "2016-05",
+        "end": "2017-07"
+      },
+      "skills": [
+        "Android",
+        "PHP",
+        "Symfony",
+        "Chamilo",
+        "product ownership",
+        "technical design",
+        "integration",
+        "testing"
+      ]
+    },
+    {
+      "client": "Transilien",
+      "project": "Stream aggregator-compiler",
+      "company": "Capgemini",
+      "role": "Developer",
+      "built": "Designed and developed a service component of the train information chain that computes stateful information streams from several sources for several consumers, with performance as a primary constraint.",
+      "team_size": 6,
+      "duration": {
+        "start": "2017-09",
+        "end": "2018-01"
+      },
+      "skills": [
+        "Java",
+        "Spring",
+        "JBoss",
+        "Hazelcast",
+        "HornetQ",
+        "Oracle Database",
+        "H2",
+        "GitLab",
+        "Jenkins",
+        "technical design",
+        "performance optimisation",
+        "data synchronisation"
+      ]
+    },
+    {
+      "client": "Transilien",
+      "project": "Train information chain administration",
+      "company": "Capgemini",
+      "role": "Developer, then lead developer",
+      "built": "Designed and developed a secured administration interface to configure and oversee a chain of web applications processing train information for passengers and internal systems; took over as lead developer four months in.",
+      "team_size": 7,
+      "duration": {
+        "start": "2018-01",
+        "end": "2019-03"
+      },
+      "skills": [
+        "Java",
+        "Spring Boot",
+        "Angular",
+        "PostgreSQL",
+        "GitLab",
+        "Jenkins",
+        "OpenID Connect",
+        "technical design",
+        "technical leadership",
+        "code review",
+        "mentoring"
+      ]
+    },
+    {
+      "client": "SNCF",
+      "project": "File aggregator-transcoder",
+      "company": "Capgemini",
+      "role": "Developer",
+      "built": "Developed a set of microservices that aggregate files from different sources, persist them, and transcode them for different consumers.",
+      "team_size": 5,
+      "duration": {
+        "start": "2019-03",
+        "end": "2019-04"
+      },
+      "skills": [
+        "Java",
+        "Spring",
+        "PostgreSQL",
+        "Hibernate",
+        "GitLab",
+        "Jenkins",
+        "microservices"
+      ]
+    },
+    {
+      "client": "SNCF Connect & Tech",
+      "project": "Train ticket sales web apps",
+      "company": "Capgemini",
       "role": "Technical lead",
-      "built": "Replaced a commercial Oracle MDM at the core of SNCF's client referential with a Spring Boot application, alongside a Java and Cloudera upgrade of the surrounding platform.",
+      "built": "Cross-project technical lead across several web applications selling rail tickets: estimated upcoming functional scope, broke it into user stories with sizing and design, and supported the project teams technically.",
+      "team_size": 13,
+      "duration": {
+        "start": "2019-05",
+        "end": "2020-11"
+      },
+      "skills": [
+        "Java",
+        "Spring Boot",
+        "React",
+        "Oracle Database",
+        "Rundeck",
+        "GitLab",
+        "GitLab CI",
+        "technical leadership",
+        "estimation",
+        "user story splitting",
+        "technical design",
+        "payment integration",
+        "continuous integration",
+        "code review",
+        "mentoring"
+      ]
+    },
+    {
+      "client": "Air France-KLM",
+      "project": "Equipment tracking app",
+      "company": "Capgemini",
+      "role": "Lead developer",
+      "built": "Lead developer on a cross-platform Ionic / Angular / Cordova application for Windows (UWP) and iOS that tracks jet engine parts through their cleaning process after teardown, each part identified by an RFID tag scanned with a Bluetooth-connected reader.",
+      "team_size": 3,
+      "duration": {
+        "start": "2020-11",
+        "end": "2022-08"
+      },
+      "skills": [
+        "Java",
+        "Spring Boot",
+        "Ionic",
+        "Angular",
+        "Apache Cordova",
+        "UWP",
+        "iOS",
+        "Zebra RFID",
+        "Bluetooth",
+        "Bitbucket",
+        "Bamboo",
+        "technical leadership",
+        "refactoring",
+        "release management",
+        "code review",
+        "mentoring"
+      ]
+    },
+    {
+      "client": "SNCF",
+      "project": "Client referential",
+      "company": "Capgemini",
+      "role": "Technical lead",
+      "built": "Led the group of applications forming SNCF's client referential: replaced its commercial Oracle MDM with a Spring Boot application, cleared technical obsolescence across the platform (Java 8 → 17, Spring 4 → 5, Cloudera 5 → 7), and moved its clusters to a new hosting site.",
       "team_size": 11,
       "duration": {
-        "start": "2019-01",
-        "end": "2021-01"
+        "start": "2022-08",
+        "end": "2024-02"
       },
       "notable": "The Oracle MDM cost twice: an expensive licence, and a team employed full-time to correct the data it produced. Replacing it meant rebuilding a mature product's behaviour with no specification to work from — documentation was absent or years stale, so the incumbent's real rules had to be recovered from the system itself.\n\nThe house standard was Spring on a dedicated external Tomcat, on ageing on-premise infrastructure. I argued for Spring Boot with embedded Tomcat instead — the better fit, and the furthest the client would go. With a mostly junior team on a critical system, a from-scratch rebuild on a current stack was also the one chance they'd get to learn one.",
       "skills": [
         "Java",
+        "Spring",
         "Spring Boot",
         "Tomcat",
-        "Oracle",
+        "Angular",
+        "PostgreSQL",
+        "Oracle Database",
+        "HBase",
+        "Apache Kafka",
+        "ActiveMQ",
+        "IBM MQ",
         "Cloudera",
-        "MDM",
+        "Oracle MDM",
+        "Experian",
+        "Datadog",
+        "GitLab",
+        "Jenkins",
+        "master data management",
         "technical leadership",
+        "technical scoping",
+        "proof of concept",
+        "legacy modernisation",
+        "data centre migration",
         "code review",
         "mentoring"
+      ]
+    },
+    {
+      "client": "Decathlon",
+      "project": "Store labelling generation",
+      "company": "Sfeir",
+      "role": "Backend developer",
+      "built": "Backend development on a microservice application that generates paper and electronic shelf labels for Decathlon stores in every country.",
+      "team_size": 6,
+      "duration": {
+        "start": "2024-02",
+        "end": null
+      },
+      "skills": [
+        "Java",
+        "Spring Boot",
+        "Apache Kafka",
+        "PostgreSQL",
+        "Express.js",
+        "Docker",
+        "Kubernetes",
+        "Flux CD",
+        "GitHub",
+        "GitHub Actions",
+        "Datadog",
+        "AWS",
+        "GCP",
+        "Microsoft Azure",
+        "Cucumber",
+        "Playwright",
+        "GitHub Copilot",
+        "architecture review",
+        "performance optimisation",
+        "test automation",
+        "monitoring"
       ]
     }
   ]
