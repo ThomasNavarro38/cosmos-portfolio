@@ -31,12 +31,18 @@
  * result, and `scene-model.test.ts` audits it: no store write, no named event, no
  * subscription, no DOM, no coordinate literal, and exactly this binding.
  *
+ * **Reduced motion (2.10)** is read the same way: `reducedMotion()` once per
+ * frame, never subscribed, and handed to all three frame bodies as their
+ * trailing `reduced`. Every move then runs at `duration × pace`, continuously —
+ * the models own how.
+ *
  * The carried state lives in `useRef`s, not in React state: it changes every
  * frame and nothing should re-render when it does.
  */
 
 import { useFrame } from '@react-three/fiber';
 import { useRef } from 'react';
+import { reducedMotion } from '../shell/motion-preference.ts';
 import { navigationStore } from '../shell/state.ts';
 import { flightFrame, type FlightMotion } from './flight-model.ts';
 import { focusFrame, type FocusMotion } from './focus-model.ts';
@@ -56,11 +62,12 @@ export function RailCamera({ rail, bodies }: RailCameraProps) {
 
   useFrame(({ camera, size }, delta) => {
     const state = navigationStore.getState();
-    const frame = railFrame(motion.current, rail, state.scrollProgress, size.width, size.height, delta);
+    const reduced = reducedMotion();
+    const frame = railFrame(motion.current, rail, state.scrollProgress, size.width, size.height, delta, reduced);
     motion.current = frame.motion;
-    const flown = flightFrame(flight.current, rail, state.mode, state.flightTarget, frame, delta);
+    const flown = flightFrame(flight.current, rail, state.mode, state.flightTarget, frame, delta, reduced);
     flight.current = flown.motion;
-    focus.current = focusFrame(focus.current, rail, bodies, state.focusedProjectId, flown.frame, size.width, delta);
+    focus.current = focusFrame(focus.current, rail, bodies, state.focusedProjectId, flown.frame, size.width, delta, reduced);
     camera.position.set(focus.current.pose.position.x, focus.current.pose.position.y, focus.current.pose.position.z);
     camera.lookAt(focus.current.pose.target.x, focus.current.pose.target.y, focus.current.pose.target.z);
   });

@@ -31,6 +31,7 @@
  */
 
 import { easeFocus } from '../shell/focus-motion.ts';
+import { motionPace } from '../shell/motion-preference.ts';
 import { RAIL_MAX_FRAME_SECONDS, railPose, type Rail, type RailFrame, type RailPose } from './rail-model.ts';
 
 /**
@@ -91,10 +92,11 @@ export interface FlightMotion {
  *     starts there and eases to the flight goal, so a remount never cuts.
  *   - **The key changed:** capture the pose drawn last frame and hold it; the
  *     move to the new goal starts from exactly there. A change mid-move is C0.
- *   - **Otherwise:** advance by `dt` (clamped to `[0, RAIL_MAX_FRAME_SECONDS]`)
- *     and blend from the captured pose to the goal by
- *     `easeFocus(elapsed / FLIGHT_SECONDS)`. At `FLIGHT_SECONDS` the pose is the
- *     goal, exactly — on the Rail, the live Rail pose itself.
+ *   - **Otherwise:** advance by `dt` (clamped to `[0, RAIL_MAX_FRAME_SECONDS]`,
+ *     then divided by the reduced-motion pace, 2.10) and blend from the captured
+ *     pose to the goal by `easeFocus(elapsed / FLIGHT_SECONDS)`. At
+ *     `FLIGHT_SECONDS` the pose is the goal, exactly — on the Rail, the live Rail
+ *     pose itself. Reduced, the same move completes at `FLIGHT_SECONDS × pace`.
  */
 export function stepFlight(
   previous: FlightMotion | null,
@@ -103,6 +105,7 @@ export function stepFlight(
   railPose: RailPose,
   flightPoseOf: (target: string | null) => RailPose,
   dt: number,
+  reduced = false,
 ): FlightMotion {
   const flying = mode === 'freeflight';
   const key = { mode, target: flying ? target : null };
@@ -112,7 +115,7 @@ export function stepFlight(
   if (key.mode !== previous.mode || key.target !== previous.target) {
     return { ...key, from: previous.pose, elapsed: 0, pose: previous.pose };
   }
-  const step = Number.isFinite(dt) ? Math.min(Math.max(dt, 0), RAIL_MAX_FRAME_SECONDS) : 0;
+  const step = (Number.isFinite(dt) ? Math.min(Math.max(dt, 0), RAIL_MAX_FRAME_SECONDS) : 0) / motionPace(reduced);
   const elapsed = Math.min(previous.elapsed + step, FLIGHT_SECONDS);
   const goal = flying ? flightPoseOf(key.target) : railPose;
   const eased = easeFocus(elapsed / FLIGHT_SECONDS);
@@ -146,9 +149,10 @@ export function flightFrame(
   target: string | null,
   frame: RailFrame,
   delta: number,
+  reduced = false,
 ): FlightFrame {
   const aspect = frame.motion.aspect.value;
-  const motion = stepFlight(previous, mode, target, frame.pose, (goal) => flightPose(rail, goal, aspect), delta);
+  const motion = stepFlight(previous, mode, target, frame.pose, (goal) => flightPose(rail, goal, aspect), delta, reduced);
   return { motion, frame: { motion: frame.motion, pose: motion.pose } };
 }
 

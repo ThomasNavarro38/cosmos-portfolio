@@ -46,14 +46,21 @@
  * the spring's alone rather than a lag stacked on a lag.
  *
  * **Pure, like every model in this directory.** It imports `./scene-model.ts`
- * and nothing else — no Three, no React, no store — so every rule an acceptance
- * criterion names runs under `node --test`, which cannot load the `.tsx` rig.
+ * and the shell's pure `motionPace` (2.10) and nothing else — no Three, no
+ * React, no store — so every rule an acceptance criterion names runs under
+ * `node --test`, which cannot load the `.tsx` rig.
+ *
+ * **Reduced motion (2.10)** shortens the spring's time constant to
+ * `RAIL_SPRING_SECONDS × pace`, for progress and aspect alike; the rig reads the
+ * preference once per frame and hands it to `railFrame`. The Dwell warp and
+ * every rest pose are untouched.
  *
  * Not here, on purpose: the Focus/panel scroll split (2.7), click-to-fly and
- * keyboard travel (2.9), reduced motion (2.10), and containment *along the path*
- * between stops — only a camera at rest at a stop is proven to frame its system.
+ * keyboard travel (2.9), and containment *along the path* between stops — only
+ * a camera at rest at a stop is proven to frame its system.
  */
 
+import { motionPace } from '../shell/motion-preference.ts';
 import {
   BODY_MARGIN,
   DEFAULT_FOV,
@@ -638,6 +645,7 @@ export function stepRailMotion(
   targetProgress: number,
   liveAspect: number,
   dt: number,
+  reduced = false,
 ): RailMotion {
   const stops = railStopCount(rail);
   const fallbackProgress = previous?.progress.value ?? 0;
@@ -648,9 +656,13 @@ export function stepRailMotion(
   if (previous === null) {
     return { progress: { value: 0, velocity: 0 }, aspect: { value: aspectGoal, velocity: 0 } };
   }
+  // Reduced motion (2.10): the same spring on a shorter time constant, for both.
+  // For a critically damped spring that is exactly `dt / pace` — time dilated,
+  // as every eased move is — and never a cut.
+  const seconds = RAIL_SPRING_SECONDS * motionPace(reduced);
   return {
-    progress: dampProgress(previous.progress, goal, dt),
-    aspect: dampProgress(previous.aspect, aspectGoal, dt),
+    progress: dampProgress(previous.progress, goal, dt, seconds),
+    aspect: dampProgress(previous.aspect, aspectGoal, dt, seconds),
   };
 }
 
@@ -666,9 +678,10 @@ export interface RailFrame {
  *
  * The rig passes exactly what it holds: the motion it carried from the last
  * frame, the store's `scrollProgress`, R3F's canvas `size` and the frame
- * `delta`. It writes `motion` back and applies `pose` to the camera — nothing
- * else. The live aspect is `width / height`; a zero height reads as no usable
- * aspect and the previous one is kept.
+ * `delta`, and the reduced-motion preference (2.10), read once per frame. It
+ * writes `motion` back and applies `pose` to the camera — nothing else. The
+ * live aspect is `width / height`; a zero height reads as no usable aspect and
+ * the previous one is kept.
  */
 export function railFrame(
   previous: RailMotion | null,
@@ -677,8 +690,9 @@ export function railFrame(
   width: number,
   height: number,
   delta: number,
+  reduced = false,
 ): RailFrame {
-  const motion = stepRailMotion(previous, rail, storeProgress, width / height, delta);
+  const motion = stepRailMotion(previous, rail, storeProgress, width / height, delta, reduced);
   return { motion, pose: railPose(rail, motion.progress.value, motion.aspect.value) };
 }
 

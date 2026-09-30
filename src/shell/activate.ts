@@ -28,10 +28,25 @@
  *   - Pulling back is free flight framing the whole universe:
  *     `enterFreeFlight(null)`, releasing Focus first as a Client does.
  *   - Returning is `enterRail()`, which writes `mode` alone, so the Rail resumes
- *     at the progress it was left at. Focus, if any, stays (2.10 owns that).
- *   - Home (the keyboard's `Home`) is `enterRail()` then `advanceScroll(0)`: the
+ *     at the progress it was left at — releasing Focus first (2.10), as a Client
+ *     and the overview do.
+ *   - Home (the keyboard's `Home`) is the return, then `advanceScroll(0)`: the
  *     Rail's opening frame, from either mode. It is the one door that writes
- *     progress, beside the scroll input.
+ *     progress, beside the scroll input. Its Focus release is defensive: the
+ *     keyboard never reaches Home while a Project is focused (`keyIntent`
+ *     leaves Home to the panel then), so the release only keeps the
+ *     `mode === focusOrigin` invariant for any direct caller of the door.
+ *
+ * Decisions ratified for 2.10:
+ *
+ *   - **Every door that changes `mode` releases Focus first.** So while a
+ *     Project is Focused, `mode === focusOrigin`, over every sequence of doors —
+ *     executed in `activate.test.ts`. That invariant is what lets a Focus release
+ *     return to the layer recorded at entry (AD-16) without writing `mode`: the
+ *     layer Focus was entered from is the layer it is still drawn over.
+ *   - `releaseLayer()` is `Escape`'s door: it releases the innermost layer, and
+ *     only that one. Focused → `releaseFocus()`; otherwise in free flight →
+ *     `enterRail()`; otherwise nothing. It never makes two writes.
  */
 
 import {
@@ -88,13 +103,35 @@ export function pullBack(): void {
   enterFreeFlight(null);
 }
 
-/** Resume the journey: back to the Rail, where it was left. */
+/** Resume the journey: back to the Rail, where it was left, releasing Focus first. */
 export function returnToRail(): void {
+  releaseForTravel();
   enterRail();
 }
 
-/** Home: back to the Rail, at its opening frame. */
+/**
+ * Home: back to the Rail, at its opening frame. It goes through the return, so a
+ * direct caller holding a Focus releases it (defensive — Home while Focused is
+ * the panel's, and never reaches this door from the keyboard).
+ */
 export function goHome(): void {
-  enterRail();
+  returnToRail();
   advanceScroll(0);
+}
+
+/**
+ * Release the innermost layer (`Escape`, 2.10): Focus when a Project is focused,
+ * else free flight back to the Rail where it was left, else nothing.
+ *
+ * One write at most. A Focus released in free flight stays in free flight — the
+ * layer it was entered from, since every door that changes `mode` releases Focus
+ * first — and a second `Escape` then returns to the Rail.
+ */
+export function releaseLayer(): void {
+  const { focusedProjectId, mode } = navigationStore.getState();
+  if (focusedProjectId !== null) {
+    releaseFocus();
+    return;
+  }
+  if (mode === 'freeflight') enterRail();
 }

@@ -51,6 +51,7 @@
 
 import { FOCUS_SECONDS, easeFocus } from '../shell/focus-motion.ts';
 import { panelFraction } from '../shell/panel-model.ts';
+import { motionPace } from '../shell/motion-preference.ts';
 import type { DustMedium } from './dust-model.ts';
 import { RAIL_MAX_FRAME_SECONDS } from './rail-model.ts';
 import type { Body, ScenePosition } from './scene-model.ts';
@@ -462,9 +463,11 @@ export interface MoteView {
  * Rules, in order:
  *
  *   - **Time.** `dt` is clamped to `[0, RAIL_MAX_FRAME_SECONDS]` (non-finite
- *     reads as 0). The clock spins every orbit; every Mote's `elapsed` and
- *     re-slot advance. A decay that has reached `FOCUS_SECONDS` is at level 0
- *     at its source and is removed.
+ *     reads as 0), then divided by the reduced-motion pace (2.10). The clock
+ *     spins every orbit — except under reduced motion, where it holds, so the
+ *     Motes keep their angles; every Mote's `elapsed` and re-slot advance. A
+ *     decay that has reached `FOCUS_SECONDS` is at level 0 at its source and
+ *     is removed.
  *   - **The focused ID changed** (or a first frame finds one focused): each
  *     Skill of the new Project that already has a Mote is retargeted to its new
  *     slot from its drawn pose and level; each Mote heading for a slot the new
@@ -491,9 +494,13 @@ export function stepMotes(
   focusedId: string | null,
   view: MoteView,
   dt: number,
+  reduced = false,
 ): MoteField {
-  const step = Number.isFinite(dt) ? Math.min(Math.max(dt, 0), RAIL_MAX_FRAME_SECONDS) : 0;
-  const clock = previous === null ? 0 : previous.clock + step;
+  const step = (Number.isFinite(dt) ? Math.min(Math.max(dt, 0), RAIL_MAX_FRAME_SECONDS) : 0) / motionPace(reduced);
+  // Reduced motion stops the orbits (WCAG 2.3.3, Animation from Interactions): an
+  // orbit has no end to shorten. At full motion they spin with no pause control —
+  // WCAG 2.2.2 stays open (deferred-work.md).
+  const clock = previous === null ? 0 : reduced ? previous.clock : previous.clock + step;
   const changed = previous === null ? focusedId !== null : focusedId !== previous.focusedId;
 
   const advanced = (previous?.motes ?? [])
@@ -531,8 +538,9 @@ export function moteFrame(
   projection: ArrayLike<number>,
   width: number,
   delta: number,
+  reduced = false,
 ): MoteField {
-  return stepMotes(previous, { artifact, bodies, media }, focusedId, { view, projection, width }, delta);
+  return stepMotes(previous, { artifact, bodies, media }, focusedId, { view, projection, width }, delta, reduced);
 }
 
 function retarget(motes: readonly Mote[], scene: MoteScene, focusedId: string | null, clock: number): Mote[] {
