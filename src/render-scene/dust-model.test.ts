@@ -164,12 +164,12 @@ test('an uncapped medium reaches past its farthest Planet, so that system sits i
 // --- Matrix row: the committed artifact -------------------------------------
 
 test('the committed artifact gets its ratio’s particle count in a non-degenerate volume, though flat in y and z', () => {
-  // One Star and one Planet, both at y = 0 and z = 0: a scatter box read off the
+  // Every committed Body sits at y = 0 and z = 0: a scatter box read off the
   // Bodies alone would be a line segment, and every particle would sit on the axis.
   const bodies = committedBodies();
   const { media, particles } = buildDust(bodies);
 
-  assert.equal(media.length, 1, 'one Client, one medium');
+  assert.equal(media.length, bodies.filter((body) => body.kind === 'star').length, 'one medium per Client');
   assert.equal(particles.length, targetFor(bodies.length), 'the count equals the ratio’s target');
 
   for (const axis of ['x', 'y', 'z'] as const) {
