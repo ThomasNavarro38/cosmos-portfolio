@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 09-30-2026 13:17
+last_updated: 09-30-2026 23:20
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -59,8 +59,8 @@ development_status:
   2-10-escape-precedence-and-reduced-motion: done
   epic-2-retrospective: done
 
-  epic-3: backlog
-  3-1-generated-design-tokens-from-a-single-source: backlog
+  epic-3: in-progress
+  3-1-generated-design-tokens-from-a-single-source: review
   3-2-the-stroke-and-ink-ladders-applied-to-the-scene: backlog
   3-3-the-deep-shallow-signal-moon-and-ring: backlog
   3-4-the-hover-and-keyboard-focus-affordance: backlog
@@ -230,7 +230,10 @@ action_items:
       run the M1 pacing judgement in the browser (Dwell through stops, A->B hand-off,
       overview, label density); then work the 'tune at M1' deferrals. Gates Epic 3"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-09-30: content authored (f30ca01), re-solve produces no diff;
+      M1 pacing judged in the browser by Thomas, all checks pass. One finding, the
+      Client Star's perspective stretch under Focus, deferred to story 3.2 (deferred-work.md)"
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
   - id: "epic-2-retro-item-2-no-cut-on-refocus-during-release"
     epic: 2

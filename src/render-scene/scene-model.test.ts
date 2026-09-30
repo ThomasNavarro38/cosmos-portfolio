@@ -1376,6 +1376,77 @@ test('the draw-order audit rejects the real renderer with any one of its guarant
   }
 });
 
+// --- Colour comes from the tokens (3.1) --------------------------------------
+
+/**
+ * The renderer's colours, as a pure function over its source: the Dust medium is
+ * drawn in `DUST_MEDIUM_COLOR` and the particles in `DUST_PARTICLE_COLOR` (the
+ * model's token-backed constants, `dust-model.test.ts` pins their values), and the
+ * canvas carries exactly one background, `tokens.colors['surface-base-dark']`.
+ *
+ * Comments are blanked but strings kept, because the token key *is* a string.
+ */
+function auditSceneColours(source: string): string[] {
+  const code = blankComments(source);
+  const failures: string[] = [];
+  const colourOf = (material: string) => /\bcolor\s*=\s*\{\s*([^}]*?)\s*\}/.exec(material)?.[1];
+
+  for (const [collection, expected] of [
+    ['media', 'DUST_MEDIUM_COLOR'],
+    ['particles', 'DUST_PARTICLE_COLOR'],
+  ] as const) {
+    const materials = mapBlocks(code, collection).flatMap((block) => block.match(/<\w+Material\b[^>]*>/g) ?? []);
+    if (materials.length === 0) failures.push(`${collection} are drawn with no material to colour`);
+    for (const material of materials) {
+      const colour = colourOf(material);
+      if (colour !== expected) failures.push(`a ${collection} material is coloured ${colour ?? 'by default'}, not ${expected}`);
+    }
+  }
+
+  const backgrounds = code.match(/<color\b[^>]*\battach\s*=\s*["']background["'][^>]*>/g) ?? [];
+  if (backgrounds.length !== 1) {
+    failures.push(`${backgrounds.length} scene backgrounds — exactly one, surface-base-dark, is drawn`);
+  }
+  for (const background of backgrounds) {
+    if (!/\bargs\s*=\s*\{\s*\[\s*tokens\.colors\[\s*(['"])surface-base-dark\1\s*\]\s*\]\s*\}/.test(background)) {
+      failures.push("the scene background is not tokens.colors['surface-base-dark']");
+    }
+  }
+  if (!/import\s*\{\s*tokens\s*\}\s*from\s*['"]\.\.\/tokens\/tokens\.ts['"]/.test(code)) {
+    failures.push('the renderer does not import the generated tokens');
+  }
+  return failures;
+}
+
+test('the Dust and the background are coloured from the tokens', () => {
+  assert.deepEqual(auditSceneColours(readFileSync(SCENE_TSX, 'utf8')), []);
+});
+
+test('the colour audit rejects the real renderer with any one colour binding broken', () => {
+  const real = readFileSync(SCENE_TSX, 'utf8');
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    [
+      'the Dust constants swapped',
+      (s) =>
+        s
+          .replace('color={DUST_MEDIUM_COLOR}', 'color={__SWAP__}')
+          .replace('color={DUST_PARTICLE_COLOR}', 'color={DUST_MEDIUM_COLOR}')
+          .replace('color={__SWAP__}', 'color={DUST_PARTICLE_COLOR}'),
+    ],
+    ['the medium uncoloured', (s) => s.replace(/\s*color=\{DUST_MEDIUM_COLOR\}/, '')],
+    ['a particle coloured by a literal name', (s) => s.replace('color={DUST_PARTICLE_COLOR}', 'color={GREY}')],
+    ['the background removed', (s) => s.replace(/<color attach="background"[^>]*\/>/, '')],
+    ['the background token changed', (s) => s.replace("tokens.colors['surface-base-dark']", "tokens.colors['surface-raised-dark']")],
+    ['the background from a constant', (s) => s.replace("args={[tokens.colors['surface-base-dark']]}", 'args={[GROUND]}')],
+    ['a second background', (s) => s.replace('<ambientLight', '<color attach="background" args={[tokens.colors[\'surface-base-dark\']]} />\n      <ambientLight')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped renderer`);
+    assert.notDeepEqual(auditSceneColours(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
 // --- The surface has extent -------------------------------------------------
 
 /**

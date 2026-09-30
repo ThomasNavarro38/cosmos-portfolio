@@ -42,6 +42,7 @@
  * its gradient. Non-overlap wins over coverage by design.
  */
 
+import { tokens } from '../tokens/tokens.ts';
 import { BODY_MARGIN, BODY_RENDER_ORDER, type Body, type ScenePosition } from './scene-model.ts';
 
 // --- Tuning ------------------------------------------------------------------
@@ -67,13 +68,19 @@ export const DUST_PARTICLE_OPACITY = 0.55;
 export const DUST_PARTICLE_RADIUS = 0.07;
 
 /**
- * The one neutral greybox Dust value, shared by medium and particles.
+ * The particles' colour: `stroke-dust-dark`, the ladder's faintest step (DESIGN.md
+ * `dust-field.particleFill`). Read from the generated tokens, never written as a
+ * literal — the gate's colour scan fails the build on one (AD-12).
  *
- * Mid-grey rather than white because the canvas is transparent over a white
- * document: a white medium would be invisible. Epic 3 replaces it with
- * `stroke-dust`; this is a placeholder, not a palette.
+ * The `-dark` values because they are the shipped M2 palette, drawn on
+ * `surface-base-dark`: the canvas is now opaque (`scene.tsx` sets that
+ * background), where the greybox drew mid-grey on a transparent canvas over the
+ * white document. On that white, these dim strokes would all but vanish.
  */
-export const DUST_COLOR = '#8a8a8a';
+export const DUST_PARTICLE_COLOR = tokens.colors['stroke-dust-dark'];
+
+/** The medium's colour: `stroke-rest-dark` (DESIGN.md `dust-field.mediumGradientStop0`). */
+export const DUST_MEDIUM_COLOR = tokens.colors['stroke-rest-dark'];
 
 /**
  * How much broader than its system a medium is drawn.

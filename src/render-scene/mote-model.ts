@@ -50,6 +50,7 @@
  */
 
 import { FOCUS_SECONDS, easeFocus } from '../shell/focus-motion.ts';
+import { tokens } from '../tokens/tokens.ts';
 import { panelFraction } from '../shell/panel-model.ts';
 import { motionPace } from '../shell/motion-preference.ts';
 import type { DustMedium } from './dust-model.ts';
@@ -108,8 +109,11 @@ export const MOTE_LABEL_CHAR_PX = MOTE_LABEL_FONT_PX * 0.6;
 /** The gap between a dot and its label, in CSS pixels. */
 export const MOTE_LABEL_GAP_PX = 12;
 
-/** The one greybox Mote value, dot and label. Epic 3 replaces it with a token. */
-export const MOTE_COLOR = '#4a4a4a';
+/**
+ * The one Mote value, dot and label: `stroke-active` (DESIGN.md `mote.fillTier1`).
+ * Tiering across three values is story 3.5's; until then every Mote is tier 1.
+ */
+export const MOTE_COLOR = tokens.colors['stroke-active-dark'];
 
 // --- The artifact slice ------------------------------------------------------
 

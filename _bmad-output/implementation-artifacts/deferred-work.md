@@ -653,3 +653,30 @@ leaves open.
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-10-escape-precedence-and-reduced-motion.md`
   summary: The reduced-motion preference's one writer is the `matchMedia` effect in `SceneHost`, so a surface that renders the panel without the 3D host (story 4.1's Fallback) would read `reducedMotion()` as `false` forever.
   evidence: `focus-panel.tsx` reads the preference through `useSyncExternalStore`, but only `scene-host.tsx` calls `setReducedMotion`; the preference is page-wide, not the scene's. Move the writer to the app root when 4.1 lands a second surface.
+
+## Deferred from: M1 pacing judgement (2026-09-30)
+
+- source_spec: none
+  summary: A focused Project's Client Star draws as an egg, not a circle — perspective stretch from the wide lens. Story 3.2 owns the fix: its "Bodies and Motes are true circles" must be drawn as screen-parallel circles (billboards facing the image plane), which stay round at any lens width.
+  evidence: `DEFAULT_FOV = 50` (`src/render-scene/scene-model.ts:298`) gives a ~79° horizontal field at 16:9, and `focusPose` (`src/render-scene/focus-model.ts:94-141`) closes in and shifts the Planet left of the panel, leaving the Star near the frame edge. Measured over every Project on the committed layout: the Star stretches radially by up to 29% at 1366×768 (39° off-axis, `transilien/train-information-chain-administration`), 12% at 390×844; the focused Planet by at most 6%. Seen by Thomas in the browser; the pacing itself passed. Narrowing the lens instead was declined — it flattens the whole scene and would reopen the pacing judgement.
+
+## Deferred from: code review of spec-3-1-generated-design-tokens-from-a-single-source (2026-09-30)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-generated-design-tokens-from-a-single-source.md`
+  summary: Scene materials do not render their token's exact value. R3F's default renderer applies ACES tone mapping and sRGB→linear conversion to material colours, so `meshBasicMaterial color={token}` is not the hex the DOM draws. Story 3.2 must decide colour management (`flat` / `toneMapped={false}`) before the stroke ladder and contrast floors can be asserted on screen.
+  evidence: `src/render-scene/scene.tsx` passes token hexes to `meshBasicMaterial`/`spriteMaterial` with no `toneMapped={false}` and a default `<Canvas>`; AD-12's "cannot drift" holds for the source values only.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-generated-design-tokens-from-a-single-source.md`
+  summary: Every consumer reads a `-dark` key directly (`tokens.colors['stroke-dust-dark']` etc.), so shipping the light theme means editing each call site rather than one token swap. A resolved theme view or a shared accessor would make it a swap.
+  evidence: `src/render-scene/dust-model.ts`, `mote-model.ts` and `scene.tsx` each name `-dark` keys; nothing selects a theme.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-generated-design-tokens-from-a-single-source.md`
+  summary: The literal-colour ban covers `#hex`, `rgb[a](` and `hsl[a](` only (the AC's list). Named colours (`'white'`), `hwb/lab/lch/oklab/oklch/color()/color-mix()`, and `0x` numbers in colour positions (`new Color(0xffffff)`, `setHex`) pass. Candidate for story 3.9's identity audit.
+  evidence: `scripts/colour-literals.ts` pattern; `DUST_SEED = 0x2a5d17` is why numeric hex was excluded wholesale rather than by position.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-generated-design-tokens-from-a-single-source.md`
+  summary: The shared single-pass stripper mis-tracks two constructs, which now affect the colour scan as well as the boundary scan. A nested template inside an interpolation (`` `a ${`b`} // x` ``) ends the outer literal early. An apostrophe in JSX text (`<p>Don't</p>`) opens a string to the end of the line.
+  evidence: `src/derive/boundaries.ts` `stripCommentsAndStrings` string handling predates 3.1. `maskTemplateText` tracks brace depth but not inner backticks, and JSX text is not distinguished from code.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-generated-design-tokens-from-a-single-source.md`
+  summary: `src/derive/index.ts` guards `main()` with a plain `process.argv[1]` comparison, so on Windows a path mismatch (drive-letter case, junction, subst) would make `npm run gate` exit 0 without checking the layout artifact. `scripts/tokens.ts` now compares real paths case-insensitively; the derive entry needs the same.
+  evidence: Found while fixing the identical guard in `scripts/tokens.ts` during the 3.1 review; the derive guard predates 3.1.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-generated-design-tokens-from-a-single-source.md`
+  summary: A flaky test. `solve.test.ts` writes and deletes `src/derive/.mutant-*.ts` while other suites run, and the import-boundary walker reads dot-files, so `artifact.test.ts` can fail with ENOENT. The colour scan now skips dot-files; the boundary walker does not.
+  evidence: Seen once during 3.1 implementation ("the gate fixture passes before it is broken…"); `sourceFilesUnder` in `boundaries.ts` skips dot-directories only.

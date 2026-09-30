@@ -280,6 +280,26 @@ export const ROOT_RULE: BoundaryRule = {
  * width (newlines kept), so every surviving character keeps its line and column.
  */
 export function stripCommentsAndStrings(source: string): string {
+  return strip(source, false);
+}
+
+/**
+ * Strips comments only, keeping every string, template and regex literal
+ * verbatim — the same single pass as `stripCommentsAndStrings`, in its other
+ * mode, rather than a second stripper (retro item 9).
+ *
+ * The colour-literal scan (`scripts/colour-literals.ts`) needs this shape: a
+ * literal colour *is* a string, so blanking strings would blank the thing it looks
+ * for, while a colour mentioned in a comment is prose and must not be reported.
+ * The literals still have to be walked rather than ignored, because `'a // b'`
+ * and `'#fff /* x'` are strings, not comments.
+ */
+export function stripComments(source: string): string {
+  return strip(source, true);
+}
+
+/** The one pass behind both exports; `keepLiterals` selects the mode. */
+function strip(source: string, keepLiterals: boolean): string {
   const out: string[] = [];
   let index = 0;
   const length = source.length;
@@ -337,7 +357,8 @@ export function stripCommentsAndStrings(source: string): string {
         scan += 1;
       }
       if (closed) {
-        blank(source.slice(index, scan + 1));
+        if (keepLiterals) out.push(source.slice(index, scan + 1));
+        else blank(source.slice(index, scan + 1));
         index = scan + 1;
         previous = '/';
         previousWord = '';
@@ -398,6 +419,19 @@ export function stripCommentsAndStrings(source: string): string {
         continue;
       }
       out.push(quote);
+      if (keepLiterals) {
+        // The text is a literal and kept; each `${...}` span is code, and a
+        // comment inside it (`` `${x /* #fff */}` ``) is still a comment — so the
+        // span goes back through this same pass, in this same mode.
+        out.push(quote === '`' ? keepTemplateText(contents) : contents);
+        if (terminated) {
+          out.push(quote);
+          index += 1;
+        }
+        previous = quote;
+        previousWord = '';
+        continue;
+      }
       // A template's `${...}` holds code, not text. Blanking it along with the
       // literal would hide `` `${await import('../data/x.ts')}` `` from the scan
       // entirely — silence, which this module treats as its worst failure. The
@@ -473,6 +507,36 @@ function maskTemplateText(contents: string): string {
     }
     // `${` and the closing `}` are punctuation, not code: keep the span between.
     out += '  ' + contents.slice(at + 2, depth === 0 ? scan - 1 : scan) + (depth === 0 ? ' ' : '');
+    index = scan;
+  }
+  return out;
+}
+
+/**
+ * `maskTemplateText`'s counterpart for the comments-only mode: the literal text
+ * is kept verbatim and each `${...}` span is stripped of comments by a recursive
+ * call to the same pass. Width-preserving, like everything else here.
+ */
+function keepTemplateText(contents: string): string {
+  let out = '';
+  let index = 0;
+  while (index < contents.length) {
+    const at = contents.indexOf('${', index);
+    if (at === -1) {
+      out += contents.slice(index);
+      break;
+    }
+    out += contents.slice(index, at + 2);
+    let depth = 1;
+    let scan = at + 2;
+    while (scan < contents.length && depth > 0) {
+      const char = contents[scan];
+      if (char === '{') depth += 1;
+      else if (char === '}') depth -= 1;
+      scan += 1;
+    }
+    const end = depth === 0 ? scan - 1 : scan;
+    out += strip(contents.slice(at + 2, end), true) + (depth === 0 ? '}' : '');
     index = scan;
   }
   return out;

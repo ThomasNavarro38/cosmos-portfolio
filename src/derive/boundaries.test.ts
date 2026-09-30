@@ -26,6 +26,7 @@ import {
   SRC_ROOT,
   checkImportBoundaries,
   findImports,
+  stripComments,
   stripCommentsAndStrings,
   targetDirectoryOf,
 } from './boundaries.ts';
@@ -796,4 +797,38 @@ test('boundaries.ts reads no clock, no random, no environment, and writes nothin
   assert.doesNotMatch(code, /process\s*\.\s*env/, 'no environment read');
   assert.doesNotMatch(code, /writeFileSync|mkdirSync|rmSync/, 'the gate writes nothing');
   assert.doesNotMatch(code, /\bfetch\b|XMLHttpRequest|WebSocket/, 'and reaches no network');
+});
+
+// --- The comments-only mode -------------------------------------------------
+
+test('stripComments blanks comments, keeps every literal verbatim, and preserves layout', () => {
+  // The same pass as `stripCommentsAndStrings`, in its other mode: a string that
+  // looks like a comment stays a string, and a comment that holds a quote stays a
+  // comment. Layout survives so a reported line and column are the authored ones.
+  const source = [
+    "const a = '#fff'; // '#000'",
+    '/* rgb(0, 0, 0)',
+    '   still a comment */ const b = "a // b";',
+    'const c = `x ${"/* not a comment */"} y`;',
+    'const d = /[/*]/.test(e); // tail',
+  ].join('\n');
+  const kept = stripComments(source);
+  assert.equal(kept.length, source.length);
+  assert.equal(kept.split('\n').length, source.split('\n').length);
+  assert.match(kept, /'#fff'/);
+  assert.doesNotMatch(kept, /#000/);
+  assert.doesNotMatch(kept, /rgb\(/);
+  assert.match(kept, /"a \/\/ b"/);
+  assert.match(kept, /\/\* not a comment \*\//);
+  assert.match(kept, /\/\[\/\*\]\//);
+  assert.doesNotMatch(kept, /tail/);
+  // A comment inside a template interpolation is code's comment, not the
+  // template's text: stripped, while the surrounding literal text is kept.
+  const interpolated = 'const t = `${x /* #fff */} #000`;';
+  const keptInterpolated = stripComments(interpolated);
+  assert.equal(keptInterpolated.length, interpolated.length);
+  assert.doesNotMatch(keptInterpolated, /#fff/);
+  assert.match(keptInterpolated, /\$\{x\s+\} #000`/);
+  // The other mode is unchanged by the refactor: strings are blanked there.
+  assert.doesNotMatch(stripCommentsAndStrings(source), /#fff/);
 });
