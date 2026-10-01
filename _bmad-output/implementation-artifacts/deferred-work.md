@@ -701,3 +701,6 @@ leaves open.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-1-generated-design-tokens-from-a-single-source.md`
   summary: Nothing enforces "nothing under `src/` imports `scripts/`". The README states it; no boundary rule or test checks it.
   evidence: `src/derive/boundaries.ts` rules cover `src/` directories only.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-2-the-stroke-and-ink-ladders-applied-to-the-scene.md`
+  summary: The oldest Planets (`luminanceBand: stroke-dust`) share one colour with the Dust particles and the Rail, and sit inside a brighter `stroke-rest` orbit, contradicting DESIGN.md §2 ("stroke-dust — not used for any Body") and inverting the distance ladder between a Planet and its own orbit; needs a design decision for the 3.9 audit (re-band derive's resting range, or tie each orbit's step to its Planet's band).
+  evidence: `src/derive/rules.ts` RESTING_BANDS includes `stroke-dust`; `stroke-model.ts` draws every orbit at `stroke-rest`; the epic AC binds the band to `stroke-dust … stroke-near`, so 3.2 followed the AC as its spec Design Notes record.

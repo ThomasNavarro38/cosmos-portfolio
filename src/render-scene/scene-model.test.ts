@@ -35,6 +35,7 @@ import { Frustum, Matrix4, PerspectiveCamera, Quaternion, Vector3 } from 'three'
 import { DUST_PARTICLE_RADIUS } from './dust-model.ts';
 import { FOCUS_REACH } from './focus-model.ts';
 import { MOTE_ORBIT_RADII, MOTE_RADIUS } from './mote-model.ts';
+import { PLANET_RADIUS, STAR_RADIUS } from './stroke-model.ts';
 import {
   BODY_MARGIN,
   DEFAULT_FOV,
@@ -59,6 +60,8 @@ const FLIGHT_MODEL_TS = fileURLToPath(new URL('./flight-model.ts', import.meta.u
 const SCENE_PICK_TS = fileURLToPath(new URL('./scene-pick.ts', import.meta.url));
 const MOTE_MODEL_TS = fileURLToPath(new URL('./mote-model.ts', import.meta.url));
 const MOTE_FIELD_TSX = fileURLToPath(new URL('./mote-field.tsx', import.meta.url));
+const STROKE_MODEL_TS = fileURLToPath(new URL('./stroke-model.ts', import.meta.url));
+const BODY_FIELD_TSX = fileURLToPath(new URL('./body-field.tsx', import.meta.url));
 const SRC_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SCENE_HOST_TSX = fileURLToPath(new URL('../shell/scene-host.tsx', import.meta.url));
 const APP_TSX = fileURLToPath(new URL('../App.tsx', import.meta.url));
@@ -128,6 +131,7 @@ function project(
     isDeep: false,
     mass: 2,
     luminanceBand: 'stroke-near',
+    orbitNormal: { x: 0, y: -1, z: 0 },
     moteTier: 'mote-sparse',
     position,
     ...overrides,
@@ -327,6 +331,7 @@ test('a Planet’s mass, band, tier and depth are the artifact’s values, not r
         project('project:a/1', 'client:a', at(2), {
           mass: 99,
           luminanceBand: 'stroke-far',
+          orbitNormal: { x: 0, y: -1, z: 0 },
           moteTier: 'mote-dense',
           isDeep: true,
         }),
@@ -473,8 +478,33 @@ test('a non-finite coordinate throws naming the entity and the axis', () => {
           /project:bad/.test(error.message) && new RegExp(`\\b${axis}\\b`).test(error.message),
         `a Planet's ${axis} = ${String(value)} must name the entity and the axis`,
       );
+
+      // The orbit plane (3.2) is guarded the same way: a non-finite normal would
+      // draw an orbit of NaN vertices, in silence.
+      const normal = { x: 0, y: -1, z: 0, [axis]: value };
+      assert.throws(
+        () =>
+          buildScene({
+            clients: [client('client:a', at(0), project('project:bad', 'client:a', at(2), { orbitNormal: normal }))],
+          }),
+        (error: Error) =>
+          /project:bad/.test(error.message) &&
+          /orbit normal/.test(error.message) &&
+          new RegExp(`\\b${axis}\\b`).test(error.message),
+        `a Planet's orbit normal ${axis} = ${String(value)} must name the Project, the normal and the axis`,
+      );
     }
   }
+});
+
+test('a Planet with no orbit normal throws naming the Project', () => {
+  // The type says every Project carries one; a hand-built document that never
+  // passed the gate may not, and it should fail by name rather than draw no orbit.
+  const { orbitNormal: _normal, ...planeless } = project('project:bad', 'client:a', at(2));
+  assert.throws(
+    () => buildScene({ clients: [client('client:a', at(0), planeless as SceneArtifactProject)] }),
+    (error: Error) => /project:bad/.test(error.message) && /orbit normal/.test(error.message),
+  );
 });
 
 test('a coordinate that is legitimately zero or negative is accepted', () => {
@@ -680,18 +710,12 @@ test('an empty Body list and a degenerate fov both yield a usable camera rather 
 });
 
 test('the margins the framing and the Rail stops leave are at least the largest radius the renderer draws', () => {
-  // `BODY_MARGIN` lives in this model and `STAR_RADIUS` in `scene.tsx`, two files the
-  // runner cannot cross: the model is `.ts` and the renderer is `.tsx`, which
-  // `node --test` cannot load in any position. So the renderer's constant is read off
-  // its source and compared. Safe at 3 > 1 today and silently wrong the moment Epic 3
-  // raises the radius — which is exactly the kind of coupling that survives a review
-  // and fails in a browser.
-  const code = quotedCodeOf(SCENE_TSX);
-  const radii = [...code.matchAll(/\b(?:STAR_RADIUS|PLANET_RADIUS)\s*=\s*([\d.]+)/g)].map((match) =>
-    Number(match[1]),
-  );
-  assert.equal(radii.length, 2, `both placeholder radii must be declared as literals — found ${radii.length}`);
-  for (const radius of radii) {
+  // `BODY_MARGIN` lives in this model and the drawn radii in `stroke-model.ts` (3.2),
+  // which `body-field.tsx` draws every outline at. Both are `.ts`, so the radii are
+  // imported and compared rather than read off a renderer's source. Safe at 3 > 1
+  // today and silently wrong the moment a story raises the radius — which is exactly
+  // the kind of coupling that survives a review and fails in a browser.
+  for (const radius of [STAR_RADIUS, PLANET_RADIUS]) {
     assert.ok(
       radius <= BODY_MARGIN,
       `BODY_MARGIN (${BODY_MARGIN}) must cover the drawn radius ${radius}, or the outermost Body clips`,
@@ -777,7 +801,7 @@ test('no module here imports src/data/, src/derive/, the solver, or zustand/reac
   // package, so `zustand/react` and `zustand/vanilla` are both `zustand`, and a row
   // banning `zustand` would reject the navigation store this directory's README
   // explicitly permits.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX]) {
     assert.deepEqual(auditForbiddenImports(readFileSync(path, 'utf8')), [], `${path} must hold no forbidden import`);
   }
 });
@@ -819,7 +843,7 @@ test('the scene holds no classification or mapping-rule vocabulary of its own', 
   // A case-insensitive `\balpha\b` ban was dropped from this list deliberately — over
   // a pure-structure module it cannot fail by construction, and it would misfire on a
   // future token name or on a fixture Client named Alpha.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX]) {
     const code = codeOf(path);
     assert.doesNotMatch(code, /\bclassify\w*\s*\(|\bfunction\s+classify/i, 'no classification test');
     assert.doesNotMatch(code, /\b(?:luminance|mote|mass|rail)(?:Band|Tier|Of|For|From)?\s*\(/i, 'no mapping computed');
@@ -853,22 +877,14 @@ function auditRenderer(source: string): string[] {
   if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) {
     failures.push('writes the navigation store — every transition is a named event');
   }
-  // One interaction, exactly: a Body mesh's click handed to `activateBody` (2.7),
-  // whose rule is executed in `scene-pick.test.ts`. Everything else — hover,
-  // pointer-over, pointer-missed, a click bound to anything but that, a raycast of
-  // its own — is still banned, and the permitted binding is allowed once, inside the
-  // Bodies' own map, where `body` is the Body clicked.
-  const pick = /\bonClick=\{\s*\(\s*event\s*\)\s*=>\s*activateBody\(\s*body\s*,\s*event\s*\)\s*\}/g;
-  const picks = code.match(pick) ?? [];
-  if (picks.length > 1) failures.push('binds the click more than once — one Body mesh carries it');
-  const picksInBodies = mapBlocks(code, 'bodies').reduce((sum, block) => sum + (block.match(pick) ?? []).length, 0);
-  if (picks.length !== picksInBodies) failures.push('binds the click outside the Bodies’ map — only a Body is picked');
-  const rest = code.replace(pick, '');
-  if (/\braycast\w*|\bonClick\b|\bonPointer\w+|\bonWheel\b|\bonScroll\b|\bonDoubleClick\b|\bonContextMenu\b|\bonUpdate\b/i.test(rest)) {
-    failures.push('handles an interaction beyond onClick → activateBody(body, event) — Focus is deliberate, never hover');
+  // No interaction at all since 3.2: the one click — a Body's, handed to
+  // `activateBody` — is `<BodyField>`'s, held there by `auditPick`. Everything here
+  // — a click, hover, pointer-over, pointer-missed, a raycast of its own — is banned.
+  if (/\braycast\w*|\bonClick\b|\bonPointer\w+|\bonWheel\b|\bonScroll\b|\bonDoubleClick\b|\bonContextMenu\b|\bonUpdate\b/i.test(code)) {
+    failures.push('handles an interaction — the one click is a Body’s, bound in body-field.tsx');
   }
-  if (/\bactivateBody\b/.test(rest.replace(/import\s*\{[^}]*\}\s*from[^;]*;/g, ''))) {
-    failures.push('reaches activateBody other than through the one click binding');
+  if (/\bactivateBody\b/.test(code)) {
+    failures.push('reaches activateBody — the Bodies’ binding owns the click');
   }
   if (/\bfocusProject\b|\breleaseFocus\b|\bselectClient\b|\badvanceScroll\b/.test(code)) {
     failures.push('names a navigation event — the click reaches the store through activateBody alone');
@@ -903,19 +919,17 @@ test('the thinness audit rejects each form it names, including the ones that rea
     'navigationStore.setState({ mode: "free-flight" });',
     '<mesh onClick={() => focusProject(body.id)} />',
     '<mesh onPointerOver={() => setHovered(body.id)} />',
-    // 2.7's narrowing, driven: the one binding is allowed, and every neighbour of it
-    // — hover, pointer-missed, a second handler, a click bound to anything else, a
-    // click outside the Bodies — is still rejected.
+    // Since 3.2 the scene binds no interaction at all — the click moved with the
+    // Bodies into `body-field.tsx` — so even the binding that used to be allowed is
+    // rejected here, with every neighbour of it.
+    'bodies.map((body) => <mesh key={body.id} onClick={(event) => activateBody(body, event)} />)',
     'bodies.map((body) => <mesh key={body.id} onPointerOver={(event) => activateBody(body, event)} />)',
     'bodies.map((body) => <mesh key={body.id} onPointerEnter={() => activateBody(body)} />)',
     '<Canvas aria-hidden="true" onPointerMissed={() => releaseFocus()}>',
     'bodies.map((body) => <mesh key={body.id} onPointerMissed={() => undefined} />)',
     'bodies.map((body) => <mesh key={body.id} onDoubleClick={(event) => activateBody(body, event)} />)',
     'bodies.map((body) => <mesh key={body.id} onClick={(event) => focusProject(body.id)} />)',
-    'bodies.map((body) => <mesh key={body.id} onClick={() => activateBody(body)} />)',
-    'particles.map((body) => <mesh key={body.id} onClick={(event) => activateBody(body, event)} />)',
-    'bodies.map((body) => <mesh key={body.id} onClick={(event) => activateBody(body, event)} onPointerOut={() => undefined} />)',
-    'bodies.map((body) => <mesh key={body.id} onClick={(event) => activateBody(body, event)} />); bodies.map((body) => <mesh key={body.id} onClick={(event) => activateBody(body, event)} />)',
+    "import { activateBody } from './scene-pick.ts';",
     'const pick = () => activateBody(bodies[0]);',
     'const w = window.innerWidth;',
     'const deep = body.notable !== null;',
@@ -929,67 +943,447 @@ test('the thinness audit rejects each form it names, including the ones that rea
     'bodies.map((body) => <mesh key={body.id} position={[body.position.x, 0, 0]} />)',
     '<Canvas aria-hidden="true" camera={{ position: [1, 2, 3], rotation: [0, 0, 0] }} />',
     'const { bodies } = buildScene(artifact);',
-    'return body.kind === "star" ? STAR_RADIUS : PLANET_RADIUS;',
-    'bodies.map((body) => <mesh key={body.id} onClick={(event) => activateBody(body, event)} />)',
-    "import { activateBody } from './scene-pick.ts';",
+    '<BodyField bodies={bodies} rail={rail} />',
+    '<div aria-hidden="true" style={vignetteStyle()} />',
   ]) {
     assert.deepEqual(auditRenderer(form), [], `${form} is the mapping itself and must pass`);
   }
 });
 
-test('every Body mesh hands its click to activateBody, and that is the scene’s only handler', () => {
+test('every Body’s hit sphere hands its click to activateBody, and that is the only handler', () => {
   // Pinned positively: deleting the handler is a one-line edit every negative scan
   // passes, and a Planet in the scene then cannot be picked (2.7). The rule the click
-  // runs is executed in `scene-pick.test.ts`; this holds the binding.
-  const real = readFileSync(SCENE_TSX, 'utf8');
+  // runs is executed in `scene-pick.test.ts`; this holds the binding, which moved
+  // with the Bodies into `body-field.tsx` (3.2).
+  const real = readFileSync(BODY_FIELD_TSX, 'utf8');
   assert.deepEqual(auditPick(real), []);
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
-    ['the click deleted', (source) => source.replace('onClick={(event) => activateBody(body, event)}', '')],
+    ['the click deleted', (source) => source.replace(' onClick={(event) => activateBody(body, event)}', '')],
     ['the event dropped', (source) => source.replace('activateBody(body, event)', 'activateBody(body)')],
     ['the import dropped', (source) => source.replace("import { activateBody } from './scene-pick.ts';", '')],
-    ['a hover beside it', (source) => source.replace('onClick={(event)', 'onPointerOver={() => undefined}\n          onClick={(event)')],
-    ['a missed click releasing', (source) => source.replace(/<Canvas(?=\r?\n)/, '<Canvas onPointerMissed={() => undefined}')],
+    ['a hover beside it', (source) => source.replace('onClick={(event)', 'onPointerOver={() => undefined}\n            onClick={(event)')],
+    ['the hit sphere drawn', (source) => source.replace('<mesh visible={false} onClick', '<mesh onClick')],
+    ['a click on the outline', (source) => source.replace('<Billboard>', '<Billboard onClick={(event) => activateBody(body, event)}>')],
+    ['a click on a line', (source) => source.replace('key={line.id}', 'key={line.id}\n          onPointerMissed={() => undefined}')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);
-    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped renderer`);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped binding`);
     assert.notDeepEqual(auditPick(mutated), [], `"${name}" must be rejected`);
   }
 });
 
-/** The pick binding, positively: every Body mesh carries it, it comes from the pure rule, and the thinness audit holds. */
+/**
+ * The pick binding, positively: inside the Bodies' map, one hidden hit sphere per
+ * Body carries `onClick={(event) => activateBody(body, event)}`, imported from the
+ * pure rule — and nothing else in the file handles any interaction.
+ */
 function auditPick(source: string): string[] {
   const code = blankProse(source);
   const failures: string[] = [];
+  const pick = /\bonClick=\{\s*\(\s*event\s*\)\s*=>\s*activateBody\(\s*body\s*,\s*event\s*\)\s*\}/g;
   const blocks = mapBlocks(code, 'bodies');
-  if (blocks.length === 0) failures.push('the Bodies are not mapped');
-  for (const block of blocks) {
-    // The mesh's opening tag, read up to the first child element rather than to the
-    // first `>` — the handler's own `=>` would end a `[^>]*` match inside it.
-    const meshes = block.match(/<mesh\b[\s\S]*?>\s*</g) ?? [];
-    if (meshes.length === 0) failures.push('the Bodies are mapped to no mesh');
-    for (const mesh of meshes) {
-      if (!/\bonClick=\{\s*\(\s*event\s*\)\s*=>\s*activateBody\(\s*body\s*,\s*event\s*\)\s*\}/.test(mesh)) {
-        failures.push('a Body mesh does not hand its click, and the event, to activateBody');
-      }
+  if (blocks.length !== 1) failures.push('the Bodies are not mapped exactly once');
+  const block = blocks[0] ?? '';
+  // The mesh's opening tag, read up to the first child element rather than to the
+  // first `>` — the handler's own `=>` would end a `[^>]*` match inside it.
+  const hits = (block.match(/<mesh\b[\s\S]*?>\s*</g) ?? []).filter((mesh) => /\bonClick\b/.test(mesh));
+  if (hits.length !== 1) failures.push('not exactly one hit mesh per Body carries the click');
+  for (const hit of hits) {
+    if (!/\bvisible=\{\s*false\s*\}/.test(hit)) failures.push('the hit sphere is drawn — it must be visible={false}, an outline is the Body');
+    if (!/\bonClick=\{\s*\(\s*event\s*\)\s*=>\s*activateBody\(\s*body\s*,\s*event\s*\)\s*\}/.test(hit)) {
+      failures.push('a Body’s hit sphere does not hand its click, and the event, to activateBody');
     }
+  }
+  if ((code.match(pick) ?? []).length !== 1) failures.push('the click is bound other than once');
+  const rest = code.replace(pick, '');
+  if (/\braycast\w*|\bonClick\b|\bonPointer\w+|\bonWheel\b|\bonScroll\b|\bonDoubleClick\b|\bonContextMenu\b|\bonUpdate\b/i.test(rest)) {
+    failures.push('handles an interaction beyond onClick → activateBody(body, event) — Focus is deliberate, never hover');
   }
   if (!/import\s*\{\s*activateBody\s*\}\s*from\s*'\.\/scene-pick\.ts'/.test(blankComments(source))) {
     failures.push('activateBody is not imported from the pure rule');
   }
-  return [...failures, ...auditRenderer(source)];
+  return failures;
 }
 
-test('the placeholder radius discriminates on kind, never on a missing mass', () => {
+test('the drawn radius discriminates on kind, never on a missing mass', () => {
   // Pinned positively, because a negative scan cannot observe a correct form going
   // missing — and the wrong form is a plausible one-line edit. `mass === undefined`
   // means a Planet arriving without mass renders silently Star-sized instead of
   // surfacing; the union is what the model defined, so `kind` is the question with an
-  // answer.
-  const code = quotedCodeOf(SCENE_TSX);
-  assert.match(code, /body\.kind\s*===\s*'star'/, 'the size question is asked of kind');
+  // answer. Since 3.2 the radius is `stroke-model.ts`'s `bodyRadius`.
+  const code = quotedCodeOf(STROKE_MODEL_TS);
+  const radius = /export function bodyRadius[\s\S]*?\n\}/.exec(code)?.[0] ?? '';
+  assert.match(radius, /body\.kind\s*===\s*'star'/, 'the size question is asked of kind');
   assert.doesNotMatch(code, /mass\s*===\s*undefined|mass\s*!==\s*undefined|body\.mass\s*\?\?/, 'never of a missing mass');
   assert.doesNotMatch(code, /!\s*body\.mass\b/, 'nor of its truthiness — mass is a positive number, but zero reads false');
+});
+
+// --- The Bodies' binding (3.2) ------------------------------------------------
+
+/**
+ * `body-field.tsx`'s contract, as a pure function over its source.
+ *
+ * Every ladder rule is executed in `stroke-model.test.ts` and the Rail line in
+ * `rail-model.test.ts`; this holds the binding. Negatively: no store write and
+ * no named event, no frame loop, no reactive state or effect, no DOM, no ordering
+ * or selection, no coordinate literal, no light, and no line geometry but drei's
+ * `<Line>`. Positively:
+ *
+ *   - **One subscription, by selector**: exactly
+ *     `const subject = useSyncExternalStore(navigationStore.subscribe, () => sceneSubject(navigationStore.getState(), rail))`.
+ *   - **Lines only from named model functions**: exactly two `<Line>`s — one per
+ *     `sceneLines(bodies, railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT))` entry,
+ *     drawn in that line's points, colour and weight; and one outline per Body, in
+ *     a `<Billboard>`, on `circlePoints(CIRCLE_SEGMENTS, bodyRadius(body))`,
+ *     coloured and weighted by `bodyStroke(body, subject)`.
+ *   - **Core dots from `coreDots(body, subject)`**, a `circleGeometry` of the dot's
+ *     radius in the dot's colour.
+ *   - **Draw order**: every visible draw at `BODY_RENDER_ORDER`, `transparent` at
+ *     opacity 1 — after the Dust — and nothing else carries a `renderOrder`.
+ */
+function auditBodyField(source: string): string[] {
+  const code = blankProse(source);
+  const quoted = blankComments(source);
+  const failures: string[] = [];
+  const squash = (text: string) => text.replace(/\s+/g, ' ');
+
+  if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) failures.push('writes the store with setState');
+  if (/\b(?:advanceScroll|selectClient|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation|activateClient|activateProject)\b/.test(code)) {
+    failures.push('names a navigation event — a Body reaches the store through activateBody alone');
+  }
+  if (/\buseFrame\b|\buseThree\b|\buseState\b|\buseReducer\b|\buseEffect\b|\buseLayoutEffect\b|\buseMemo\b|\buseRef\b|\buseStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {
+    failures.push('holds a frame loop, reactive state, an effect or a zustand binding — one selector subscription only');
+  }
+  const subscriptions = code.match(/\buseSyncExternalStore\s*\(/g) ?? [];
+  if (
+    subscriptions.length !== 1 ||
+    !/const subject = useSyncExternalStore\(navigationStore\.subscribe, \(\) => sceneSubject\(navigationStore\.getState\(\), rail\)\);/.test(squash(code))
+  ) {
+    failures.push('the subject is not read by exactly one useSyncExternalStore selector over sceneSubject');
+  }
+  if (/\bwindow\b|\bdocument\b|innerWidth|innerHeight|getBoundingClientRect|addEventListener|matchMedia/.test(code)) {
+    failures.push('reads the DOM');
+  }
+  if (/\.sort\s*\(|\.filter\s*\(|\.reverse\s*\(|\.slice\s*\(|\.find\s*\(/.test(code)) {
+    failures.push('orders or selects — what is drawn, and how, is the model’s');
+  }
+  if (/\b(?:ambient|directional|point|spot|hemisphere)Light\b|\bmeshStandardMaterial\b|\bmeshPhongMaterial\b|\bmeshLambertMaterial\b/.test(code)) {
+    failures.push('lights or shades a Body — every material is unlit');
+  }
+  failures.push(...coordinateLiterals(code));
+
+  // Line geometry: drei's `<Line>` and nothing else, imported with the billboard only.
+  for (const element of CONNECTOR_ELEMENTS) {
+    // Case-sensitive here, so drei's `<Line>` is not read as Three's `<line>`.
+    if (element !== 'Line' && new RegExp(`<\\s*${element}\\b`).test(code)) failures.push(`draws <${element}>`);
+  }
+  if (/\bwireframe\b/i.test(code)) failures.push('sets wireframe');
+  if (!/import\s*\{\s*Billboard\s*,\s*Line\s*\}\s*from\s*'@react-three\/drei'/.test(quoted)) {
+    failures.push('does not import exactly { Billboard, Line } from drei');
+  }
+  const lines = (code.match(/<Line\b[\s\S]*?\/>/g) ?? []).map(squash);
+  if (lines.length !== 2) failures.push(`draws ${lines.length} <Line> elements — one for the scene's hairlines, one per Body outline`);
+  const sceneBlocks = mapBlocks(code, 'sceneLines\\(\\s*bodies\\s*,\\s*railLine\\(\\s*rail\\s*,\\s*RAIL_LINE_SAMPLES_PER_SEGMENT\\s*\\)\\s*\\)');
+  const sceneLine = squash(sceneBlocks[0]?.match(/<Line\b[\s\S]*?\/>/)?.[0] ?? '');
+  if (sceneBlocks.length !== 1 || !/^sceneLines\([^)]*\)\)\s*\.\s*map\(\s*\(\s*line\s*\)\s*=>/.test(squash(sceneBlocks[0] ?? ''))) {
+    failures.push('the orbits and the Rail are not drawn from sceneLines(bodies, railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT)), once');
+  }
+  for (const [attribute, expected] of [
+    ['key', 'line.id'],
+    ['points', 'line.points'],
+    ['color', 'line.color'],
+    ['lineWidth', 'line.widthPx'],
+  ] as const) {
+    if (!new RegExp(`\\b${attribute}=\\{\\s*${expected.replace('.', '\\.')}\\s*\\}`).test(sceneLine)) {
+      failures.push(`a scene hairline's ${attribute} is not ${expected}`);
+    }
+  }
+  const bodyBlock = mapBlocks(code, 'bodies')[0] ?? '';
+  const billboard = /<Billboard>([\s\S]*?)<\/Billboard>/.exec(bodyBlock)?.[1] ?? '';
+  const outline = squash(billboard.match(/<Line\b[\s\S]*?\/>/)?.[0] ?? '');
+  if (outline === '') failures.push('a Body outline is not a <Line> inside a camera-facing <Billboard>');
+  for (const [attribute, expected] of [
+    ['points', /\bpoints=\{\s*circlePoints\(\s*CIRCLE_SEGMENTS\s*,\s*bodyRadius\(\s*body\s*\)\s*\)\s*\}/],
+    ['color', /\bcolor=\{\s*bodyStroke\(\s*body\s*,\s*subject\s*\)\.color\s*\}/],
+    ['lineWidth', /\blineWidth=\{\s*bodyStroke\(\s*body\s*,\s*subject\s*\)\.widthPx\s*\}/],
+  ] as const) {
+    if (!expected.test(outline)) failures.push(`a Body outline's ${attribute} is not the stroke model's`);
+  }
+  for (const line of lines) {
+    if (!/\btransparent(?:\s*=\s*\{\s*true\s*\}|(?![\w-]|\s*=))/.test(line)) failures.push('a line is opaque — it would draw before the Dust');
+    if (!/\bopacity=\{\s*1\s*\}/.test(line)) failures.push('a line is not at opacity 1 — transparent is for ordering, never for fading');
+    if (!/\brenderOrder=\{\s*BODY_RENDER_ORDER\s*\}/.test(line)) failures.push('a line lacks renderOrder={BODY_RENDER_ORDER}');
+  }
+
+  // Where each Body is drawn, and how large its hit sphere is: the group carries the
+  // Body's own solved position, axis for axis, and the hit sphere the drawn radius.
+  if (!/^bodies\.map\(\s*\(\s*body\s*\)\s*=>\s*\(\s*<group\s+key=\{\s*body\.id\s*\}\s+position=\{\s*\[\s*body\.position\.x\s*,\s*body\.position\.y\s*,\s*body\.position\.z\s*\]\s*\}\s*>/.test(squash(bodyBlock))) {
+    failures.push('a Body is not drawn in a group at [body.position.x, body.position.y, body.position.z]');
+  }
+  if ((bodyBlock.match(/<group\b/g) ?? []).length !== 1) failures.push('a Body is drawn other than in one positioned group');
+  if (!/<mesh visible=\{false\}[^]*?<sphereGeometry\s+args=\{\s*\[\s*bodyRadius\(\s*body\s*\)\s*,/.test(squash(bodyBlock))) {
+    failures.push('the hit sphere is not the drawn radius, bodyRadius(body)');
+  }
+
+  // Core dots.
+  const dotBlocks = mapBlocks(code, 'coreDots\\(\\s*body\\s*,\\s*subject\\s*\\)');
+  if (dotBlocks.length !== 1 || !billboard.includes('coreDots(')) failures.push('the core dots are not coreDots(body, subject), inside the billboard');
+  const dots = dotBlocks[0] ?? '';
+  const dotMesh = dots.match(/<mesh\b[^>]*>/)?.[0] ?? '';
+  if (!/\brenderOrder=\{\s*BODY_RENDER_ORDER\s*\}/.test(dotMesh)) failures.push('a core dot lacks renderOrder={BODY_RENDER_ORDER}');
+  if (!/<circleGeometry\s+args=\{\s*\[\s*dot\.radius\s*,/.test(dots)) failures.push('a core dot is not a circle of the dot’s radius');
+  if (!/\bkey=\{\s*dot\.id\s*\}/.test(dotMesh)) failures.push('a core dot is not keyed by its own id');
+
+  // Every material: unlit, transparent at opacity 1, in a model colour.
+  const materials = code.match(/<\w+Material\b[^>]*>/g) ?? [];
+  if (materials.length !== 1) failures.push(`${materials.length} materials — the core dot's, and nothing else`);
+  for (const material of materials) {
+    if (!/^<meshBasicMaterial\b/.test(material)) failures.push('a material is lit');
+    if (!/\bcolor=\{\s*dot\.color\s*\}/.test(material)) failures.push('a core dot is not drawn in the dot’s colour');
+    if (!/\btransparent(?:\s*=\s*\{\s*true\s*\}|(?![\w-]|\s*=))/.test(material)) failures.push('a core dot is opaque');
+    if (!/\bopacity=\{\s*1\s*\}/.test(material)) failures.push('a core dot is not at opacity 1');
+  }
+  // `renderOrder` sits on the three audited draws and nowhere else.
+  const orders = code.match(/\brenderOrder\s*=\s*\{?\s*([^}\s]*)/g) ?? [];
+  if (orders.length !== 3 || orders.some((order) => !/BODY_RENDER_ORDER/.test(order))) {
+    failures.push('a renderOrder other than the two lines’ and the core dot’s BODY_RENDER_ORDER');
+  }
+  // Every colour comes from the model: a line's, a stroke's, a dot's.
+  for (const match of code.matchAll(/\bcolor=\{\s*([^}]*?)\s*\}/g)) {
+    if (!['line.color', 'bodyStroke(body, subject).color', 'dot.color'].includes(squash(match[1] ?? ''))) {
+      failures.push(`colour {${match[1]}} is not the stroke model's`);
+    }
+  }
+  if (/\bink-|\btokens\b/.test(quoted)) failures.push('reads a token directly — every colour comes from the stroke model, and no ink is a line');
+  return [...failures, ...auditPick(source)];
+}
+
+test('the Bodies’ binding draws the stroke model and holds no rule of its own', () => {
+  assert.deepEqual(auditBodyField(readFileSync(BODY_FIELD_TSX, 'utf8')), []);
+});
+
+test('the Bodies’ binding audit rejects the real binding with any one guarantee broken', () => {
+  const real = readFileSync(BODY_FIELD_TSX, 'utf8');
+  const SUB = 'useSyncExternalStore(navigationStore.subscribe, () => sceneSubject(navigationStore.getState(), rail))';
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['a store write', (s) => s.replace('return (', 'navigationStore.setState({ focusedProjectId: null });\n  return (')],
+    ['a named event', (s) => s.replace('return (', 'releaseFocus();\n  return (')],
+    ['a frame loop', (s) => s.replace('return (', 'useFrame(() => undefined);\n  return (')],
+    ['reactive state', (s) => s.replace('return (', 'const [x] = useState(0);\n  return (')],
+    ['a zustand hook', (s) => s.replace(SUB, 'useStore(navigationStore, (state) => sceneSubject(state, rail))')],
+    ['the whole state subscribed', (s) => s.replace(SUB, 'useSyncExternalStore(navigationStore.subscribe, navigationStore.getState)')],
+    ['the subject from nowhere', (s) => s.replace(SUB, 'useSyncExternalStore(navigationStore.subscribe, () => null)')],
+    ['a DOM read', (s) => s.replace('return (', 'const w = window.innerWidth;\n  return (')],
+    ['a selection of Bodies', (s) => s.replace('{bodies.map(', '{bodies.filter((body) => body.kind === "star").map(')],
+    ['a light', (s) => s.replace('<Billboard>', '<ambientLight />\n          <Billboard>')],
+    ['a lit dot', (s) => s.replace('<meshBasicMaterial', '<meshStandardMaterial')],
+    ['a literal-coloured outline', (s) => s.replace('color={bodyStroke(body, subject).color}', 'color={WHITE}')],
+    ['the outline weight invented', (s) => s.replace('lineWidth={bodyStroke(body, subject).widthPx}', 'lineWidth={2}')],
+    ['a hairline colour invented', (s) => s.replace('color={line.color}', 'color={RAIL}')],
+    ['a hairline weight invented', (s) => s.replace('lineWidth={line.widthPx}', 'lineWidth={1}')],
+    ['a token read directly', (s) => s.replace('color={dot.color}', "color={tokens.colors['ink-lift-dark']}")],
+    ['the outline not facing the camera', (s) => s.replace('<Billboard>', '<group>').replace('</Billboard>', '</group>')],
+    ['the outline off its radius', (s) => s.replace('circlePoints(CIRCLE_SEGMENTS, bodyRadius(body))', 'circlePoints(CIRCLE_SEGMENTS, 3)')],
+    ['the orbits not drawn', (s) => s.replace('sceneLines(bodies, railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT))', 'sceneLines(bodies, [])')],
+    ['a third line', (s) => s.replace('<Billboard>', '<Line points={[]} transparent opacity={1} renderOrder={BODY_RENDER_ORDER} />\n          <Billboard>')],
+    ['a drei connector', (s) => s.replace('<Billboard>', '<QuadraticBezierLine start={a} end={b} />\n          <Billboard>')],
+    ['a line loses its order', (s) => s.replace('renderOrder={BODY_RENDER_ORDER}', '')],
+    ['a line goes opaque', (s) => s.replace(/(<Line\b[^/]*?)\s*transparent\b/, '$1')],
+    ['a line fades', (s) => s.replace('opacity={1}', 'opacity={0.5}')],
+    ['a dot loses its order', (s) => s.replace('<mesh key={dot.id} renderOrder={BODY_RENDER_ORDER}>', '<mesh key={dot.id}>')],
+    ['a dot keyed by a constant', (s) => s.replace('<mesh key={dot.id}', '<mesh key="core"')],
+    ['the position deleted', (s) => s.replace(' position={[body.position.x, body.position.y, body.position.z]}', '')],
+    ['the axes swapped', (s) => s.replace('[body.position.x, body.position.y, body.position.z]', '[body.position.y, body.position.x, body.position.z]')],
+    ['the hit radius a Planet’s', (s) => s.replace('args={[bodyRadius(body), 16, 12]}', 'args={[PLANET_RADIUS, 16, 12]}')],
+    ['a dot fades', (s) => s.replace('transparent opacity={1} />', 'transparent opacity={0.5} />')],
+    ['a dot goes opaque', (s) => s.replace('color={dot.color} transparent', 'color={dot.color}')],
+    ['a dot off its radius', (s) => s.replace('args={[dot.radius, 24]}', 'args={[0.2, 24]}')],
+    ['the dots on every Body', (s) => s.replace('coreDots(body, subject)', 'coreDots(body, body.id)')],
+    ['a literal order', (s) => s.replace('renderOrder={BODY_RENDER_ORDER}', 'renderOrder={3}')],
+    ['a coordinate literal', (s) => s.replace('return (', 'const home = [0, 0, 40];\n  return (')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped binding`);
+    assert.notDeepEqual(auditBodyField(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
+// --- The two ladders never borrow each other's tokens (3.2) --------------------
+
+/**
+ * Every scene line takes a `stroke-*` token and every scene glyph an `ink-*` one,
+ * as a pure function over files: an `ink-` token inside a line element or line
+ * material, or anywhere in the stroke model, is a line drawn in a glyph's ink; a
+ * `stroke-` token, or a stroke-backed constant (`MOTE_COLOR`, `strokeColor(`,
+ * `DUST_*_COLOR`), inside a `*LabelStyle` function is a glyph drawn in a line's
+ * stroke.
+ */
+function auditLadders(files: readonly { readonly path: string; readonly source: string }[]): string[] {
+  const failures: string[] = [];
+  for (const file of files) {
+    const code = blankComments(file.source);
+    if (file.path.endsWith('/stroke-model.ts') && /\bink-/.test(code)) {
+      failures.push(`${file.path} names an ink token — the stroke model colours lines only`);
+    }
+    // A line element, read up to its own closing `/>` or `>` with no `=` before
+    // it — so the `>` of an arrow (`=>`) inside an attribute does not end it early.
+    const lineElements =
+      code.match(
+        /<(?:Line|line|lineSegments|lineLoop|QuadraticBezierLine|CubicBezierLine|CatmullRomLine|line\w*Material)\b(?:=>|[^>])*>/g,
+      ) ?? [];
+    for (const element of lineElements) {
+      if (/\bink-/.test(element)) failures.push(`${file.path} draws a line in an ink token`);
+    }
+    // A label style in any declaration form — `function fooLabelStyle`, or a
+    // `const`/`let` bound to an arrow or function expression — read to the end of
+    // its body by balanced braces.
+    for (const start of code.matchAll(/\b(?:function\s+\w*LabelStyle\b|(?:const|let|var)\s+\w*LabelStyle\b\s*(?::[^=]*)?=)/g)) {
+      const open = code.indexOf('{', start.index);
+      let depth = 0;
+      let end = code.length;
+      for (let index = open; index !== -1 && index < code.length; index += 1) {
+        if (code[index] === '{') depth += 1;
+        if (code[index] === '}') {
+          depth -= 1;
+          if (depth === 0) {
+            end = index + 1;
+            break;
+          }
+        }
+      }
+      const style = code.slice(start.index, end);
+      if (/\bstroke-|\bMOTE_COLOR\b|\bstrokeColor\s*\(|\bDUST_\w*COLOR\b/.test(style)) {
+        failures.push(`${file.path} styles a label with a stroke token`);
+      }
+    }
+  }
+  return failures;
+}
+
+function renderSceneSources(): { path: string; source: string }[] {
+  return readdirSync(SCENE_DIR)
+    .filter((name) => /\.tsx?$/.test(name) && !/\.test\.ts$/.test(name))
+    .map((name) => ({ path: `src/render-scene/${name}`, source: readFileSync(join(SCENE_DIR, name), 'utf8') }));
+}
+
+test('no ink token on a line, and no stroke token on a label', () => {
+  const files = renderSceneSources();
+  assert.ok(files.some((file) => file.path.endsWith('/mote-model.ts')), 'the walk reaches the one label style');
+  assert.deepEqual(auditLadders(files), []);
+});
+
+test('the ladder audit rejects each borrowing', () => {
+  for (const [path, source] of [
+    ['src/render-scene/stroke-model.ts', "const c = tokens.colors['ink-label-dark'];"],
+    ['src/render-scene/body-field.tsx', "<Line points={p} color={tokens.colors['ink-faint-dark']} />"],
+    ['src/render-scene/x.tsx', "<lineBasicMaterial color={tokens.colors['ink-faint-dark']} />"],
+    ['src/render-scene/mote-model.ts', 'export function moteLabelStyle() {\n  return { color: MOTE_COLOR };\n}'],
+    ['src/render-scene/mote-model.ts', "export function moteLabelStyle() {\n  return { color: tokens.colors['stroke-rest-dark'] };\n}"],
+    // The forms that escaped the first audit: an arrow-bound style, and a line whose
+    // attribute holds an arrow before its ink.
+    ['src/render-scene/mote-model.ts', 'export const moteLabelStyle = () => ({ color: MOTE_COLOR });'],
+    ['src/render-scene/mote-model.ts', "const sceneLabelStyle: () => Style = function () {\n  return { color: tokens.colors['stroke-focus-dark'] };\n};"],
+    ['src/render-scene/body-field.tsx', "<Line points={p} onUpdate={(l) => l} color={tokens.colors['ink-lift-dark']} />"],
+    ['src/render-scene/body-field.tsx', "<Line\n  points={p.map((q) => q)}\n  color={tokens.colors['ink-prose-dark']}\n/>"],
+  ] as const) {
+    assert.notDeepEqual(auditLadders([{ path, source }]), [], `${path}: ${source} must be rejected`);
+  }
+  assert.deepEqual(
+    auditLadders([
+      { path: 'src/render-scene/mote-model.ts', source: 'export function moteLabelStyle() {\n  return { color: MOTE_LABEL_COLOR };\n}' },
+      { path: 'src/render-scene/mote-model.ts', source: 'export const moteLabelStyle = () => ({ color: MOTE_LABEL_COLOR });\nconst w = MOTE_COLOR;' },
+      { path: 'src/render-scene/body-field.tsx', source: "<Line points={p.map((q) => q)} color={line.color} />\n<div style={{ color: tokens.colors['ink-label-dark'] }} />" },
+      { path: 'src/render-scene/stroke-model.ts', source: "// glyphs take ink-*\nconst c = tokens.colors['stroke-rest-dark'];" },
+    ]),
+    [],
+  );
+});
+
+/** Every non-test source file under `src/` outside `src/tokens/`, any extension. */
+function untokenisedSources(): { path: string; source: string }[] {
+  return readdirSync(SRC_ROOT, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && !/\.test\.ts$/.test(entry.name))
+    .map((entry) => join(entry.parentPath, entry.name))
+    .map((path) => `src/${relative(SRC_ROOT, path).split(sep).join('/')}`)
+    .filter((path) => !path.startsWith('src/tokens/'))
+    .map((path) => ({ path, source: readFileSync(join(SRC_ROOT, path.slice('src/'.length)), 'utf8') }));
+}
+
+/** The token that fails the contrast floor, assembled so this file never names it whole. */
+const QUIET_INK = ['ink', 'quiet'].join('-');
+
+/** Files that name the failing ink token at all. */
+function quietInkReaders(files: readonly { readonly path: string; readonly source: string }[]): string[] {
+  return files.filter((file) => file.source.includes(QUIET_INK)).map((file) => `${file.path} names ${QUIET_INK}`);
+}
+
+test('the ink step below the contrast floor is referenced nowhere under src/ outside tokens/', () => {
+  // DESIGN.md: it fails the 4.5:1 floor and must appear on no glyph. The surest way
+  // to keep it off every glyph is to keep it out of every file that could draw one.
+  const files = untokenisedSources();
+  assert.ok(files.some((file) => file.path === 'src/render-scene/README.md'), 'the walk reaches prose too');
+  assert.deepEqual(quietInkReaders(files), []);
+  assert.notDeepEqual(quietInkReaders([{ path: 'src/shell/x.tsx', source: `color: tokens.colors['${QUIET_INK}-dark']` }]), []);
+});
+
+// --- No effects: depth is the ladder's, never shading's (3.2) -----------------
+
+/** The forms that put shadow, blur, glow, bloom, a radius or a light into a surface. */
+const EFFECTS =
+  /box-shadow|boxShadow|textShadow|drop-shadow|blur\(|borderRadius|castShadow|shadows|bloom|glow|(?:ambient|directional|point|spot|hemisphere)Light/i;
+
+/**
+ * Every effect in code, each reported as `file:line` — comments blanked (line count
+ * kept), strings kept, since a CSS value is a string.
+ */
+function effectsIn(files: readonly { readonly path: string; readonly source: string }[]): string[] {
+  const every = new RegExp(EFFECTS.source, `${EFFECTS.flags.replace('g', '')}g`);
+  return files.flatMap((file) => {
+    const code = blankComments(file.source);
+    return [...code.matchAll(every)].map((match) => {
+      const line = code.slice(0, match.index).split('\n').length;
+      return `${file.path}:${line} holds ${match[0]}`;
+    });
+  });
+}
+
+test('no shadow, blur, glow, bloom, radius or light in the scene or the shell', () => {
+  const files = sourceFiles().filter(
+    (file) => /^src\/(?:render-scene|shell)\//.test(file.path) && !/\.test\.ts$/.test(file.path),
+  );
+  assert.ok(files.some((file) => file.path === 'src/render-scene/scene.tsx'), 'the walk reaches the scene');
+  assert.ok(files.some((file) => file.path === 'src/shell/focus-panel.tsx'), 'and the shell');
+  assert.deepEqual(effectsIn(files), []);
+});
+
+test('the effects audit rejects each form, in code, and ignores comments', () => {
+  for (const source of [
+    '<ambientLight intensity={0.6} />',
+    '<directionalLight position={p} />',
+    '<pointLight />',
+    '<spotLight />',
+    '<hemisphereLight />',
+    '<Canvas shadows>',
+    '<mesh castShadow />',
+    "style={{ boxShadow: '0 0 4px' }}",
+    "style={{ textShadow: '0 0 4px' }}",
+    "style={{ filter: 'blur(2px)' }}",
+    "style={{ filter: 'drop-shadow(0 0 2px)' }}",
+    "style={{ borderRadius: '4px' }}",
+    "const css = 'box-shadow: none';",
+    '<Bloom />',
+    'const glowing = true;',
+  ]) {
+    assert.notDeepEqual(effectsIn([{ path: 'src/shell/x.tsx', source }]), [], `${source} must be rejected`);
+  }
+  assert.deepEqual(effectsIn([{ path: 'src/shell/x.tsx', source: '// no glow, no bloom, no ambientLight\n/* boxShadow */' }]), []);
+  // Every match, not the first, each with its line.
+  assert.deepEqual(
+    effectsIn([{ path: 'src/shell/x.tsx', source: "const a = 1;\n<ambientLight />\n// glow\nstyle={{ boxShadow: 'x', borderRadius: 2 }}" }]),
+    ['src/shell/x.tsx:2 holds ambientLight', 'src/shell/x.tsx:4 holds boxShadow', 'src/shell/x.tsx:4 holds borderRadius'],
+  );
 });
 
 // --- The ARIA ratchet -------------------------------------------------------
@@ -1061,8 +1455,10 @@ test('the ARIA checker rejects a false value and a missing attribute, not merely
  * this stack — and rendering it passed every check, because the element regex was
  * case-sensitive and the substring list named only lowercase intrinsics.
  *
- * Orbits are the only relational geometry in this story, and they are Planet
- * *positions* rather than drawn rings.
+ * Narrowed in 3.2: orbits and the Rail *are* drawn now, as drei `<Line>`s, and only
+ * in `body-field.tsx`, fed only from named model functions (`sceneLines`,
+ * `railLine`, `circlePoints`) — `auditBodyField` holds that file instead. Every
+ * other module here still draws no line at all.
  */
 const CONNECTOR_ELEMENTS: readonly string[] = [
   // Three's own intrinsics, as R3F lowercases them.
@@ -1113,11 +1509,11 @@ function auditConnectors(code: string): string[] {
   return failures;
 }
 
-test('the renderer draws no line, edge, or connector between any two Bodies', () => {
-  // The Rail's files too: a camera path drawn as a `<CatmullRomLine>` would be a
-  // connector between two Clients by another name.
-  for (const path of [SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX]) {
-    assert.deepEqual(auditConnectors(readFileSync(path, 'utf8')), [], `${path}: orbit is a position, never a drawn ring`);
+test('no module but the Bodies’ binding draws a line, edge, or connector', () => {
+  // The Rail's files too: the Rail is drawn by `body-field.tsx` from `railLine`, and
+  // a second, hand-made line elsewhere would be one no audit reads.
+  for (const path of [SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS]) {
+    assert.deepEqual(auditConnectors(readFileSync(path, 'utf8')), [], `${path}: lines are body-field.tsx's alone`);
   }
 });
 
@@ -1143,10 +1539,9 @@ test('the connector ban rejects drei’s Line as well as Three’s intrinsics', 
   // Placeholder geometry must pass, or the ban rejects the story's own deliverable.
   for (const form of [
     '<mesh><sphereGeometry args={[1, 24, 16]} /><meshStandardMaterial /></mesh>',
-    '<ambientLight intensity={0.6} />',
-    '<directionalLight position={[1, 2, 3]} />',
-    "import { Canvas } from '@react-three/fiber';",
+    '<mesh><circleGeometry args={[0.15, 24]} /><meshBasicMaterial transparent opacity={1} /></mesh>',
     "import { Billboard } from '@react-three/drei';",
+    "import { Canvas } from '@react-three/fiber';",
   ]) {
     assert.deepEqual(auditConnectors(form), [], `${form} draws no connector and must pass`);
   }
@@ -1191,12 +1586,15 @@ function mapBlocks(code: string, collection: string): string[] {
  *   - Every scene object mapped from `media` or `particles` carries
  *     `renderOrder={DUST_RENDER_ORDER}`, and every material there
  *     `depthWrite={false}`.
- *   - Every Body mesh carries `renderOrder={BODY_RENDER_ORDER}`, and its material is
- *     `transparent` at opacity 1. **Transparent is load-bearing:** three renders its
- *     whole opaque list before its transparent list whatever the `renderOrder`, so an
- *     opaque Body is drawn *before* the Dust and then painted over.
- *   - No `renderOrder` takes a literal or sits anywhere but on an audited draw, and
- *     no billboard or point cloud exists outside the Dust.
+ *   - The Bodies are drawn by `<BodyField>`, mounted once inside the Canvas, and
+ *     nowhere else in this file; `auditBodyField` holds their half — every Body draw
+ *     at `BODY_RENDER_ORDER`, `transparent` at opacity 1. **Transparent is
+ *     load-bearing:** three renders its whole opaque list before its transparent
+ *     list whatever the `renderOrder`, so an opaque Body is drawn *before* the Dust
+ *     and then painted over.
+ *   - No `renderOrder` here takes anything but `DUST_RENDER_ORDER` or sits anywhere
+ *     but on an audited Dust draw, and no billboard or point cloud exists outside
+ *     the Dust.
  *   - Every medium sprite is scaled by `mediumSpriteScale`, so it is drawn at the
  *     model's radius and the model's non-overlap proof holds on screen.
  *
@@ -1228,29 +1626,17 @@ function auditDrawOrder(source: string): string[] {
     }
   }
 
-  const bodyBlocks = mapBlocks(code, 'bodies');
-  if (bodyBlocks.length === 0) failures.push('maps no bodies — the Bodies are not drawn');
-  for (const bodyBlock of bodyBlocks) {
-    const meshes = bodyBlock.match(/<mesh\b[^>]*>/g) ?? [];
-    if (meshes.length === 0) failures.push('the Bodies are mapped to no mesh');
-    for (const mesh of meshes) {
-      if (!/\brenderOrder\s*=\s*\{\s*BODY_RENDER_ORDER\s*\}/.test(mesh)) {
-        failures.push('a Body mesh lacks renderOrder={BODY_RENDER_ORDER} — Dust could draw after it');
-      }
-    }
-    const materials = bodyBlock.match(/<\w+Material\b[^>]*>/g) ?? [];
-    if (materials.length === 0) failures.push('the Bodies are drawn with no material');
-    for (const material of materials) {
-      // A bare attribute or `{true}`, and nothing else: `{0}` and `{!true}` are falsy
-      // and passed a scan that excluded only `{false}`.
-      if (!/\btransparent(?:\s*=\s*\{\s*true\s*\}|(?![\w-]|\s*=))/.test(material)) {
-        failures.push('a Body material is opaque — three draws the opaque list first, so Dust paints over it');
-      }
-      const opacity = /\bopacity\s*=\s*\{\s*([^}]*?)\s*\}/.exec(material);
-      if (opacity !== null && opacity[1] !== '1') {
-        failures.push(`a Body is drawn at opacity ${opacity[1]} — transparent is for ordering, never for fading`);
-      }
-    }
+  // The Bodies' half of the rule is `<BodyField>`'s since 3.2, held by
+  // `auditBodyField`. Here: it is mounted exactly once, inside the Canvas, with the
+  // Bodies and the Rail — and the scene draws no Body of its own beside it, which
+  // would be a draw under neither audit.
+  const inside = /<Canvas\b[\s\S]*<\/Canvas>/.exec(code)?.[0] ?? '';
+  if (!/<BodyField\s+bodies=\{\s*bodies\s*\}\s+rail=\{\s*rail\s*\}\s*\/>/.test(inside)) {
+    failures.push('the Bodies are not drawn — <BodyField bodies={bodies} rail={rail} /> is not mounted inside the Canvas');
+  }
+  if ((code.match(/<BodyField\b/g) ?? []).length !== 1) failures.push('the Bodies are mounted other than once');
+  if (mapBlocks(code, 'bodies').length > 0) {
+    failures.push('maps the Bodies here — a Body drawn outside <BodyField> is under no draw-order rule');
   }
 
   // The medium is drawn at the model's radius through the model's own scale, so the
@@ -1264,8 +1650,8 @@ function auditDrawOrder(source: string): string[] {
   }
 
   for (const match of code.matchAll(/\brenderOrder\s*=\s*\{\s*([^}]*?)\s*\}/g)) {
-    if (match[1] !== 'DUST_RENDER_ORDER' && match[1] !== 'BODY_RENDER_ORDER') {
-      failures.push(`renderOrder={${match[1]}} — draw order comes from the model's named constants only`);
+    if (match[1] !== 'DUST_RENDER_ORDER') {
+      failures.push(`renderOrder={${match[1]}} — the scene draws only Dust, at the model's DUST_RENDER_ORDER`);
     }
   }
   // Every `renderOrder`, in any value form, sits on an object the audit above checked.
@@ -1279,7 +1665,6 @@ function auditDrawOrder(source: string): string[] {
         (block) => block.match(/<(?:sprite|mesh|points|instancedMesh|group)\b[^>]*>/g) ?? [],
       ),
     ),
-    ...mapBlocks(code, 'bodies').flatMap((block) => block.match(/<mesh\b[^>]*>/g) ?? []),
   ];
   const renderOrders = /\brenderOrder\s*=/g;
   if (count(code, renderOrders) !== audited.reduce((sum, object) => sum + count(object, renderOrders), 0)) {
@@ -1321,12 +1706,15 @@ test('the draw-order audit rejects the real renderer with any one of its guarant
     ['depth explicitly on', (s) => s.replace('depthWrite={false}', 'depthWrite={true}')],
     ['the medium loses its order', (s) => s.replace(/(<sprite\b[^>]*?)\s*renderOrder=\{DUST_RENDER_ORDER\}/, '$1')],
     ['a particle loses its order', (s) => s.replace(/(particles\.map[\s\S]*?)renderOrder=\{DUST_RENDER_ORDER\}/, '$1')],
-    ['a Body loses its order', (s) => s.replace('renderOrder={BODY_RENDER_ORDER}', '')],
     ['Dust takes the Body order', (s) => s.replace('renderOrder={DUST_RENDER_ORDER}', 'renderOrder={BODY_RENDER_ORDER}')],
-    ['a literal order', (s) => s.replace('renderOrder={BODY_RENDER_ORDER}', 'renderOrder={3}')],
-    ['the Body goes opaque', (s) => s.replace(/(<meshStandardMaterial\b[^>]*?)\s*transparent\b/, '$1')],
-    ['the Body is transparent={false}', (s) => s.replace(/(<meshStandardMaterial\b[^>]*?\s)transparent\b/, '$1transparent={false}')],
-    ['the Body fades', (s) => s.replace(/(<meshStandardMaterial\b[^>]*?)opacity=\{1\}/, '$1opacity={0.5}')],
+    ['a literal order', (s) => s.replace('renderOrder={DUST_RENDER_ORDER}', 'renderOrder={3}')],
+    ['the Bodies unmounted', (s) => s.replace('<BodyField bodies={bodies} rail={rail} />', '')],
+    ['the Bodies mounted twice', (s) => s.replace('<BodyField bodies={bodies} rail={rail} />', '<BodyField bodies={bodies} rail={rail} />\n        <BodyField bodies={bodies} rail={rail} />')],
+    [
+      'the Bodies outside the Canvas',
+      (s) => s.replace('<BodyField bodies={bodies} rail={rail} />', '').replace('</Canvas>', '</Canvas>\n      <BodyField bodies={bodies} rail={rail} />'),
+    ],
+    ['the Bodies without the Rail', (s) => s.replace('<BodyField bodies={bodies} rail={rail} />', '<BodyField bodies={bodies} rail={buildRail(artifact, [])} />')],
     ['the particles are not drawn', (s) => s.replace(/particles\.map/, 'particlesUnused.map')],
     ['the media are not drawn', (s) => s.replace(/media\.map/, 'mediaUnused.map')],
     [
@@ -1335,37 +1723,32 @@ test('the draw-order audit rejects the real renderer with any one of its guarant
     ],
     [
       'a group reorders the Dust',
-      (s) => s.replace('<ambientLight', '<group renderOrder={BODY_RENDER_ORDER} />\n      <ambientLight'),
+      (s) => s.replace('<BodyField bodies', '<group renderOrder={BODY_RENDER_ORDER} />\n        <BodyField bodies'),
     ],
-    ['a string-valued order', (s) => s.replace('<ambientLight', '<ambientLight renderOrder="5"')],
-    ['a stray point cloud', (s) => s.replace('<ambientLight', '<instancedMesh />\n      <ambientLight')],
+    ['a string-valued order', (s) => s.replace('<BodyField bodies', '<BodyField renderOrder="5" bodies')],
+    ['a stray point cloud', (s) => s.replace('<BodyField bodies', '<instancedMesh />\n        <BodyField bodies')],
     [
       'a second, widened framing',
       (s) => s.replace('frameBodies(bodies);', 'frameBodies(bodies);\n  const wide = frameBodies([...bodies, ...particles]);'),
     ],
-    ['a stray billboard', (s) => s.replace('<ambientLight', '<sprite scale={[1, 1, 1]} />\n      <ambientLight')],
-    ['a Mote', (s) => s.replace('<ambientLight', '{motes.map((m) => <mesh key={m} />)}\n      <ambientLight')],
+    ['a stray billboard', (s) => s.replace('<BodyField bodies', '<sprite scale={[1, 1, 1]} />\n        <BodyField bodies')],
+    ['a Mote', (s) => s.replace('<BodyField bodies', '{motes.map((m) => <mesh key={m} />)}\n        <BodyField bodies')],
     ['a Skill', (s) => s.replace('buildDust(bodies)', 'buildDust(bodies, skills)')],
     ['the framing widened', (s) => s.replace('frameBodies(bodies)', 'frameBodies([...bodies, ...particles])')],
-    ['the Body is transparent={0}', (s) => s.replace(/(<meshStandardMaterial\b[^>]*?\s)transparent\b/, '$1transparent={0}')],
-    [
-      'the Body is transparent={!true}',
-      (s) => s.replace(/(<meshStandardMaterial\b[^>]*?\s)transparent\b/, '$1transparent={!true}'),
-    ],
     [
       'a second, unaudited media block',
-      (s) => s.replace('<ambientLight', '{media.map((m) => <sprite key={m.id}><spriteMaterial /></sprite>)}\n      <ambientLight'),
+      (s) => s.replace('<BodyField bodies', '{media.map((m) => <sprite key={m.id}><spriteMaterial /></sprite>)}\n        <BodyField bodies'),
     ],
     [
       'a second, unaudited particles block',
-      (s) => s.replace('<ambientLight', '{particles.map((p) => <mesh key={p.id}><meshBasicMaterial /></mesh>)}\n      <ambientLight'),
+      (s) => s.replace('<BodyField bodies', '{particles.map((p) => <mesh key={p.id}><meshBasicMaterial /></mesh>)}\n        <BodyField bodies'),
     ],
     [
       'a second, unaudited bodies block',
       (s) =>
         s.replace(
-          '<ambientLight',
-          '{bodies.map((b) => <mesh key={b.id}><meshStandardMaterial transparent={false} /></mesh>)}\n      <ambientLight',
+          '<BodyField bodies',
+          '{bodies.map((b) => <mesh key={b.id}><meshStandardMaterial transparent={false} /></mesh>)}\n        <BodyField bodies',
         ),
     ],
   ];
@@ -1438,7 +1821,7 @@ test('the colour audit rejects the real renderer with any one colour binding bro
     ['the background removed', (s) => s.replace(/<color attach="background"[^>]*\/>/, '')],
     ['the background token changed', (s) => s.replace("tokens.colors['surface-base-dark']", "tokens.colors['surface-raised-dark']")],
     ['the background from a constant', (s) => s.replace("args={[tokens.colors['surface-base-dark']]}", 'args={[GROUND]}')],
-    ['a second background', (s) => s.replace('<ambientLight', '<color attach="background" args={[tokens.colors[\'surface-base-dark\']]} />\n      <ambientLight')],
+    ['a second background', (s) => s.replace('<BodyField bodies', '<color attach="background" args={[tokens.colors[\'surface-base-dark\']]} />\n        <BodyField bodies')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);
@@ -1510,22 +1893,6 @@ test('the surface audit rejects a canvas with no size, no camera, or no rotation
     [],
     'a sized canvas with a framed, oriented camera must pass',
   );
-});
-
-test('the directional light is offset from the camera, not sitting on it', () => {
-  // Two sources exist so the spheres read as spheres. A directional light placed
-  // exactly at the camera lights every visible surface head-on, producing the flat
-  // silhouettes the second source was added to prevent — and the adjacent comment
-  // would then claim the opposite of what the code does.
-  const code = codeOf(SCENE_TSX);
-  const light = /<directionalLight[\s\S]*?\/>/.exec(code);
-  assert.ok(light !== null, 'a second source must exist');
-  assert.doesNotMatch(
-    light[0],
-    /position=\{\s*\[\s*framing\.position\.x\s*,\s*framing\.position\.y\s*,\s*framing\.position\.z\s*\]\s*\}/,
-    'a light at the camera is the flat silhouette its own comment says it prevents',
-  );
-  assert.match(light[0], /framing\.position\.[xy]\s*\+/, 'offset from the camera on at least one lateral axis');
 });
 
 // --- The lazy edge and the error boundary ----------------------------------
@@ -1651,7 +2018,7 @@ test('neither Rail file, nor the focus model, nor the Motes’ renderer, holds a
   // triples by nature, and this scan cannot tell them from a place. What the scan
   // stands for is proven there instead, by execution — translating every Body
   // translates every Mote (`mote-model.test.ts`).
-  for (const path of [RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, MOTE_FIELD_TSX]) {
+  for (const path of [RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX]) {
     assert.deepEqual(coordinateLiterals(codeOf(path)), [], `${path} must resolve every pose from entities`);
   }
 });
@@ -2203,6 +2570,12 @@ test('every module in this directory is covered by the scans above', () => {
     // its purity audit is in `flight-model.test.ts`.
     'flight-model.ts',
     'flight-model.test.ts',
+    // 3.2: named in the import, vocabulary and coordinate-literal scans; the model is
+    // in the connector scan too and carries its own purity audit in
+    // `stroke-model.test.ts`, the binding has `auditBodyField` and `auditPick` above.
+    'stroke-model.ts',
+    'stroke-model.test.ts',
+    'body-field.tsx',
     'README.md',
   ]);
   const found: string[] = [];

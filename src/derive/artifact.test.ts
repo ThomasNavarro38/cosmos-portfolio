@@ -547,10 +547,28 @@ test('a solve missing a position throws naming the entity rather than emitting i
 
   const { [target.id]: _dropped, ...rest } = full.positions;
   assert.throws(
-    () => buildArtifact(graph, { positions: rest }, AS_OF),
+    () => buildArtifact(graph, { ...full, positions: rest }, AS_OF),
     (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.match(error.message, /no position/, 'the failure names the problem');
+      assert.ok(error.message.includes(target.id), 'and names the entity');
+      return true;
+    },
+  );
+});
+
+test('a solve missing an orbit normal throws naming the Project rather than emitting it', () => {
+  const graph = graphOf(...opposedEntries());
+  const full = solve(graph);
+  const target = graph.clients[0]?.projects[0];
+  assert.ok(target !== undefined);
+
+  const { [target.id]: _dropped, ...rest } = full.orbitNormals;
+  assert.throws(
+    () => buildArtifact(graph, { ...full, orbitNormals: rest }, AS_OF),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /no orbit normal/, 'the failure names the problem');
       assert.ok(error.message.includes(target.id), 'and names the entity');
       return true;
     },

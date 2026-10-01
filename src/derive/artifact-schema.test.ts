@@ -114,8 +114,8 @@ test('SCHEMA_VERSION is a literal in the schema, so a mismatch fails', () => {
   }
 });
 
-test('the version is 4 now that rail landed, and changing the shape means changing it', () => {
-  assert.equal(SCHEMA_VERSION, 4, 'Story 2.1 added `rail`, so the shape version is 4');
+test('the version is 5 now that orbit planes landed, and changing the shape means changing it', () => {
+  assert.equal(SCHEMA_VERSION, 5, 'Story 3.2 added `orbitNormal`, so the shape version is 5');
   assert.equal(valid().schemaVersion, SCHEMA_VERSION, 'the emitter declares it');
 
   // Read off the source: the literal must be in the schema, not merely compared
@@ -552,6 +552,82 @@ test('a non-finite coordinate is rejected rather than read as absent', () => {
     };
     assertFails(validateArtifact(broken), /position\.x/, `a position.x of ${String(bad)} must fail`);
   }
+});
+
+// --- Orbit planes (3.2) -----------------------------------------------------
+
+test('every emitted Project carries a unit orbitNormal', () => {
+  for (const client of valid(baseEntry(), { ...baseEntry(), project: 'A second system' }).clients) {
+    for (const project of client.projects) {
+      const { x, y, z } = project.orbitNormal;
+      assert.ok(Math.abs(Math.hypot(x, y, z) - 1) <= 1e-3, `${project.id}'s normal is unit length`);
+    }
+  }
+});
+
+test('a Project without an orbitNormal, or with a non-unit one, is rejected', () => {
+  const missing = copy(valid()) as { clients: { projects: Record<string, unknown>[] }[] };
+  const project = missing.clients[0]?.projects[0];
+  assert.ok(project !== undefined);
+  delete project['orbitNormal'];
+  assertFails(validateArtifact(missing), /orbitNormal/, 'a missing orbit plane must fail');
+
+  for (const bad of [
+    { x: 0, y: 0, z: 0 },
+    { x: 0, y: -2, z: 0 },
+    { x: 0.5, y: 0.5, z: 0 },
+    { x: Number.NaN, y: -1, z: 0 },
+    { x: Number.POSITIVE_INFINITY, y: -1, z: 0 },
+    { x: 0, y: Number.NEGATIVE_INFINITY, z: 0 },
+  ]) {
+    const broken = copy(valid()) as { clients: { projects: Record<string, unknown>[] }[] };
+    const target = broken.clients[0]?.projects[0];
+    assert.ok(target !== undefined);
+    target['orbitNormal'] = bad;
+    assertFails(validateArtifact(broken), /orbitNormal/, `the normal ${JSON.stringify(bad)} must fail`);
+  }
+});
+
+test('a unit orbitNormal whose plane does not contain its Planet is rejected, naming the Project', () => {
+  const artifact = valid();
+  const client = artifact.clients[0];
+  const project = client?.projects[0];
+  assert.ok(client !== undefined && project !== undefined);
+  const offset = {
+    x: project.position.x - client.position.x,
+    y: project.position.y - client.position.y,
+    z: project.position.z - client.position.z,
+  };
+  const r = Math.hypot(offset.x, offset.y, offset.z);
+  // Unit, finite, and pointing straight along the offset: the worst wrong plane.
+  const along = { x: offset.x / r, y: offset.y / r, z: offset.z / r };
+  const broken = copy(artifact) as { clients: { projects: Record<string, unknown>[] }[] };
+  const target = broken.clients[0]?.projects[0];
+  assert.ok(target !== undefined);
+  target['orbitNormal'] = along;
+  const failures = validateArtifact(broken);
+  assertFails(failures, /clients\.0\.projects\.0\.orbitNormal/, 'the failing path is named');
+  assert.ok(failures.some((line) => line.includes(project.id)), 'and the Project by ID');
+
+  // Tilted just past the tolerance about the offset's own axis: still rejected.
+  const n = project.orbitNormal;
+  const tilt = 2e-3;
+  const tilted = {
+    x: n.x * Math.cos(tilt) + along.x * Math.sin(tilt),
+    y: n.y * Math.cos(tilt) + along.y * Math.sin(tilt),
+    z: n.z * Math.cos(tilt) + along.z * Math.sin(tilt),
+  };
+  target['orbitNormal'] = tilted;
+  assertFails(validateArtifact(broken), /orbitNormal/, 'a plane tilted past the tolerance must fail');
+
+  // And the emitted plane, as solved, passes.
+  assert.deepEqual(validateArtifact(artifact), []);
+});
+
+test('an artifact still declaring schemaVersion 4 is rejected', () => {
+  const old = copy(valid());
+  old['schemaVersion'] = 4;
+  assertFails(validateArtifact(old), /schemaVersion/, 'a pre-orbit artifact must not be read on a guess');
 });
 
 test('timeAxis is bounded to 0..1', () => {

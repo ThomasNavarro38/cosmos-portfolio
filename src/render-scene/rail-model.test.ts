@@ -24,6 +24,7 @@ import { railStopCount as inputStopCount } from '../shell/rail-input.ts';
 import {
   DWELL_SLOWDOWN,
   RAIL_HEADING,
+  RAIL_LINE_SAMPLES_PER_SEGMENT,
   RAIL_MAX_FRAME_SECONDS,
   RAIL_OPENING_SLOWDOWN,
   RAIL_SPRING_SECONDS,
@@ -33,6 +34,7 @@ import {
   dampProgress,
   railFarPlane,
   railFrame,
+  railLine,
   railPose,
   railStopCount,
   stepRailMotion,
@@ -78,6 +80,7 @@ function client(id: string, position: ScenePosition, planet: ScenePosition): Sce
         isDeep: true,
         mass: 2,
         luminanceBand: 'stroke-near',
+        orbitNormal: { x: 0, y: -1, z: 0 },
         moteTier: 'mote-sparse',
         position: planet,
       },
@@ -774,6 +777,7 @@ test('a Project added at a wider orbit, with no Shot edit, is still framed at it
                 isDeep: false,
                 mass: 1,
                 luminanceBand: 'stroke-far',
+                orbitNormal: { x: 0, y: -1, z: 0 },
                 moteTier: 'mote-none',
                 position: { x: entry.position.x - 24, y: entry.position.y + 6, z: entry.position.z - 9 },
               },
@@ -810,6 +814,7 @@ test('a Planet toward the camera, below its Star, or none at all is still framed
     isDeep: false,
     mass: 1,
     luminanceBand: 'stroke-far',
+    orbitNormal: { x: 0, y: -1, z: 0 },
     moteTier: 'mote-none',
     position,
   });
@@ -1207,6 +1212,84 @@ test('reduced: rest and the Dwell are untouched — the pose at rest is identica
   );
   const atRest = { progress: { value: 2, velocity: 0 }, aspect: { value: 1.5, velocity: 0 } };
   assert.deepEqual(stepRailMotion(atRest, rail, 2, 1.5, 1 / 60, true), atRest, 'a spring at rest is not moved by the pace');
+});
+
+// --- The drawn Rail (3.2) ----------------------------------------------------------
+
+test('the drawn Rail passes through every stop Star, in stop order, starting at the first stop', () => {
+  const { rail, bodies } = railOf(fiveStops());
+  const samples = 8;
+  const line = railLine(rail, samples);
+  const stops = rail.keyframes.slice(1);
+  assert.equal(line.length, (stops.length - 1) * samples + 1, 'one point per sample, plus the closing Star');
+  stops.forEach((keyframe, index) => {
+    const star = bodies.find((body) => body.id === keyframe.subject);
+    assert.ok(star !== undefined);
+    const point = line[index * samples];
+    assert.ok(point !== undefined);
+    assertNear(point, star.position, `the line passes through ${String(keyframe.subject)}`);
+  });
+  // The opening frame is no knot: the line starts on the first stop's Star.
+  assert.equal(rail.keyframes[0]?.subject, null);
+});
+
+test('the drawn Rail is the curve through the stops, not the camera’s path', () => {
+  const { rail } = railOf(fiveStops());
+  const line = railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT);
+  // At every stop the camera stands back from its Star along the Shot, so a line
+  // drawn on the camera path would miss every Star by about the Shot's distance.
+  for (let k = 1; k < rail.keyframes.length; k += 1) {
+    const pose = railPose(rail, k, DESKTOP_ASPECT);
+    const nearest = Math.min(...line.map((point) => distance(point, pose.position)));
+    assert.ok(nearest > SHOT_DISTANCE / 2, `the line keeps away from the camera at stop ${k}`);
+  }
+});
+
+test('the drawn Rail is translation-invariant: moving every Body moves the line with it', () => {
+  const shift = at(500, -40, 120);
+  const moved = fiveStops();
+  const translated: SceneArtifact = {
+    ...moved,
+    clients: moved.clients.map((entry) => ({
+      ...entry,
+      position: { x: entry.position.x + shift.x, y: entry.position.y + shift.y, z: entry.position.z + shift.z },
+      projects: entry.projects.map((project) => ({
+        ...project,
+        position: { x: project.position.x + shift.x, y: project.position.y + shift.y, z: project.position.z + shift.z },
+      })),
+    })),
+  };
+  const before = railLine(railOf(fiveStops()).rail, 6);
+  const after = railLine(railOf(translated).rail, 6);
+  assert.equal(after.length, before.length);
+  before.forEach((point, index) => {
+    const there = after[index];
+    assert.ok(there !== undefined);
+    assertNear(there, { x: point.x + shift.x, y: point.y + shift.y, z: point.z + shift.z }, `point ${index}`, 1e-6);
+  });
+});
+
+test('a Rail of one stop, or none, draws no line', () => {
+  const one = fiveStops();
+  const single: SceneArtifact = { ...one, rail: ['client:a'] };
+  assert.deepEqual(railLine(railOf(single).rail, 8), [], 'one stop is a point, not a curve');
+  const none: SceneArtifact = { ...one, rail: [] };
+  assert.deepEqual(railLine(railOf(none).rail, 8), [], 'no stop, no line');
+});
+
+test('the drawn Rail refuses a sample count that is not a positive whole number', () => {
+  const { rail } = railOf(fiveStops());
+  for (const bad of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(() => railLine(rail, bad), /samples per segment/, `${String(bad)} samples must be refused`);
+  }
+});
+
+test('the committed artifact draws a Rail exactly when it has two stops or more', () => {
+  const artifact = committed();
+  const { rail } = railOf(artifact);
+  const line = railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT);
+  if (railStopCount(rail) < 2) assert.deepEqual(line, []);
+  else assert.equal(line.length, (railStopCount(rail) - 1) * RAIL_LINE_SAMPLES_PER_SEGMENT + 1);
 });
 
 // --- Purity --------------------------------------------------------------------

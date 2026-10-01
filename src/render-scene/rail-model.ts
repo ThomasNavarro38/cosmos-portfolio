@@ -455,6 +455,45 @@ export function railStopCount(rail: Rail): number {
   return Math.max(0, rail.keyframes.length - 1);
 }
 
+/** How many samples per segment the drawn Rail takes between two stop Stars. */
+export const RAIL_LINE_SAMPLES_PER_SEGMENT = 24;
+
+/**
+ * The Rail as a drawn line (3.2): a Catmull-Rom curve through the stop Stars'
+ * centres, in stop order, sampled `samplesPerSegment` times per segment.
+ *
+ * **Through the stops' targets, not along the camera's path.** The camera rides
+ * its own path, so a line drawn there could never be seen; the Rail drawn is the
+ * spine between the Clients (DESIGN.md §6, the direction-03 mock). Keyframe 0,
+ * the opening frame, has no subject and is not a stop, so it is not a knot.
+ *
+ * **Not the curve `railPose` aims along.** It uses the same uniform Catmull-Rom
+ * *form*, but over different knots: the aim curve also runs through keyframe 0's
+ * target, so its segments near the first stop bend differently, and its end
+ * tangents differ. The two agree only in passing through every stop Star exactly.
+ * The drawn Rail is the spine between the Clients, not a trace of the camera's aim.
+ *
+ * Fewer than two stops is no line at all — `[]` — because one point is not a
+ * curve and drawing a dot at the only Star would be a Body nobody derived.
+ *
+ * @throws if `samplesPerSegment` is not a positive integer.
+ */
+export function railLine(rail: Rail, samplesPerSegment: number): ScenePosition[] {
+  if (!Number.isInteger(samplesPerSegment) || samplesPerSegment < 1) {
+    throw new Error(`the drawn Rail needs a positive whole number of samples per segment, not ${String(samplesPerSegment)}.`);
+  }
+  const knots = rail.keyframes.flatMap((keyframe) => (keyframe.subject === null ? [] : [keyframe.target]));
+  if (knots.length < 2) return [];
+  const points: ScenePosition[] = [];
+  for (let segment = 0; segment < knots.length - 1; segment += 1) {
+    for (let i = 0; i < samplesPerSegment; i += 1) {
+      points.push(catmullRom(knots, segment, i / samplesPerSegment));
+    }
+  }
+  points.push(catmullRom(knots, knots.length - 2, 1));
+  return points;
+}
+
 /** How many samples per segment `railFarPlane` takes along the curve. */
 export const RAIL_FAR_SAMPLES_PER_SEGMENT = 32;
 

@@ -23,10 +23,12 @@
  * **Flat, because the renderer draws a list.** The artifact nests Projects under
  * their Client, and the DOM index keeps that nesting because there the structure
  * *is* the information. Here it is not: a Planet's membership is already carried
- * by `clientId`, and its relation to its Star is already expressed as a solved
- * *position* in orbit around it. So the scene consumes one list and draws one
- * mesh per entry. **No connector geometry of any kind** — orbit is where a Body
- * is, never a ring drawn between two of them.
+ * by `clientId`, and its relation to its Star by its solved position and the
+ * orbit plane the solve emitted with it (`orbitNormal`, 3.2). So the scene
+ * consumes one list. The orbit drawn around a Star is the orbit *solved* — its
+ * plane read off the artifact, never reconstructed here — and the only line
+ * geometry in the scene is the orbits and the Rail, both built by named model
+ * functions in `stroke-model.ts` and `rail-model.ts`.
  *
  * **A Company is an attribute, never a Body.** `content.company` names who the
  * work was done through; it adds no entity to the graph and therefore adds
@@ -118,6 +120,8 @@ export interface SceneArtifactProject {
   readonly luminanceBand: string;
   readonly moteTier: string;
   readonly position: ScenePosition;
+  /** The unit normal of the plane this Project orbits its Star in, as solved (3.2). */
+  readonly orbitNormal: ScenePosition;
 }
 
 /** A solved position in scene space, exactly as the artifact carries it. */
@@ -145,9 +149,11 @@ export type BodyKind = 'star' | 'planet';
  * index, the store and the scene all name a destination the same way. A
  * re-slugified or prefixed ID here would be a second identity derivation.
  *
- * `mass`, `luminanceBand`, `moteTier` and `isDeep` are carried rather than used:
- * this story draws placeholder geometry only, and Epic 3 is what dresses it. They
- * are on the Body because the model's job is to hand the renderer everything the
+ * `mass`, `luminanceBand`, `moteTier`, `isDeep` and `orbitNormal` are carried
+ * as the artifact resolved them. `luminanceBand` is a Planet's resting stroke
+ * token and `orbitNormal` its orbit plane (both drawn since 3.2, through
+ * `stroke-model.ts`); the rest wait for the stories that dress them. They are on
+ * the Body because the model's job is to hand the renderer everything the
  * artifact resolved, so a later story adds appearance without adding a read.
  */
 export interface Body {
@@ -175,6 +181,11 @@ export interface Body {
   readonly isDeep?: boolean;
   /** The Star this Planet orbits, by ID. Star: absent. */
   readonly clientId?: string;
+  /**
+   * The unit normal of this Planet's orbit plane, as the artifact solved it.
+   * Star: absent — a Star orbits nothing. Carried, never computed (AD-3).
+   */
+  readonly orbitNormal?: ScenePosition;
 }
 
 /** The whole scene: every Body, in the order the artifact carries them. */
@@ -246,6 +257,7 @@ export function buildScene(artifact: SceneBodiesArtifact): SceneBodies {
         // what every other consumer resolves a Planet's Star by, so reading the
         // nesting instead would make this surface the only one that disagrees.
         clientId: project.clientId,
+        orbitNormal: requireFiniteVector(project.id, 'orbit normal', project.orbitNormal),
       });
     }
   }
@@ -261,16 +273,24 @@ export function buildScene(artifact: SceneBodiesArtifact): SceneBodies {
  * as the gate's failure lines.
  */
 function requireFinitePosition(id: string, position: ScenePosition): ScenePosition {
+  return requireFiniteVector(id, 'coordinate', position);
+}
+
+/** The same guard for any carried vector, naming what it is. */
+function requireFiniteVector(id: string, what: string, vector: ScenePosition | undefined): ScenePosition {
+  if (vector === undefined) {
+    throw new Error(`${id} carries no ${what}; the artifact emits one for every Project.`);
+  }
   for (const axis of ['x', 'y', 'z'] as const) {
-    const value = position[axis];
+    const value = vector[axis];
     if (!Number.isFinite(value)) {
       throw new Error(
-        `${id} has a non-finite ${axis} coordinate (${String(value)}); ` +
+        `${id} has a non-finite ${axis} ${what} (${String(value)}); ` +
           'a Body at an unguarded coordinate is placed nowhere, silently.',
       );
     }
   }
-  return position;
+  return vector;
 }
 
 /**
@@ -310,11 +330,11 @@ export const DEFAULT_NEAR = 0.1;
 /**
  * Slack added around the Bodies' extent, in scene units.
  *
- * A Body is drawn as a sphere of non-zero radius, so a camera fitted to the
+ * A Body is drawn as a circle of non-zero radius, so a camera fitted to the
  * *centres* clips the outermost Body in half. This is the margin that keeps the
- * whole mesh inside the frustum, and it must stay at least as large as the largest
- * radius `scene.tsx` draws — asserted there rather than assumed, because the two
- * numbers live in two files and Epic 3 is entitled to raise the radius.
+ * whole outline inside the frustum, and it must stay at least as large as the
+ * largest radius `stroke-model.ts` draws — asserted in `scene-model.test.ts`
+ * rather than assumed, because the two numbers live in two files.
  */
 export const BODY_MARGIN = 3;
 
@@ -324,7 +344,7 @@ export const BODY_MARGIN = 3;
  *
  * `rail-model.ts` resolves a stop's distance so that a sphere this large around
  * each Body's centre sits wholly inside the frustum. Its floor is the largest
- * radius `scene.tsx` draws — below that a Body clips at its stop — and
+ * radius `stroke-model.ts` draws — below that a Body clips at its stop — and
  * `scene-model.test.ts` asserts it, as it does for `BODY_MARGIN`. Everything
  * above the floor is composition: at today's radii (1 at most) it leaves the
  * Planet two units clear of the frame's edge, so it reads as *in* the frame

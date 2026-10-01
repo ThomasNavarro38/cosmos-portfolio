@@ -1,5 +1,5 @@
 { "$banner": "GENERATED FILE — do not edit by hand. Produced by src/derive/index.ts from src/data/career.json; run `npm run solve` to regenerate. Hand edits are overwritten by the next solve and are not validated by the build gate.",
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "asOf": "2026-09",
   "clients": [
     {
@@ -25,6 +25,11 @@
             "x": -122.0502,
             "y": 11.6181,
             "z": 8.3139
+          },
+          "orbitNormal": {
+            "x": 0,
+            "y": -1,
+            "z": 0
           },
           "content": {
             "client": "SIMSU",
@@ -76,6 +81,11 @@
             "y": 2.8239,
             "z": -81.6705
           },
+          "orbitNormal": {
+            "x": -0.2085,
+            "y": -0.978,
+            "z": 0
+          },
           "content": {
             "client": "Transilien",
             "project": "Stream aggregator-compiler",
@@ -117,6 +127,11 @@
             "x": -89.3272,
             "y": 6.9931,
             "z": -81.6705
+          },
+          "orbitNormal": {
+            "x": -0.2085,
+            "y": -0.978,
+            "z": 0
           },
           "content": {
             "client": "Transilien",
@@ -170,6 +185,11 @@
             "x": 36.145,
             "y": 24.679,
             "z": 65.1858
+          },
+          "orbitNormal": {
+            "x": 0,
+            "y": -1,
+            "z": 0
           },
           "content": {
             "client": "SNCF Connect & Tech",
@@ -227,6 +247,11 @@
             "x": 78.1233,
             "y": -26.3178,
             "z": -30.6403
+          },
+          "orbitNormal": {
+            "x": 0,
+            "y": -1,
+            "z": 0
           },
           "content": {
             "client": "Air France-KLM",
@@ -286,6 +311,11 @@
             "y": -27.3288,
             "z": 1.1937
           },
+          "orbitNormal": {
+            "x": -0.2085,
+            "y": -0.978,
+            "z": 0
+          },
           "content": {
             "client": "SNCF",
             "project": "Client referential",
@@ -342,6 +372,11 @@
             "y": -23.1596,
             "z": 1.1937
           },
+          "orbitNormal": {
+            "x": -0.2085,
+            "y": -0.978,
+            "z": 0
+          },
           "content": {
             "client": "SNCF",
             "project": "File aggregator-transcoder",
@@ -390,6 +425,11 @@
             "x": 142.3499,
             "y": 3.3716,
             "z": 0.7171
+          },
+          "orbitNormal": {
+            "x": 0,
+            "y": -1,
+            "z": 0
           },
           "content": {
             "client": "Decathlon",

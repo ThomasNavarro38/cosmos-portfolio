@@ -552,6 +552,57 @@ test('a Client’s Projects are lifted out of a single flat plane', () => {
   );
 });
 
+// --- Orbit planes (3.2) -----------------------------------------------------
+
+test('every Project gets a unit orbit normal, and no Star gets one', () => {
+  const graph = graphOf(...multiClientEntries());
+  const layout = solve(graph);
+  for (const client of graph.clients) {
+    assert.equal(layout.orbitNormals[client.id], undefined, `the Star "${client.id}" orbits nothing`);
+    for (const project of client.projects) {
+      const normal = layout.orbitNormals[project.id];
+      assert.ok(normal !== undefined, `"${project.id}" has an orbit plane`);
+      assert.ok(Math.abs(Math.hypot(normal.x, normal.y, normal.z) - 1) < 1e-3, `"${project.id}"'s normal is unit`);
+    }
+  }
+});
+
+test('each Project lies in its own orbit plane: the offset from its Star is perpendicular to the normal', () => {
+  // The plane is the one the placement used, not a plane that merely contains the
+  // Planet: the in-plane tangent at the slot, (−sin A, 0, cos A), is horizontal, so
+  // the normal's plane must hold both the offset and a horizontal direction.
+  const graph = graphOf(
+    { ...baseEntry(), client: 'Orbit', project: 'One' },
+    { ...baseEntry(), client: 'Orbit', project: 'Two' },
+    { ...baseEntry(), client: 'Orbit', project: 'Three' },
+  );
+  const layout = solve(graph);
+  const client = graph.clients[0];
+  assert.ok(client !== undefined);
+  const star = positionOf(layout, client.id);
+  for (const project of client.projects) {
+    const here = positionOf(layout, project.id);
+    const normal = layout.orbitNormals[project.id];
+    assert.ok(normal !== undefined);
+    const offset = { x: here.x - star.x, y: here.y - star.y, z: here.z - star.z };
+    const r = Math.hypot(offset.x, offset.y, offset.z);
+    const dot = (offset.x * normal.x + offset.y * normal.y + offset.z * normal.z) / r;
+    assert.ok(Math.abs(dot) < 1e-3, `"${project.id}" sits off its own orbit plane (cos = ${dot})`);
+    // The plane also holds the slot's horizontal tangent (−sin A, 0, cos A), which
+    // is true exactly when the normal's horizontal part (n.x, n.z) is parallel to
+    // the offset's horizontal part (off.x, off.z) — i.e. their 2D cross product
+    // n.x·off.z − n.z·off.x is zero. A plane spun about the offset would contain
+    // the Planet but break this.
+    const cross = normal.x * offset.z - normal.z * offset.x;
+    assert.ok(Math.abs(cross) / r < 1e-3, `"${project.id}"'s plane is spun about its offset`);
+  }
+});
+
+test('the orbit planes are as deterministic as the positions', () => {
+  const graph = graphOf(...multiClientEntries());
+  assert.deepEqual(solve(graph).orbitNormals, solve(graph).orbitNormals);
+});
+
 // --- Rounding ---------------------------------------------------------------
 
 test('every coordinate is rounded to a fixed precision', () => {

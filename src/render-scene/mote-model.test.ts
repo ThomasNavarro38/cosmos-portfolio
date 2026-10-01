@@ -21,6 +21,7 @@ import { DUST_MEDIUM_PEAK_OPACITY, buildDust, mediumAlphaAt, type DustMedium } f
 import { FOCUS_REACH, focusPose } from './focus-model.ts';
 import {
   MOTE_COLOR,
+  MOTE_LABEL_COLOR,
   MOTE_LABEL_CHAR_PX,
   MOTE_LABEL_FONT_PX,
   MOTE_LABEL_GAP_PX,
@@ -84,6 +85,7 @@ function fixture(skills: { a?: readonly string[]; b?: readonly string[] } = {}, 
     isDeep: true,
     mass: 2,
     luminanceBand: 'stroke-near',
+    orbitNormal: { x: 0, y: -1, z: 0 },
     moteTier: 'mote-dense',
     position: shifted(position),
     content: { skills: list },
@@ -1161,7 +1163,16 @@ test('the mote model is pure: no Three, no React, no store, no clock, no tier', 
 
 // --- Colour, from the tokens ---------------------------------------------------------
 
-test('a Mote, dot and label, is stroke-active from the generated tokens (DESIGN.md mote.fillTier1)', () => {
+test('a Mote dot is stroke-active from the generated tokens (DESIGN.md mote.fillTier1)', () => {
   assert.equal(MOTE_COLOR, tokens.colors['stroke-active-dark']);
-  assert.equal(moteLabelStyle().color, MOTE_COLOR);
+});
+
+test('a Mote label is a glyph, so it takes ink-prose — never a stroke token (3.2)', () => {
+  assert.equal(MOTE_LABEL_COLOR, tokens.colors['ink-prose-dark']);
+  assert.equal(moteLabelStyle().color, MOTE_LABEL_COLOR);
+  // Read off the source too: the two dark values coincide, so a label quietly
+  // coloured `MOTE_COLOR` would pass the value check while borrowing a stroke.
+  const style = /export function moteLabelStyle\(\)[\s\S]*?\n\}/.exec(readFileSync(MODEL_TS, 'utf8'))?.[0] ?? '';
+  assert.match(style, /color:\s*MOTE_LABEL_COLOR\b/);
+  assert.doesNotMatch(style, /stroke-/);
 });
