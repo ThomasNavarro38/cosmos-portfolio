@@ -23,7 +23,9 @@
  * **Drawn after the Dust, labelled below the panel.** Every dot carries
  * `BODY_RENDER_ORDER` in the transparent pass writing no depth, so it follows
  * the Dust as a Body does. Each label is a drei `<Html>` with
- * `zIndexRange={[0, 0]}` — under the Focus panel's `zIndex: 1` — and no pointer
+ * `zIndexRange={[1, 1]}` — over the vignette (an unindexed later sibling of the
+ * canvas, which would otherwise darken an edge label below the contrast floor)
+ * and under the Focus panel's `zIndex: 2` — and no pointer
  * events. The labels land inside the canvas root, which is `aria-hidden`, so
  * the Motes are not narrated and no live region exists: the panel and the index
  * are the interface. No connector, no orbit line, no hover, no click.
@@ -80,7 +82,7 @@ export function MoteField({ artifact, bodies, media }: MoteFieldProps) {
         >
           <sphereGeometry args={[MOTE_RADIUS, 12, 8]} />
           <meshBasicMaterial color={MOTE_COLOR} transparent opacity={0} depthWrite={false} />
-          <Html zIndexRange={[0, 0]} pointerEvents="none" style={{ pointerEvents: 'none' }}>
+          <Html zIndexRange={[1, 1]} pointerEvents="none" style={{ pointerEvents: 'none' }}>
             <div
               ref={(label) => {
                 labels.current[index] = label;

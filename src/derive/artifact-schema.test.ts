@@ -18,7 +18,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { buildArtifact } from './artifact.ts';
-import { ArtifactSchema, SCHEMA_VERSION, validateArtifact, type Artifact } from './artifact-schema.ts';
+import { ArtifactSchema, ORBIT_PLANE_TOLERANCE, SCHEMA_VERSION, validateArtifact, type Artifact } from './artifact-schema.ts';
 import { DWELL_TEMPOS } from './dwell.ts';
 import { deriveEntities } from './entities.ts';
 import { solveLayout } from './solve.ts';
@@ -560,7 +560,7 @@ test('every emitted Project carries a unit orbitNormal', () => {
   for (const client of valid(baseEntry(), { ...baseEntry(), project: 'A second system' }).clients) {
     for (const project of client.projects) {
       const { x, y, z } = project.orbitNormal;
-      assert.ok(Math.abs(Math.hypot(x, y, z) - 1) <= 1e-3, `${project.id}'s normal is unit length`);
+      assert.ok(Math.abs(Math.hypot(x, y, z) - 1) <= ORBIT_PLANE_TOLERANCE, `${project.id}'s normal is unit length`);
     }
   }
 });

@@ -42,6 +42,10 @@ export type StrokeStep = (typeof STROKE_STEPS)[number];
 /**
  * The resting band a Planet's `luminanceBand` may name: `stroke-dust` …
  * `stroke-near`. The two brighter steps are camera state, never data.
+ *
+ * Derive's `RESTING_BANDS`, mirrored: this directory may not import
+ * `src/derive/`, so `stroke-model.test.ts` reads that literal as text and pins
+ * the two equal — a band the gate accepts and this refuses would throw at render.
  */
 export const RESTING_STEPS: readonly StrokeStep[] = ['stroke-dust', 'stroke-rest', 'stroke-near'];
 
@@ -54,10 +58,12 @@ export type StrokeWeightKey = keyof (typeof tokens)['components']['stroke-weight
  *
  * The tokens carry weights as CSS strings (3.1 deferred the parse here). A value
  * that is not exactly `<n>px` throws naming the key: a weight read as `NaN`
- * would draw a line of no width, silently.
+ * would draw a line of no width, silently. The key is typed, so a misspelt weight
+ * fails the type check rather than the render; the runtime check still guards a
+ * key that reaches here untyped.
  */
 export function strokeWidthPx(
-  key: string,
+  key: StrokeWeightKey,
   weights: Readonly<Record<string, string>> = tokens.components['stroke-weight'],
 ): number {
   const value = Object.hasOwn(weights, key) ? weights[key] : undefined;
@@ -344,7 +350,9 @@ export interface VignetteStyle {
 
 /**
  * The vignette: a radial gradient of `vignette-dark` over the whole frame, 0
- * opacity inside 42% of the radius rising to 0.9 at the edge (DESIGN.md §5).
+ * opacity inside 42% of the radius rising to 0.9 at the corners (DESIGN.md §5). The
+ * gradient is sized to the farthest corner, so the middle of each edge stops short
+ * of 0.9 — the corners are what darken most.
  *
  * Written with `color-mix` against `transparent`, so the colour is the token and
  * the opacity a percentage — no `rgb(`, `hsl(` or `#` in this file, and the
