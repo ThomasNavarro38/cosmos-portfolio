@@ -1,11 +1,13 @@
 /**
  * The Bodies, rendered as line-art (3.2): a camera-facing outline circle per
- * Body, a filled core dot on each Star, a hidden hit sphere per Body that hands
- * its click to `activateBody`, every Planet's orbit and the Rail.
+ * Body, a filled core dot on each Star, the Ring on each Deep Planet (3.3), a
+ * hidden hit sphere per Body that hands its click to `activateBody`, every
+ * Planet's orbit and the Rail.
  *
  * **A binding, and nothing else.** Every rule — which token and weight each line
  * takes, which one Body is white this frame, the circle, orbit and Rail geometry
- * — lives in `stroke-model.ts` and `rail-model.ts`, where `node --test` executes
+ * — lives in `stroke-model.ts` and `rail-model.ts`, and which Planet carries a
+ * Ring and how it is drawn in `notable-model.ts`, where `node --test` executes
  * it. This file cannot be loaded by that runner (`.tsx`), so it is held to what
  * is left by `auditBodyField` in `scene-model.test.ts`.
  *
@@ -16,8 +18,8 @@
  * snapshot — a string or `null`, so equal snapshots are equal by `Object.is`.
  * No frame loop, and no write to the store.
  *
- * **Drawn after the Dust.** Every visible draw — outline, core dot, orbit, Rail
- * — carries `BODY_RENDER_ORDER` with a `transparent` material at opacity 1, so
+ * **Drawn after the Dust.** Every visible draw — outline, Ring, core dot, orbit,
+ * Rail — carries `BODY_RENDER_ORDER` with a `transparent` material at opacity 1, so
  * three sorts it into the transparent pass after the Dust. The hit spheres are
  * `visible={false}`: three's raycaster tests them all the same, and they draw
  * nothing. No light reaches any of it: every material is unlit.
@@ -27,6 +29,7 @@ import { Billboard, Line } from '@react-three/drei';
 import { useSyncExternalStore } from 'react';
 import { navigationStore } from '../shell/state.ts';
 import { RAIL_LINE_SAMPLES_PER_SEGMENT, railLine, type Rail } from './rail-model.ts';
+import { notableRings } from './notable-model.ts';
 import { activateBody } from './scene-pick.ts';
 import { BODY_RENDER_ORDER, type Body } from './scene-model.ts';
 import { CIRCLE_SEGMENTS, bodyRadius, bodyStroke, circlePoints, coreDots, sceneLines, sceneSubject } from './stroke-model.ts';
@@ -64,6 +67,17 @@ export function BodyField({ bodies, rail }: BodyFieldProps) {
               opacity={1}
               renderOrder={BODY_RENDER_ORDER}
             />
+            {notableRings(body).map((ring) => (
+              <Line
+                key={ring.id}
+                points={ring.points}
+                color={ring.color}
+                lineWidth={ring.widthPx}
+                transparent
+                opacity={1}
+                renderOrder={BODY_RENDER_ORDER}
+              />
+            ))}
             {coreDots(body, subject).map((dot) => (
               <mesh key={dot.id} renderOrder={BODY_RENDER_ORDER}>
                 <circleGeometry args={[dot.radius, 24]} />

@@ -37,7 +37,9 @@
  * (`scene-pick.ts`): a Star flies to its Client, a Planet enters Focus. The
  * camera's moves live with the rig (`<RailCamera>`, every rule in
  * `rail-model.ts`), and the focused Project's Motes with `<MoteField>`, mounted
- * after the rig so it projects through the camera the rig has just moved. The
+ * after the rig so it projects through the camera the rig has just moved. Each
+ * Deep Planet's Ring is `<BodyField>`'s, and its Moon `<MoonField>`'s (3.3),
+ * mounted after `<BodyField>` — every rule in `notable-model.ts`. The
  * `camera` prop stays keyframe 0, so the first frame is the opening frame
  * whether or not the rig has run yet.
  *
@@ -65,6 +67,7 @@ import {
   mediumFalloff,
   mediumSpriteScale,
 } from './dust-model.ts';
+import { MoonField } from './moon-field.tsx';
 import { MoteField } from './mote-field.tsx';
 import type { MoteArtifact } from './mote-model.ts';
 import { RailCamera } from './rail-camera.tsx';
@@ -181,6 +184,8 @@ export function Scene({ artifact }: SceneProps) {
         ))}
         {/* The Bodies, their orbits and the Rail: after the Dust in draw order, one subject white. */}
         <BodyField bodies={bodies} rail={rail} />
+        {/* The Moons: one per Deep Planet, after the Bodies and the rig, held at their pixel floor. They read no store. */}
+        <MoonField bodies={bodies} />
       </Canvas>
       {/* The vignette: the ground over the frame's edge, 0 inside 42% rising to 0.9. Inert, and not narrated. */}
       <div aria-hidden="true" style={vignetteStyle()} />

@@ -708,3 +708,9 @@ leaves open.
 ## Deferred from: code review of spec-3-2-the-stroke-and-ink-ladders-applied-to-the-scene.md (2026-10-01)
 
 - Source-tree audits race mutant files: tests that write mutants into `src/` (`loadMutant`-style, e.g. `src/shell/*.test.ts`) run in parallel with walks such as `sourceFiles()` in `scene-model.test.ts`; one run in four failed `only the pacing surfaces reference the reduced-motion preference`. Pre-existing — write mutants outside `src/` or exclude them from the walk.
+
+## Deferred from: code review of spec-3-3-the-deep-shallow-signal-moon-and-ring.md (2026-10-01)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-3-the-deep-shallow-signal-moon-and-ring.md`
+  summary: A Deep Planet's Ring (2.2 × r) and Moon (2 × r out) are visible, filled-looking marks outside the Body's hit sphere (`bodyRadius(body)`), so clicking them does nothing; decide with 3.4's hover/keyboard affordance whether the hit target grows to the Ring.
+  evidence: `body-field.tsx` hit sphere is `sphereGeometry args={[bodyRadius(body), …]}`; 3.3's spec puts click semantics under Ask First, so it was not changed here.

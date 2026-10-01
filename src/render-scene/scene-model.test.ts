@@ -62,6 +62,8 @@ const MOTE_MODEL_TS = fileURLToPath(new URL('./mote-model.ts', import.meta.url))
 const MOTE_FIELD_TSX = fileURLToPath(new URL('./mote-field.tsx', import.meta.url));
 const STROKE_MODEL_TS = fileURLToPath(new URL('./stroke-model.ts', import.meta.url));
 const BODY_FIELD_TSX = fileURLToPath(new URL('./body-field.tsx', import.meta.url));
+const NOTABLE_MODEL_TS = fileURLToPath(new URL('./notable-model.ts', import.meta.url));
+const MOON_FIELD_TSX = fileURLToPath(new URL('./moon-field.tsx', import.meta.url));
 const SRC_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SCENE_HOST_TSX = fileURLToPath(new URL('../shell/scene-host.tsx', import.meta.url));
 const APP_TSX = fileURLToPath(new URL('../App.tsx', import.meta.url));
@@ -801,7 +803,7 @@ test('no module here imports src/data/, src/derive/, the solver, or zustand/reac
   // package, so `zustand/react` and `zustand/vanilla` are both `zustand`, and a row
   // banning `zustand` would reject the navigation store this directory's README
   // explicitly permits.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX, NOTABLE_MODEL_TS, MOON_FIELD_TSX]) {
     assert.deepEqual(auditForbiddenImports(readFileSync(path, 'utf8')), [], `${path} must hold no forbidden import`);
   }
 });
@@ -833,6 +835,12 @@ test('the forbidden-import audit rejects each form, so it is a ratchet rather th
   }
 });
 
+/**
+ * An assignment to, or a default of, `isDeep` (`=`, `??`, `??=`, `||`, `||=`) —
+ * never a comparison or a condition, which read it.
+ */
+const ISDEEP_WRITE = /\bisDeep\s*=(?!=)|\bisDeep\s*\?\?|\bisDeep\s*\|\|/;
+
 test('the scene holds no classification or mapping-rule vocabulary of its own', () => {
   // The three mapping rules live in `src/derive/rules.ts` and nowhere else. A name
   // like `classify` or `luminanceFor` in this directory is how a fourth rule arrives
@@ -843,11 +851,25 @@ test('the scene holds no classification or mapping-rule vocabulary of its own', 
   // A case-insensitive `\balpha\b` ban was dropped from this list deliberately — over
   // a pure-structure module it cannot fail by construction, and it would misfire on a
   // future token name or on a fixture Client named Alpha.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX, NOTABLE_MODEL_TS, MOON_FIELD_TSX]) {
     const code = codeOf(path);
     assert.doesNotMatch(code, /\bclassify\w*\s*\(|\bfunction\s+classify/i, 'no classification test');
     assert.doesNotMatch(code, /\b(?:luminance|mote|mass|rail)(?:Band|Tier|Of|For|From)?\s*\(/i, 'no mapping computed');
-    assert.doesNotMatch(code, /\bisDeep\s*=\s*|\bisDeep\s*\?\?/, 'depth is read, never assigned or defaulted');
+    assert.doesNotMatch(code, ISDEEP_WRITE, 'depth is read, never assigned or defaulted');
+  }
+  // A comparison is a read (3.3's `body.isDeep === true`); an assignment or a default is not.
+  for (const form of [
+    'body.isDeep = true;',
+    'const isDeep = notable !== null;',
+    'const d = body.isDeep ?? false;',
+    '{ isDeep=1 }',
+    'const d = body.isDeep || false;',
+    'body.isDeep ||= true;',
+  ]) {
+    assert.match(form, ISDEEP_WRITE, `${form} must be rejected`);
+  }
+  for (const form of ['body.isDeep === true', 'body.isDeep !== true', 'body.isDeep == true', 'const mark = body.isDeep ? ring : none;']) {
+    assert.doesNotMatch(form, ISDEEP_WRITE, `${form} reads and must pass`);
   }
 });
 
@@ -1032,13 +1054,16 @@ test('the drawn radius discriminates on kind, never on a missing mass', () => {
  *
  *   - **One subscription, by selector**: exactly
  *     `const subject = useSyncExternalStore(navigationStore.subscribe, () => sceneSubject(navigationStore.getState(), rail))`.
- *   - **Lines only from named model functions**: exactly two `<Line>`s — one per
+ *   - **Lines only from named model functions**: exactly three `<Line>`s — one per
  *     `sceneLines(bodies, railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT))` entry,
  *     drawn in that line's points, colour and weight; and one outline per Body, in
  *     a `<Billboard>`, on `circlePoints(CIRCLE_SEGMENTS, bodyRadius(body))`,
  *     coloured and weighted by `bodyStroke(body, subject)`.
  *   - **Core dots from `coreDots(body, subject)`**, a `circleGeometry` of the dot's
  *     radius in the dot's colour.
+ *   - **The Ring (3.3) from `notableRings(body)`**, a third `<Line>` inside the
+ *     Body's billboard, in the ring's points, colour and weight — handed the Body
+ *     alone, never the subject, so it is at rest and always.
  *   - **Draw order**: every visible draw at `BODY_RENDER_ORDER`, `transparent` at
  *     opacity 1 — after the Dust — and nothing else carries a `renderOrder`.
  */
@@ -1083,7 +1108,7 @@ function auditBodyField(source: string): string[] {
     failures.push('does not import exactly { Billboard, Line } from drei');
   }
   const lines = (code.match(/<Line\b[\s\S]*?\/>/g) ?? []).map(squash);
-  if (lines.length !== 2) failures.push(`draws ${lines.length} <Line> elements — one for the scene's hairlines, one per Body outline`);
+  if (lines.length !== 3) failures.push(`draws ${lines.length} <Line> elements — one for the scene's hairlines, one per Body outline, one per Ring`);
   const sceneBlocks = mapBlocks(code, 'sceneLines\\(\\s*bodies\\s*,\\s*railLine\\(\\s*rail\\s*,\\s*RAIL_LINE_SAMPLES_PER_SEGMENT\\s*\\)\\s*\\)');
   const sceneLine = squash(sceneBlocks[0]?.match(/<Line\b[\s\S]*?\/>/)?.[0] ?? '');
   if (sceneBlocks.length !== 1 || !/^sceneLines\([^)]*\)\)\s*\.\s*map\(\s*\(\s*line\s*\)\s*=>/.test(squash(sceneBlocks[0] ?? ''))) {
@@ -1126,6 +1151,29 @@ function auditBodyField(source: string): string[] {
     failures.push('the hit sphere is not the drawn radius, bodyRadius(body)');
   }
 
+  // The Ring (3.3): one per `notableRings(body)` entry, inside the billboard, handed
+  // the Body alone — never the subject — and drawn in the ring's own geometry.
+  const ringBlocks = mapBlocks(code, 'notableRings\\(\\s*body\\s*\\)');
+  if (ringBlocks.length !== 1 || (code.match(/\bnotableRings\s*\(/g) ?? []).length !== 1 || !billboard.includes('notableRings(')) {
+    failures.push('the Rings are not notableRings(body), once, inside the billboard');
+  }
+  const ringBlock = squash(ringBlocks[0] ?? '');
+  if (!/^notableRings\(\s*body\s*\)\s*\.\s*map\(\s*\(\s*ring\s*\)\s*=>/.test(ringBlock)) failures.push('the Rings are not mapped as (ring)');
+  const ringLine = ringBlock.match(/<Line\b[\s\S]*?\/>/)?.[0] ?? '';
+  for (const [attribute, expected] of [
+    ['key', 'ring.id'],
+    ['points', 'ring.points'],
+    ['color', 'ring.color'],
+    ['lineWidth', 'ring.widthPx'],
+  ] as const) {
+    if (!new RegExp(`\\b${attribute}=\\{\\s*${expected.replace('.', '\\.')}\\s*\\}`).test(ringLine)) {
+      failures.push(`a Ring's ${attribute} is not ${expected}`);
+    }
+  }
+  if (!/import\s*\{\s*notableRings\s*\}\s*from\s*'\.\/notable-model\.ts'/.test(quoted)) {
+    failures.push('notableRings is not imported from the notable model');
+  }
+
   // Core dots.
   const dotBlocks = mapBlocks(code, 'coreDots\\(\\s*body\\s*,\\s*subject\\s*\\)');
   if (dotBlocks.length !== 1 || !billboard.includes('coreDots(')) failures.push('the core dots are not coreDots(body, subject), inside the billboard');
@@ -1144,15 +1192,16 @@ function auditBodyField(source: string): string[] {
     if (!/\btransparent(?:\s*=\s*\{\s*true\s*\}|(?![\w-]|\s*=))/.test(material)) failures.push('a core dot is opaque');
     if (!/\bopacity=\{\s*1\s*\}/.test(material)) failures.push('a core dot is not at opacity 1');
   }
-  // `renderOrder` sits on the three audited draws and nowhere else.
+  // `renderOrder` sits on the four audited draws — the scene hairlines, the outline,
+  // the Ring and the core dot — and nowhere else.
   const orders = code.match(/\brenderOrder\s*=\s*\{?\s*([^}\s]*)/g) ?? [];
-  if (orders.length !== 3 || orders.some((order) => !/BODY_RENDER_ORDER/.test(order))) {
-    failures.push('a renderOrder other than the two lines’ and the core dot’s BODY_RENDER_ORDER');
+  if (orders.length !== 4 || orders.some((order) => !/BODY_RENDER_ORDER/.test(order))) {
+    failures.push('a renderOrder other than the three lines’ and the core dot’s BODY_RENDER_ORDER');
   }
-  // Every colour comes from the model: a line's, a stroke's, a dot's.
+  // Every colour comes from the model: a line's, a stroke's, a ring's, a dot's.
   for (const match of code.matchAll(/\bcolor=\{\s*([^}]*?)\s*\}/g)) {
-    if (!['line.color', 'bodyStroke(body, subject).color', 'dot.color'].includes(squash(match[1] ?? ''))) {
-      failures.push(`colour {${match[1]}} is not the stroke model's`);
+    if (!['line.color', 'bodyStroke(body, subject).color', 'ring.color', 'dot.color'].includes(squash(match[1] ?? ''))) {
+      failures.push(`colour {${match[1]}} is not the stroke or the notable model's`);
     }
   }
   if (/\bink-|\btokens\b/.test(quoted)) failures.push('reads a token directly — every colour comes from the stroke model, and no ink is a line');
@@ -1162,6 +1211,9 @@ function auditBodyField(source: string): string[] {
 test('the Bodies’ binding draws the stroke model and holds no rule of its own', () => {
   assert.deepEqual(auditBodyField(readFileSync(BODY_FIELD_TSX, 'utf8')), []);
 });
+
+/** The Ring's whole map block in the shipped binding, for the mutations below. */
+const RING_BLOCK = /\s*\{notableRings\(body\)\.map\(\(ring\) => \([\s\S]*?\/>\s*\)\)\}/;
 
 test('the Bodies’ binding audit rejects the real binding with any one guarantee broken', () => {
   const real = readFileSync(BODY_FIELD_TSX, 'utf8');
@@ -1202,6 +1254,21 @@ test('the Bodies’ binding audit rejects the real binding with any one guarante
     ['the dots on every Body', (s) => s.replace('coreDots(body, subject)', 'coreDots(body, body.id)')],
     ['a literal order', (s) => s.replace('renderOrder={BODY_RENDER_ORDER}', 'renderOrder={3}')],
     ['a coordinate literal', (s) => s.replace('return (', 'const home = [0, 0, 40];\n  return (')],
+    // The Ring (3.3).
+    ['the Ring not drawn', (s) => s.replace(RING_BLOCK, '')],
+    ['the Ring outside the billboard', (s) => s.replace(RING_BLOCK, '').replace('</Billboard>', `</Billboard>${RING_BLOCK.exec(s)?.[0] ?? ''}`)],
+    ['the Ring drawn twice', (s) => s.replace(RING_BLOCK, (block) => `${block}${block}`)],
+    ['the Ring read off the subject', (s) => s.replace('notableRings(body)', 'notableRings(body, subject)')],
+    ['the Ring on every Body', (s) => s.replace('notableRings(body)', 'notableRings({ ...body, isDeep: true })')],
+    ['a Ring colour invented', (s) => s.replace('color={ring.color}', 'color={RING}')],
+    ['a Ring in a hairline’s colour', (s) => s.replace('color={ring.color}', 'color={line.color}')],
+    ['a Ring weight invented', (s) => s.replace('lineWidth={ring.widthPx}', 'lineWidth={2}')],
+    ['the Ring off its circle', (s) => s.replace('points={ring.points}', 'points={circlePoints(CIRCLE_SEGMENTS, 3)}')],
+    ['a Ring keyed by a constant', (s) => s.replace('key={ring.id}', 'key="ring"')],
+    ['a Ring fades', (s) => s.replace(/(lineWidth=\{ring\.widthPx\}\s*transparent\s*)opacity=\{1\}/, '$1opacity={0.4}')],
+    ['a Ring loses its order', (s) => s.replace(/(lineWidth=\{ring\.widthPx\}\s*transparent\s*opacity=\{1\}\s*)renderOrder=\{BODY_RENDER_ORDER\}/, '$1')],
+    ['a Ring goes opaque', (s) => s.replace(/(lineWidth=\{ring\.widthPx\}\s*)transparent\s*/, '$1')],
+    ['the Ring import dropped', (s) => s.replace("import { notableRings } from './notable-model.ts';", '')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);
@@ -1515,7 +1582,7 @@ function auditConnectors(code: string): string[] {
 test('no module but the Bodies’ binding draws a line, edge, or connector', () => {
   // The Rail's files too: the Rail is drawn by `body-field.tsx` from `railLine`, and
   // a second, hand-made line elsewhere would be one no audit reads.
-  for (const path of [SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS]) {
+  for (const path of [SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, NOTABLE_MODEL_TS, MOON_FIELD_TSX]) {
     assert.deepEqual(auditConnectors(readFileSync(path, 'utf8')), [], `${path}: lines are body-field.tsx's alone`);
   }
 });
@@ -1641,6 +1708,17 @@ function auditDrawOrder(source: string): string[] {
   if (mapBlocks(code, 'bodies').length > 0) {
     failures.push('maps the Bodies here — a Body drawn outside <BodyField> is under no draw-order rule');
   }
+  // The Moons (3.3) are `<MoonField>`'s, held by `auditMoonField` (every Moon at
+  // `MOON_RENDER_ORDER`, transparent at opacity 1). Here: mounted exactly once,
+  // inside the Canvas, with the Bodies, after `<BodyField>` — so after the rig too.
+  if (!/<MoonField\s+bodies=\{\s*bodies\s*\}\s*\/>/.test(inside)) {
+    failures.push('the Moons are not drawn — <MoonField bodies={bodies} /> is not mounted inside the Canvas');
+  }
+  if ((code.match(/<MoonField\b/g) ?? []).length !== 1) failures.push('the Moons are mounted other than once');
+  const bodyMount = inside.search(/<BodyField\b/);
+  const moonMount = inside.search(/<MoonField\b/);
+  if (bodyMount < 0 || moonMount < 0 || moonMount < bodyMount) failures.push('the Moons are not mounted after the Bodies');
+  if (!/import\s*\{\s*MoonField\s*\}\s*from\s*'\.\/moon-field\.tsx'/.test(blankComments(source))) failures.push('MoonField is not imported');
 
   // The medium is drawn at the model's radius through the model's own scale, so the
   // non-overlap and ceiling proofs over `radius` are proofs about the screen too.
@@ -1746,6 +1824,14 @@ test('the draw-order audit rejects the real renderer with any one of its guarant
       'a second, unaudited particles block',
       (s) => s.replace('<BodyField bodies', '{particles.map((p) => <mesh key={p.id}><meshBasicMaterial /></mesh>)}\n        <BodyField bodies'),
     ],
+    // The Moons (3.3).
+    ['the Moons unmounted', (s) => s.replace('<MoonField bodies={bodies} />', '')],
+    ['the Moons mounted twice', (s) => s.replace('<MoonField bodies={bodies} />', '<MoonField bodies={bodies} />\n        <MoonField bodies={bodies} />')],
+    ['the Moons outside the Canvas', (s) => s.replace('<MoonField bodies={bodies} />', '').replace('</Canvas>', '</Canvas>\n      <MoonField bodies={bodies} />')],
+    ['the Moons without the Bodies', (s) => s.replace('<MoonField bodies={bodies} />', '<MoonField bodies={[]} />')],
+    ['the Moons before the Bodies', (s) => s.replace('<MoonField bodies={bodies} />', '').replace('<BodyField bodies', '<MoonField bodies={bodies} />\n        <BodyField bodies')],
+    ['the Bodies unmounted, the Moons kept', (s) => s.replace('<BodyField bodies={bodies} rail={rail} />', '')],
+    ['the Moons given an order', (s) => s.replace('<MoonField bodies={bodies} />', '<MoonField renderOrder={DUST_RENDER_ORDER} bodies={bodies} />')],
     [
       'a second, unaudited bodies block',
       (s) =>
@@ -2084,7 +2170,7 @@ test('neither Rail file, nor the focus model, nor the Motes’ renderer, holds a
   // triples by nature, and this scan cannot tell them from a place. What the scan
   // stands for is proven there instead, by execution — translating every Body
   // translates every Mote (`mote-model.test.ts`).
-  for (const path of [RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX]) {
+  for (const path of [RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX, NOTABLE_MODEL_TS, MOON_FIELD_TSX]) {
     assert.deepEqual(coordinateLiterals(codeOf(path)), [], `${path} must resolve every pose from entities`);
   }
 });
@@ -2602,6 +2688,256 @@ test('the Mote mount audit rejects the real scene with any one guarantee removed
   }
 });
 
+// --- The Moons (3.3) --------------------------------------------------------
+
+/**
+ * `moon-field.tsx`'s contract, as a pure function over its source.
+ *
+ * Every rule of the Moon — which Planets carry one, where, how large, in what
+ * colour, and its pixel floor — is executed in `notable-model.test.ts`; this
+ * holds the binding. Negatively: no store read of any kind (a Moon depends on
+ * `isDeep` alone, never on where the visitor is), no store write or named event,
+ * no reactive state or effect, no DOM, no interaction, no ordering or selection,
+ * no connector, no coordinate literal, no authored or band read. Positively: one
+ * `notableMoons(bodies)`; a frame loop that is *exactly* — update the camera's
+ * matrices, then each Moon's `moonScale` from both matrices and R3F's canvas
+ * height, written with `applyMoonScale` to its own pooled mesh; one positioned
+ * group per Moon at its Planet, a camera-facing `<Billboard>`, and in it one
+ * mesh at the Moon's billboard-local centre, at `MOON_RENDER_ORDER` (one above
+ * the Ring's `BODY_RENDER_ORDER`, so the overlap never flickers), a circle of
+ * the Moon's radius in an unlit `transparent` material at opacity 1 in the
+ * Moon's colour.
+ */
+function auditMoonField(source: string): string[] {
+  const code = blankProse(source);
+  const quoted = blankComments(source);
+  const squash = (text: string) => text.replace(/\s+/g, ' ');
+  const failures: string[] = [];
+
+  if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) failures.push('writes the store with setState');
+  if (/\b(?:advanceScroll|selectClient|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation|activateClient|activateProject|activateBody)\b/.test(code)) {
+    failures.push('names a navigation event — a Moon writes only its own mesh');
+  }
+  if (/\bnavigationStore\b|\bgetState\b|\buseStore\b|\bsubscribe\b|\buseSyncExternalStore\b|\buseShallow\b|\bsceneSubject\b|\bsubject\b/.test(code) || /['"]zustand(?:\/react)?|shell\/state/.test(quoted)) {
+    failures.push('reads the navigation state — a Moon is at rest and always, on isDeep alone');
+  }
+  if (/\buseThree\b|\buseState\b|\buseReducer\b|\buseEffect\b|\buseLayoutEffect\b|\buseMemo\b/.test(code)) {
+    failures.push('holds reactive state or an effect — the meshes are refs, the loop is useFrame');
+  }
+  if (/\bwindow\b|\bdocument\b|innerWidth|innerHeight|getBoundingClientRect|addEventListener|matchMedia/.test(code)) {
+    failures.push('reads the DOM — the height arrives as R3F’s size');
+  }
+  if (/\braycast\w*|\bonClick\b|\bonPointer\w+|\bonWheel\b|\bonScroll\b|\bonDoubleClick\b|\bonContextMenu\b/i.test(code)) {
+    failures.push('handles an interaction — a Moon is never hovered or clicked');
+  }
+  if (/\.sort\s*\(|\.filter\s*\(|\.reverse\s*\(|\.slice\s*\(|\.find\s*\(/.test(code)) {
+    failures.push('orders or selects — which Planets carry a Moon is the model’s');
+  }
+  if (/\bisDeep\b|\bnotable\b|\bcontent\b|\bluminanceBand\b|\bmass\b|\bbodyStroke\b|\bbodyRadius\b/.test(code)) {
+    failures.push('reads a field or a rule — every Moon value comes from notableMoons');
+  }
+  if (/\b(?:ambient|directional|point|spot|hemisphere)Light\b|\bmeshStandardMaterial\b|\bmeshPhongMaterial\b|\bmeshLambertMaterial\b/.test(code)) {
+    failures.push('lights or shades a Moon — every material is unlit');
+  }
+  failures.push(...auditConnectors(source));
+  failures.push(...coordinateLiterals(code));
+
+  if ((code.match(/\bnotableMoons\s*\(/g) ?? []).length !== 1 || !/const\s+moons\s*=\s*notableMoons\(\s*bodies\s*\)\s*;/.test(code)) {
+    failures.push('the Moons are not notableMoons(bodies), once');
+  }
+  if (!/const\s+meshes\s*=\s*useRef<\(\s*Mesh\s*\|\s*null\s*\)\[\]>\(\s*\[\s*\]\s*\)/.test(code)) failures.push('the meshes are not a ref that starts empty');
+  if (!/import\s*\{\s*MOON_RENDER_ORDER\s*,\s*applyMoonScale\s*,\s*moonScale\s*,\s*notableMoons\s*\}\s*from\s*'\.\/notable-model\.ts'/.test(quoted)) {
+    failures.push('the notable model is not imported as { MOON_RENDER_ORDER, applyMoonScale, moonScale, notableMoons }');
+  }
+  if (!/import\s*\{\s*Billboard\s*\}\s*from\s*'@react-three\/drei'/.test(quoted)) failures.push('does not import exactly { Billboard } from drei');
+
+  const loop = /\buseFrame\s*\(\s*\(\s*\{\s*camera\s*,\s*size\s*\}\s*\)\s*=>\s*\{([\s\S]*?)\}\s*\)\s*;/.exec(code);
+  if (loop === null) {
+    failures.push('runs no frame loop taking ({ camera, size })');
+  } else {
+    const statements = (loop[1] ?? '')
+      .split(';')
+      .map((statement) => statement.replace(/\s+/g, ''))
+      .filter((statement) => statement !== '');
+    const expected = [
+      'camera.updateMatrixWorld()',
+      'moons.forEach((moon,index)=>applyMoonScale(meshes.current[index],moonScale(moon,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size.height)))',
+    ];
+    if (JSON.stringify(statements) !== JSON.stringify(expected)) {
+      failures.push(
+        'the frame loop is not exactly: camera.updateMatrixWorld(), then every Moon’s moonScale(moon, ' +
+          'camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.height) applied to its own mesh',
+      );
+    }
+  }
+  if ((code.match(/\buseFrame\s*\(/g) ?? []).length !== 1) failures.push('runs other than one frame loop');
+
+  const blocks = mapBlocks(code, 'moons');
+  if (blocks.length !== 1) failures.push(`maps the Moons ${blocks.length} times — one pooled mesh per Moon`);
+  const block = squash(blocks[0] ?? '');
+  if (!/^moons\.map\(\s*\(\s*moon\s*,\s*index\s*\)\s*=>\s*\(\s*<group key=\{\s*moon\.id\s*\} position=\{\s*\[\s*moon\.position\.x\s*,\s*moon\.position\.y\s*,\s*moon\.position\.z\s*\]\s*\}\s*>\s*<Billboard>\s*<mesh\b/.test(block)) {
+    failures.push('a Moon is not a mesh in a <Billboard> in a group keyed by its id at [moon.position.x, moon.position.y, moon.position.z]');
+  }
+  if ((block.match(/<group\b/g) ?? []).length !== 1 || (block.match(/<Billboard\b/g) ?? []).length !== 1) {
+    failures.push('a Moon is drawn other than in one positioned, camera-facing group');
+  }
+  const meshes = block.match(/<mesh\b[\s\S]*?>\s*</g) ?? [];
+  if (meshes.length !== 1 || (code.match(/<mesh\b/g) ?? []).length !== 1) failures.push('not one mesh per Moon');
+  const mesh = meshes[0] ?? '';
+  if (!/\bref=\{\s*\(\s*mesh\b[^)]*\)\s*=>\s*\{\s*meshes\.current\[\s*index\s*\]\s*=\s*mesh\s*;?\s*\}\s*\}/.test(mesh)) {
+    failures.push('a Moon’s mesh is not stored at its pool index');
+  }
+  if (!/\bposition=\{\s*\[\s*moon\.center\[0\]\s*,\s*moon\.center\[1\]\s*,\s*moon\.center\[2\]\s*\]\s*\}/.test(mesh)) {
+    failures.push('a Moon is not at its billboard-local centre — the scale would move it off its Ring');
+  }
+  if (/\bscale\s*=/.test(code)) failures.push('a Moon carries a scale prop — the frame loop alone scales it, so a re-render cannot reset it');
+  if (!/\brenderOrder=\{\s*MOON_RENDER_ORDER\s*\}/.test(mesh)) {
+    failures.push('a Moon is not drawn at MOON_RENDER_ORDER — after the Dust, and over its coplanar Ring');
+  }
+  if ((code.match(/\brenderOrder\s*=/g) ?? []).length !== 1) failures.push('a renderOrder other than the Moon’s');
+  if (!/<circleGeometry\s+args=\{\s*\[\s*moon\.radius\s*,/.test(block)) failures.push('a Moon is not a circle of the Moon’s radius');
+  const materials = code.match(/<\w+Material\b[^>]*>/g) ?? [];
+  if (materials.length !== 1) failures.push('a Moon is not drawn with exactly one material');
+  for (const material of materials) {
+    if (!/^<meshBasicMaterial\b/.test(material)) failures.push('a Moon material is lit');
+    if (!/\bcolor=\{\s*moon\.color\s*\}/.test(material)) failures.push('a Moon is not drawn in the Moon’s colour');
+    if (!/\btransparent(?:\s*=\s*\{\s*true\s*\}|(?![\w-]|\s*=))/.test(material)) failures.push('a Moon is opaque — three draws the opaque list first, before the Dust');
+    if (!/\bopacity=\{\s*1\s*\}/.test(material)) failures.push('a Moon is not at opacity 1 — opacity is never the signal');
+  }
+  if (/\btokens\b|\bstroke-|\bink-/.test(quoted)) failures.push('reads a token directly — the Moon’s colour is the model’s');
+  return failures;
+}
+
+test('the Moons’ renderer binds the notable model and holds no rule of its own', () => {
+  assert.deepEqual(auditMoonField(readFileSync(MOON_FIELD_TSX, 'utf8')), []);
+});
+
+test('the Moon audit rejects the real renderer with any one guarantee broken', () => {
+  const real = readFileSync(MOON_FIELD_TSX, 'utf8');
+  const SCALE = 'moonScale(moon, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.height)';
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['a store write', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    navigationStore.setState({ focusedProjectId: null });')],
+    ['a named event', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    releaseFocus();')],
+    ['a store read', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    const state = navigationStore.getState();')],
+    ['a subscription', (s) => s.replace('const moons = notableMoons(bodies);', 'const subject = useSyncExternalStore(navigationStore.subscribe, () => null);\n  const moons = notableMoons(bodies);')],
+    ['the Moons read off the subject', (s) => s.replace('notableMoons(bodies)', 'notableMoons(bodies, subject)')],
+    ['reactive state', (s) => s.replace('const moons = notableMoons', 'const [, force] = useState(0);\n  const moons = notableMoons')],
+    ['memoised Moons', (s) => s.replace('const moons = notableMoons(bodies);', 'const moons = useMemo(() => notableMoons(bodies), [bodies]);')],
+    ['useThree', (s) => s.replace('const moons = notableMoons', 'const { size } = useThree();\n  const moons = notableMoons')],
+    ['a DOM read', (s) => s.replace('size.height)', 'window.innerHeight)')],
+    ['a constant height', (s) => s.replace('size.height)', '800)')],
+    ['the width for the height', (s) => s.replace('size.height)', 'size.width)')],
+    ['stale matrices', (s) => s.replace('camera.updateMatrixWorld();', '')],
+    ['the matrices swapped', (s) => s.replace('camera.matrixWorldInverse.elements, camera.projectionMatrix.elements', 'camera.projectionMatrix.elements, camera.matrixWorldInverse.elements')],
+    ['the world matrix for the view', (s) => s.replace('camera.matrixWorldInverse.elements', 'camera.matrixWorld.elements')],
+    ['no floor', (s) => s.replace(SCALE, '1')],
+    ['the wrong mesh', (s) => s.replace('applyMoonScale(meshes.current[index]', 'applyMoonScale(meshes.current[0]')],
+    ['nothing applied', (s) => s.replace(/\n\s*moons\.forEach\([^\n]*\n/, '\n')],
+    ['a second frame loop', (s) => s.replace('return (', 'useFrame(() => undefined);\n  return (')],
+    ['a deep read', (s) => s.replace('const moons = notableMoons(bodies);', 'const moons = notableMoons(bodies.filter((body) => body.isDeep === true));')],
+    ['a band read', (s) => s.replace('color={moon.color}', 'color={bodies[0]?.luminanceBand}')],
+    ['a token read directly', (s) => s.replace('color={moon.color}', "color={tokens.colors['stroke-active-dark']}")],
+    ['a lit Moon', (s) => s.replace('<meshBasicMaterial', '<meshStandardMaterial')],
+    ['a light', (s) => s.replace('<Billboard>', '<ambientLight />\n          <Billboard>')],
+    ['a Moon fades', (s) => s.replace('opacity={1}', 'opacity={0.6}')],
+    ['an opaque Moon', (s) => s.replace('transparent opacity={1}', 'opacity={1}')],
+    ['no draw order', (s) => s.replace('renderOrder={MOON_RENDER_ORDER}', '')],
+    ['a literal draw order', (s) => s.replace('renderOrder={MOON_RENDER_ORDER}', 'renderOrder={3}')],
+    ['the Moon at the Ring’s order', (s) => s.replace('renderOrder={MOON_RENDER_ORDER}', 'renderOrder={BODY_RENDER_ORDER}')],
+    ['the Moon order computed locally', (s) => s.replace('renderOrder={MOON_RENDER_ORDER}', 'renderOrder={BODY_RENDER_ORDER + 1}')],
+    ['the Moon not facing the camera', (s) => s.replace('<Billboard>', '<group>').replace('</Billboard>', '</group>')],
+    ['the Moon off its centre', (s) => s.replace('position={[moon.center[0], moon.center[1], moon.center[2]]}', 'position={[moon.center[0], moon.center[0], moon.center[2]]}')],
+    ['the Moon at its Planet', (s) => s.replace(/\n\s*position=\{\[moon\.center\[0\], moon\.center\[1\], moon\.center\[2\]\]\}/, '')],
+    ['the position deleted', (s) => s.replace(' position={[moon.position.x, moon.position.y, moon.position.z]}', '')],
+    ['the axes swapped', (s) => s.replace('[moon.position.x, moon.position.y, moon.position.z]', '[moon.position.y, moon.position.x, moon.position.z]')],
+    ['a scale prop', (s) => s.replace('renderOrder={MOON_RENDER_ORDER}', 'renderOrder={MOON_RENDER_ORDER}\n              scale={1}')],
+    ['a Moon off its radius', (s) => s.replace('args={[moon.radius, 24]}', 'args={[0.2, 24]}')],
+    ['keyed by index', (s) => s.replace('key={moon.id}', 'key={index}')],
+    ['the handle not stored', (s) => s.replace('meshes.current[index] = mesh;', 'void mesh;')],
+    ['a click', (s) => s.replace('renderOrder={MOON_RENDER_ORDER}', 'renderOrder={MOON_RENDER_ORDER}\n              onClick={() => undefined}')],
+    ['a hover', (s) => s.replace('renderOrder={MOON_RENDER_ORDER}', 'renderOrder={MOON_RENDER_ORDER}\n              onPointerOver={() => undefined}')],
+    ['a drei connector', (s) => s.replace("import { Billboard } from '@react-three/drei';", "import { Billboard, Line } from '@react-three/drei';")],
+    ['a coordinate literal', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    camera.position.set(0, 5, 40);')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped renderer`);
+    assert.notDeepEqual(auditMoonField(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
+// --- The Ring means a Notable, and nothing else (3.3) ------------------------------
+
+/** Every string literal in a source, comments blanked first. */
+function stringLiterals(source: string): string[] {
+  return blankComments(source).match(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g) ?? [];
+}
+
+/**
+ * Every JSX text child in a `.tsx` source: text between a `>` and the next `<`
+ * holding no brace (an `{expression}` child is code, read by the string scan),
+ * comments blanked first. A heuristic over source text — a stretch of TypeScript
+ * between a generic's `>` and a `<` can be read too, which only widens the scan.
+ */
+function jsxTexts(source: string): string[] {
+  return [...blankComments(source).matchAll(/>([^<>{}]+)</g)]
+    .map((match) => (match[1] ?? '').trim())
+    .filter((text) => /[a-z]/i.test(text));
+}
+
+/** Whether a piece of copy pairs the word `ring` with the word `open`. */
+const RING_OPENS = (text: string): boolean => /\bring/i.test(text) && /\bopen/i.test(text);
+
+/**
+ * Each non-test source whose string literals — or, in a `.tsx`, JSX text — pair
+ * `ring` with `open` as words, as `file: text`. Word-anchored, so `string` and
+ * `during` are not a ring.
+ */
+function ringOpensStrings(files: readonly { readonly path: string; readonly source: string }[]): string[] {
+  return files
+    .filter((file) => !/\.test\.ts$/.test(file.path))
+    .flatMap((file) =>
+      [...stringLiterals(file.source), ...(/\.tsx$/.test(file.path) ? jsxTexts(file.source) : [])]
+        .filter(RING_OPENS)
+        .map((text) => `${file.path}: ${text}`),
+    );
+}
+
+test('no shipped string says what a ring opens — the Ring means a Notable, and everything opens', () => {
+  // DESIGN.md §7.2: the direction-03 caption is wrong under the ratified decisions
+  // and must not survive into any build. No copy explains a mark at all.
+  const files = sourceFiles();
+  assert.ok(
+    files.some((file) => file.path.replace(/\\/g, '/') === 'src/shell/index-model.ts'),
+    'the walk reaches the shipped Deep/Shallow copy',
+  );
+  assert.ok(files.some((file) => /\.tsx$/.test(file.path)), 'the walk reaches JSX too');
+  assert.deepEqual(ringOpensStrings(files), []);
+  for (const source of [
+    "const caption = 'a ring means it opens';",
+    '<p>{"Ring: open to read"}</p>',
+    'const hint = `the RING opens the Notable`;',
+    'export const Caption = () => <p>A ring means it opens.</p>;',
+    '<figcaption>\n  Rings open the Notable\n</figcaption>',
+  ]) {
+    assert.notDeepEqual(ringOpensStrings([{ path: 'src/shell/x.tsx', source }]), [], `${source} must be rejected`);
+  }
+  assert.deepEqual(
+    ringOpensStrings([
+      { path: 'src/shell/x.tsx', source: "// a ring never means it opens\nconst a = 'ring'; const b = 'open';" },
+      { path: 'src/shell/x.test.ts', source: "const caption = 'a ring means it opens';" },
+      // Word-anchored: neither `string` nor `during` is a ring.
+      { path: 'src/shell/x.ts', source: "const m = 'the string is open'; const n = 'during the opening frame';" },
+      { path: 'src/shell/x.tsx', source: '<p>The string stays open during the opening.</p>' },
+      // JSX text is read in `.tsx` only, and an expression child is code, not copy.
+      { path: 'src/shell/x.ts', source: 'const a = b > ring && open < c;' },
+      { path: 'src/shell/x.tsx', source: '<p>{ring}</p><span>{open}</span>' },
+      { path: 'src/shell/x.tsx', source: '{/* a ring opens nothing */}<p>Deep</p>' },
+    ]),
+    [],
+  );
+});
+
 // --- Directory coverage ----------------------------------------------------
 
 test('every module in this directory is covered by the scans above', () => {
@@ -2643,6 +2979,12 @@ test('every module in this directory is covered by the scans above', () => {
     'stroke-model.ts',
     'stroke-model.test.ts',
     'body-field.tsx',
+    // 3.3: named in the import, vocabulary, connector and coordinate-literal scans;
+    // the model carries its own purity audit in `notable-model.test.ts`, the binding
+    // has `auditMoonField` above, and its mount is held by `auditDrawOrder`.
+    'notable-model.ts',
+    'notable-model.test.ts',
+    'moon-field.tsx',
     'README.md',
   ]);
   const found: string[] = [];
