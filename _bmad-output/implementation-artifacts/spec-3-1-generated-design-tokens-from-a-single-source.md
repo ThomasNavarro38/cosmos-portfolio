@@ -67,6 +67,20 @@ context:
 - Given a fresh generation, when `tokens.css` is read, then every colour key appears as `--color-<key>`, and `--space-*` covers 4/8/12/20/28/40/52/56 with no 16 or 24.
 - Given `src/tokens/`, when boundaries are checked, then no generated file imports anything.
 
+### Review Findings
+
+- [x] [Review][Patch] The `as const` literal-type guarantee is enforced by nothing automated: `npm test`/`gate`/`build` never run `tsc`, so emitting `'};'` instead of `'} as const;'` keeps every check green [scripts/tokens.test.ts:485]
+- [x] [Review][Patch] The colour scan's function arm is case-sensitive (`RGB(`, `HSLA(` in CSS pass) and lacks the hex arm's lookbehind, so method calls like `color.rgb(` would be reported [scripts/colour-literals.ts:61]
+- [x] [Review][Patch] A JSX numeric entity (`&#160;`, `&#123;`) is reported as a literal colour: `&` is not in the hex arm's lookbehind [scripts/colour-literals.ts:61]
+- [x] [Review][Patch] The render-scene README still names the removed `DUST_COLOR` and the "transparent over a white document" rationale [src/render-scene/README.md:59]
+- [x] [Review][Patch] The stale-output test asserts only `failures.length === 2`, not that both failures name `tokens.css`/`tokens.ts` as stale or hand-edited [scripts/tokens.test.ts:232]
+- [x] [Review][Defer] Mote labels are coloured with `stroke-active-dark`, a stroke token, while DESIGN.md §6 puts labels at `ink-label` or above [src/render-scene/mote-model.ts:116] — deferred to story 3.5 (same hex as `ink-prose-dark`, so no visible change today)
+- [x] [Review][Defer] `tokens.ts` emits unit strings (`'0.7px'`, `'9.5px'`, `'50%'`) where scene materials need numbers [src/tokens/tokens.ts] — deferred to story 3.2, its first numeric consumer
+- [x] [Review][Defer] Colour-scan coverage gaps beyond the AC: `.svg`/`.html` files and `*.test.tsx`/`*.spec.ts`, CSS id selectors made of hex letters (`#face {`), CSS strings containing `/*`, `}` inside a string within `${...}` (`keepTemplateText`) [scripts/colour-literals.ts:86] — deferred, hardening beyond the AC
+- [x] [Review][Defer] Generator YAML/validation hardening: `True`/`NULL`/`- - x`/big integers read silently, closing fence with trailing space or `---x`, ramp field types and units not checked, 16/24 written as `1rem`/`calc()` [scripts/tokens.ts] — deferred, DESIGN.md is the only input and uses none of these
+- [x] [Review][Defer] Write/gate robustness: the second `renameSync` can fail after the first, a crashed run leaves `*.tmp` that fails the gate, `gate` uses `&&` so a derive failure hides the token check, a non-ENOENT scan error drops collected failures, a repeated `--out=` silently wins [scripts/tokens.ts:766] — deferred, every case fails loudly or self-heals on rerun
+- [x] [Review][Defer] Nothing enforces that `src/**` never imports `scripts/` (the README states it, no boundary rule checks it) [src/derive/boundaries.ts] — deferred
+
 ## Design Notes
 
 Why no YAML dependency: the repo pins a deliberately closed set of dependencies (`boundaries.ts:15-22` makes the same call against ESLint). A subset parser that rejects anything unsupported is safer than a general one quietly accepting a construct it misreads.

@@ -8,7 +8,7 @@
  * one, naming `file:line`.
  *
  * **What counts.** A `#` followed by 3, 4, 6 or 8 hex digits and nothing more of
- * a word, and a call-shaped `rgb(`, `rgba(`, `hsl(` or `hsla(`. Matched in code
+ * a word, and a call-shaped `rgb(`, `rgba(`, `hsl(` or `hsla(`, in any case. Matched in code
  * *and* in string literals — a colour literal is almost always a string — but not
  * in comments, which are prose: `stripComments` (`src/derive/boundaries.ts`)
  * blanks them and keeps everything else in place, so a reported line is the
@@ -53,12 +53,14 @@ export interface ColourLiteral {
  *
  * The hex arm's trailing lookahead is what separates `#fff` from `#fffx` and
  * `#section`; its leading lookbehind keeps `a#fff` (an identifier character
- * before the `#`), `$#fff` and `this.#face` (a private field) out, which no colour
- * is written as. Alternation order matters
- * only for reporting: the longest hex run is tried first so `#aabbccdd` is
- * reported whole.
+ * before the `#`), `$#fff`, `this.#face` (a private field) and `&#160;` (a
+ * character reference) out, which no colour is written as. The function arm
+ * shares the lookbehind, so `color.rgb(` is a method call rather than CSS, and is
+ * case-insensitive because CSS function names are: `RGB(` is `rgb(`. Alternation
+ * order matters only for reporting: the longest hex run is tried first so
+ * `#aabbccdd` is reported whole.
  */
-const COLOUR_LITERAL = /(?<![\w$.])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![\w$-])|\b(?:rgba?|hsla?)\s*\(/g;
+const COLOUR_LITERAL = /(?<![\w$.&])#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{4}|[0-9a-f]{3})(?![\w$-])|(?<![\w$.])(?:rgba?|hsla?)\s*\(/gi;
 
 /** CSS's only comment form, blanked width-for-width so lines keep their numbers. */
 export function stripCssComments(source: string): string {

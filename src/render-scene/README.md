@@ -56,7 +56,7 @@ The greybox has no stroke ladder, so "a Body's luminance step is ambiguous again
 
 The final judgement is perceptual and is re-asked when real data lands: the committed artifact holds one Client and one Project, so the neighbouring-systems claims are proven over in-memory fixtures.
 
-The medium is a billboard `sprite`. Its texture is one module-level `DataTexture`, uploaded once and shared by every medium, whose texels come from `mediumFalloff`: white RGBA, with alpha falling from 255 at the centre to 0 at the edge. The sprite is scaled by `mediumSpriteScale`, which accounts for the falloff reaching 0 half a texel inside the quad, so each medium fades out exactly at its model radius and the non-overlap proof above holds for what is drawn. `auditDrawOrder` requires that scale by name. The texture is tinted by one neutral greybox value (`DUST_COLOR`), grey rather than white because the canvas is transparent over a white document. Epic 3 replaces it with `stroke-dust`.
+The medium is a billboard `sprite`. Its texture is one module-level `DataTexture`, uploaded once and shared by every medium, whose texels come from `mediumFalloff`: white RGBA, with alpha falling from 255 at the centre to 0 at the edge. The sprite is scaled by `mediumSpriteScale`, which accounts for the falloff reaching 0 half a texel inside the quad, so each medium fades out exactly at its model radius and the non-overlap proof above holds for what is drawn. `auditDrawOrder` requires that scale by name. The texture is tinted by `DUST_MEDIUM_COLOR` (`stroke-rest-dark`), and the particles take `DUST_PARTICLE_COLOR` (`stroke-dust-dark`), both read from `src/tokens/tokens.ts` and drawn on the scene's `surface-base-dark` background.
 
 ## Why the canvas root is `aria-hidden="true"`
 

@@ -680,3 +680,24 @@ leaves open.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-1-generated-design-tokens-from-a-single-source.md`
   summary: A flaky test. `solve.test.ts` writes and deletes `src/derive/.mutant-*.ts` while other suites run, and the import-boundary walker reads dot-files, so `artifact.test.ts` can fail with ENOENT. The colour scan now skips dot-files; the boundary walker does not.
   evidence: Seen once during 3.1 implementation ("the gate fixture passes before it is broken…"); `sourceFilesUnder` in `boundaries.ts` skips dot-directories only.
+
+## Deferred from: code review of spec-3-1-generated-design-tokens-from-a-single-source (2026-10-01)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-generated-design-tokens-from-a-single-source.md`
+  summary: Mote labels take `stroke-active-dark` (a stroke token) while DESIGN.md §6 requires labels at `ink-label` or above and the ladders never borrow each other's tokens. Same hex as `ink-prose-dark` today, so nothing renders differently; story 3.5 should split dot and label colours.
+  evidence: `src/render-scene/mote-model.ts:116` `MOTE_COLOR` documented as "dot and label"; `moteLabelStyle().color === MOTE_COLOR` in the test.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-generated-design-tokens-from-a-single-source.md`
+  summary: `tokens.ts` emits stroke weights, radii, letter-spacing and font sizes as unit strings (`'0.7px'`, `'50%'`, `'9.5px'`); scene materials need numbers. Story 3.2, the first numeric consumer, should emit or derive numeric views rather than parse units at call sites.
+  evidence: `src/tokens/tokens.ts` `components`/`rounded`/`typography` blocks.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-generated-design-tokens-from-a-single-source.md`
+  summary: Colour-scan coverage gaps beyond the AC's list. Not scanned: `.svg`, `.html` (and root `index.html`). Scanned though they are tests: `*.test.tsx`, `*.spec.ts`. False positive: CSS id selectors made only of hex letters (`#face {`). Missed: a CSS string containing `/*` opens a phantom comment, and a `}` inside a string within `${...}` ends `keepTemplateText`'s span early. Candidate for story 3.9's identity audit.
+  evidence: `scripts/colour-literals.ts` `isScanned`, `stripCssComments`; `src/derive/boundaries.ts` `keepTemplateText` naive brace depth.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-generated-design-tokens-from-a-single-source.md`
+  summary: Generator hardening outside DESIGN.md's current shape. Plain scalars `True`/`NULL`, a nested `- - x` and integers beyond 2^53 are read without rejection; a closing fence with trailing whitespace or an earlier `---x` line gives a misleading "no closing fence"; ramp field types/units are not validated; 16/24 spacing written as `1rem` or `calc()` passes the ban.
+  evidence: `scripts/tokens.ts` `extractFrontmatter`, plain-scalar parsing, `validate`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-generated-design-tokens-from-a-single-source.md`
+  summary: Write and gate robustness. `writeTokens` renames the two temporaries in sequence, so a locked `tokens.ts` (EPERM on Windows) leaves a new CSS beside a stale TS. A crashed run leaves `*.<pid>.tmp` that the gate then reports as "not a generated file". `gate` chains with `&&`, so a derive failure hides the token check. A non-ENOENT scan error throws and loses failures already collected. A repeated `--out=` silently wins. Each case fails loudly or heals on a rerun.
+  evidence: `scripts/tokens.ts` `writeTokens`, `checkTokens`, `parseArgs`; `package.json` `gate`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-1-generated-design-tokens-from-a-single-source.md`
+  summary: Nothing enforces "nothing under `src/` imports `scripts/`". The README states it; no boundary rule or test checks it.
+  evidence: `src/derive/boundaries.ts` rules cover `src/` directories only.
