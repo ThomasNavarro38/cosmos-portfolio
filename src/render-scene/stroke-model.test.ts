@@ -31,11 +31,13 @@ import {
   strokeColor,
   strokeWidthPx,
   vignetteStyle,
+  type StrokeWeightKey,
   type SubjectState,
 } from './stroke-model.ts';
 
 const MODEL_TS = fileURLToPath(new URL('./stroke-model.ts', import.meta.url));
 const SCHEMA_TS = fileURLToPath(new URL('../derive/artifact-schema.ts', import.meta.url));
+const RULES_TS = fileURLToPath(new URL('../derive/rules.ts', import.meta.url));
 const ARTIFACT_JSON = fileURLToPath(new URL('../../generated/layout.generated.json', import.meta.url));
 
 function committed(): { artifact: SceneArtifact; bodies: readonly Body[]; rail: Rail } {
@@ -72,7 +74,7 @@ test('every stroke weight token parses to its pixel value', () => {
   assert.equal(strokeWidthPx('body-client'), 0.9);
   assert.equal(strokeWidthPx('body-focus'), 1.0);
   for (const key of Object.keys(tokens.components['stroke-weight'])) {
-    const px = strokeWidthPx(key);
+    const px = strokeWidthPx(key as StrokeWeightKey);
     assert.ok(px >= 0.6 && px <= 1.0, `${key} sits on the 0.6–1.0px ladder`);
   }
 });
@@ -85,8 +87,10 @@ test('a weight that is not <n>px throws naming the key', () => {
       `${JSON.stringify(bad)} must be refused by name`,
     );
   }
-  assert.throws(() => strokeWidthPx('absent'), /"absent"/, 'a missing key is named too');
-  assert.throws(() => strokeWidthPx('constructor'), /"constructor"/, 'and an inherited one is no weight');
+  // Cast past the key's type: these are the keys the type check exists to stop,
+  // and the runtime guard is what holds when one arrives untyped.
+  assert.throws(() => strokeWidthPx('absent' as StrokeWeightKey), /"absent"/, 'a missing key is named too');
+  assert.throws(() => strokeWidthPx('constructor' as StrokeWeightKey), /"constructor"/, 'and an inherited one is no weight');
 });
 
 // --- The subject -------------------------------------------------------------------
@@ -319,6 +323,15 @@ test('the orbit-plane tolerance is the gate’s, so what the gate accepts is wha
   );
 });
 
+test('the scene’s resting steps are derive’s resting bands, so every band the gate accepts is one a Planet can be drawn in', () => {
+  // Text, not an import, for the same boundary as the tolerance above. A band added
+  // to derive alone would pass the gate and then throw in `bodyStroke` at render.
+  const literal = /export const RESTING_BANDS = \[([^\]]*)\] as const;/.exec(readFileSync(RULES_TS, 'utf8'));
+  assert.ok(literal !== null, 'rules.ts declares its resting bands as a literal list');
+  const bands = [...(literal[1] ?? '').matchAll(/'([^']+)'/g)].map((match) => match[1]);
+  assert.deepEqual([...RESTING_STEPS], bands);
+});
+
 test('the scene’s hairlines: one stroke-rest orbit per Planet and the Rail at stroke-dust, all 0.7px', () => {
   const { bodies, rail } = committed();
   const lines = sceneLines(bodies, railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT));
@@ -360,7 +373,7 @@ test('a Planet whose Star is not in the scene throws rather than orbiting nothin
 
 // --- The vignette --------------------------------------------------------------------
 
-test('the vignette is vignette-dark at 0 opacity at 42% rising to 0.9 at the edge, inert to the pointer', () => {
+test('the vignette is vignette-dark at 0 opacity at 42% rising to 0.9 at the corners, inert to the pointer', () => {
   const style = vignetteStyle();
   const ground = tokens.colors['vignette-dark'];
   assert.equal(

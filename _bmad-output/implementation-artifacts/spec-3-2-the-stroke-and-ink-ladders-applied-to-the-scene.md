@@ -66,10 +66,24 @@ context:
 - [x] `src/render-scene/README.md`, `src/derive/README.md` -- rewrite the connector, lighting and greybox paragraphs.
 
 **Acceptance Criteria:**
-- Given every reachable navigation state over the committed artifact, when `bodyStroke` is evaluated for every Body, then at most one returns `stroke-focus` and no unfocused Body exceeds `stroke-near`.
+- Given every reachable navigation state over the committed artifact, when `bodyStroke` is evaluated for every Body, then at most one returns `stroke-focus` and no Body other than the subject exceeds `stroke-near`.
 - Given the committed tree, when `npm test`, `npm run typecheck`, `npm run gate` run, then all pass.
 - Given `vignetteStyle()`, when read, then it is a radial gradient of `vignette-dark` at 0 opacity at 42% rising to 0.9 at 100%, written without `rgb(`/`hsl(`/`#`.
 - Given `npm run dev`, when the opening frame renders, then Bodies are outline circles, exactly one Star is white with a filled core, orbits and the Rail are faint hairlines, corners darken, and clicking a Body still flies/focuses.
+
+### Review Findings
+
+- [x] [Review][Patch] Vignette overlay paints over Mote labels — raise labels to `zIndexRange={[1, 1]}` and the Focus panel to `zIndex: 2` (decided: fix now) [src/render-scene/mote-field.tsx:83]
+- [x] [Review][Decision] Resting Star core dot is near-invisible — `coreDots` takes the outline colour, so a receded Star's core is `stroke-rest-dark` (#2C2C33) on `surface-base` (#08080A); DESIGN §6 says the core is what makes a Star read as emitting, but names a core fill only for the subject. Pick a resting core token, or accept outline-only receded Stars. — **Decided: accept outline-only resting Stars; confirm visually under AC4.**
+- [x] [Review][Patch] Amend AC1 to "no Body other than the subject exceeds `stroke-near`" to match the I/O matrix (decided: amend) [spec AC1]
+- [x] [Review][Patch] `RESTING_STEPS` mirrors derive's `RESTING_BANDS` with no pin; a derive-only band change passes every test and the gate, then throws in `bodyStroke` at render [src/render-scene/stroke-model.ts:46]
+- [x] [Review][Patch] Gate cosine divides by radius only and uses the raw normal; `orbitPoints` normalises — a normal of length ≠ 1 can pass the gate and be refused by the renderer at the boundary [src/derive/artifact-schema.ts:225]
+- [x] [Review][Patch] "under 1e-3 for any orbit radius above a tenth of a unit" is false (4-place rounding gives ~1.7e-4/r); `weight` is unbounded (`src/data/schema.ts:111`), so a large weight fails the gate with an opaque cosine/NaN message — correct the comment and give solve a named error for an orbit below solve precision [src/derive/artifact-schema.ts:69]
+- [x] [Review][Patch] No positive audit that `scene.tsx` mounts the `aria-hidden` vignette inside a `position: 'relative'` wrapper — deleting it passes all tests [src/render-scene/scene.tsx:186]
+- [x] [Review][Patch] Effects scan misses `receiveShadow`, `border-radius`, `text-shadow` [src/render-scene/scene-model.test.ts:1335]
+- [x] [Review][Patch] `StrokeWeightKey` exported but unused; `strokeWidthPx(key: string)` lets a typo'd key through the type check [src/render-scene/stroke-model.ts:52]
+- [x] [Review][Patch] "0.9 at the edge" is only true at the corners (`farthest-corner`) — reword docblock, README and test title [src/render-scene/stroke-model.ts:347]
+- [x] [Review][Patch] Tests hard-code `1e-3` instead of importing `ORBIT_PLANE_TOLERANCE` [src/derive/solve.test.ts:565]
 
 ## Design Notes
 

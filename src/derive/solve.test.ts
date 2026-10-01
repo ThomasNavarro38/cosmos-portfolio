@@ -30,7 +30,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { deriveEntities, type EntityGraph } from './entities.ts';
 import { buildRail } from './rail.ts';
-import { solveLayout, type Position, type SolvedLayout } from './solve.ts';
+import { ORBIT_PLANE_TOLERANCE } from './artifact-schema.ts';
+import { MIN_ORBIT_RADIUS, solveLayout, type Position, type SolvedLayout } from './solve.ts';
 
 const SOLVE_TS = fileURLToPath(new URL('./solve.ts', import.meta.url));
 const RAIL_TS = fileURLToPath(new URL('./rail.ts', import.meta.url));
@@ -562,7 +563,7 @@ test('every Project gets a unit orbit normal, and no Star gets one', () => {
     for (const project of client.projects) {
       const normal = layout.orbitNormals[project.id];
       assert.ok(normal !== undefined, `"${project.id}" has an orbit plane`);
-      assert.ok(Math.abs(Math.hypot(normal.x, normal.y, normal.z) - 1) < 1e-3, `"${project.id}"'s normal is unit`);
+      assert.ok(Math.abs(Math.hypot(normal.x, normal.y, normal.z) - 1) <= ORBIT_PLANE_TOLERANCE, `"${project.id}"'s normal is unit`);
     }
   }
 });
@@ -587,15 +588,34 @@ test('each Project lies in its own orbit plane: the offset from its Star is perp
     const offset = { x: here.x - star.x, y: here.y - star.y, z: here.z - star.z };
     const r = Math.hypot(offset.x, offset.y, offset.z);
     const dot = (offset.x * normal.x + offset.y * normal.y + offset.z * normal.z) / r;
-    assert.ok(Math.abs(dot) < 1e-3, `"${project.id}" sits off its own orbit plane (cos = ${dot})`);
+    assert.ok(Math.abs(dot) <= ORBIT_PLANE_TOLERANCE, `"${project.id}" sits off its own orbit plane (cos = ${dot})`);
     // The plane also holds the slot's horizontal tangent (−sin A, 0, cos A), which
     // is true exactly when the normal's horizontal part (n.x, n.z) is parallel to
     // the offset's horizontal part (off.x, off.z) — i.e. their 2D cross product
     // n.x·off.z − n.z·off.x is zero. A plane spun about the offset would contain
     // the Planet but break this.
     const cross = normal.x * offset.z - normal.z * offset.x;
-    assert.ok(Math.abs(cross) / r < 1e-3, `"${project.id}"'s plane is spun about its offset`);
+    assert.ok(Math.abs(cross) / r <= ORBIT_PLANE_TOLERANCE, `"${project.id}"'s plane is spun about its offset`);
   }
+});
+
+test('the narrowest placeable orbit is solved and in its plane; a narrower one is refused naming the Project', () => {
+  // `railDistance` is `10 / weight`, so weight 40 is exactly `MIN_ORBIT_RADIUS`.
+  const edge = graphOf({ ...baseEntry(), client: 'Near', project: 'Edge', weight: 10 / MIN_ORBIT_RADIUS });
+  const layout = solve(edge);
+  const client = edge.clients[0];
+  const project = client?.projects[0];
+  assert.ok(client !== undefined && project !== undefined);
+  const star = positionOf(layout, client.id);
+  const here = positionOf(layout, project.id);
+  const normal = layout.orbitNormals[project.id];
+  assert.ok(normal !== undefined);
+  const offset = { x: here.x - star.x, y: here.y - star.y, z: here.z - star.z };
+  const cosine = (offset.x * normal.x + offset.y * normal.y + offset.z * normal.z) / Math.hypot(offset.x, offset.y, offset.z);
+  assert.ok(Math.abs(cosine) <= ORBIT_PLANE_TOLERANCE, `the narrowest orbit still lies in its plane after rounding (cos = ${cosine})`);
+
+  const tooNarrow = graphOf({ ...baseEntry(), client: 'Near', project: 'Inside', weight: 100 });
+  assert.throws(() => solve(tooNarrow), /project:near\/inside[\s\S]*lower its weight/);
 });
 
 test('the orbit planes are as deterministic as the positions', () => {

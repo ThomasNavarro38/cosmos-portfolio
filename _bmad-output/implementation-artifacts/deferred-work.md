@@ -704,3 +704,7 @@ leaves open.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-2-the-stroke-and-ink-ladders-applied-to-the-scene.md`
   summary: The oldest Planets (`luminanceBand: stroke-dust`) share one colour with the Dust particles and the Rail, and sit inside a brighter `stroke-rest` orbit, contradicting DESIGN.md §2 ("stroke-dust — not used for any Body") and inverting the distance ladder between a Planet and its own orbit; needs a design decision for the 3.9 audit (re-band derive's resting range, or tie each orbit's step to its Planet's band).
   evidence: `src/derive/rules.ts` RESTING_BANDS includes `stroke-dust`; `stroke-model.ts` draws every orbit at `stroke-rest`; the epic AC binds the band to `stroke-dust … stroke-near`, so 3.2 followed the AC as its spec Design Notes record.
+
+## Deferred from: code review of spec-3-2-the-stroke-and-ink-ladders-applied-to-the-scene.md (2026-10-01)
+
+- Source-tree audits race mutant files: tests that write mutants into `src/` (`loadMutant`-style, e.g. `src/shell/*.test.ts`) run in parallel with walks such as `sourceFiles()` in `scene-model.test.ts`; one run in four failed `only the pacing surfaces reference the reduced-motion preference`. Pre-existing — write mutants outside `src/` or exclude them from the walk.

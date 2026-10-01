@@ -66,9 +66,12 @@ const PositionSchema = z.strictObject({
  * Star may stray from perpendicular to that normal.
  *
  * Both errors come from the same source — every component of a position and of a
- * normal is rounded to the solve's four places — and both stay well under `1e-3`
- * for any orbit radius above a tenth of a unit (the committed artifact's worst is
- * about `5e-5`). Anything further off is not a rounded orbit plane but a wrong one.
+ * normal is rounded to the solve's four places. The normal's length error is at
+ * most about `1e-4`. The cosine's is about `1.7e-4 / r` (half a unit in the fourth
+ * place on each axis of the offset, over the orbit radius `r`), so it stays under
+ * `1e-3` only for orbits wider than about `0.19` units — the solve refuses a
+ * narrower one by name (its `MIN_ORBIT_RADIUS`, `0.25`). The committed artifact's worst is
+ * about `5e-5`. Anything further off is not a rounded orbit plane but a wrong one.
  *
  * `src/render-scene/stroke-model.ts` checks the same perpendicularity before it
  * draws an orbit, against its own `ORBIT_PLANE_TOLERANCE` of the same value: it may
@@ -222,8 +225,13 @@ const ArtifactClientSchema = z
       };
       const radius = Math.hypot(offset.x, offset.y, offset.z);
       const normal = project.orbitNormal;
+      // Normalised the way the renderer's `orbitPoints` normalises, so the two
+      // compute one cosine and agree at the tolerance's edge.
+      const length = Math.hypot(normal.x, normal.y, normal.z);
       const cosine =
-        radius > 0 ? (offset.x * normal.x + offset.y * normal.y + offset.z * normal.z) / radius : Number.NaN;
+        radius > 0 && length > 0
+          ? (offset.x * normal.x + offset.y * normal.y + offset.z * normal.z) / (radius * length)
+          : Number.NaN;
       if (!(Math.abs(cosine) <= ORBIT_PLANE_TOLERANCE)) {
         ctx.addIssue({
           code: 'custom',

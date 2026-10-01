@@ -334,7 +334,7 @@ export interface PanelStyle {
   readonly top: 0;
   readonly right: 0;
   readonly bottom: 0;
-  readonly zIndex: 1;
+  readonly zIndex: 2;
   readonly width: string;
   readonly boxSizing: 'border-box';
   readonly overflowY: 'auto';
@@ -374,7 +374,7 @@ export function panelStyle(open: boolean, pace = 1): PanelStyle {
     top: 0,
     right: 0,
     bottom: 0,
-    zIndex: 1,
+    zIndex: 2,
     width: panelWidthCss(),
     boxSizing: 'border-box',
     overflowY: 'auto',

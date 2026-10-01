@@ -1332,7 +1332,7 @@ test('the ink step below the contrast floor is referenced nowhere under src/ out
 
 /** The forms that put shadow, blur, glow, bloom, a radius or a light into a surface. */
 const EFFECTS =
-  /box-shadow|boxShadow|textShadow|drop-shadow|blur\(|borderRadius|castShadow|shadows|bloom|glow|(?:ambient|directional|point|spot|hemisphere)Light/i;
+  /box-shadow|boxShadow|text-shadow|textShadow|drop-shadow|blur\(|border-radius|borderRadius|castShadow|receiveShadow|shadows|bloom|glow|(?:ambient|directional|point|spot|hemisphere)Light/i;
 
 /**
  * Every effect in code, each reported as `file:line` — comments blanked (line count
@@ -1367,6 +1367,9 @@ test('the effects audit rejects each form, in code, and ignores comments', () =>
     '<hemisphereLight />',
     '<Canvas shadows>',
     '<mesh castShadow />',
+    '<mesh receiveShadow />',
+    "const css = 'border-radius: 4px';",
+    "const css = 'text-shadow: 0 0 4px';",
     "style={{ boxShadow: '0 0 4px' }}",
     "style={{ textShadow: '0 0 4px' }}",
     "style={{ filter: 'blur(2px)' }}",
@@ -1756,6 +1759,69 @@ test('the draw-order audit rejects the real renderer with any one of its guarant
     const mutated = mutate(real);
     assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped renderer`);
     assert.notDeepEqual(auditDrawOrder(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
+// --- The vignette is mounted (3.2) -------------------------------------------
+
+/**
+ * The vignette overlay, as mounted by the renderer: exactly one element styled by
+ * `vignetteStyle()`, an `aria-hidden` sibling **after** the `<Canvas>` (inside it
+ * would make it a Three child, not a DOM overlay), inside a `position: 'relative'`
+ * wrapper that the overlay's `absolute; inset: 0` resolves against — without it
+ * the vignette would cover whichever positioned ancestor it finds.
+ *
+ * Comments blanked, strings kept: `aria-hidden="true"` and `'relative'` are the
+ * evidence. `stroke-model.test.ts` checks the style's value; this checks it is drawn.
+ */
+function auditVignette(source: string): string[] {
+  const code = blankComments(source);
+  const failures: string[] = [];
+  const overlays = code.match(/<\w+\b[^>]*\bstyle=\{\s*vignetteStyle\(\)\s*\}[^>]*>/g) ?? [];
+  if (overlays.length !== 1) {
+    failures.push(`the vignette is mounted ${overlays.length} times, not once`);
+    return failures;
+  }
+  const overlay = overlays[0] ?? '';
+  if (!/^<div\b/.test(overlay)) failures.push('the vignette is not a DOM <div> overlay');
+  if (!/\baria-hidden="true"/.test(overlay)) failures.push('the vignette is narrated — it is not aria-hidden');
+  const at = code.indexOf(overlay);
+  const canvasOpen = code.indexOf('<Canvas');
+  const canvasClose = code.indexOf('</Canvas>');
+  if (canvasOpen < 0 || canvasClose < 0) {
+    failures.push('no <Canvas> to lay the vignette over');
+    return failures;
+  }
+  if (at < canvasClose) failures.push('the vignette is not a sibling after the <Canvas> — it is inside or under it');
+  const wrapper = /<div\s+style=\{\{\s*position:\s*'relative'\s*\}\}\s*>\s*$/.test(code.slice(0, canvasOpen));
+  if (!wrapper) failures.push('the <Canvas> is not wrapped in a position: relative <div> — the overlay has no frame to fill');
+  const close = code.indexOf('</div>', at + overlay.length);
+  if (close < 0 || /<\w/.test(code.slice(at + overlay.length, close))) {
+    failures.push('the vignette is not the last child of the wrapper');
+  }
+  return failures;
+}
+
+test('the renderer mounts the vignette once, aria-hidden, over the canvas inside a positioned wrapper', () => {
+  assert.deepEqual(auditVignette(readFileSync(SCENE_TSX, 'utf8')), []);
+});
+
+test('the vignette audit rejects the real renderer with any one of its guarantees removed', () => {
+  const real = readFileSync(SCENE_TSX, 'utf8');
+  const overlay = '<div aria-hidden="true" style={vignetteStyle()} />';
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['the overlay deleted', (s) => s.replace(overlay, '')],
+    ['the overlay mounted twice', (s) => s.replace(overlay, `${overlay}\n      ${overlay}`)],
+    ['the overlay narrated', (s) => s.replace(overlay, '<div style={vignetteStyle()} />')],
+    ['the wrapper unpositioned', (s) => s.replace("<div style={{ position: 'relative' }}>", '<div>')],
+    ['the overlay inside the Canvas', (s) => s.replace(overlay, '').replace('</Canvas>', `  ${overlay}\n      </Canvas>`)],
+    ['the overlay before the Canvas', (s) => s.replace(overlay, '').replace('      <Canvas', `      ${overlay}\n      <Canvas`)],
+    ['the overlay as a span', (s) => s.replace(overlay, '<span aria-hidden="true" style={vignetteStyle()} />')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped renderer`);
+    assert.notDeepEqual(auditVignette(mutated), [], `"${name}" must be rejected`);
   }
 });
 
@@ -2331,7 +2397,7 @@ test('the Rail-importer scan rejects every edge form from outside, and ignores p
  * both matrices and the canvas width and written back, and each draw applied
  * with `applyMoteDraw` to its own pooled handles; one mesh per `motePool` entry
  * keyed by Skill, drawn at `BODY_RENDER_ORDER` in the transparent pass writing
- * no depth; one drei `<Html>` label each, at `zIndexRange={[0, 0]}` with no
+ * no depth; one drei `<Html>` label each, at `zIndexRange={[1, 1]}` with no
  * pointer events, styled by the model.
  */
 function auditMoteField(source: string): string[] {
@@ -2418,7 +2484,7 @@ function auditMoteField(source: string): string[] {
   const labels = pool.match(/<Html\b[^>]*>/g) ?? [];
   if (labels.length !== 1 || (code.match(/<Html\b/g) ?? []).length !== 1) failures.push('not one drei <Html> label per pooled dot');
   const html = labels[0] ?? '';
-  if (!/\bzIndexRange=\{\s*\[\s*0\s*,\s*0\s*\]\s*\}/.test(html)) failures.push('the label is not at zIndexRange [0, 0] — it could stack over the panel');
+  if (!/\bzIndexRange=\{\s*\[\s*1\s*,\s*1\s*\]\s*\}/.test(html)) failures.push('the label is not at zIndexRange [1, 1] — it could stack over the panel or under the vignette');
   // Read with its strings kept: the value is a string, which the prose blanking erases.
   const quotedHtml = mapBlocks(quoted, 'motePool\\(\\s*artifact\\s*\\)')[0]?.match(/<Html\b[^>]*>/)?.[0] ?? '';
   if (!/\bpointerEvents="none"/.test(quotedHtml)) {
@@ -2475,8 +2541,9 @@ test('the Mote audit rejects the real renderer with any one guarantee broken', (
     ['a literal draw order', (s) => s.replace('renderOrder={BODY_RENDER_ORDER}', 'renderOrder={3}')],
     ['an opaque Mote', (s) => s.replace('transparent opacity={0}', 'opacity={0}')],
     ['a Mote writing depth', (s) => s.replace('depthWrite={false}', 'depthWrite')],
-    ['the label over the panel', (s) => s.replace('<Html zIndexRange={[0, 0]}', '<Html zIndexRange={[16777271, 0]}')],
-    ['the label default z', (s) => s.replace('<Html zIndexRange={[0, 0]} ', '<Html ')],
+    ['the label over the panel', (s) => s.replace('<Html zIndexRange={[1, 1]}', '<Html zIndexRange={[16777271, 0]}')],
+    ['the label default z', (s) => s.replace('<Html zIndexRange={[1, 1]} ', '<Html ')],
+    ['the label under the vignette', (s) => s.replace('<Html zIndexRange={[1, 1]}', '<Html zIndexRange={[0, 0]}')],
     ['a clickable label', (s) => s.replace('pointerEvents="none"', 'pointerEvents="auto"')],
     ['the label unstyled', (s) => s.replace('style={moteLabelStyle()}', '')],
     ['the label shows the wrong text', (s) => s.replace('{skill}\n            </div>', '{index}\n            </div>').replace('{skill}\r\n            </div>', '{index}\r\n            </div>')],

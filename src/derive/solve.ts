@@ -154,6 +154,18 @@ const ORBIT_PITCH = 0.42;
 /** Radians of separation forced between two Projects sharing an orbital radius. */
 const ORBIT_MIN_SEPARATION = 0.35;
 
+/**
+ * The narrowest orbit the solve will place, in scene units.
+ *
+ * Every coordinate is rounded to four places, which moves a Planet's offset from
+ * its Star by up to about `1.7e-4` and its plane's cosine by that over the radius.
+ * Below about `0.19` units that error alone exceeds the schema's orbit-plane
+ * tolerance (`1e-3`), and the gate would refuse a correct solve with a cosine no
+ * author could act on. Refused here instead, naming the Project and its `weight`
+ * (`railDistance` is `10 / weight`, so this caps an authored weight at 40).
+ */
+export const MIN_ORBIT_RADIUS = 0.25;
+
 // --- The simulation node ----------------------------------------------------
 
 /** One Client Star in the simulation. Carries its ID so results can be keyed. */
@@ -440,6 +452,13 @@ function solveOrbits(client: ClientEntity, star: Position): Map<string, SolvedOr
     // system reads as a system rather than as a flat ring seen edge-on.
     const inclination = (slot - (count - 1) / 2) * ORBIT_PITCH;
     const radius = project.railDistance;
+    // A non-finite radius is left to `finitePosition`, which names it as such.
+    if (radius < MIN_ORBIT_RADIUS) {
+      throw new Error(
+        `"${project.id}" would orbit its Star at ${String(radius)} units, inside the ${String(MIN_ORBIT_RADIUS)} ` +
+          'the solve can place to four decimal places; lower its weight.',
+      );
+    }
 
     const x = star.x + radius * Math.cos(angle) * Math.cos(inclination);
     const y = star.y + radius * Math.sin(inclination);
