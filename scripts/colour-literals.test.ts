@@ -48,6 +48,9 @@ test('every literal form in the matrix is found', () => {
     ['<meshBasicMaterial color="#4a4a4a" />', '#4a4a4a'],
     ['.panel { color: #0D0D10; }', '#0D0D10'],
     ['.panel { color: rgb (0 0 0); }', 'rgb('],
+    // CSS function names are case-insensitive.
+    ['.panel { color: RGB(0 0 0); }', 'RGB('],
+    ["const c = 'HSLA(0, 0%, 50%, 1)';", 'HSLA('],
     // A string that holds `//` is a string, not a comment.
     ["const c = 'a // #fff';", '#fff'],
   ] as const) {
@@ -72,6 +75,11 @@ test('decoys pass: comments, numeric hex, anchors, and hex runs that are words',
     'const f = this.#face;',
     'const b = $#fff;',
     'const toRgb = (x) => x; torgb(1);',
+    // A method call is not a CSS function, as `this.#face` is not a hex colour.
+    'const c = color.rgb(1, 2, 3);',
+    'const c = d3.hsl(0, 0, 0);',
+    // A numeric character reference is text, not a colour.
+    '<p>a&#160;b &#123;</p>',
     '.a { color: var(--color-ink-label-dark); } /* #fff */',
   ]) {
     assert.deepEqual(findColourLiterals(source), [], `${source} must pass`);

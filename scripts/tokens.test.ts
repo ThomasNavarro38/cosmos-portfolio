@@ -230,6 +230,9 @@ test('a stale output — the source changed, the output did not — fails the ga
   writeFileSync(paths.design, mutate('stroke-dust-dark: "#1D1D22"', 'stroke-dust-dark: "#1E1E23"'));
   const failures = checkTokens(paths);
   assert.equal(failures.length, 2, failures.join('\n'));
+  for (const [index, name] of [CSS_FILE, TS_FILE].entries()) {
+    assert.match(failures[index] as string, new RegExp(`${name.replace('.', '\\.')}.*stale or hand-edited`));
+  }
 });
 
 test('a missing output fails the gate', () => {
@@ -493,6 +496,15 @@ test('tokens.ts: resolved values with literal types', () => {
   // No alias survives anywhere in the emitted object.
   assert.doesNotMatch(JSON.stringify(tokens), /\{[a-z-]+\.[a-z.-]+\}/i);
   assert.equal(Object.keys(tokens.typography).length, 12, 'the font families plus eleven ramp roles');
+});
+
+test('tokens.ts is emitted `as const`, so its literal types survive without a typecheck run', () => {
+  // The annotated assignments above prove the literal types only under `tsc`,
+  // which neither `npm test` nor `npm run gate` runs; this holds the emitter to it.
+  assert.ok(
+    generate(FIXTURE).ts.endsWith('} as const;\n\nexport type Tokens = typeof tokens;\n'),
+    'the emitted object must close with `} as const;`',
+  );
 });
 
 test('tokens.css: every colour key as --color-<key>, and the spacing ramp without 16 or 24', () => {
