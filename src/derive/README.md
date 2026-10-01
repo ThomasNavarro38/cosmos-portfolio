@@ -13,8 +13,8 @@ Pure pipeline: validate → derive → solve. No DOM, no React, no Three. The si
 | `rules.ts` | Exactly the three mapping rules (FR-3), and nothing else. |
 | `entities.test.ts` | Graph shape, the three Shallow forms, ID stability under a re-order, ID collision, Company-is-not-a-Body. |
 | `rules.test.ts` | Every rules row of the edge-case matrix: ordering, band ceiling, ongoing, single-entry, default weight. |
-| `solve.ts` | The deterministic force solve: Client Stars along the Rail, Projects in orbit around their own Star. |
-| `solve.test.ts` | Determinism, orbit ownership, the non-finite guard, and mutation guards that pin each determinism guarantee. |
+| `solve.ts` | The deterministic force solve: Client Stars along the Rail, Projects in orbit around their own Star, each with the unit normal of the plane it orbits in. |
+| `solve.test.ts` | Determinism, orbit ownership, orbit planes (unit, containing the Planet, deterministic), the non-finite guard, and mutation guards that pin each determinism guarantee. |
 | `destinations.ts` | The one destination set: every Client and every Project, once each, in content-derived order. |
 | `destinations.test.ts` | Cardinality, ID order under a re-order, and mutation guards that fail if the walk drops a Project or emits Clients only. |
 | `rail.ts` | The Rail's ordering — Clients by earliest `duration.start`, ties by ID — owned here, imported by `solve.ts`, and emitted as the artifact's `rail`. |
@@ -151,7 +151,11 @@ Bytes are LF and end with a newline. `.gitattributes` normalizes the repository 
 
 `SCHEMA_VERSION` is `z.literal` in the schema, not a range: an artifact declaring any other version fails validation rather than being read on a guess. Every level is a `strictObject`, so a consumer writing an undeclared field fails the gate.
 
-The version is **4**. It started at 1; Story 1.6 added `destinations`, Story 1.7 added `dwell` and `shots`, and Story 2.1 added `rail`. Each time the contract's shape changed, the number it declares changed with it. An artifact still carrying `3` publishes no Rail ordering, and fails the gate rather than being read by a consumer that expects one.
+The version is **5**. It started at 1; Story 1.6 added `destinations`, Story 1.7 added `dwell` and `shots`, Story 2.1 added `rail`, and Story 3.2 added each Project's `orbitNormal`. Each time the contract's shape changed, the number it declares changed with it. An artifact still carrying `4` publishes no orbit planes, and fails the gate rather than being read by a scene that draws them.
+
+### Orbit planes are derived, not drawn from a guess (3.2)
+
+Each Project carries `orbitNormal`: the unit normal of the plane it orbits its Star in, `(sin I·cos A, −cos I, sin I·sin A)` for the slot angle `A` and inclination `I` `solveOrbits` placed it at (`e1 × e2`, with `e1` toward the Planet and `e2 = (−sin A, 0, cos A)`). The scene draws each orbit as the circle through the Planet in that plane. Emitted rather than reconstructed because a position alone does not carry the inclination: a renderer would have to guess the plane, and the orbit drawn would not be the orbit solved (AD-3). The schema refines it to unit length (within `1e-3`, since every component is rounded to the solve's four places), and `buildArtifact` throws naming a Project the solve gave no plane.
 
 Every field is **required**, not declared-and-empty — which is only possible once something populates it. A required field nothing emits would have made the artifact fail its own gate, which is exactly what the gate exists to prevent, and is why each was deliberately absent until the story that emits it.
 

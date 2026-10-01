@@ -39,6 +39,7 @@ function client(id: string, position: ScenePosition, planets: readonly ScenePosi
       isDeep: index % 2 === 0,
       mass: 2,
       luminanceBand: 'stroke-near',
+      orbitNormal: { x: 0, y: -1, z: 0 },
       moteTier: 'mote-sparse',
       position: planet,
     })),

@@ -110,10 +110,19 @@ export const MOTE_LABEL_CHAR_PX = MOTE_LABEL_FONT_PX * 0.6;
 export const MOTE_LABEL_GAP_PX = 12;
 
 /**
- * The one Mote value, dot and label: `stroke-active` (DESIGN.md `mote.fillTier1`).
+ * The one Mote dot value: `stroke-active` (DESIGN.md `mote.fillTier1`).
  * Tiering across three values is story 3.5's; until then every Mote is tier 1.
+ * A dot only: a label is a glyph, and glyphs take the ink ladder (3.2).
  */
 export const MOTE_COLOR = tokens.colors['stroke-active-dark'];
+
+/**
+ * The Mote label's ink: `ink-prose`, the ink step that pairs with the dot's
+ * `stroke-active` (the same dark value, on the other ladder). A stroke token on a
+ * glyph is what 3.2 forbids — the two ladders never borrow each other's tokens.
+ * Legibility tiers are 3.5's.
+ */
+export const MOTE_LABEL_COLOR = tokens.colors['ink-prose-dark'];
 
 // --- The artifact slice ------------------------------------------------------
 
@@ -383,7 +392,7 @@ export function moteLabelStyle(): MoteLabelStyle {
   return {
     font: `${MOTE_LABEL_FONT_PX}px monospace`,
     whiteSpace: 'nowrap',
-    color: MOTE_COLOR,
+    color: MOTE_LABEL_COLOR,
     pointerEvents: 'none',
     userSelect: 'none',
     visibility: 'hidden',

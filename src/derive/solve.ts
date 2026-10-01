@@ -59,6 +59,17 @@ export interface Position {
  */
 export interface SolvedLayout {
   readonly positions: Readonly<Record<string, Position>>;
+  /**
+   * Every Project's orbit plane, as the unit normal of that plane, keyed by
+   * Project ID. Client Stars have none: a Star orbits nothing.
+   *
+   * Emitted rather than left to a renderer because the plane is a fact of the
+   * placement — the slot angle and inclination `solveOrbits` chose — and a
+   * renderer reconstructing it from two positions would need a second guess at
+   * the inclination, which a position alone does not carry (AD-3). The orbit
+   * drawn is then the orbit solved.
+   */
+  readonly orbitNormals: Readonly<Record<string, Position>>;
 }
 
 /** Options for `solveLayout`. */
@@ -411,8 +422,8 @@ function solveStars(
  * angles are derived from the slot index within the ID-sorted order, so they are
  * as deterministic as the sort and draw no randomness at all.
  */
-function solveOrbits(client: ClientEntity, star: Position): Map<string, Position> {
-  const solved = new Map<string, Position>();
+function solveOrbits(client: ClientEntity, star: Position): Map<string, SolvedOrbit> {
+  const solved = new Map<string, SolvedOrbit>();
   const ordered = inOrbitOrder(client.projects);
   const count = ordered.length;
   if (count === 0) return solved;
@@ -434,10 +445,27 @@ function solveOrbits(client: ClientEntity, star: Position): Map<string, Position
     const y = star.y + radius * Math.sin(inclination);
     const z = star.z + radius * Math.sin(angle) * Math.cos(inclination);
 
-    solved.set(project.id, finitePosition(project.id, x, y, z));
+    // The orbit plane's unit normal: `e1 × e2`, with `e1` the unit offset toward
+    // the Planet and `e2 = (−sin A, 0, cos A)` the in-plane tangent at the slot.
+    // Unit by construction (the two are orthonormal); rounded like every other
+    // coordinate, which moves its length by far less than the schema tolerates.
+    const normal = finitePosition(
+      project.id,
+      Math.sin(inclination) * Math.cos(angle),
+      -Math.cos(inclination),
+      Math.sin(inclination) * Math.sin(angle),
+    );
+
+    solved.set(project.id, { position: finitePosition(project.id, x, y, z), orbitNormal: normal });
   });
 
   return solved;
+}
+
+/** One Project's placement: where it sits, and the plane it orbits in. */
+interface SolvedOrbit {
+  readonly position: Position;
+  readonly orbitNormal: Position;
 }
 
 // --- Invariants -------------------------------------------------------------
@@ -524,6 +552,7 @@ export function solveLayout(graph: EntityGraph, options: SolveOptions): SolvedLa
   const stars = solveStars(graph.clients, randomSource);
 
   const positions: Record<string, Position> = {};
+  const orbitNormals: Record<string, Position> = {};
   // Emitted in Rail order so the record's key order is content-derived too — a
   // `JSON.stringify` of this object is byte-identical under a re-ordered
   // `career.json`, which key insertion in authored order would not be.
@@ -533,12 +562,13 @@ export function solveLayout(graph: EntityGraph, options: SolveOptions): SolvedLa
       throw new Error(`no solved position for Client "${client.id}".`);
     }
     positions[client.id] = star;
-    for (const [id, position] of solveOrbits(client, star)) {
-      positions[id] = position;
+    for (const [id, orbit] of solveOrbits(client, star)) {
+      positions[id] = orbit.position;
+      orbitNormals[id] = orbit.orbitNormal;
     }
   }
 
   assertOrbitOwnership(graph, positions);
 
-  return { positions };
+  return { positions, orbitNormals };
 }

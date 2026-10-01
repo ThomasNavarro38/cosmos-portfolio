@@ -39,7 +39,23 @@ function positionOf(layout: SolvedLayout, id: string): Position {
   return position;
 }
 
-/** One Project, with its solved position folded in. */
+/**
+ * The orbit plane of one Project, or a failure naming it — for the same reason
+ * `positionOf` throws: a Planet emitted with no plane would have its orbit drawn
+ * from nothing.
+ */
+function orbitNormalOf(layout: SolvedLayout, id: string): Position {
+  const normal = layout.orbitNormals[id];
+  if (normal === undefined) {
+    throw new Error(
+      `the solve produced no orbit normal for "${id}", so its orbit cannot be emitted. ` +
+        `Every Project must be placed in an orbit plane.`,
+    );
+  }
+  return normal;
+}
+
+/** One Project, with its solved position and orbit plane folded in. */
 function projectOf(entity: ProjectEntity, layout: SolvedLayout): ArtifactProject {
   return {
     id: entity.id,
@@ -51,6 +67,7 @@ function projectOf(entity: ProjectEntity, layout: SolvedLayout): ArtifactProject
     moteTier: entity.moteTier,
     timeAxis: entity.timeAxis,
     position: positionOf(layout, entity.id),
+    orbitNormal: orbitNormalOf(layout, entity.id),
     // The authored record, carried **whole** and by reference to the object the
     // schema produced — never field-by-field. A hand-written projection is a
     // list that goes stale the first time a field is added to `ProjectSchema`,

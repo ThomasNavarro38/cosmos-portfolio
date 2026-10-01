@@ -68,6 +68,7 @@ function project(id: string, clientId: string, position = at(1)): SceneArtifactP
     isDeep: false,
     mass: 2,
     luminanceBand: 'stroke-near',
+    orbitNormal: { x: 0, y: -1, z: 0 },
     moteTier: 'mote-sparse',
     position,
   };

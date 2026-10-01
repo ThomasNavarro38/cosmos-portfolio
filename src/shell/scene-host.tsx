@@ -117,6 +117,7 @@ export interface SceneHostArtifact {
       readonly luminanceBand: string;
       readonly moteTier: string;
       readonly position: { readonly x: number; readonly y: number; readonly z: number };
+      readonly orbitNormal: { readonly x: number; readonly y: number; readonly z: number };
       readonly content: { readonly skills: readonly string[] };
     }[];
   }[];

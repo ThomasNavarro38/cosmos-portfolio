@@ -26,19 +26,19 @@ import { SHOT_FRAMINGS } from './shots.ts';
  * on a guess.
  *
  * It started at 1, became **2** when Story 1.6 added `destinations`, **3** when
- * Story 1.7 added `dwell` and `shots`, and is **4** now that Story 2.1 has added
- * `rail`: each time the contract's shape changed, the number it declares changed
- * with it. An artifact still carrying `3` publishes no Rail ordering, and must
- * fail rather than be read by a consumer that expects one — a DOM index reading
- * a `3` artifact would have no order to walk in but the ones the document
- * already carries, neither of which is the Rail's.
+ * Story 1.7 added `dwell` and `shots`, **4** when Story 2.1 added `rail`, and is
+ * **5** now that Story 3.2 has added each Project's `orbitNormal`: each time
+ * the contract's shape changed, the number it declares changed with it. An
+ * artifact still carrying `4` publishes no orbit planes, and must fail rather
+ * than be read by a scene that draws them — it would have to reconstruct each
+ * plane from two positions, which do not carry the inclination.
  *
  * Every new field is **required**, not declared-and-empty. That is only possible
  * once something populates it — a required field nothing emits would have made
  * the artifact fail its own gate, which is precisely what the gate exists to
  * prevent, and is why each was deliberately absent until the story that emits it.
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /** ISO 8601 year-month, matching the authored form exactly. */
 const IsoYearMonth = z
@@ -59,6 +59,35 @@ const PositionSchema = z.strictObject({
   y: z.number().finite(),
   z: z.number().finite(),
 });
+
+/**
+ * The one tolerance an orbit plane is checked against, twice: how far a normal's
+ * length may stray from 1, and how far (as a cosine) a Planet's offset from its
+ * Star may stray from perpendicular to that normal.
+ *
+ * Both errors come from the same source — every component of a position and of a
+ * normal is rounded to the solve's four places — and both stay well under `1e-3`
+ * for any orbit radius above a tenth of a unit (the committed artifact's worst is
+ * about `5e-5`). Anything further off is not a rounded orbit plane but a wrong one.
+ *
+ * `src/render-scene/stroke-model.ts` checks the same perpendicularity before it
+ * draws an orbit, against its own `ORBIT_PLANE_TOLERANCE` of the same value: it may
+ * not import this directory, so the value is mirrored, and
+ * `stroke-model.test.ts` reads this file's literal as text and pins the two equal.
+ */
+export const ORBIT_PLANE_TOLERANCE = 1e-3;
+
+/**
+ * A Project's orbit plane, as its unit normal (Story 3.2).
+ *
+ * Unit length is refined, not assumed: a renderer builds the orbit's basis from
+ * it, and a non-unit normal would draw a tilted or degenerate ellipse that still
+ * looks like an orbit.
+ */
+const UnitVectorSchema = PositionSchema.refine(
+  (v) => Math.abs(Math.hypot(v.x, v.y, v.z) - 1) <= ORBIT_PLANE_TOLERANCE,
+  'must be a unit vector',
+);
 
 /**
  * The Fallback's time-axis scalar: `0..1`, oldest `0`.
@@ -90,6 +119,9 @@ const ArtifactProjectSchema = z.strictObject({
   moteTier: z.enum(MOTE_TIERS),
   timeAxis: TimeAxisSchema,
   position: PositionSchema,
+  // The plane the Project orbits its Star in, solved with its position (3.2).
+  // Emitted so the scene draws the orbit rather than reconstructing it (AD-3).
+  orbitNormal: UnitVectorSchema,
   content: ProjectSchema,
 });
 
@@ -162,14 +194,47 @@ const ShotSchema = z.strictObject({
   framing: z.enum(SHOT_FRAMINGS),
 });
 
-/** One Client in the artifact: a Rail stop, its Star's position, its Projects. */
-const ArtifactClientSchema = z.strictObject({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  timeAxis: TimeAxisSchema,
-  position: PositionSchema,
-  projects: z.array(ArtifactProjectSchema).min(1),
-});
+/**
+ * One Client in the artifact: a Rail stop, its Star's position, its Projects.
+ *
+ * **Each Project must lie in its own orbit plane.** A unit normal can still name a
+ * plane the Planet is not in — tilted about the wrong axis — and the scene would
+ * then fail to draw that orbit in a visitor's browser rather than here. The check
+ * needs the Star's position and the Project's together, so it sits on the Client:
+ * the cosine between the Planet's offset from its Star and its `orbitNormal` must
+ * be within `ORBIT_PLANE_TOLERANCE` of zero. A Planet sitting exactly on its Star
+ * has no offset to check and is rejected too — it has no orbit to draw.
+ */
+const ArtifactClientSchema = z
+  .strictObject({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    timeAxis: TimeAxisSchema,
+    position: PositionSchema,
+    projects: z.array(ArtifactProjectSchema).min(1),
+  })
+  .superRefine((client, ctx) => {
+    client.projects.forEach((project, index) => {
+      const offset = {
+        x: project.position.x - client.position.x,
+        y: project.position.y - client.position.y,
+        z: project.position.z - client.position.z,
+      };
+      const radius = Math.hypot(offset.x, offset.y, offset.z);
+      const normal = project.orbitNormal;
+      const cosine =
+        radius > 0 ? (offset.x * normal.x + offset.y * normal.y + offset.z * normal.z) / radius : Number.NaN;
+      if (!(Math.abs(cosine) <= ORBIT_PLANE_TOLERANCE)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['projects', index, 'orbitNormal'],
+          message:
+            `"${project.id}" does not lie in its own orbit plane (cosine ${String(cosine)}); ` +
+            'its offset from its Star must be perpendicular to its orbitNormal.',
+        });
+      }
+    });
+  });
 
 /**
  * The whole emitted document.
