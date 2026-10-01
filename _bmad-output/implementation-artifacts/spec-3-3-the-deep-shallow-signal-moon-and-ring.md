@@ -19,7 +19,7 @@ context:
 
 ## Boundaries & Constraints
 
-**Always:** Marks depend on `body.isDeep === true` alone — never on band, mass, subject or navigation state, so every Deep Planet in a system shows both at once and at rest. Shallow Planets and Stars get neither. Outline step, colour, weight and radius stay exactly as 3.2 computes them for a Planet whatever its `isDeep`. Ring and Moon face the camera (`<Billboard>`), unlit, `transparent` at opacity 1, `BODY_RENDER_ORDER`. Colours via `strokeColor`, weight via `strokeWidthPx('hairline')`. Moon pixel floor: `max(0.27·r, 2.4 · worldPerPixel)` with `worldPerPixel = 2·depth / (P[5] · heightPx)`, `depth` the Planet's view-space depth (floor not applied when `depth ≤ 0`); applied as a mesh scale, the Moon's centre fixed.
+**Always:** Marks depend on `body.isDeep === true` alone — never on band, mass, subject or navigation state, so every Deep Planet in a system shows both at once and at rest. Shallow Planets and Stars get neither. Outline step, colour, weight and radius stay exactly as 3.2 computes them for a Planet whatever its `isDeep`. Ring and Moon face the camera (`<Billboard>`), unlit, `transparent` at opacity 1; the Ring at `BODY_RENDER_ORDER`, the Moon at `MOON_RENDER_ORDER` (`BODY_RENDER_ORDER + 1`, so it always draws over its coplanar Ring). Colours via `strokeColor`, weight via `strokeWidthPx('hairline')`. Moon pixel floor: `max(0.27·r, 2.4 · worldPerPixel)` with `worldPerPixel = 2·depth / (P[5] · heightPx)`, `depth` the Planet's view-space depth (floor not applied when `depth ≤ 0`); applied as a mesh scale, the Moon's centre fixed.
 
 **Ask First:** Any npm dependency. Any change to `bodyStroke`, `bodyRadius`, `sceneSubject`, click semantics, or the artifact schema.
 
@@ -67,11 +67,22 @@ context:
 - Given the committed tree, when `npm test`, `npm run typecheck`, `npm run gate` run, then all pass.
 - Given `npm run dev`, when the camera arrives at a Client stop holding a Deep Project, then its Ring and Moon are visible at rest with no interaction, and Shallow Planets show bare outlines.
 
+### Review Findings
+
+- [x] [Review][Decision] Moon render order deviates from the frozen Always clause — The frozen constraint says Ring and Moon draw at `BODY_RENDER_ORDER`; the Moon ships at `MOON_RENDER_ORDER = BODY_RENDER_ORDER + 1` (`notable-model.ts:61`, `moon-field.tsx:330`), and `auditMoonField` rejects `BODY_RENDER_ORDER` outright. Rationale (coplanar overlap would flicker under three's depth sort) is sound, but the frozen section was not renegotiated, so the spec contradicts itself. Resolved: keep `+1`; frozen clause amended by Thomas (2026-10-01).
+- [x] [Review][Decision] "Ring opens" scan skips comments — The Never clause bans "any text, caption or comment string" saying a ring opens; the scan (`scene-model.test.ts` `stringLiterals`/`jsxTexts`) runs on `blankComments(source)` and its fixtures explicitly accept `// a ring never means it opens`. Nothing violates today; the question is whether "comment string" means source comments. Resolved: scope is shipped copy, not source comments; recorded in Design Notes (Thomas, 2026-10-01).
+- [x] [Review][Patch] No test holds the Moon straddling the Ring [src/render-scene/notable-model.test.ts:465]
+- [x] [Review][Patch] `ISDEEP_WRITE` misses `isDeep &&=` and an object-literal `isDeep: true|false` [src/render-scene/scene-model.test.ts:963]
+- [x] [Review][Patch] Deferred click-target entry names the Ring only; the Moon is outside the hit sphere too [_bmad-output/implementation-artifacts/deferred-work.md:713]
+- [x] [Review][Patch] Design Notes say the Moon "touches" the Ring; it straddles it (1.73–2.27 × r across 2.2 × r) [_bmad-output/implementation-artifacts/spec-3-3-the-deep-shallow-signal-moon-and-ring.md:81]
+
 ## Design Notes
 
-Moon direction: a fixed billboard-local angle (`MOON_ANGLE = π/12`, up-right, as in the direction-03 mock) so it reads as one consistent mark, not noise. At 2 × r the Moon touches the 2.2 × r Ring, as in the mock (body 11, ring 24, moon at 24).
+Moon direction: a fixed billboard-local angle (`MOON_ANGLE = π/12`, up-right, as in the direction-03 mock) so it reads as one consistent mark, not noise. Centred at 2 × r with radius 0.27 × r, the Moon's disc spans 1.73–2.27 × r along its direction, so the 2.2 × r Ring runs through it, as in the mock (body 11, ring 24, moon at 24); held by `notable-model.test.ts`.
 
 Pixel floor, from the column-major matrices three exposes: `zView = V[2]x + V[6]y + V[10]z + V[14]`, `depth = −zView`; `P[5] = 1/tan(fov/2)`; one CSS pixel spans `2·depth / (P[5]·heightPx)` world units at that depth.
+
+"Comment string" in the Never clause means shipped, visitor-facing copy (string literals and JSX text), not source-code comments: the scan in `scene-model.test.ts` blanks comments deliberately, so a developer comment that restates the rule ("a ring never means it opens") does not trip it.
 
 Ring at `stroke-near` on a recent Planet at band `stroke-near` is the same token — legal: the Ring is a structural channel, its distinctness is geometric (2.2 × r), never tonal.
 

@@ -134,6 +134,21 @@ test('a Deep Planet carries one Moon of r 0.1215 in stroke-active, centred 0.9 o
   assert.ok(close(Math.atan2(moon.center[1], moon.center[0]), MOON_ANGLE));
 });
 
+test('the Moon’s disc straddles the Ring, so the two read as one layered mark', () => {
+  // Along the Moon's direction its disc spans offset ± radius; the Ring must run
+  // through it. A floor scale only grows the disc about the same centre, so the
+  // unscaled Moon is the tightest case.
+  const deep = planet('project:a', true);
+  const [moon] = notableMoons([deep]);
+  const [ring] = notableRings(deep);
+  assert.ok(moon !== undefined && ring !== undefined);
+  const offset = Math.hypot(moon.center[0], moon.center[1]);
+  const ringRadius = Math.hypot(ring.points[0]?.[0] ?? 0, ring.points[0]?.[1] ?? 0);
+  assert.ok(offset - moon.radius < ringRadius, 'the Ring is outside the Moon’s inner edge');
+  assert.ok(ringRadius < offset + moon.radius, 'the Ring is inside the Moon’s outer edge');
+  assert.ok(MOON_OFFSET_RATIO - MOON_RADIUS_RATIO < RING_RADIUS_RATIO && RING_RADIUS_RATIO < MOON_OFFSET_RATIO + MOON_RADIUS_RATIO);
+});
+
 test('a Shallow Planet carries neither, and its outline is the Deep one’s', () => {
   const shallow = planet('project:a', false);
   assert.deepEqual(notableRings(shallow), []);

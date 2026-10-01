@@ -836,10 +836,12 @@ test('the forbidden-import audit rejects each form, so it is a ratchet rather th
 });
 
 /**
- * An assignment to, or a default of, `isDeep` (`=`, `??`, `??=`, `||`, `||=`) —
- * never a comparison or a condition, which read it.
+ * An assignment to, or a default of, `isDeep` (`=`, `??`, `??=`, `||`, `||=`,
+ * `&&=`), or an object literal that sets it to a constant or a negation
+ * (`isDeep: true`, `isDeep: !…`) — never a comparison or a condition, which read
+ * it, nor a type annotation or a carry (`isDeep: project.isDeep`).
  */
-const ISDEEP_WRITE = /\bisDeep\s*=(?!=)|\bisDeep\s*\?\?|\bisDeep\s*\|\|/;
+const ISDEEP_WRITE = /\bisDeep\s*=(?!=)|\bisDeep\s*\?\?|\bisDeep\s*\|\||\bisDeep\s*&&=|\bisDeep\s*:\s*(?:true\b|false\b|!)/;
 
 test('the scene holds no classification or mapping-rule vocabulary of its own', () => {
   // The three mapping rules live in `src/derive/rules.ts` and nowhere else. A name
@@ -865,10 +867,23 @@ test('the scene holds no classification or mapping-rule vocabulary of its own', 
     '{ isDeep=1 }',
     'const d = body.isDeep || false;',
     'body.isDeep ||= true;',
+    'body.isDeep &&= false;',
+    'notableRings({ ...body, isDeep: true })',
+    'const fake = { isDeep : false };',
+    'const flipped = { ...body, isDeep: !body.isDeep };',
   ]) {
     assert.match(form, ISDEEP_WRITE, `${form} must be rejected`);
   }
-  for (const form of ['body.isDeep === true', 'body.isDeep !== true', 'body.isDeep == true', 'const mark = body.isDeep ? ring : none;']) {
+  for (const form of [
+    'body.isDeep === true',
+    'body.isDeep !== true',
+    'body.isDeep == true',
+    'const mark = body.isDeep ? ring : none;',
+    'const deep = body.isDeep && ring;',
+    'isDeep: project.isDeep,',
+    'readonly isDeep: boolean;',
+    'readonly isDeep?: boolean;',
+  ]) {
     assert.doesNotMatch(form, ISDEEP_WRITE, `${form} reads and must pass`);
   }
 });

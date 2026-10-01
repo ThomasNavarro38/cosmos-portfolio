@@ -712,5 +712,5 @@ leaves open.
 ## Deferred from: code review of spec-3-3-the-deep-shallow-signal-moon-and-ring.md (2026-10-01)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-3-the-deep-shallow-signal-moon-and-ring.md`
-  summary: A Deep Planet's Ring (2.2 × r) and Moon (2 × r out) are visible, filled-looking marks outside the Body's hit sphere (`bodyRadius(body)`), so clicking them does nothing; decide with 3.4's hover/keyboard affordance whether the hit target grows to the Ring.
+  summary: A Deep Planet's Ring (2.2 × r) and Moon (2 × r out, radius 0.27 × r or more under the pixel floor) are visible marks outside the Body's hit sphere (`bodyRadius(body)`), so clicking either does nothing; decide with 3.4's hover/keyboard affordance whether the hit target grows to cover the Ring and the Moon.
   evidence: `body-field.tsx` hit sphere is `sphereGeometry args={[bodyRadius(body), …]}`; 3.3's spec puts click semantics under Ask First, so it was not changed here.
