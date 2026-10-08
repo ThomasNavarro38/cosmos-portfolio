@@ -9,8 +9,17 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { activateClient, activateProject, goHome, pullBack, releaseLayer, returnToRail } from './activate.ts';
-import { advanceScroll, enterRail, navigationStore, releaseFocus, resetNavigation, selectClient } from './state.ts';
+import {
+  activateClient,
+  activateProject,
+  approachByKeyboard,
+  goHome,
+  leaveByKeyboard,
+  pullBack,
+  releaseLayer,
+  returnToRail,
+} from './activate.ts';
+import { advanceScroll, enterRail, hoverProject, navigationStore, releaseFocus, resetNavigation, selectClient } from './state.ts';
 
 const ACTIVATE_TS = fileURLToPath(new URL('./activate.ts', import.meta.url));
 
@@ -29,6 +38,8 @@ test('a Client activated on the Rail enters free flight aimed at it, and moves n
     scrollProgress: 1.5,
     focusedProjectId: null,
     focusOrigin: null,
+    hoveredProjectId: null,
+    keyboardProjectId: null,
   });
 });
 
@@ -66,6 +77,8 @@ test('a Project activated on the Rail is Focus alone, entered from the Rail', ()
     scrollProgress: 1,
     focusedProjectId: 'project:p',
     focusOrigin: 'rail',
+    hoveredProjectId: null,
+    keyboardProjectId: null,
   });
 });
 
@@ -303,6 +316,61 @@ test('a malformed ID throws naming it, in either mode, and leaves the store as i
   }
 });
 
+// --- The keyboard's approach (3.4) -------------------------------------------------
+
+test('a :focus-visible focus on an index entry approaches it, and writes nothing else', () => {
+  resetNavigation();
+  hoverProject('project:b');
+  const before = navigationStore.getState();
+  approachByKeyboard('project:a', true);
+  const after = navigationStore.getState();
+  assert.equal(after.keyboardProjectId, 'project:a');
+  assert.deepEqual({ ...after, keyboardProjectId: before.keyboardProjectId }, before, 'only the keyboard field moved');
+  assert.equal(after.hoveredProjectId, 'project:b', 'the pointer’s approach stands; the keyboard simply wins it');
+});
+
+test('a mouse-click focus (no :focus-visible) leaves the keyboard field unchanged', () => {
+  resetNavigation();
+  approachByKeyboard('project:a', false);
+  assert.equal(navigationStore.getState().keyboardProjectId, null);
+  approachByKeyboard('project:a', true);
+  approachByKeyboard('project:b', false);
+  assert.equal(navigationStore.getState().keyboardProjectId, 'project:a', 'a pointer focus replaces nothing');
+});
+
+test('a blur clears the approach only when it names the current holder — a stale leave writes nothing', () => {
+  resetNavigation();
+  approachByKeyboard('project:a', true);
+  approachByKeyboard('project:b', true);
+  const before = navigationStore.getState();
+  leaveByKeyboard('project:a');
+  assert.equal(navigationStore.getState(), before, 'the stale leave did not even notify');
+  assert.equal(navigationStore.getState().keyboardProjectId, 'project:b');
+  leaveByKeyboard('project:b');
+  assert.equal(navigationStore.getState().keyboardProjectId, null);
+});
+
+test('the keyboard doors reject a malformed ID before anything is written', () => {
+  resetNavigation();
+  approachByKeyboard('project:a', true);
+  const before = navigationStore.getState();
+  assert.throws(() => approachByKeyboard('', true), /approachByKeyboard.*""/);
+  assert.throws(() => approachByKeyboard('', false), /approachByKeyboard/);
+  assert.throws(() => leaveByKeyboard('  '), /leaveByKeyboard/);
+  assert.equal(navigationStore.getState(), before);
+});
+
+test('the keyboard doors activate nothing: no Focus, no flight, no Rail move', () => {
+  resetNavigation();
+  advanceScroll(1.5);
+  approachByKeyboard('project:a', true);
+  leaveByKeyboard('project:a');
+  const state = navigationStore.getState();
+  assert.equal(state.mode, 'rail');
+  assert.equal(state.focusedProjectId, null);
+  assert.equal(state.scrollProgress, 1.5);
+});
+
 // --- Purity -------------------------------------------------------------------
 
 function blank(source: string): string {
@@ -351,6 +419,15 @@ function auditActivatePurity(source: string): string[] {
   if (!/if\s*\(\s*navigationStore\.getState\(\)\.focusedProjectId\s*!==\s*null\s*\)\s*releaseFocus\(\)\s*;/.test(code)) {
     failures.push('Focus is released before travel other than when a Project is focused');
   }
+  // 3.4: the keyboard's two doors, each gated, and the field written nowhere else.
+  if ((code.match(/\bkeyboardApproach\(/g) ?? []).length !== 2) failures.push('keyboardApproach is called other than twice');
+  if (!/if\s*\(\s*focusVisible\s*\)\s*keyboardApproach\(\s*id\s*\)\s*;/.test(code)) {
+    failures.push('the keyboard approach is not gated on :focus-visible');
+  }
+  if (!/if\s*\(\s*navigationStore\.getState\(\)\.keyboardProjectId\s*===\s*id\s*\)\s*keyboardApproach\(\s*null\s*\)\s*;/.test(code)) {
+    failures.push('the keyboard leave has no stale-leave guard');
+  }
+  if (/\bhoverProject\b/.test(code)) failures.push('a door writes the pointer’s approach');
   return failures;
 }
 
@@ -390,6 +467,11 @@ test('the purity audit rejects the real module with any one impurity added', () 
     ['Escape on the Rail enters the Rail', (s) => s.replace("if (mode === 'freeflight') enterRail();", 'enterRail();')],
     ['Escape pulls back', (s) => s.replace("if (mode === 'freeflight') enterRail();", "if (mode === 'freeflight') enterFreeFlight(null);")],
     ['Escape goes home', (s) => s.replace("if (mode === 'freeflight') enterRail();", "if (mode === 'freeflight') goHome();")],
+    // The keyboard's approach (3.4).
+    ['a pointer focus approaches', (s) => s.replace('if (focusVisible) keyboardApproach(id);', 'keyboardApproach(id);')],
+    ['a stale leave clears', (s) => s.replace('if (navigationStore.getState().keyboardProjectId === id) keyboardApproach(null);', 'keyboardApproach(null);')],
+    ['an ungated second approach', (s) => s.replace('if (focusVisible) keyboardApproach(id);', 'if (focusVisible) keyboardApproach(id);\n  keyboardApproach(id);')],
+    ['a door that writes hover', (s) => s.replace('if (focusVisible) keyboardApproach(id);', 'if (focusVisible) keyboardApproach(id);\n  hoverProject(id);')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);

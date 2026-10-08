@@ -714,3 +714,7 @@ leaves open.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-3-the-deep-shallow-signal-moon-and-ring.md`
   summary: A Deep Planet's Ring (2.2 × r) and Moon (2 × r out, radius 0.27 × r or more under the pixel floor) are visible marks outside the Body's hit sphere (`bodyRadius(body)`), so clicking either does nothing; decide with 3.4's hover/keyboard affordance whether the hit target grows to cover the Ring and the Moon.
   evidence: `body-field.tsx` hit sphere is `sphereGeometry args={[bodyRadius(body), …]}`; 3.3's spec puts click semantics under Ask First, so it was not changed here.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-4-the-hover-and-keyboard-focus-affordance.md`
+  summary: Body hit spheres have no on-screen minimum size, so distant Planets are a few pixels wide and impractical to hover or click.
+  evidence: The hit sphere uses the Body's world radius (src/render-scene/body-field.tsx), unlike the Moon which got a pixel floor in 3.3; 3.4's hover reuses this 3.2 click target, making the gap more visible.

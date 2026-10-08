@@ -34,6 +34,8 @@
  * | `scrollProgress` | `advanceScroll` — the scroll input's handlers in `scene-host.tsx` (rules in `rail-input.ts`) and the `goHome` door (`activate.ts`) | Continuous progress along the Rail, in stops: 0 is the opening frame, `k` the `k`-th Client stop, present first |
  * | `focusedProjectId` | `focusProject` / `releaseFocus` | The one Project focused, or none |
  * | `focusOrigin` | `focusProject`, at entry | The mode Focus was entered from |
+ * | `hoveredProjectId` | `hoverProject` — the scene's pointer over/out on a Planet's hit sphere (`scene-pick.ts`) | The Planet the pointer is over, or none (3.4) |
+ * | `keyboardProjectId` | `keyboardApproach` — the index's Project button focus/blur, through the doors `approachByKeyboard` / `leaveByKeyboard` (`activate.ts`) | The Project whose index entry holds `:focus-visible`, or none (3.4) |
  *
  * No event writes two writers' fields. The scroll input advancing
  * `scrollProgress` must not move `railPosition`, and selecting a Client must not
@@ -177,6 +179,20 @@ export interface NavigationState {
   readonly focusedProjectId: ProjectId | null;
   /** The mode Focus was entered from. Written by `focusProject`, at entry. */
   readonly focusOrigin: FocusOrigin;
+  /**
+   * The Project whose Planet the pointer is over, or `null` (3.4). Written by
+   * `hoverProject` only — the scene's hit-sphere over/out bindings.
+   *
+   * Approach, never activation: nothing reads it to move the camera or open the
+   * panel. It only says which Project's affordance the pointer reaches.
+   */
+  readonly hoveredProjectId: ProjectId | null;
+  /**
+   * The Project whose index entry holds keyboard focus (`:focus-visible`), or
+   * `null` (3.4). Written by `keyboardApproach` only — the index's focus/blur,
+   * through the doors in `activate.ts`. A mouse-click focus never writes it.
+   */
+  readonly keyboardProjectId: ProjectId | null;
 }
 
 /**
@@ -195,6 +211,8 @@ const INITIAL_STATE: NavigationState = {
   scrollProgress: 0,
   focusedProjectId: null,
   focusOrigin: null,
+  hoveredProjectId: null,
+  keyboardProjectId: null,
 };
 
 /**
@@ -363,6 +381,38 @@ export function enterFreeFlight(target: ClientId | null): void {
  */
 export function enterRail(): void {
   navigationStore.setState({ mode: 'rail' });
+}
+
+/**
+ * The pointer is over this Project's Planet, or over none (`null`) (3.4).
+ *
+ * Writes `hoveredProjectId` and nothing else: hover reveals, it never activates,
+ * so no other field moves. The store holds no stale-leave rule — a leave that
+ * names a Project the pointer has already left is the caller's to drop
+ * (`scene-pick.ts`), as membership is.
+ *
+ * @throws if `id` is neither `null` nor a non-empty string, naming the field and
+ * the value.
+ */
+export function hoverProject(id: ProjectId | null): void {
+  const hoveredProjectId = id === null ? null : requireId('hoverProject', id);
+  navigationStore.setState({ hoveredProjectId });
+}
+
+/**
+ * The keyboard has reached this Project's index entry, or has left it (`null`)
+ * (3.4).
+ *
+ * Writes `keyboardProjectId` and nothing else. The `:focus-visible` gate and the
+ * stale-leave guard are the doors' (`approachByKeyboard`, `leaveByKeyboard` in
+ * `activate.ts`), not the store's.
+ *
+ * @throws if `id` is neither `null` nor a non-empty string, naming the field and
+ * the value.
+ */
+export function keyboardApproach(id: ProjectId | null): void {
+  const keyboardProjectId = id === null ? null : requireId('keyboardApproach', id);
+  navigationStore.setState({ keyboardProjectId });
 }
 
 /**

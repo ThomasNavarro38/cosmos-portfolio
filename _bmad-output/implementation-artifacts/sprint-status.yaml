@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 2026-10-01
+last_updated: 2026-10-08
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -63,7 +63,7 @@ development_status:
   3-1-generated-design-tokens-from-a-single-source: done
   3-2-the-stroke-and-ink-ladders-applied-to-the-scene: done
   3-3-the-deep-shallow-signal-moon-and-ring: done
-  3-4-the-hover-and-keyboard-focus-affordance: backlog
+  3-4-the-hover-and-keyboard-focus-affordance: review
   3-5-mote-tiering-and-label-legibility: backlog
   3-6-the-information-panel: backlog
   3-7-the-notable-and-the-editorial-rule-line: backlog

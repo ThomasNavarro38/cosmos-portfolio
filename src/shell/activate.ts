@@ -47,6 +47,16 @@
  *   - `releaseLayer()` is `Escape`'s door: it releases the innermost layer, and
  *     only that one. Focused → `releaseFocus()`; otherwise in free flight →
  *     `enterRail()`; otherwise nothing. It never makes two writes.
+ *
+ * Decisions ratified for 3.4:
+ *
+ *   - **The keyboard's approach is two doors, and neither activates.**
+ *     `approachByKeyboard(id, focusVisible)` writes `keyboardApproach(id)` only
+ *     when the index entry's focus is `:focus-visible` — a mouse click also
+ *     focuses a button, and that focus is no approach. `leaveByKeyboard(id)`
+ *     clears the field only when it still names `id`: a blur that arrives after
+ *     the next entry's focus is a stale leave, and must not erase the newer one.
+ *     The guard lives here, not in the store, which holds no rule.
  */
 
 import {
@@ -54,6 +64,7 @@ import {
   enterFreeFlight,
   enterRail,
   focusProject,
+  keyboardApproach,
   navigationStore,
   releaseFocus,
   requireId,
@@ -134,4 +145,28 @@ export function releaseLayer(): void {
     return;
   }
   if (mode === 'freeflight') enterRail();
+}
+
+/**
+ * The keyboard has reached this Project's index entry (3.4): its affordance is
+ * drawn. Only when the entry's focus is `:focus-visible` — a pointer focus is
+ * not an approach and writes nothing.
+ *
+ * @throws naming the value when the ID is malformed, before anything is written.
+ */
+export function approachByKeyboard(projectId: ProjectId, focusVisible: boolean): void {
+  const id = requireId('approachByKeyboard', projectId);
+  if (focusVisible) keyboardApproach(id);
+}
+
+/**
+ * The keyboard has left this Project's index entry (3.4). Clears the approach
+ * only when it still names this Project: a stale leave — one arriving after
+ * another entry was reached — writes nothing.
+ *
+ * @throws naming the value when the ID is malformed, before anything is written.
+ */
+export function leaveByKeyboard(projectId: ProjectId): void {
+  const id = requireId('leaveByKeyboard', projectId);
+  if (navigationStore.getState().keyboardProjectId === id) keyboardApproach(null);
 }

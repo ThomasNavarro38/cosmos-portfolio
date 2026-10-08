@@ -118,7 +118,12 @@ export interface SceneHostArtifact {
       readonly moteTier: string;
       readonly position: { readonly x: number; readonly y: number; readonly z: number };
       readonly orbitNormal: { readonly x: number; readonly y: number; readonly z: number };
-      readonly content: { readonly skills: readonly string[] };
+      readonly content: {
+        readonly skills: readonly string[];
+        readonly project: string;
+        readonly role: string;
+        readonly team_size: number;
+      };
     }[];
   }[];
 }

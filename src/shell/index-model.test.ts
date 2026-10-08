@@ -670,7 +670,23 @@ function auditDoors(source: string): string[] {
   if (/activateClient\(\s*project\.|activateProject\(\s*client\.|activateProject\(\s*project\.id\s*,\s*project\./.test(code)) {
     failures.push('a door is handed the other entity’s ID — a ProjectId where a ClientId belongs is AD-4a');
   }
-  if (/\b(?:selectClient|focusProject|enterFreeFlight|enterRail|releaseFocus|advanceScroll)\b/.test(code)) {
+  // 3.4: the keyboard's approach — exactly one focus and one blur handler, on the
+  // Project button, each a door handed its own Project's ID; the focus gate is
+  // `:focus-visible`, read off the button itself, never a bare `:focus`.
+  if ((code.match(/onFocus=\{/g) ?? []).length !== 1) failures.push('other than exactly one focus handler');
+  if ((code.match(/onBlur=\{/g) ?? []).length !== 1) failures.push('other than exactly one blur handler');
+  if (
+    !/onFocus=\{\(event\)\s*=>\s*approachByKeyboard\(\s*project\.id\s*,\s*event\.currentTarget\.matches\(\s*':focus-visible'\s*\)\s*\)\}/.test(code)
+  ) {
+    failures.push('the Project button’s focus does not approach its own Project, gated on :focus-visible');
+  }
+  if (!/onBlur=\{\(\)\s*=>\s*leaveByKeyboard\(\s*project\.id\s*\)\}/.test(code)) {
+    failures.push('the Project button’s blur does not leave its own Project');
+  }
+  if (!/activateProject\(\s*project\.id\s*,\s*client\.id\s*\)\}\s*onFocus=/.test(code)) {
+    failures.push('the focus handler is not on the Project button');
+  }
+  if (/\b(?:selectClient|focusProject|enterFreeFlight|enterRail|releaseFocus|advanceScroll|hoverProject|keyboardApproach)\b/.test(code)) {
     failures.push('a store event called directly — every button is a door in activate.ts');
   }
   const clicks = (code.match(/onClick=\{/g) ?? []).length;
@@ -702,6 +718,14 @@ test('the door audit rejects the real renderer with any one door miswired', () =
     ['the ref on the Client button', (s) => s.replace(' ref={overview}', '').replace('<button type="button" onClick={() => activateClient', '<button type="button" ref={overview} onClick={() => activateClient')],
     ['the mode read off the wrong field', (s) => s.replace('(state) => state.mode)', '(state) => state.focusOrigin)')],
     ['a Client button with no handler', (s) => s.replace(' onClick={() => activateClient(client.id)}', '')],
+    // 3.4: the keyboard's approach.
+    ['a mouse focus approaches too', (s) => s.replace("event.currentTarget.matches(':focus-visible')", 'true')],
+    ['a bare :focus gate', (s) => s.replace("matches(':focus-visible')", "matches(':focus')")],
+    ['the focus handed a Client', (s) => s.replace('approachByKeyboard(project.id,', 'approachByKeyboard(client.id,')],
+    ['the blur dropped', (s) => s.replace(/\s*onBlur=\{\(\) => leaveByKeyboard\(project\.id\)\}/, '')],
+    ['the blur writes the store directly', (s) => s.replace('leaveByKeyboard(project.id)', 'keyboardApproach(null)')],
+    ['a hover written from the index', (s) => s.replace('leaveByKeyboard(project.id)', 'hoverProject(project.id)')],
+    ['a second focus handler', (s) => s.replace('<button type="button" onClick={() => activateClient(client.id)}>', '<button type="button" onClick={() => activateClient(client.id)} onFocus={() => pullBack()}>')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real.replace(/\r\n/g, '\n'));
