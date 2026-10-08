@@ -40,6 +40,8 @@
  * after the rig so it projects through the camera the rig has just moved. Each
  * Deep Planet's Ring is `<BodyField>`'s, and its Moon `<MoonField>`'s (3.3),
  * mounted after `<BodyField>` — every rule in `notable-model.ts`. The
+ * approached Project's leader and label are `<AffordanceField>`'s (3.4), mounted
+ * last, an overlay over the vignette — every rule in `affordance-model.ts`. The
  * `camera` prop stays keyframe 0, so the first frame is the opening frame
  * whether or not the rig has run yet.
  *
@@ -67,6 +69,8 @@ import {
   mediumFalloff,
   mediumSpriteScale,
 } from './dust-model.ts';
+import { AffordanceField } from './affordance-field.tsx';
+import type { AffordanceArtifact } from './affordance-model.ts';
 import { MoonField } from './moon-field.tsx';
 import { MoteField } from './mote-field.tsx';
 import type { MoteArtifact } from './mote-model.ts';
@@ -95,9 +99,9 @@ MEDIUM_TEXTURE.magFilter = LinearFilter;
 MEDIUM_TEXTURE.minFilter = LinearFilter;
 MEDIUM_TEXTURE.needsUpdate = true;
 
-/** What the scene needs: the artifact, and nothing else — the Bodies' slice and the Motes'. */
+/** What the scene needs: the artifact, and nothing else — the Bodies' slice, the Motes' and the affordance's. */
 export interface SceneProps {
-  readonly artifact: SceneArtifact & MoteArtifact;
+  readonly artifact: SceneArtifact & MoteArtifact & AffordanceArtifact;
 }
 
 /**
@@ -186,6 +190,8 @@ export function Scene({ artifact }: SceneProps) {
         <BodyField bodies={bodies} rail={rail} />
         {/* The Moons: one per Deep Planet, after the Bodies and the rig, held at their pixel floor. They read no store. */}
         <MoonField bodies={bodies} />
+        {/* The affordance (3.4): the approached Project's leader and label, in an overlay over the vignette. It reads, it never writes the store. */}
+        <AffordanceField artifact={artifact} bodies={bodies} />
       </Canvas>
       {/* The vignette: the ground over the frame's edge, 0 inside 42% rising to 0.9. Inert, and not narrated. */}
       <div aria-hidden="true" style={vignetteStyle()} />

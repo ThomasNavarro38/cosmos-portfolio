@@ -64,6 +64,8 @@ const STROKE_MODEL_TS = fileURLToPath(new URL('./stroke-model.ts', import.meta.u
 const BODY_FIELD_TSX = fileURLToPath(new URL('./body-field.tsx', import.meta.url));
 const NOTABLE_MODEL_TS = fileURLToPath(new URL('./notable-model.ts', import.meta.url));
 const MOON_FIELD_TSX = fileURLToPath(new URL('./moon-field.tsx', import.meta.url));
+const AFFORDANCE_MODEL_TS = fileURLToPath(new URL('./affordance-model.ts', import.meta.url));
+const AFFORDANCE_FIELD_TSX = fileURLToPath(new URL('./affordance-field.tsx', import.meta.url));
 const SRC_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SCENE_HOST_TSX = fileURLToPath(new URL('../shell/scene-host.tsx', import.meta.url));
 const APP_TSX = fileURLToPath(new URL('../App.tsx', import.meta.url));
@@ -803,7 +805,7 @@ test('no module here imports src/data/, src/derive/, the solver, or zustand/reac
   // package, so `zustand/react` and `zustand/vanilla` are both `zustand`, and a row
   // banning `zustand` would reject the navigation store this directory's README
   // explicitly permits.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX, NOTABLE_MODEL_TS, MOON_FIELD_TSX]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX, NOTABLE_MODEL_TS, MOON_FIELD_TSX, AFFORDANCE_MODEL_TS, AFFORDANCE_FIELD_TSX]) {
     assert.deepEqual(auditForbiddenImports(readFileSync(path, 'utf8')), [], `${path} must hold no forbidden import`);
   }
 });
@@ -853,7 +855,7 @@ test('the scene holds no classification or mapping-rule vocabulary of its own', 
   // A case-insensitive `\balpha\b` ban was dropped from this list deliberately — over
   // a pure-structure module it cannot fail by construction, and it would misfire on a
   // future token name or on a fixture Client named Alpha.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX, NOTABLE_MODEL_TS, MOON_FIELD_TSX]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX, NOTABLE_MODEL_TS, MOON_FIELD_TSX, AFFORDANCE_MODEL_TS, AFFORDANCE_FIELD_TSX]) {
     const code = codeOf(path);
     assert.doesNotMatch(code, /\bclassify\w*\s*\(|\bfunction\s+classify/i, 'no classification test');
     assert.doesNotMatch(code, /\b(?:luminance|mote|mass|rail)(?:Band|Tier|Of|For|From)?\s*\(/i, 'no mapping computed');
@@ -987,19 +989,28 @@ test('the thinness audit rejects each form it names, including the ones that rea
   }
 });
 
-test('every Body’s hit sphere hands its click to activateBody, and that is the only handler', () => {
+test('every Body’s hit sphere hands its click to activateBody and its pointer over/out to hoverBody/leaveBody, and nothing else handles anything', () => {
   // Pinned positively: deleting the handler is a one-line edit every negative scan
   // passes, and a Planet in the scene then cannot be picked (2.7). The rule the click
   // runs is executed in `scene-pick.test.ts`; this holds the binding, which moved
-  // with the Bodies into `body-field.tsx` (3.2).
+  // with the Bodies into `body-field.tsx` (3.2). Since 3.4 the hover reveals: the
+  // same hit sphere hands its over and out to the approach — and a hover that
+  // *activates* is rejected.
   const real = readFileSync(BODY_FIELD_TSX, 'utf8');
   assert.deepEqual(auditPick(real), []);
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
-    ['the click deleted', (source) => source.replace(' onClick={(event) => activateBody(body, event)}', '')],
+    ['the click deleted', (source) => source.replace('onClick={(event) => activateBody(body, event)}', '')],
     ['the event dropped', (source) => source.replace('activateBody(body, event)', 'activateBody(body)')],
-    ['the import dropped', (source) => source.replace("import { activateBody } from './scene-pick.ts';", '')],
-    ['a hover beside it', (source) => source.replace('onClick={(event)', 'onPointerOver={() => undefined}\n            onClick={(event)')],
-    ['the hit sphere drawn', (source) => source.replace('<mesh visible={false} onClick', '<mesh onClick')],
+    ['the import dropped', (source) => source.replace("import { activateBody, hoverBody, leaveBody } from './scene-pick.ts';", '')],
+    ['a hover that activates', (source) => source.replace('onPointerOver={(event) => hoverBody(body, event)}', 'onPointerOver={(event) => activateBody(body, event)}')],
+    ['a hover that focuses', (source) => source.replace('onPointerOver={(event) => hoverBody(body, event)}', 'onPointerOver={() => focusProject(body.id)}')],
+    ['a third pointer handler', (source) => source.replace('onClick={(event)', 'onPointerEnter={() => undefined}\n            onClick={(event)')],
+    ['the hover dropped', (source) => source.replace('onPointerOver={(event) => hoverBody(body, event)}', '')],
+    ['the leave dropped', (source) => source.replace('onPointerOut={(event) => leaveBody(body, event)}', '')],
+    ['the leave wired to the hover', (source) => source.replace('onPointerOut={(event) => leaveBody(body, event)}', 'onPointerOut={(event) => hoverBody(body, event)}')],
+    ['the hover handed no event', (source) => source.replace('hoverBody(body, event)', 'hoverBody(body)')],
+    ['a hover on the outline', (source) => source.replace('<Billboard>', '<Billboard onPointerOver={(event) => hoverBody(body, event)}>')],
+    ['the hit sphere drawn', (source) => source.replace(/<mesh\s+visible=\{false\}/, '<mesh')],
     ['a click on the outline', (source) => source.replace('<Billboard>', '<Billboard onClick={(event) => activateBody(body, event)}>')],
     ['a click on a line', (source) => source.replace('key={line.id}', 'key={line.id}\n          onPointerMissed={() => undefined}')],
   ];
@@ -1012,13 +1023,18 @@ test('every Body’s hit sphere hands its click to activateBody, and that is the
 
 /**
  * The pick binding, positively: inside the Bodies' map, one hidden hit sphere per
- * Body carries `onClick={(event) => activateBody(body, event)}`, imported from the
- * pure rule — and nothing else in the file handles any interaction.
+ * Body carries `onClick={(event) => activateBody(body, event)}` and, since 3.4,
+ * `onPointerOver={(event) => hoverBody(body, event)}` and
+ * `onPointerOut={(event) => leaveBody(body, event)}`, all three imported from the
+ * pure rule — and nothing else in the file handles any interaction. Hover
+ * reveals, never activates: a pointer handler handed a door is a finding.
  */
 function auditPick(source: string): string[] {
   const code = blankProse(source);
   const failures: string[] = [];
   const pick = /\bonClick=\{\s*\(\s*event\s*\)\s*=>\s*activateBody\(\s*body\s*,\s*event\s*\)\s*\}/g;
+  const over = /\bonPointerOver=\{\s*\(\s*event\s*\)\s*=>\s*hoverBody\(\s*body\s*,\s*event\s*\)\s*\}/g;
+  const out = /\bonPointerOut=\{\s*\(\s*event\s*\)\s*=>\s*leaveBody\(\s*body\s*,\s*event\s*\)\s*\}/g;
   const blocks = mapBlocks(code, 'bodies');
   if (blocks.length !== 1) failures.push('the Bodies are not mapped exactly once');
   const block = blocks[0] ?? '';
@@ -1031,14 +1047,18 @@ function auditPick(source: string): string[] {
     if (!/\bonClick=\{\s*\(\s*event\s*\)\s*=>\s*activateBody\(\s*body\s*,\s*event\s*\)\s*\}/.test(hit)) {
       failures.push('a Body’s hit sphere does not hand its click, and the event, to activateBody');
     }
+    if (!new RegExp(over.source).test(hit) || !new RegExp(out.source).test(hit)) {
+      failures.push('a Body’s hit sphere does not hand its pointer over and out, with the event, to hoverBody and leaveBody');
+    }
   }
   if ((code.match(pick) ?? []).length !== 1) failures.push('the click is bound other than once');
-  const rest = code.replace(pick, '');
+  if ((code.match(over) ?? []).length !== 1 || (code.match(out) ?? []).length !== 1) failures.push('the approach is bound other than once');
+  const rest = code.replace(pick, '').replace(over, '').replace(out, '');
   if (/\braycast\w*|\bonClick\b|\bonPointer\w+|\bonWheel\b|\bonScroll\b|\bonDoubleClick\b|\bonContextMenu\b|\bonUpdate\b/i.test(rest)) {
-    failures.push('handles an interaction beyond onClick → activateBody(body, event) — Focus is deliberate, never hover');
+    failures.push('handles an interaction beyond the click and the approach — Focus is deliberate, and hover reveals, never activates');
   }
-  if (!/import\s*\{\s*activateBody\s*\}\s*from\s*'\.\/scene-pick\.ts'/.test(blankComments(source))) {
-    failures.push('activateBody is not imported from the pure rule');
+  if (!/import\s*\{\s*activateBody\s*,\s*hoverBody\s*,\s*leaveBody\s*\}\s*from\s*'\.\/scene-pick\.ts'/.test(blankComments(source))) {
+    failures.push('activateBody, hoverBody and leaveBody are not imported from the pure rule');
   }
   return failures;
 }
@@ -1067,13 +1087,15 @@ test('the drawn radius discriminates on kind, never on a missing mass', () => {
  * or selection, no coordinate literal, no light, and no line geometry but drei's
  * `<Line>`. Positively:
  *
- *   - **One subscription, by selector**: exactly
- *     `const subject = useSyncExternalStore(navigationStore.subscribe, () => sceneSubject(navigationStore.getState(), rail))`.
+ *   - **Two subscriptions, by selector**: exactly
+ *     `const subject = useSyncExternalStore(navigationStore.subscribe, () => sceneSubject(navigationStore.getState(), rail))`
+ *     and, since 3.4,
+ *     `const approached = useSyncExternalStore(navigationStore.subscribe, () => approachedId(navigationStore.getState()))`.
  *   - **Lines only from named model functions**: exactly three `<Line>`s — one per
  *     `sceneLines(bodies, railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT))` entry,
  *     drawn in that line's points, colour and weight; and one outline per Body, in
  *     a `<Billboard>`, on `circlePoints(CIRCLE_SEGMENTS, bodyRadius(body))`,
- *     coloured and weighted by `bodyStroke(body, subject)`.
+ *     coloured and weighted by `bodyStroke(body, subject, approached)`.
  *   - **Core dots from `coreDots(body, subject)`**, a `circleGeometry` of the dot's
  *     radius in the dot's colour.
  *   - **The Ring (3.3) from `notableRings(body)`**, a third `<Line>` inside the
@@ -1089,18 +1111,25 @@ function auditBodyField(source: string): string[] {
   const squash = (text: string) => text.replace(/\s+/g, ' ');
 
   if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) failures.push('writes the store with setState');
-  if (/\b(?:advanceScroll|selectClient|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation|activateClient|activateProject)\b/.test(code)) {
-    failures.push('names a navigation event — a Body reaches the store through activateBody alone');
+  if (/\b(?:advanceScroll|selectClient|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation|activateClient|activateProject|hoverProject|keyboardApproach)\b/.test(code)) {
+    failures.push('names a navigation event — a Body reaches the store through activateBody, hoverBody and leaveBody alone');
   }
   if (/\buseFrame\b|\buseThree\b|\buseState\b|\buseReducer\b|\buseEffect\b|\buseLayoutEffect\b|\buseMemo\b|\buseRef\b|\buseStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {
     failures.push('holds a frame loop, reactive state, an effect or a zustand binding — one selector subscription only');
   }
   const subscriptions = code.match(/\buseSyncExternalStore\s*\(/g) ?? [];
   if (
-    subscriptions.length !== 1 ||
+    subscriptions.length !== 2 ||
     !/const subject = useSyncExternalStore\(navigationStore\.subscribe, \(\) => sceneSubject\(navigationStore\.getState\(\), rail\)\);/.test(squash(code))
   ) {
     failures.push('the subject is not read by exactly one useSyncExternalStore selector over sceneSubject');
+  }
+  // 3.4: the approached Project, by its own selector over the affordance model's rule.
+  if (!/const approached = useSyncExternalStore\(navigationStore\.subscribe, \(\) => approachedId\(navigationStore\.getState\(\)\)\);/.test(squash(code))) {
+    failures.push('the approached Project is not read by one useSyncExternalStore selector over approachedId');
+  }
+  if (!/import\s*\{\s*approachedId\s*\}\s*from\s*'\.\/affordance-model\.ts'/.test(quoted)) {
+    failures.push('approachedId is not imported from the affordance model');
   }
   if (/\bwindow\b|\bdocument\b|innerWidth|innerHeight|getBoundingClientRect|addEventListener|matchMedia/.test(code)) {
     failures.push('reads the DOM');
@@ -1145,8 +1174,8 @@ function auditBodyField(source: string): string[] {
   if (outline === '') failures.push('a Body outline is not a <Line> inside a camera-facing <Billboard>');
   for (const [attribute, expected] of [
     ['points', /\bpoints=\{\s*circlePoints\(\s*CIRCLE_SEGMENTS\s*,\s*bodyRadius\(\s*body\s*\)\s*\)\s*\}/],
-    ['color', /\bcolor=\{\s*bodyStroke\(\s*body\s*,\s*subject\s*\)\.color\s*\}/],
-    ['lineWidth', /\blineWidth=\{\s*bodyStroke\(\s*body\s*,\s*subject\s*\)\.widthPx\s*\}/],
+    ['color', /\bcolor=\{\s*bodyStroke\(\s*body\s*,\s*subject\s*,\s*approached\s*\)\.color\s*\}/],
+    ['lineWidth', /\blineWidth=\{\s*bodyStroke\(\s*body\s*,\s*subject\s*,\s*approached\s*\)\.widthPx\s*\}/],
   ] as const) {
     if (!expected.test(outline)) failures.push(`a Body outline's ${attribute} is not the stroke model's`);
   }
@@ -1215,7 +1244,7 @@ function auditBodyField(source: string): string[] {
   }
   // Every colour comes from the model: a line's, a stroke's, a ring's, a dot's.
   for (const match of code.matchAll(/\bcolor=\{\s*([^}]*?)\s*\}/g)) {
-    if (!['line.color', 'bodyStroke(body, subject).color', 'ring.color', 'dot.color'].includes(squash(match[1] ?? ''))) {
+    if (!['line.color', 'bodyStroke(body, subject, approached).color', 'ring.color', 'dot.color'].includes(squash(match[1] ?? ''))) {
       failures.push(`colour {${match[1]}} is not the stroke or the notable model's`);
     }
   }
@@ -1245,8 +1274,15 @@ test('the Bodies’ binding audit rejects the real binding with any one guarante
     ['a selection of Bodies', (s) => s.replace('{bodies.map(', '{bodies.filter((body) => body.kind === "star").map(')],
     ['a light', (s) => s.replace('<Billboard>', '<ambientLight />\n          <Billboard>')],
     ['a lit dot', (s) => s.replace('<meshBasicMaterial', '<meshStandardMaterial')],
-    ['a literal-coloured outline', (s) => s.replace('color={bodyStroke(body, subject).color}', 'color={WHITE}')],
-    ['the outline weight invented', (s) => s.replace('lineWidth={bodyStroke(body, subject).widthPx}', 'lineWidth={2}')],
+    ['a literal-coloured outline', (s) => s.replace('color={bodyStroke(body, subject, approached).color}', 'color={WHITE}')],
+    ['the outline weight invented', (s) => s.replace('lineWidth={bodyStroke(body, subject, approached).widthPx}', 'lineWidth={2}')],
+    // The approach (3.4).
+    ['the approach ignored', (s) => s.replace('bodyStroke(body, subject, approached).color', 'bodyStroke(body, subject).color')],
+    ['the approach ignored by the weight', (s) => s.replace('bodyStroke(body, subject, approached).widthPx', 'bodyStroke(body, subject, null).widthPx')],
+    ['the approach read off the hover alone', (s) => s.replace('() => approachedId(navigationStore.getState()))', '() => navigationStore.getState().hoveredProjectId)')],
+    ['the approach unsubscribed', (s) => s.replace(/\n\s*const approached = useSyncExternalStore\([^\n]*\n/, '\n  const approached = null;\n')],
+    ['the approached Planet made the subject', (s) => s.replace('bodyStroke(body, subject, approached).color', 'bodyStroke(body, approached, approached).color')],
+    ['a hover written from the binding', (s) => s.replace('return (', 'hoverProject(null);\n  return (')],
     ['a hairline colour invented', (s) => s.replace('color={line.color}', 'color={RAIL}')],
     ['a hairline weight invented', (s) => s.replace('lineWidth={line.widthPx}', 'lineWidth={1}')],
     ['a token read directly', (s) => s.replace('color={dot.color}', "color={tokens.colors['ink-lift-dark']}")],
@@ -1597,7 +1633,9 @@ function auditConnectors(code: string): string[] {
 test('no module but the Bodies’ binding draws a line, edge, or connector', () => {
   // The Rail's files too: the Rail is drawn by `body-field.tsx` from `railLine`, and
   // a second, hand-made line elsewhere would be one no audit reads.
-  for (const path of [SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, NOTABLE_MODEL_TS, MOON_FIELD_TSX]) {
+  // 3.4: the affordance's leader is an SVG `<path>`, which no connector here names —
+  // `auditAffordanceField` holds it to one open segment.
+  for (const path of [SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, NOTABLE_MODEL_TS, MOON_FIELD_TSX, AFFORDANCE_MODEL_TS, AFFORDANCE_FIELD_TSX]) {
     assert.deepEqual(auditConnectors(readFileSync(path, 'utf8')), [], `${path}: lines are body-field.tsx's alone`);
   }
 });
@@ -1734,6 +1772,19 @@ function auditDrawOrder(source: string): string[] {
   const moonMount = inside.search(/<MoonField\b/);
   if (bodyMount < 0 || moonMount < 0 || moonMount < bodyMount) failures.push('the Moons are not mounted after the Bodies');
   if (!/import\s*\{\s*MoonField\s*\}\s*from\s*'\.\/moon-field\.tsx'/.test(blankComments(source))) failures.push('MoonField is not imported');
+  // The affordance (3.4) is `<AffordanceField>`'s, held by `auditAffordanceField`:
+  // a DOM overlay drawing no scene object. Here: mounted exactly once, inside the
+  // Canvas (its frame loop needs one), with the artifact and the Bodies, last — after
+  // the rig, so it projects this frame's camera.
+  if (!/<AffordanceField\s+artifact=\{\s*artifact\s*\}\s+bodies=\{\s*bodies\s*\}\s*\/>/.test(inside)) {
+    failures.push('the affordance is not mounted — <AffordanceField artifact={artifact} bodies={bodies} /> is not inside the Canvas');
+  }
+  if ((code.match(/<AffordanceField\b/g) ?? []).length !== 1) failures.push('the affordance is mounted other than once');
+  const affordanceMount = inside.search(/<AffordanceField\b/);
+  if (affordanceMount < 0 || affordanceMount < moonMount || affordanceMount < inside.search(/<RailCamera\b/)) {
+    failures.push('the affordance is not mounted last, after the rig and the Moons');
+  }
+  if (!/import\s*\{\s*AffordanceField\s*\}\s*from\s*'\.\/affordance-field\.tsx'/.test(blankComments(source))) failures.push('AffordanceField is not imported');
 
   // The medium is drawn at the model's radius through the model's own scale, so the
   // non-overlap and ceiling proofs over `radius` are proofs about the screen too.
@@ -1847,6 +1898,13 @@ test('the draw-order audit rejects the real renderer with any one of its guarant
     ['the Moons before the Bodies', (s) => s.replace('<MoonField bodies={bodies} />', '').replace('<BodyField bodies', '<MoonField bodies={bodies} />\n        <BodyField bodies')],
     ['the Bodies unmounted, the Moons kept', (s) => s.replace('<BodyField bodies={bodies} rail={rail} />', '')],
     ['the Moons given an order', (s) => s.replace('<MoonField bodies={bodies} />', '<MoonField renderOrder={DUST_RENDER_ORDER} bodies={bodies} />')],
+    // The affordance (3.4).
+    ['the affordance unmounted', (s) => s.replace('<AffordanceField artifact={artifact} bodies={bodies} />', '')],
+    ['the affordance mounted twice', (s) => s.replace('<AffordanceField artifact={artifact} bodies={bodies} />', '<AffordanceField artifact={artifact} bodies={bodies} />\n        <AffordanceField artifact={artifact} bodies={bodies} />')],
+    ['the affordance outside the Canvas', (s) => s.replace('<AffordanceField artifact={artifact} bodies={bodies} />', '').replace('</Canvas>', '</Canvas>\n      <AffordanceField artifact={artifact} bodies={bodies} />')],
+    ['the affordance before the rig', (s) => s.replace('<AffordanceField artifact={artifact} bodies={bodies} />', '').replace('<RailCamera rail', '<AffordanceField artifact={artifact} bodies={bodies} />\n        <RailCamera rail')],
+    ['the affordance without the Bodies', (s) => s.replace('<AffordanceField artifact={artifact} bodies={bodies} />', '<AffordanceField artifact={artifact} bodies={[]} />')],
+    ['the affordance given an order', (s) => s.replace('<AffordanceField artifact', '<AffordanceField renderOrder={BODY_RENDER_ORDER} artifact')],
     [
       'a second, unaudited bodies block',
       (s) =>
@@ -2185,7 +2243,7 @@ test('neither Rail file, nor the focus model, nor the Motes’ renderer, holds a
   // triples by nature, and this scan cannot tell them from a place. What the scan
   // stands for is proven there instead, by execution — translating every Body
   // translates every Mote (`mote-model.test.ts`).
-  for (const path of [RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX, NOTABLE_MODEL_TS, MOON_FIELD_TSX]) {
+  for (const path of [RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX, NOTABLE_MODEL_TS, MOON_FIELD_TSX, AFFORDANCE_MODEL_TS, AFFORDANCE_FIELD_TSX]) {
     assert.deepEqual(coordinateLiterals(codeOf(path)), [], `${path} must resolve every pose from entities`);
   }
 });
@@ -2881,6 +2939,201 @@ test('the Moon audit rejects the real renderer with any one guarantee broken', (
   }
 });
 
+// --- The affordance (3.4) ----------------------------------------------------------
+
+/**
+ * `affordance-field.tsx`'s contract, as a pure function over its source.
+ *
+ * Every rule of the affordance — which Project is approached, its text, the
+ * leader and label layout, the 12% re-anchoring and the keyboard outline — is
+ * executed in `affordance-model.test.ts`; this holds the binding. Negatively: no
+ * store write and no named event, no subscription or reactive hook, no DOM read,
+ * no interaction, no ordering or selection, no line or connector geometry, no
+ * closed shape (no circle, ellipse, rect, polygon or polyline, no mesh or
+ * geometry), no scale or opacity, no token read directly, no copy of its own, no
+ * tooltip or live region, no coordinate literal. Positively: a frame loop that is
+ * *exactly* — update the camera's matrices, re-pick under the pointer with the
+ * pick rule's `repickPointer(events, gl.domElement.matches(':hover'))` (the one
+ * DOM read, so a camera moving under a still pointer keeps the approach honest
+ * before the frame is drawn), `affordanceFrame` handed one
+ * `getState()` read, the artifact, the Bodies, both matrices and R3F's `size`,
+ * and the draw written with `applyAffordance` onto the four ref handles; one
+ * drei `<Html fullscreen>` pinned by `overlayOrigin`, kept by `keepOverlay`, at
+ * `zIndexRange={[1, 1]}` with no pointer events; in it an `aria-hidden` overlay,
+ * one `<svg>` holding one `<path>` leader, and one label block holding the title
+ * and the secondary line, each in the model's style.
+ */
+function auditAffordanceField(source: string): string[] {
+  const code = blankProse(source);
+  const quoted = blankComments(source);
+  const squash = (text: string) => text.replace(/\s+/g, ' ');
+  const failures: string[] = [];
+
+  if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) failures.push('writes the store with setState');
+  if (/\b(?:advanceScroll|selectClient|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation|hoverProject|keyboardApproach|activate\w*|approachByKeyboard|leaveByKeyboard|hoverBody|leaveBody)\b/.test(code)) {
+    failures.push('names a navigation event or a door — the affordance reads the store and writes only its own handles');
+  }
+  if (/\buseStore\b|\bsubscribe\b|\buseSyncExternalStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {
+    failures.push('subscribes to the store — a frame loop reads getState()');
+  }
+  if (/\buseThree\b|\buseState\b|\buseReducer\b|\buseEffect\b|\buseLayoutEffect\b|\buseMemo\b/.test(code)) {
+    failures.push('holds reactive state or an effect — the handles are refs, the loop is useFrame');
+  }
+  if (/\bwindow\b|\bdocument\b|innerWidth|innerHeight|getBoundingClientRect|addEventListener|matchMedia/.test(code)) {
+    failures.push('reads the DOM — the size arrives as R3F’s');
+  }
+  if (/\braycast\w*|\bonClick\b|\bonPointer\w+|\bonWheel\b|\bonScroll\b|\bonDoubleClick\b|\bonContextMenu\b|\bonFocus\b|\bonBlur\b|\bonKey\w+/i.test(code)) {
+    failures.push('handles an interaction — the affordance reveals, it is never hovered or clicked');
+  }
+  if (/\.sort\s*\(|\.filter\s*\(|\.reverse\s*\(|\.slice\s*\(|\.find\s*\(/.test(code)) {
+    failures.push('orders or selects — which Project is approached is the model’s');
+  }
+  if (/aria-live|role\s*=\s*["'](?:status|alert|log|marquee|timer|tooltip)["']|\btitle\s*=\s*["{]|<\s*title\b/.test(quoted)) {
+    failures.push('announces or explains — no live region and no tooltip');
+  }
+  if (/<\s*(?:circle|ellipse|rect|polygon|polyline|mesh|sprite|\w+Geometry|\w+Material)\b/i.test(code)) {
+    failures.push('draws a shape — a leader and a label, never a ring or any new geometry around a Body');
+  }
+  if (/\bscale\b|\bopacity\b|\bfilter\b|\bisDeep\b|\bcontent\b|\bnotable\b/.test(code)) {
+    failures.push('scales, fades or reads a field — every value comes from affordanceFrame');
+  }
+  if (/\btokens\b|\bink-|\bstroke-|\bstrokeColor\b/.test(quoted)) failures.push('reads a token directly — every style is the model’s');
+  // Read from the returned tree only: the heuristic would take a generic's `>` … `<` for text.
+  if (jsxTexts(source.slice(Math.max(0, source.indexOf('return (')))).length > 0) failures.push('carries copy of its own — the label’s text is the artifact’s, written per frame');
+  failures.push(...auditConnectors(source));
+  failures.push(...coordinateLiterals(code));
+
+  // The frame loop is read off `quoted` (comments blanked, strings kept), so the
+  // re-pick's `':hover'` is checked as written.
+  const loop = /\buseFrame\s*\(\s*\(\s*\{\s*camera\s*,\s*size\s*,\s*events\s*,\s*gl\s*\}\s*\)\s*=>\s*\{([\s\S]*?)\}\s*\)\s*;/.exec(quoted);
+  if (loop === null) {
+    failures.push('runs no frame loop taking ({ camera, size, events, gl })');
+  } else {
+    const statements = (loop[1] ?? '')
+      .split(';')
+      .map((statement) => statement.replace(/\s+/g, ''))
+      .filter((statement) => statement !== '');
+    const expected = [
+      'camera.updateMatrixWorld()',
+      "repickPointer(events,gl.domElement.matches(':hover'))",
+      'constdraw=affordanceFrame(navigationStore.getState(),artifact,bodies,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size)',
+      'applyAffordance({leader:leader.current,block:block.current,title:title.current,secondary:secondary.current},draw)',
+    ];
+    if (JSON.stringify(statements) !== JSON.stringify(expected)) {
+      failures.push(
+        "the frame loop is not exactly: camera.updateMatrixWorld(), repickPointer(events, gl.domElement.matches(':hover')), " +
+          'affordanceFrame(navigationStore.getState(), artifact, bodies, camera.matrixWorldInverse.elements, ' +
+          'camera.projectionMatrix.elements, size), and the draw applied to the four handles',
+      );
+    }
+  }
+  // 3.4: the re-pick under a moving camera — the pick rule's, imported, called once,
+  // and the one DOM read is whether the pointer is over the canvas.
+  if (!/import\s*\{\s*repickPointer\s*\}\s*from\s*'\.\/scene-pick\.ts'/.test(quoted)) failures.push('repickPointer is not imported from the pick rule');
+  if ((code.match(/\brepickPointer\s*\(/g) ?? []).length !== 1) failures.push('the re-pick is called other than once');
+  if ((code.match(/\.matches\s*\(/g) ?? []).length !== 1 || (code.match(/\bevents\b/g) ?? []).length !== 2) {
+    failures.push('reads the DOM or R3F’s events beyond the re-pick’s one :hover question');
+  }
+  if ((code.match(/\buseFrame\s*\(/g) ?? []).length !== 1) failures.push('runs other than one frame loop');
+  for (const [name, type] of [
+    ['leader', 'SVGPathElement'],
+    ['block', 'HTMLDivElement'],
+    ['title', 'HTMLSpanElement'],
+    ['secondary', 'HTMLSpanElement'],
+  ] as const) {
+    if (!new RegExp(`const\\s+${name}\\s*=\\s*useRef<${type}>\\(\\s*null\\s*\\)`).test(code)) failures.push(`the ${name} handle is not an empty ${type} ref`);
+  }
+  if ((code.match(/\buseRef\s*</g) ?? []).length !== 4) failures.push('a ref other than the four handles');
+  if ((code.match(/\.current\s*=(?!=)/g) ?? []).length !== 0) failures.push('writes a ref — the handles are elements, written by applyAffordance only');
+
+  const htmls = quoted.match(/<Html\b[^>]*>/g) ?? [];
+  if (htmls.length !== 1) failures.push('not exactly one drei <Html> overlay');
+  const html = squash(htmls[0] ?? '');
+  for (const [name, pattern] of [
+    ['fullscreen', /\sfullscreen(?=[\s>])/],
+    ['calculatePosition={overlayOrigin}', /\scalculatePosition=\{\s*overlayOrigin\s*\}/],
+    ['onOcclude={keepOverlay}', /\sonOcclude=\{\s*keepOverlay\s*\}/],
+    ['zIndexRange={[1, 1]}', /\szIndexRange=\{\s*\[\s*1\s*,\s*1\s*\]\s*\}/],
+    ['pointerEvents="none"', /\spointerEvents="none"/],
+  ] as const) {
+    if (!pattern.test(html)) failures.push(`the overlay is not <Html ${name}> — it would stack, hide or take the pointer wrongly`);
+  }
+  if ((quoted.match(/<\w[\w.-]*\b[^>]*\bonOcclude=/g) ?? []).length !== 1) failures.push('onOcclude is bound other than once, on the overlay');
+  const body = squash(quoted);
+  const shape =
+    /<div aria-hidden="true" style=\{affordanceOverlayStyle\(\)\}> <svg style=\{affordanceSvgStyle\(\)\}> <path ref=\{leader\} d="" style=\{affordanceLeaderStyle\(\)\} \/> <\/svg> <div ref=\{block\} style=\{affordanceBlockStyle\(\)\}> <span ref=\{title\} style=\{affordanceTitleLabelStyle\(\)\} \/> <span ref=\{secondary\} style=\{affordanceSecondaryLabelStyle\(\)\} \/> <\/div> <\/div>/;
+  if (!shape.test(body)) {
+    failures.push('the overlay is not exactly: an aria-hidden layer, one svg holding one leader path, and one label block of title and secondary line, each in the model’s style');
+  }
+  if ((code.match(/<\s*path\b/g) ?? []).length !== 1 || (code.match(/<\s*svg\b/g) ?? []).length !== 1) failures.push('other than one leader path in one svg');
+  if (!/import\s*\{\s*Html\s*\}\s*from\s*'@react-three\/drei'/.test(quoted)) failures.push('the overlay is not drei’s Html');
+  return failures;
+}
+
+test('the affordance’s binding draws the model and holds no rule of its own', () => {
+  assert.deepEqual(auditAffordanceField(readFileSync(AFFORDANCE_FIELD_TSX, 'utf8')), []);
+});
+
+test('the affordance audit rejects the real binding with any one guarantee broken', () => {
+  const real = readFileSync(AFFORDANCE_FIELD_TSX, 'utf8');
+  const CALL =
+    'affordanceFrame(navigationStore.getState(), artifact, bodies, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size)';
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['a store write', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    navigationStore.setState({ hoveredProjectId: null });')],
+    ['a named event', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    hoverProject(null);')],
+    ['a door', (s) => s.replace('camera.updateMatrixWorld();', "camera.updateMatrixWorld();\n    activateProject('p', 'c');")],
+    ['a subscription', (s) => s.replace('return (', 'navigationStore.subscribe(() => {});\n  return (')],
+    ['a hook binding', (s) => s.replace('affordanceFrame(navigationStore.getState(),', 'affordanceFrame(useStore(navigationStore, (value) => value),')],
+    ['reactive state', (s) => s.replace('const leader = useRef', 'const [, force] = useState(0);\n  const leader = useRef')],
+    ['useThree', (s) => s.replace('const leader = useRef', 'const { size: canvas } = useThree();\n  const leader = useRef')],
+    ['a DOM read', (s) => s.replace('projectionMatrix.elements, size)', 'projectionMatrix.elements, { width: window.innerWidth, height: window.innerHeight })')],
+    ['stale matrices', (s) => s.replace('camera.updateMatrixWorld();', '')],
+    ['the matrices swapped', (s) => s.replace('camera.matrixWorldInverse.elements, camera.projectionMatrix.elements', 'camera.projectionMatrix.elements, camera.matrixWorldInverse.elements')],
+    ['a constant size', (s) => s.replace('projectionMatrix.elements, size)', 'projectionMatrix.elements, { width: 1600, height: 900 })')],
+    ['no Bodies', (s) => s.replace('artifact, bodies, camera', 'artifact, [], camera')],
+    ['nothing applied', (s) => s.replace(/\n\s*applyAffordance\([^\n]*\n/, '\n')],
+    ['a handle crossed', (s) => s.replace('title: title.current, secondary: secondary.current', 'title: secondary.current, secondary: title.current')],
+    ['a click', (s) => s.replace('<div ref={block}', '<div onClick={() => undefined} ref={block}')],
+    ['a hover', (s) => s.replace('<div ref={block}', '<div onPointerOver={() => undefined} ref={block}')],
+    ['a ring', (s) => s.replace('<path ref={leader}', '<circle r="8" />\n          <path ref={leader}')],
+    ['a halo mesh', (s) => s.replace('return (\n    <Html', 'return (\n    <>\n    <mesh><ringGeometry /></mesh>\n    <Html').replace('</Html>\n  );', '</Html>\n    </>\n  );')],
+    ['an svg line', (s) => s.replace('<path ref={leader} d="" style={affordanceLeaderStyle()} />', '<line ref={leader} style={affordanceLeaderStyle()} />')],
+    ['a second leader', (s) => s.replace('<path ref={leader} d="" style={affordanceLeaderStyle()} />', '<path ref={leader} d="" style={affordanceLeaderStyle()} />\n          <path d="" style={affordanceLeaderStyle()} />')],
+    ['a drei line', (s) => s.replace("import { Html } from '@react-three/drei';", "import { Html, Line } from '@react-three/drei';")],
+    ['a fade', (s) => s.replace('<div ref={block}', '<div ref={block} data-opacity={0.5}').replace('data-opacity', 'opacity')],
+    ['a token read directly', (s) => s.replace('style={affordanceTitleLabelStyle()}', "style={{ color: tokens.colors['ink-lift-dark'] }}")],
+    ['the title unstyled', (s) => s.replace(' style={affordanceTitleLabelStyle()}', '')],
+    ['a tooltip', (s) => s.replace('<div ref={block}', '<div title="Project" ref={block}')],
+    ['a live region', (s) => s.replace('<div ref={block}', '<div aria-live="polite" ref={block}')],
+    ['copy of its own', (s) => s.replace('<span ref={title} style={affordanceTitleLabelStyle()} />', '<span ref={title} style={affordanceTitleLabelStyle()}>Project</span>')],
+    ['the overlay narrated', (s) => s.replace('<div aria-hidden="true" style={affordanceOverlayStyle()}>', '<div style={affordanceOverlayStyle()}>')],
+    ['the overlay over the panel', (s) => s.replace('zIndexRange={[1, 1]} pointerEvents', 'zIndexRange={[16777271, 0]} pointerEvents')],
+    ['the overlay under the vignette', (s) => s.replace('zIndexRange={[1, 1]} pointerEvents', 'zIndexRange={[0, 0]} pointerEvents')],
+    ['the overlay takes the pointer', (s) => s.replace('pointerEvents="none" style', 'pointerEvents="auto" style')],
+    ['the overlay follows a world point', (s) => s.replace(' calculatePosition={overlayOrigin}', '')],
+    ['the overlay hidden by drei', (s) => s.replace(' onOcclude={keepOverlay}', '')],
+    ['the overlay not fullscreen', (s) => s.replace('<Html fullscreen calculatePosition', '<Html calculatePosition')],
+    ['a second frame loop', (s) => s.replace('return (', 'useFrame(() => undefined);\n  return (')],
+    ['a ref written', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    block.current = null;')],
+    ['a coordinate literal', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    camera.position.set(0, 5, 40);')],
+    ['a selection', (s) => s.replace('artifact, bodies, camera', 'artifact, bodies.filter((body) => body.kind === "planet"), camera')],
+    ['the write-back dropped', (s) => s.replace(`const draw = ${CALL};`, `void ${CALL};\n    const draw = { visible: false } as const;`)],
+    // The re-pick under a moving camera (3.4).
+    ['the re-pick dropped', (s) => s.replace(/\n\s*repickPointer\([^\n]*\n/, '\n')],
+    ['the re-pick after the draw', (s) => s.replace(/\n(\s*)repickPointer\(([^\n]*)\n([\s\S]*?applyAffordance\([^\n]*\n)/, '\n$3$1repickPointer($2\n')],
+    ['the re-pick outside the canvas too', (s) => s.replace("repickPointer(events, gl.domElement.matches(':hover'))", 'repickPointer(events, true)')],
+    ['R3F’s update called raw', (s) => s.replace("repickPointer(events, gl.domElement.matches(':hover'));", 'events.update?.();')],
+    ['a second re-pick', (s) => s.replace("repickPointer(events, gl.domElement.matches(':hover'));", "repickPointer(events, gl.domElement.matches(':hover'));\n    repickPointer(events, true);")],
+    ['a second DOM read', (s) => s.replace("repickPointer(events, gl.domElement.matches(':hover'));", "repickPointer(events, gl.domElement.matches(':hover') && gl.domElement.matches(':focus'));")],
+    ['the re-pick imported from elsewhere', (s) => s.replace("import { repickPointer } from './scene-pick.ts';", "import { repickPointer } from './affordance-model.ts';")],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped binding`);
+    assert.notDeepEqual(auditAffordanceField(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
 // --- The Ring means a Notable, and nothing else (3.3) ------------------------------
 
 /** Every string literal in a source, comments blanked first. */
@@ -3000,6 +3253,13 @@ test('every module in this directory is covered by the scans above', () => {
     'notable-model.ts',
     'notable-model.test.ts',
     'moon-field.tsx',
+    // 3.4: named in the import, vocabulary, connector and coordinate-literal scans;
+    // the model carries its own purity audit in `affordance-model.test.ts`, the
+    // binding has `auditAffordanceField` above, and its mount is held by
+    // `auditDrawOrder`.
+    'affordance-model.ts',
+    'affordance-model.test.ts',
+    'affordance-field.tsx',
     'README.md',
   ]);
   const found: string[] = [];

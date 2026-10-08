@@ -35,7 +35,7 @@
 
 import { useCallback, useRef } from 'react';
 import { useStore } from 'zustand/react';
-import { activateClient, activateProject, pullBack, returnToRail } from './activate.ts';
+import { activateClient, activateProject, approachByKeyboard, leaveByKeyboard, pullBack, returnToRail } from './activate.ts';
 import { buildDestinationIndex, type IndexArtifact } from './index-model.ts';
 import { indexEntryId } from './panel-model.ts';
 import { navigationStore } from './state.ts';
@@ -83,6 +83,13 @@ export interface DestinationNavProps {
  * when the button still has focus as it goes. The callback is stable
  * (`useCallback`, no dependencies), so its cleanup runs on unmount and never on a
  * re-render. Refs to elements, not copies of any state.
+ *
+ * **A Project button's focus is the keyboard's approach** (3.4): `onFocus` hands
+ * the door `approachByKeyboard` its own ID and whether the focus is
+ * `:focus-visible` — a click focuses a button too, and that is no approach — and
+ * `onBlur` hands `leaveByKeyboard` its own ID, whose stale-leave guard is the
+ * door's. The scene draws the affordance; nothing here decides it, and the
+ * accessible name is untouched.
  */
 export function DestinationNav({ artifact }: DestinationNavProps) {
   const index = buildDestinationIndex(artifact);
@@ -122,6 +129,8 @@ export function DestinationNav({ artifact }: DestinationNavProps) {
                     id={indexEntryId(project.id)}
                     aria-pressed={project.id === focusedProjectId}
                     onClick={() => activateProject(project.id, client.id)}
+                    onFocus={(event) => approachByKeyboard(project.id, event.currentTarget.matches(':focus-visible'))}
+                    onBlur={() => leaveByKeyboard(project.id)}
                   >
                     <span>{project.title}</span> <span>{project.depth}</span>
                   </button>

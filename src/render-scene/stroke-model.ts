@@ -9,8 +9,10 @@
  * a Star at rest takes `stroke-rest`. `stroke-focus` is a camera-state overlay
  * spent on **one** subject per frame (`sceneSubject`): the Focused Planet if any,
  * else the free-flight target, else on the Rail the Star the camera is heading
- * for. Nothing else is ever white, and `stroke-active` is not a Body's at 3.2
- * (hover is 3.4's).
+ * for. Nothing else is ever white. `stroke-active` is a Body's only as the
+ * approach (3.4): the one approached Planet — hovered, or reached from the
+ * index by keyboard — steps to `stroke-active` at `hairline`, unless it is the
+ * subject, which keeps `stroke-focus`.
  *
  * **Every line takes a `stroke-*-dark` token and a `components.stroke-weight`
  * weight; no glyph is drawn here.** Glyphs take the ink ladder, and the two never
@@ -96,6 +98,11 @@ export interface BodyStroke {
  * The slice of the navigation state the subject is read from. Restated
  * structurally — the store's own type is the shell's — and satisfied by
  * `navigationStore.getState()` as it is.
+ *
+ * The subject reads none of the approach fields (3.4): hovering or tabbing to a
+ * Planet never makes it white. The approached ID is read by
+ * `approachedProject` (`affordance-model.ts`) and handed to `bodyStroke` as its
+ * own argument.
  */
 export interface SubjectState {
   /**
@@ -134,10 +141,14 @@ export function sceneSubject(nav: SubjectState, rail: Rail): string | null {
 }
 
 /**
- * How a Body's outline is drawn, given this frame's subject.
+ * How a Body's outline is drawn, given this frame's subject and approached
+ * Project.
  *
  *   - **The subject**: `stroke-focus`, at `body-client` (0.9px) on a Star and
  *     `body-focus` (1.0px) on a Planet.
+ *   - **The approached Planet** (3.4), when it is not the subject:
+ *     `stroke-active`, `hairline`. A Star is never approached. With
+ *     `approachedId` `null` — the default — every outline is exactly 3.2's.
  *   - **A Star at rest**: `stroke-rest`, `hairline`.
  *   - **A Planet at rest**: its own `luminanceBand`, `hairline`. A recent Shallow
  *     Planet at `stroke-near` stays there; it never reaches white unfocused.
@@ -146,13 +157,16 @@ export function sceneSubject(nav: SubjectState, rail: Rail): string | null {
  * band as some default would be a mapping rule nobody derived, and drawing
  * `stroke-active` or `stroke-focus` at rest would spend the frame's subject.
  */
-export function bodyStroke(body: Body, subjectId: string | null): BodyStroke {
+export function bodyStroke(body: Body, subjectId: string | null, approachedId: string | null = null): BodyStroke {
   if (body.id === subjectId) {
     return {
       step: 'stroke-focus',
       color: strokeColor('stroke-focus'),
       widthPx: strokeWidthPx(body.kind === 'star' ? 'body-client' : 'body-focus'),
     };
+  }
+  if (body.kind === 'planet' && body.id === approachedId) {
+    return { step: 'stroke-active', color: strokeColor('stroke-active'), widthPx: strokeWidthPx('hairline') };
   }
   if (body.kind === 'star') {
     return { step: 'stroke-rest', color: strokeColor('stroke-rest'), widthPx: strokeWidthPx('hairline') };

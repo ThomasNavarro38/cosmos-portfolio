@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { tokens } from '../tokens/tokens.ts';
+import { approachedId } from './affordance-model.ts';
 import { RAIL_LINE_SAMPLES_PER_SEGMENT, buildRail, railLine, railStopCount, type Rail } from './rail-model.ts';
 import { buildScene, type Body, type SceneArtifact } from './scene-model.ts';
 import {
@@ -187,10 +188,64 @@ test('every stroke colour is the dark value of its own stroke token', () => {
   for (const step of STROKE_STEPS) assert.equal(strokeColor(step), tokens.colors[`${step}-dark`]);
 });
 
+test('over every reachable navigation state and approach, one Body at most is white and only the approached Planet is stroke-active', () => {
+  // 3.4: every state above, crossed with every approach — none, each Body hovered,
+  // each reached by keyboard, and the keyboard over a different hover — resolved
+  // through the affordance model's own rule. The subject never moves; the one
+  // approached Planet, unless Focused or the subject, steps to `stroke-active` at
+  // `hairline`; a Star approached changes nothing; every other outline is 3.2's.
+  const { bodies, rail } = committed();
+  const stops = railStopCount(rail);
+  const ids = bodies.map((body) => body.id);
+  const focuses = [null, ...bodies.filter((body) => body.kind === 'planet').map((body) => body.id)];
+  const clients = bodies.filter((body) => body.kind === 'star').map((body) => body.id);
+  const approaches: { hoveredProjectId: string | null; keyboardProjectId: string | null }[] = [{ hoveredProjectId: null, keyboardProjectId: null }];
+  for (const id of ids) {
+    approaches.push({ hoveredProjectId: id, keyboardProjectId: null }, { hoveredProjectId: null, keyboardProjectId: id });
+    approaches.push({ hoveredProjectId: ids.find((other) => other !== id) ?? null, keyboardProjectId: id });
+  }
+  for (const focusedProjectId of focuses) {
+    const states: SubjectState[] = [];
+    for (let i = 0; i <= stops * 4; i += 1) states.push({ ...RAIL_STATE, scrollProgress: i / 4, focusedProjectId });
+    for (const flightTarget of [null, ...clients]) states.push({ ...RAIL_STATE, mode: 'freeflight', flightTarget, focusedProjectId });
+    for (const state of states) {
+      const subject = sceneSubject(state, rail);
+      for (const approach of approaches) {
+        const approached = approachedId({ focusedProjectId, ...approach });
+        const strokes = bodies.map((body) => ({ body, stroke: bodyStroke(body, subject, approached) }));
+        const where = `${JSON.stringify(state)} ${JSON.stringify(approach)}`;
+        assert.ok(strokes.filter(({ stroke }) => stroke.step === 'stroke-focus').length <= 1, `two Bodies white at ${where}`);
+        const active = strokes.filter(({ stroke }) => stroke.step === 'stroke-active');
+        assert.ok(active.length <= 1, `two Bodies stroke-active at ${where}`);
+        for (const { body, stroke } of active) {
+          assert.equal(body.kind, 'planet', `a Star is never approached: ${where}`);
+          assert.equal(body.id, approached);
+          assert.notEqual(body.id, focusedProjectId, 'the Focused Planet is never approached');
+          assert.notEqual(body.id, subject, 'the subject keeps stroke-focus');
+          assert.equal(stroke.widthPx, 0.7, 'the step is at hairline');
+          assert.equal(stroke.color, tokens.colors['stroke-active-dark']);
+        }
+        for (const { body, stroke } of strokes) {
+          if (stroke.step !== 'stroke-active') assert.deepEqual(stroke, bodyStroke(body, subject), `${body.id} is 3.2's at ${where}`);
+        }
+      }
+    }
+  }
+});
+
+test('the third argument defaults to no approach, and a Star or a missing ID approached changes nothing', () => {
+  const p = planet('project:a', 'stroke-rest');
+  assert.deepEqual(bodyStroke(p, null), bodyStroke(p, null, null));
+  assert.equal(bodyStroke(p, null, 'project:a').step, 'stroke-active');
+  assert.equal(bodyStroke(p, 'project:a', 'project:a').step, 'stroke-focus', 'the subject keeps stroke-focus');
+  assert.deepEqual(bodyStroke(star('client:a'), null, 'client:a'), bodyStroke(star('client:a'), null));
+  assert.deepEqual(bodyStroke(p, null, 'project:zz'), bodyStroke(p, null));
+});
+
 test('over every reachable navigation state, at most one Body is white and no unfocused Body exceeds stroke-near', () => {
   // The AC, executed over the committed artifact: every Rail progress on a fine
   // grid, every free-flight target and the overview, each with nothing focused and
-  // with every Planet focused in turn.
+  // with every Planet focused in turn — with no approach, 3.2's outlines exactly.
   const { bodies, rail } = committed();
   const stops = railStopCount(rail);
   const clients = bodies.filter((body) => body.kind === 'star').map((body) => body.id);
@@ -213,7 +268,7 @@ test('over every reachable navigation state, at most one Body is white and no un
     for (const { body, stroke } of strokes) {
       if (body.id === state.focusedProjectId) continue;
       if (body.id !== subject) assert.ok(resting.has(stroke.step), `${body.id} exceeds stroke-near at rest`);
-      assert.notEqual(stroke.step, 'stroke-active', 'stroke-active is never a Body’s at 3.2');
+      assert.notEqual(stroke.step, 'stroke-active', 'stroke-active is no Body’s with nothing approached');
     }
     if (state.focusedProjectId !== null) {
       assert.deepEqual(white.map(({ body }) => body.id), [state.focusedProjectId], 'the focused Planet alone is white');

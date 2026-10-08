@@ -27,6 +27,8 @@ import {
   enterFreeFlight,
   enterRail,
   focusProject,
+  hoverProject,
+  keyboardApproach,
   navigationStore,
   releaseFocus,
   requireId,
@@ -60,6 +62,8 @@ test('a visitor arrives on the Rail, at no stop, with nothing focused', () => {
     scrollProgress: 0,
     focusedProjectId: null,
     focusOrigin: null,
+    hoveredProjectId: null,
+    keyboardProjectId: null,
   });
 });
 
@@ -381,10 +385,44 @@ const WRITERS: ReadonlyArray<{
     writes: ['mode'],
   },
   {
+    name: 'hoverProject',
+    prime: () => populate(),
+    fire: () => hoverProject('project-next'),
+    writes: ['hoveredProjectId'],
+  },
+  {
+    // The leave: `null` is a value, and clearing it is still only this field.
+    name: 'hoverProject (null, the leave)',
+    prime: () => populate(),
+    fire: () => hoverProject(null),
+    writes: ['hoveredProjectId'],
+  },
+  {
+    name: 'keyboardApproach',
+    prime: () => populate(),
+    fire: () => keyboardApproach('project-next'),
+    writes: ['keyboardProjectId'],
+  },
+  {
+    name: 'keyboardApproach (null, the leave)',
+    prime: () => populate(),
+    fire: () => keyboardApproach(null),
+    writes: ['keyboardProjectId'],
+  },
+  {
     name: 'resetNavigation',
     prime: () => populate(),
     fire: () => resetNavigation(),
-    writes: ['mode', 'flightTarget', 'railPosition', 'scrollProgress', 'focusedProjectId', 'focusOrigin'],
+    writes: [
+      'mode',
+      'flightTarget',
+      'railPosition',
+      'scrollProgress',
+      'focusedProjectId',
+      'focusOrigin',
+      'hoveredProjectId',
+      'keyboardProjectId',
+    ],
   },
 ];
 
@@ -403,6 +441,8 @@ function populate(): void {
   advanceScroll(0.1);
   focusProject('project-start');
   enterFreeFlight('client-flight');
+  hoverProject('project-hovered');
+  keyboardApproach('project-keyed');
 }
 
 test('no event writes a field belonging to another writer, and every event writes something', () => {
@@ -464,6 +504,8 @@ test('the writer table names every event the store exports, so none escapes the 
     'advanceScroll',
     'enterFreeFlight',
     'enterRail',
+    'hoverProject',
+    'keyboardApproach',
     'resetNavigation',
   ];
   for (const name of exported) {
@@ -497,6 +539,37 @@ test('the exported validator writes nothing and notifies nobody, valid or not', 
   unsubscribe();
   assert.equal(notified, 0);
   assert.equal(navigationStore.getState(), before);
+});
+
+// --- The approach (3.4) ----------------------------------------------------
+
+test('the two approach fields take an ID or null, trimmed, and reject a malformed ID with no write', () => {
+  resetNavigation();
+  hoverProject('  project-a  ');
+  keyboardApproach('\tproject-b\n');
+  assert.equal(navigationStore.getState().hoveredProjectId, 'project-a');
+  assert.equal(navigationStore.getState().keyboardProjectId, 'project-b');
+
+  const before = navigationStore.getState();
+  assert.throws(() => hoverProject(''), /hoverProject.*""/);
+  assert.throws(() => hoverProject(undefined as unknown as string), /hoverProject/);
+  assert.throws(() => keyboardApproach('   '), /keyboardApproach/);
+  assert.throws(() => keyboardApproach(undefined as unknown as string), /keyboardApproach/);
+  assert.deepEqual(navigationStore.getState(), before, 'none of them wrote anything');
+
+  hoverProject(null);
+  keyboardApproach(null);
+  assert.equal(navigationStore.getState().hoveredProjectId, null);
+  assert.equal(navigationStore.getState().keyboardProjectId, null);
+});
+
+test('the store holds no stale-leave rule: a null always clears, whoever held the field', () => {
+  // The guard is the callers' (`scene-pick.ts`, `activate.ts`), so the store stays
+  // a table of writes with no logic of its own.
+  resetNavigation();
+  hoverProject('project-b');
+  hoverProject(null);
+  assert.equal(navigationStore.getState().hoveredProjectId, null);
 });
 
 // --- Unknown IDs ------------------------------------------------------------
@@ -694,7 +767,16 @@ test('a redundant transition still notifies, and the selector is what absorbs it
   );
   assert.deepEqual(
     navigationStore.getState(),
-    { mode: 'rail', flightTarget: null, railPosition: 'client-alpha', scrollProgress: 0, focusedProjectId: null, focusOrigin: null },
+    {
+      mode: 'rail',
+      flightTarget: null,
+      railPosition: 'client-alpha',
+      scrollProgress: 0,
+      focusedProjectId: null,
+      focusOrigin: null,
+      hoveredProjectId: null,
+      keyboardProjectId: null,
+    },
     'and none of them changed anything',
   );
 });
@@ -751,6 +833,8 @@ test('every transition is reachable as a named export', () => {
     advanceScroll,
     enterFreeFlight,
     enterRail,
+    hoverProject,
+    keyboardApproach,
     resetNavigation,
   ]) {
     assert.equal(typeof event, 'function');
