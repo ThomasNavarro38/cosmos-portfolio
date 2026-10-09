@@ -32,6 +32,10 @@ import {
   approachedId,
   approachedProject,
   keepOverlay,
+  LABEL_CHAR_EM,
+  labelBounds,
+  labelBox,
+  markPx,
   onFrame,
   overlayOrigin,
   projectToScreen,
@@ -40,7 +44,16 @@ import {
   type AffordanceDraw,
   type ApproachState,
 } from './affordance-model.ts';
-import { notableMoons, notableRings } from './notable-model.ts';
+import { panelFraction } from '../shell/panel-model.ts';
+import {
+  MOON_ANGLE,
+  MOON_MIN_RADIUS_PX,
+  MOON_OFFSET_RATIO,
+  MOON_RADIUS_RATIO,
+  RING_RADIUS_RATIO,
+  notableMoons,
+  notableRings,
+} from './notable-model.ts';
 import { buildScene, type Body, type SceneArtifact } from './scene-model.ts';
 import { PLANET_RADIUS } from './stroke-model.ts';
 
@@ -202,34 +215,103 @@ test('top and bottom edges re-anchor toward the centre, and the leader keeps its
     [EDGE_SHARE * VIEWPORT.height - 1, 1, '0%'],
     [(1 - EDGE_SHARE) * VIEWPORT.height + 1, -1, '-100%'],
   ] as const) {
-    for (const x of [800, VIEWPORT.width - 20]) {
-      const layout = affordanceLayout({ x, y }, 10, VIEWPORT, false);
-      assert.equal(layout.direction.y, dy, `y ${y}: toward the centre`);
-      const { from, to } = segment(layout.leaderPath);
-      assert.ok(Math.abs(Math.hypot(to[0] - from[0], to[1] - from[1]) - LEADER_PX) < 0.05, 'the leader is still 56px');
-      assert.ok(Math.abs(Math.hypot(from[0] - x, from[1] - y) - 10) < 0.05, 'and starts on the Body’s edge');
-      assert.ok(layout.labelTransform.endsWith(`, ${shift})`), `the near edge at the anchor: ${layout.labelTransform}`);
-    }
+    const layout = affordanceLayout({ x: 800, y }, 10, VIEWPORT, false);
+    assert.equal(layout.direction.y, dy, `y ${y}: toward the centre`);
+    const { from, to } = segment(layout.leaderPath);
+    assert.ok(Math.abs(Math.hypot(to[0] - from[0], to[1] - from[1]) - LEADER_PX) < 0.05, 'the leader is still 56px');
+    assert.ok(Math.abs(Math.hypot(from[0] - 800, from[1] - y) - 10) < 0.05, 'and starts on the Body’s edge');
+    assert.ok(layout.labelTransform.endsWith(`, ${shift})`), `the near edge at the anchor: ${layout.labelTransform}`);
   }
 });
 
-test('every anchor the rule produces is inside the inner 76% of the frame for a Body well inside it', () => {
+test('a corner turns the label both ways, and a Body in the outer band has its anchor held at the inner bound', () => {
+  const bounds = labelBounds(VIEWPORT, false);
+  const corner = affordanceLayout({ x: VIEWPORT.width - 20, y: 10 }, 10, VIEWPORT, false);
+  assert.deepEqual(corner.direction, { x: -1, y: 1 });
+  assert.match(corner.labelTransform, /translate\(-100%, 0%\)$/);
+  assert.equal(corner.textAlign, 'right');
+  assert.deepEqual(corner.anchor, { x: bounds.right, y: bounds.top }, 'held at the inner corner');
+  assert.ok(Math.abs(Math.hypot(corner.from.x - (VIEWPORT.width - 20), corner.from.y - 10) - 10) < 1e-9, 'still from the Body’s edge');
+  // The left band: the default rightward anchor would land at 116px, inside the 192px band.
+  const left = affordanceLayout({ x: 50, y: 450 }, 10, VIEWPORT, false);
+  assert.deepEqual(left.direction, { x: 1, y: 0 });
+  assert.equal(left.anchor.x, bounds.left);
+  // The top band: the diagonal alone would anchor at about y = 50, inside the 108px band.
+  assert.equal(affordanceLayout({ x: 800, y: 10 }, 8, VIEWPORT, false).anchor.y, bounds.top);
+});
+
+test('every label block lies inside the inner 76% of the frame, wherever on the frame its Body is', () => {
   // The point of the rule: the vignette never pulls a readable label below its floor.
-  const [left, right] = [EDGE_SHARE * VIEWPORT.width, (1 - EDGE_SHARE) * VIEWPORT.width];
-  const [top, bottom] = [EDGE_SHARE * VIEWPORT.height, (1 - EDGE_SHARE) * VIEWPORT.height];
+  const box = { width: 260, height: 29 };
+  const { left, right, top, bottom } = labelBounds(VIEWPORT, false);
   let swept = 0;
-  for (let x = left; x <= right; x += 37) {
-    for (let y = top; y <= bottom; y += 23) {
-      const { anchor } = affordanceLayout({ x, y }, 8, VIEWPORT, false);
-      const at = `${x},${y}: anchor ${anchor.x},${anchor.y}`;
-      assert.ok(anchor.x >= left - 1e-9, `${at} — past the left 12%`);
-      assert.ok(anchor.x <= right + 1e-9, `${at} — past the right 12%`);
-      assert.ok(anchor.y >= top - 1e-9, `${at} — past the top 12%`);
-      assert.ok(anchor.y <= bottom + 1e-9, `${at} — past the bottom 12%`);
+  for (let x = 0; x <= VIEWPORT.width; x += 37) {
+    for (let y = 0; y <= VIEWPORT.height; y += 23) {
+      const { anchor, direction } = affordanceLayout({ x, y }, 8, VIEWPORT, false, box);
+      const blockLeft = direction.x < 0 ? anchor.x - box.width : anchor.x;
+      const blockTop = direction.y > 0 ? anchor.y : direction.y < 0 ? anchor.y - box.height : anchor.y - box.height / 2;
+      const at = `${x},${y}: block at ${blockLeft},${blockTop}`;
+      assert.ok(blockLeft >= left - 1e-9, `${at} — past the left 12%`);
+      assert.ok(blockLeft + box.width <= right + 1e-9, `${at} — past the right 12%`);
+      assert.ok(blockTop >= top - 1e-9, `${at} — past the top 12%`);
+      assert.ok(blockTop + box.height <= bottom + 1e-9, `${at} — past the bottom 12%`);
       swept += 1;
     }
   }
-  assert.ok(swept > 500, 'the sweep covers the inner frame');
+  assert.ok(swept > 1500, 'the sweep covers the whole frame, the outer band included');
+});
+
+test('a label whose block would cross the right bound goes left of the Body, its width counted', () => {
+  const box = { width: 200, height: 29 };
+  const bounds = labelBounds(VIEWPORT, false);
+  // The anchor alone (x + 66) would be inside; the block (x + 66 + 200) would not.
+  const x = bounds.right - 10 - LEADER_PX - box.width + 1;
+  assert.deepEqual(affordanceLayout({ x, y: 450 }, 10, VIEWPORT, false, box).direction, { x: -1, y: 0 });
+  assert.deepEqual(affordanceLayout({ x: x - 2, y: 450 }, 10, VIEWPORT, false, box).direction, { x: 1, y: 0 });
+});
+
+test('while a Project is Focused the panel’s edge is the right bound', () => {
+  const width = VIEWPORT.width;
+  assert.equal(labelBounds(VIEWPORT, true).right, (1 - panelFraction(width)) * width);
+  assert.equal(labelBounds(VIEWPORT, false).right, (1 - EDGE_SHARE) * width);
+  assert.equal(labelBounds({ width: 6000, height: 900 }, true).right, (1 - EDGE_SHARE) * 6000, 'the 12% band when it is the nearer');
+  const box = { width: 200, height: 29 };
+  const x = 800; // the block would end at 1066, past the 1040px panel edge, short of the 1408px band
+  assert.deepEqual(affordanceLayout({ x, y: 450 }, 10, VIEWPORT, false, box).direction, { x: 1, y: 0 });
+  const focused = affordanceLayout({ x, y: 450 }, 10, VIEWPORT, false, box, labelBounds(VIEWPORT, true));
+  assert.deepEqual(focused.direction, { x: -1, y: 0 }, 'left of the Body, off the panel');
+});
+
+test('the label box is estimated from its text and the type roles, erring wide', () => {
+  const short = labelBox({ title: 'A', secondary: 'B' });
+  const long = labelBox({ title: 'A much longer project title', secondary: 'B' });
+  assert.ok(long.width > short.width);
+  const title = tokens.typography['scene-label-project'];
+  const secondary = tokens.typography['scene-label-secondary'];
+  const em = (spacing: string) => LABEL_CHAR_EM + Number.parseFloat(spacing);
+  assert.ok(Math.abs(long.width - 27 * Number.parseFloat(title.fontSize) * em(title.letterSpacing)) < 1e-9);
+  const height = Number.parseFloat(title.fontSize) * title.lineHeight + Number.parseFloat(secondary.fontSize) * secondary.lineHeight;
+  assert.ok(Math.abs(short.height - height) < 1e-9, 'two line boxes tall');
+  assert.ok(LABEL_CHAR_EM >= 0.55, 'no narrower than a Helvetica average glyph');
+});
+
+test('the leader starts on a Shallow Planet’s outline and beyond a Deep Planet’s Ring and Moon', () => {
+  assert.equal(markPx({ isDeep: false }, 10), 10);
+  assert.equal(markPx({}, 10), 10);
+  for (const r of [1, 2, 4, 10, 40]) {
+    const start = markPx({ isDeep: true }, r);
+    const moon = { x: MOON_OFFSET_RATIO * r * Math.cos(MOON_ANGLE), y: MOON_OFFSET_RATIO * r * Math.sin(MOON_ANGLE) };
+    const moonRadius = Math.max(MOON_RADIUS_RATIO * r, MOON_MIN_RADIUS_PX);
+    assert.ok(start >= RING_RADIUS_RATIO * r, `r ${r}: outside the Ring`);
+    // Every direction the leader can take: no point of it within the Moon's disc.
+    for (const [dx, dy] of [[1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+      const n = Math.hypot(dx, dy);
+      for (let t = start; t <= start + LEADER_PX; t += 0.25) {
+        const d = Math.hypot((t * dx) / n - moon.x, (t * dy) / n - moon.y);
+        assert.ok(d >= moonRadius - 1e-9, `r ${r}, (${dx}, ${dy}): the leader crosses the Moon at ${t}px`);
+      }
+    }
+  }
 });
 
 test('the keyboard outline is a 1px stroke-focus square at a 3px offset; the pointer has none', () => {
@@ -308,11 +390,54 @@ test('the frame throws naming an approached ID with no Planet', () => {
     () => affordanceFrame({ ...REST, hoveredProjectId: 'project:zz' }, ARTIFACT, [], camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, VIEWPORT),
     /project:zz/,
   );
+  // A Planet the artifact carries no Project for.
+  assert.throws(
+    () =>
+      affordanceFrame({ ...REST, hoveredProjectId: 'project:zz' }, ARTIFACT, [planet('project:zz')], camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, VIEWPORT),
+    /project:zz/,
+  );
+});
+
+test('the frame places the leader from the projected centre, at the Body’s pixel radius, and the label at its end', () => {
+  const camera = cameraAt(20);
+  const V = camera.matrixWorldInverse.elements;
+  const P = camera.projectionMatrix.elements;
+  for (const [id, position, isDeep] of [
+    ['project:a', { x: 3, y: -2, z: 0 }, false],
+    ['project:b', { x: -4, y: 1, z: 2 }, true],
+  ] as const) {
+    const draw = affordanceFrame({ ...REST, hoveredProjectId: id }, ARTIFACT, [planet(id, position, isDeep)], V, P, VIEWPORT);
+    assert.ok(draw.visible);
+    // Measured with three, independently of the model's projection.
+    const ndc = new Vector3(position.x, position.y, position.z).project(camera);
+    const centre = { x: ((ndc.x + 1) / 2) * VIEWPORT.width, y: ((1 - ndc.y) / 2) * VIEWPORT.height };
+    const rim = new Vector3(position.x, position.y + PLANET_RADIUS, position.z).project(camera);
+    const r = ((rim.y - ndc.y) / 2) * VIEWPORT.height;
+    const { from, to } = segment(draw.leaderPath);
+    const start = isDeep ? Math.max(RING_RADIUS_RATIO * r, MOON_OFFSET_RATIO * r + Math.max(MOON_RADIUS_RATIO * r, MOON_MIN_RADIUS_PX)) : r;
+    assert.ok(Math.abs(Math.hypot(from[0] - centre.x, from[1] - centre.y) - start) < 0.05, `${id}: the leader starts ${start}px out`);
+    assert.ok(Math.abs(to[0] - (centre.x + start + LEADER_PX)) < 0.05 && Math.abs(to[1] - centre.y) < 0.05, `${id}: 56px further, level`);
+    assert.equal(draw.labelTransform, `translate(${to[0]}px, ${to[1]}px) translate(0%, -50%)`, `${id}: the label at the leader’s end`);
+  }
+});
+
+test('the frame takes the panel’s edge as the right bound only while a Project is Focused', () => {
+  const camera = cameraAt(20);
+  const V = camera.matrixWorldInverse.elements;
+  const P = camera.projectionMatrix.elements;
+  // Right of centre: its label would run under a Focused panel.
+  const bodies = [planet('project:a', { x: 4, y: 0, z: 0 }), planet('project:b', { x: -4, y: 0, z: 0 }, true)];
+  const free = affordanceFrame({ ...REST, hoveredProjectId: 'project:a' }, ARTIFACT, bodies, V, P, VIEWPORT);
+  const focused = affordanceFrame({ ...REST, focusedProjectId: 'project:b', hoveredProjectId: 'project:a' }, ARTIFACT, bodies, V, P, VIEWPORT);
+  assert.ok(free.visible && focused.visible);
+  assert.equal(free.textAlign, 'left');
+  assert.equal(focused.textAlign, 'right', 'left of the Body, off the panel');
 });
 
 test('a keyboard approach and the same Project hovered differ only in the label outline', () => {
   const { artifact, bodies } = committed();
   const camera = cameraAt(80);
+  let drawn = 0;
   for (const body of bodies) {
     if (body.kind !== 'planet') continue;
     const frame = (nav: ApproachState) =>
@@ -321,10 +446,12 @@ test('a keyboard approach and the same Project hovered differ only in the label 
     const keyed = frame({ ...REST, keyboardProjectId: body.id });
     assert.equal(hovered.visible, keyed.visible);
     if (!hovered.visible || !keyed.visible) continue;
+    drawn += 1;
     assert.equal(hovered.outline, 'none');
     assert.equal(keyed.outline, affordanceOutline(true));
     assert.deepEqual({ ...keyed, outline: 'none' }, hovered, `${body.id}: title, secondary, leader and transform identical`);
   }
+  assert.ok(drawn > 0, 'the committed Planets are in front of this camera');
 });
 
 test('over the committed artifact: every Planet approached draws one open leader and its own text, and a Shallow one carries no Ring or Moon', () => {
@@ -418,13 +545,24 @@ test('a frame is written onto the handles, text only when it changes, and a hidd
   assert.equal(h.leader.style.visibility, 'visible');
   assert.deepEqual(h.block.style, { visibility: 'visible', transform: draw.labelTransform, textAlign: 'left', outline: 'none' });
   assert.equal(h.title.textContent, 'Alpha');
+  assert.equal(h.secondary.textContent, 'Developer · team of 6 · Shallow');
   applyAffordance(h, draw);
   assert.deepEqual(h.written, ['title', 'secondary'], 'a still approach rewrites no text');
+  // The keyboard's square, then the pointer's none again.
+  applyAffordance(h, { ...draw, outline: affordanceOutline(true) });
+  assert.equal(h.block.style.outline, affordanceOutline(true));
+  applyAffordance(h, draw);
+  assert.equal(h.block.style.outline, 'none');
   applyAffordance(h, { visible: false });
   assert.equal(h.leader.style.visibility, 'hidden');
   assert.equal(h.block.style.visibility, 'hidden');
-  // Handles not mounted yet are skipped.
-  applyAffordance({ leader: null, block: undefined, title: null, secondary: null }, draw);
+  // Handles not mounted yet are skipped, and the mounted ones still take the frame.
+  const partial = handles();
+  assert.doesNotThrow(() => applyAffordance({ leader: null, block: undefined, title: null, secondary: null }, draw));
+  applyAffordance({ leader: null, block: partial.block, title: partial.title, secondary: null }, draw);
+  assert.equal(partial.block.style.transform, draw.labelTransform);
+  assert.equal(partial.title.textContent, 'Alpha');
+  assert.deepEqual(partial.written, ['title']);
 });
 
 // --- Purity -------------------------------------------------------------------------------------
@@ -433,7 +571,14 @@ test('a frame is written onto the handles, text only when it changes, and a hidd
 function auditAffordanceModel(source: string): string[] {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
   const failures: string[] = [];
-  const allowed = new Set(['../shell/index-model.ts', '../tokens/tokens.ts', './stroke-model.ts', './scene-model.ts']);
+  const allowed = new Set([
+    '../shell/index-model.ts',
+    '../shell/panel-model.ts',
+    '../tokens/tokens.ts',
+    './notable-model.ts',
+    './stroke-model.ts',
+    './scene-model.ts',
+  ]);
   // `from` / `import` as a keyword, never as a quoted word (`Omit<…, 'from' | …>`).
   for (const match of code.matchAll(/(?:^|[^'"`\w])(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {
     if (!allowed.has(match[1] ?? '')) failures.push(`imports ${match[1]}`);
@@ -446,8 +591,11 @@ function auditAffordanceModel(source: string): string[] {
   const bare = code.replace(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g, "''");
   if (/\.notable\b|\bduration\b|\bskills\b|\bluminanceBand\b|\bmass\b/.test(bare)) failures.push('reads a field the label does not show');
   if (/\.sort\s*\(/.test(code)) failures.push('sorts');
-  // No closed shape: an SVG close, arc or curve command in any written path.
-  if (/['"`][^'"`\n]*\b[ZzA]\s*['"`]|\bcircle\b|\bellipse\b|\bring\w*\b/i.test(code.replace(/notableRings/g, ''))) {
+  // No closed shape: an SVG close (`Z` ending a path), or an arc or curve command
+  // (`A`, `C`, `Q`, `S`, `T`) taking a coordinate, in any written path. The Ring's
+  // proportion is read only to start the leader outside it.
+  const shapes = /['"`][^'"`\n]*\b[ZzA]\s*['"`]|(?:^|[\s'"`])[AaCcQqSsTt]\s*(?:\$\{|-?\d)|\bcircle\b|\bellipse\b|\bring\w*\b/i;
+  if (shapes.test(code.replace(/notableRings|RING_RADIUS_RATIO/g, ''))) {
     failures.push('draws a closed shape — the leader is one open segment');
   }
   // On the bare code, and on the strings too: a CSS `scale(…)` lives in a template literal.
@@ -455,7 +603,7 @@ function auditAffordanceModel(source: string): string[] {
   return failures;
 }
 
-test('the affordance model imports the tokens, the index’s words, the stroke and scene models only, and reads no store, clock or DOM', () => {
+test('the affordance model imports the tokens, the index’s words, the panel’s width, the marks’ proportions, the stroke and scene models only, and reads no store, clock or DOM', () => {
   assert.deepEqual(auditAffordanceModel(readFileSync(MODEL_TS, 'utf8')), []);
 });
 
@@ -470,6 +618,9 @@ test('the affordance model audit rejects each form it names', () => {
     'const deep = project.content.notable !== null;',
     'const ids = bodies.sort();',
     "const path = `M ${a} ${b} L ${c} ${d} Z`;",
+    "const path = `M ${a} ${b} Q ${c} ${d} ${e} ${f}`;",
+    "const path = 'M 0 0 C 1 1 2 2 3 3';",
+    "const path = `M ${a} ${b} a ${r} ${r} 0 1 0 ${c} ${d}`;",
     "const halo = { kind: 'circle' };",
     'const style = { opacity: 0.5 };',
     'const style = { transform: `scale(1.2)` };',

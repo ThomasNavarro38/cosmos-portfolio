@@ -22,24 +22,34 @@
  * never the Body. That outline beside a white subject Body is the one
  * sanctioned exception to "one `stroke-focus` per frame" (Thomas, 2026-10-01).
  *
- * **The 12% rule.** The label goes right of the Body by default; when its anchor
- * would fall in the outer 12% of the frame on an axis, it re-anchors toward the
+ * **The 12% rule.** The label goes right of the Body by default; when its block
+ * would cross the outer 12% of the frame on an axis, it re-anchors toward the
  * centre on that axis — left of the Body at the right edge, below it at the top,
- * above it at the bottom — so the vignette never pulls a readable label below its
- * contrast floor.
+ * above it at the bottom — and the anchor is then held so the whole block, at its
+ * estimated size, lies inside the inner 76%, so the vignette never pulls a
+ * readable label below its contrast floor. While a Project is Focused the panel's
+ * edge is the right bound instead, as it is for the Motes' labels: the overlay
+ * sits under the panel, and a label behind it is no label.
+ *
+ * **The leader starts outside the Body's marks.** From the outline on a Shallow
+ * Planet; on a Deep one from beyond its Ring and Moon (3.3), so the leader never
+ * cuts through the signal.
  *
  * **It reads and never derives** (AD-3). The title, role and team size are the
  * authored content the artifact carries; the depth word is the artifact's
  * `isDeep`, worded by the index's own `DEPTH_LABELS`. Nothing here classifies.
  *
- * **Pure**: it imports the tokens, the index's depth words, the stroke model and
- * the scene model's types, and nothing else — no Three, no React, no store — so
+ * **Pure**: it imports the tokens, the index's depth words, the panel's width,
+ * the 3.3 marks' proportions, the stroke model and the scene model's types, and
+ * nothing else — no Three, no React, no store — so
  * every rule runs under `node --test`, which cannot load the `.tsx` binding
  * (`affordance-field.tsx`).
  */
 
 import { DEPTH_LABELS } from '../shell/index-model.ts';
+import { panelFraction } from '../shell/panel-model.ts';
 import { tokens } from '../tokens/tokens.ts';
+import { MOON_MIN_RADIUS_PX, MOON_OFFSET_RATIO, MOON_RADIUS_RATIO, RING_RADIUS_RATIO } from './notable-model.ts';
 import { bodyRadius, strokeColor, strokeWidthPx } from './stroke-model.ts';
 import type { Body, ScenePosition } from './scene-model.ts';
 
@@ -56,6 +66,13 @@ export const OUTLINE_PX = 1;
 
 /** The keyboard outline's offset from the label block, in CSS pixels (`affordance-focus-ring.outlineOffset`). */
 export const OUTLINE_OFFSET_PX = 3;
+
+/**
+ * A proportional glyph's estimated advance, as a share of the font size, before
+ * letter spacing. Generous for Helvetica at weight 300, so an estimated block is
+ * never narrower than the drawn one.
+ */
+export const LABEL_CHAR_EM = 0.6;
 
 // --- The approach ----------------------------------------------------------------
 
@@ -213,6 +230,20 @@ export function radiusPx(radius: number, depth: number, projection: ArrayLike<nu
   return Number.isFinite(px) && px > 0 ? px : 0;
 }
 
+/**
+ * Where the leader may start, in CSS pixels from a Planet's centre, given its
+ * outline's radius on screen: the outline itself on a Shallow Planet; on a Deep
+ * one the farther of its Ring (`RING_RADIUS_RATIO × r`) and its Moon's far edge
+ * (`MOON_OFFSET_RATIO × r` out, at its own radius or the `MOON_MIN_RADIUS_PX`
+ * floor, whichever is larger) — so the leader crosses neither mark, in any
+ * direction.
+ */
+export function markPx(planet: Pick<Body, 'isDeep'>, bodyPx: number): number {
+  if (planet.isDeep !== true) return bodyPx;
+  const moonFarEdge = MOON_OFFSET_RATIO * bodyPx + Math.max(MOON_RADIUS_RATIO * bodyPx, MOON_MIN_RADIUS_PX);
+  return Math.max(RING_RADIUS_RATIO * bodyPx, moonFarEdge);
+}
+
 // --- Layout --------------------------------------------------------------------------------
 
 /** A point on screen, in CSS pixels. */
@@ -225,7 +256,7 @@ export interface ScreenXY {
 export interface AffordanceLayout {
   /** The leader's direction on each axis: `1` right/down, `-1` left/up, `0` level. */
   readonly direction: ScreenXY;
-  /** The leader's start, on the Body's screen edge. */
+  /** The leader's start: the Body's screen edge, or beyond a Deep Planet's Ring and Moon. */
   readonly from: ScreenXY;
   /** The leader's end: the label anchor, where the label block's near edge sits. */
   readonly anchor: ScreenXY;
@@ -239,27 +270,102 @@ export interface AffordanceLayout {
   readonly outline: string;
 }
 
+/** The label block's estimated size on screen, in CSS pixels. */
+export interface LabelBox {
+  readonly width: number;
+  readonly height: number;
+}
+
+/** A type role's size in pixels, letter spacing in ems, and line height, read off the tokens. */
+function typeMetrics(role: 'scene-label-project' | 'scene-label-secondary') {
+  const type = tokens.typography[role];
+  return { fontPx: Number.parseFloat(type.fontSize), spacingEm: Number.parseFloat(type.letterSpacing), lineHeight: type.lineHeight };
+}
+
 /**
- * Where the leader and the label go for a Body centred at `screen` of
- * `radiusPx` on screen.
- *
- * The default direction is `û = (1, 0)`: the label right of the Body, the leader
- * `LEADER_PX` long. The default anchor is `centre + (radiusPx + LEADER_PX)·û`;
- * when it would fall in the outer `EDGE_SHARE` of the frame on an axis, `û`
- * turns toward the centre on that axis — leftward past the right edge, downward
- * above the top, upward below the bottom — and is renormalised, so the leader
- * keeps its length. The leader runs from `centre + radiusPx·û` to the anchor, and
- * the label block's near edge sits at the anchor.
+ * The label block's estimated size: each line `chars × fontPx × (LABEL_CHAR_EM +
+ * letterSpacing)` wide, the block as wide as its wider line and as tall as both
+ * line boxes. An estimate — the DOM is never measured — erring wide.
  */
-export function affordanceLayout(screen: ScreenXY, bodyPx: number, viewport: Viewport, keyboard: boolean): AffordanceLayout {
-  const reach = bodyPx + LEADER_PX;
-  const dx = screen.x + reach > (1 - EDGE_SHARE) * viewport.width ? -1 : 1;
-  const dy = screen.y < EDGE_SHARE * viewport.height ? 1 : screen.y > (1 - EDGE_SHARE) * viewport.height ? -1 : 0;
+export function labelBox(text: AffordanceText): LabelBox {
+  const lines = [
+    { chars: [...text.title].length, ...typeMetrics('scene-label-project') },
+    { chars: [...text.secondary].length, ...typeMetrics('scene-label-secondary') },
+  ];
+  return {
+    width: Math.max(...lines.map((line) => line.chars * line.fontPx * (LABEL_CHAR_EM + line.spacingEm))),
+    height: lines.reduce((sum, line) => sum + line.fontPx * line.lineHeight, 0),
+  };
+}
+
+/** The region a label block must stay inside, in CSS pixels. */
+export interface LabelBounds {
+  readonly left: number;
+  readonly right: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
+/**
+ * The inner 76% of the frame — the outer `EDGE_SHARE` off each side — with the
+ * right bound pulled in to the panel's edge while a Project is Focused.
+ */
+export function labelBounds(viewport: Viewport, focused: boolean): LabelBounds {
+  const right = (1 - EDGE_SHARE) * viewport.width;
+  return {
+    left: EDGE_SHARE * viewport.width,
+    right: focused ? Math.min(right, (1 - panelFraction(viewport.width)) * viewport.width) : right,
+    top: EDGE_SHARE * viewport.height,
+    bottom: (1 - EDGE_SHARE) * viewport.height,
+  };
+}
+
+/** `value` held to `[low, high]`; `high` wins when they cross, so a block too big for the room stays off the panel. */
+function hold(value: number, low: number, high: number): number {
+  return Math.min(Math.max(value, low), high);
+}
+
+/**
+ * Where the leader and the label go for a Body centred at `screen` whose leader
+ * starts `startPx` from its centre (`markPx`), for a label block of `box`.
+ *
+ * The default direction is `û = (1, 0)`: the label right of the Body. Its anchor
+ * is `centre + (startPx + LEADER_PX)·û`; when the block would cross `bounds` on an
+ * axis, `û` turns toward the centre on that axis — leftward when the block would
+ * pass the right bound, downward above the top, upward below the bottom — and is
+ * renormalised. The anchor is then held so the block lies inside `bounds`, which
+ * moves it only for a Body in the outer band. The leader runs from
+ * `centre + startPx·û` to the anchor, and the label block's near edge sits at the
+ * anchor.
+ */
+export function affordanceLayout(
+  screen: ScreenXY,
+  startPx: number,
+  viewport: Viewport,
+  keyboard: boolean,
+  box: LabelBox = { width: 0, height: 0 },
+  bounds: LabelBounds = labelBounds(viewport, false),
+): AffordanceLayout {
+  const reach = startPx + LEADER_PX;
+  const dx = screen.x + reach + box.width > bounds.right ? -1 : 1;
+  const dy = screen.y < bounds.top ? 1 : screen.y > bounds.bottom ? -1 : 0;
   const length = Math.hypot(dx, dy);
   const ux = dx / length;
   const uy = dy / length;
-  const from = { x: screen.x + bodyPx * ux, y: screen.y + bodyPx * uy };
-  const anchor = { x: screen.x + reach * ux, y: screen.y + reach * uy };
+  const from = { x: screen.x + startPx * ux, y: screen.y + startPx * uy };
+  // The block spans [anchor, anchor + width] rightward and [anchor − width, anchor]
+  // leftward; vertically it hangs below the anchor, sits above it, or centres on it.
+  const x = screen.x + reach * ux;
+  const y = screen.y + reach * uy;
+  const anchor = {
+    x: dx < 0 ? hold(x, bounds.left + box.width, bounds.right) : hold(x, bounds.left, bounds.right - box.width),
+    y:
+      dy > 0
+        ? hold(y, bounds.top, bounds.bottom - box.height)
+        : dy < 0
+          ? hold(y, bounds.top + box.height, bounds.bottom)
+          : hold(y, bounds.top + box.height / 2, bounds.bottom - box.height / 2),
+  };
   const shiftX = dx < 0 ? '-100%' : '0%';
   const shiftY = dy > 0 ? '0%' : dy < 0 ? '-100%' : '-50%';
   return {
@@ -309,7 +415,8 @@ export function onFrame(screen: ScreenXY, viewport: Viewport): boolean {
  * This frame's affordance: hidden at rest, when the approached Project is the
  * Focused one, when its Planet is behind the camera, or when its projected centre
  * is off the frame; otherwise its text and layout, from the Planet's projected
- * centre and radius.
+ * centre, its marks' reach (`markPx`), the label's estimated box and the bounds —
+ * the panel's edge on the right while a Project is Focused.
  *
  * @throws naming the ID when the approached Project has no Planet or no entry in
  * the artifact — both are built from the one artifact, so a miss is a bug.
@@ -329,7 +436,8 @@ export function affordanceFrame(
   const text = affordanceText(affordanceProject(artifact, approach.id));
   const screen = projectToScreen(planet.position, view, projection, viewport);
   if (screen === null || !onFrame(screen, viewport)) return HIDDEN;
-  const layout = affordanceLayout(screen, radiusPx(bodyRadius(planet), screen.depth, projection, viewport.height), viewport, approach.keyboard);
+  const startPx = markPx(planet, radiusPx(bodyRadius(planet), screen.depth, projection, viewport.height));
+  const layout = affordanceLayout(screen, startPx, viewport, approach.keyboard, labelBox(text), labelBounds(viewport, nav.focusedProjectId !== null));
   return {
     visible: true,
     projectId: approach.id,

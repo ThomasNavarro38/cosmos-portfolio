@@ -190,7 +190,7 @@ export function Scene({ artifact }: SceneProps) {
         <BodyField bodies={bodies} rail={rail} />
         {/* The Moons: one per Deep Planet, after the Bodies and the rig, held at their pixel floor. They read no store. */}
         <MoonField bodies={bodies} />
-        {/* The affordance (3.4): the approached Project's leader and label, in an overlay over the vignette. It reads, it never writes the store. */}
+        {/* The affordance (3.4): the approached Project's leader and label, in an overlay over the vignette. It writes no store field itself; its per-frame re-pick reaches the hover only through `hoverBody` / `leaveBody`. */}
         <AffordanceField artifact={artifact} bodies={bodies} />
       </Canvas>
       {/* The vignette: the ground over the frame's edge, 0 inside 42% rising to 0.9. Inert, and not narrated. */}
