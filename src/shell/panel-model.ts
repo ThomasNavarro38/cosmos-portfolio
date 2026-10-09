@@ -116,6 +116,7 @@ export interface PanelArtifactProject {
     readonly team_size: number;
     readonly built: string;
     readonly notable?: string | null;
+    readonly skills: readonly string[];
   };
 }
 
@@ -126,14 +127,16 @@ export interface PanelField {
 }
 
 /**
- * One block of the panel, in DOM order. The kinds are UX-DR22's list, and
- * `buildPanel` always emits all five, in that order.
+ * One block of the panel, in DOM order. The kinds are UX-DR22's list plus the
+ * Skills list (3.5), in that order. `buildPanel` emits every kind, except the
+ * Skills list for a Project with no Skills — an empty `<ul>` names nothing.
  */
 export type PanelBlock =
   | { readonly kind: 'kicker'; readonly text: string }
   | { readonly kind: 'title'; readonly text: string }
   | { readonly kind: 'reading'; readonly paragraphs: readonly string[] }
   | { readonly kind: 'fields'; readonly rows: readonly PanelField[] }
+  | { readonly kind: 'skills'; readonly items: readonly string[] }
   | { readonly kind: 'release'; readonly label: string };
 
 /** The panel for one Project. */
@@ -148,7 +151,9 @@ export interface FocusPanelModel {
  *
  * In DOM order (UX-DR22): the Client kicker, the Project title, the reading
  * position, the field table (`Role`, `Team`, `Built` — no `Skills` row), the
- * release button. The **reading position is always present**, because it is a
+ * Project's Skills as a static list in authored order, deduplicated (3.5: the
+ * Motes' labels are canvas-only and capped, so the DOM carries every Skill —
+ * no heading, no live region), the release button. The **reading position is always present**, because it is a
  * slot rather than an optional block: on a Deep Project it holds the `notable`
  * paragraphs, on a Shallow one it holds nothing — no error, no placeholder, no
  * skeleton. The branch is on `isDeep`, never on `notable`.
@@ -177,12 +182,19 @@ export function buildPanel(artifact: PanelArtifact, id: string | null): FocusPan
               { label: FIELD_LABELS.built, value: content.built },
             ],
           },
+          ...skillsBlock(content.skills),
           { kind: 'release', label: RELEASE_LABEL },
         ],
       };
     }
   }
   return null;
+}
+
+/** The Skills block, deduplicated in authored order — or none at all for a Project with no Skills. */
+function skillsBlock(skills: readonly string[]): PanelBlock[] {
+  const items = [...new Set(skills)];
+  return items.length === 0 ? [] : [{ kind: 'skills', items }];
 }
 
 /** Authored prose split on blank lines into paragraphs, each trimmed, none empty. */

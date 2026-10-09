@@ -24,11 +24,19 @@
  * `MOTE_SOURCE_ALPHA` opaque. The medium's profile is `(1 − t²)²`, so that
  * region is a ball of radius `radius · √(1 − √(α / peak))`, in closed form.
  *
- * **Orbits are greybox composition, not a tier.** Skill `i` — deduplicated, in
- * the order the Project lists them — sits on orbit `i mod 3` at slot `2⌊i/3⌋`,
- * with `S = max(8, 2⌈n/3⌉)` slots per orbit, so no two Motes of one Planet ever
- * occupy adjacent slots of one orbit. 3.5 replaces the list index with the
- * artifact's derived Mote tier; nothing here reads `moteTier`.
+ * **Orbits are the artifact's Skill tier** (3.5, D-A4). The artifact carries a
+ * ranked `skills` list — every distinct Skill, most-shared first, each with its
+ * tier — and the renderer reads it as a lookup; it never counts shares. A tier's
+ * index is its orbit (`mote-inner` is the innermost), and among a Project's
+ * Skills on one orbit the `j`-th by rank sits at slot `2j`, with
+ * `S = max(MOTE_MIN_SLOTS, 2k)` slots on an orbit holding `k`, so no two Motes of
+ * one Planet ever occupy adjacent slots of one orbit. Each tier draws its dot at
+ * a screen-constant radius (2.6 / 2.1 / 1.8px) in its DESIGN.md `mote` fill, and
+ * every orbit holding a Mote draws as a `stroke-dust` hairline circle on its tilt
+ * — two lines per orbit, one around the focused Planet fading in with its
+ * Motes and one around the Planet just left fading out with them, so an
+ * `A → B` hand-off never moves a line between Planets in one frame.
+ * Nothing here reads `moteTier`.
  *
  * **Labels never sit under the panel.** A label is placed from NDC positions,
  * projected through the camera matrices the frame hands in: on the dot's left
@@ -41,8 +49,17 @@
  * no-adjacency quota and would not be blocked. With no such slot the Mote stays
  * and its label stays hidden.
  *
+ * **At most `MOTE_LABEL_LIMIT` labels, none colliding, none clipped** (3.5).
+ * After placement, one pass per frame visits the labelled Motes — the focused
+ * Project's first — in `skills` rank, and shows a label only while the pass is
+ * under the limit, its estimated box lies inside the canvas on all four edges
+ * and left of the panel edge, and it clears every label already shown by
+ * `MOTE_LABEL_CLEARANCE_PX`. A label hidden by that pass is not re-slotted: the
+ * cap and the ordering are `moteLabelPass`'s alone, so a later degradation rule
+ * replaces one function.
+ *
  * **Pure.** It imports the shell's timing and panel models and this
- * directory's Dust, Rail and scene models — no Three, no React, no store, no
+ * directory's Dust, Rail, scene, stroke and Notable models — no Three, no React, no store, no
  * clock — so every rule here runs under `node --test`, and `mote-field.tsx`
  * only binds it. The one exception to "returns, never mutates" is
  * `applyMoteDraw`, which writes a frame's result onto the handles it is given;
@@ -54,8 +71,10 @@ import { tokens } from '../tokens/tokens.ts';
 import { panelFraction } from '../shell/panel-model.ts';
 import { motionPace } from '../shell/motion-preference.ts';
 import type { DustMedium } from './dust-model.ts';
+import { worldPerPixel } from './notable-model.ts';
 import { RAIL_MAX_FRAME_SECONDS } from './rail-model.ts';
 import type { Body, ScenePosition } from './scene-model.ts';
+import { strokeColor, strokeWidthPx, type LinePoint } from './stroke-model.ts';
 
 // --- Tuning ------------------------------------------------------------------
 
@@ -72,17 +91,18 @@ export const MOTE_ORBIT_TILTS = [-16, 26, -46] as const;
 
 /**
  * Each orbit's angular offset, in radians, so the first slot of every orbit is
- * not on one horizontal line — three labels there would stack. Greybox.
+ * not on one horizontal line — three labels there would stack. Quarter-turn steps
+ * (3.5): the nine-Skill fixture reads all nine labels at rest at 1440×900. Greybox.
  */
-export const MOTE_ORBIT_PHASES = [0, Math.PI / 6, Math.PI / 3] as const;
+export const MOTE_ORBIT_PHASES = [0, Math.PI / 4, Math.PI / 2] as const;
 
 /** How fast every orbit turns, so a condensed Mote keeps moving while the panel is read. */
 export const MOTE_ORBIT_RADIANS_PER_SECOND = 0.1;
 
-/** The fewest slots an orbit has. Even, so slot `2⌊i/3⌋` always leaves a gap. */
+/** The fewest slots an orbit has. Even, so slot `2j` always leaves a gap. */
 export const MOTE_MIN_SLOTS = 8;
 
-/** The drawn radius of one Mote, in scene units — well below a Planet's. */
+/** The radius of one Mote's mesh, in scene units: the sphere every dot is scaled from. */
 export const MOTE_RADIUS = 0.05;
 
 /** The drawn scale of a Mote at level 0, as a share of its full size. */
@@ -100,39 +120,93 @@ export const MOTE_SOURCE_ALPHA = 0.1;
 /** How long a re-slotted Mote's angle takes to ease to its new slot, in seconds. */
 export const MOTE_RESLOT_SECONDS = 0.4;
 
-/** The label's font size, in CSS pixels. Monospace, so its width is estimable. */
-export const MOTE_LABEL_FONT_PX = 12;
+/**
+ * The artifact's Skill tiers, innermost first: derive's `SKILL_TIERS`, mirrored,
+ * because this directory may not import `src/derive/`. A tier's index here *is*
+ * its orbit. `mote-model.test.ts` reads derive's literal as text and pins the two
+ * equal.
+ */
+export const MOTE_TIERS_BY_ORBIT = ['mote-inner', 'mote-middle', 'mote-outer'] as const;
 
-/** The estimated width of one label character, in CSS pixels: a monospace advance of 0.6em. */
-export const MOTE_LABEL_CHAR_PX = MOTE_LABEL_FONT_PX * 0.6;
+/** Each tier's dot radius on screen, in CSS pixels, before the level scale (DESIGN.md `mote.radiusTier1..3`). */
+export const MOTE_DOT_RADII_PX = [2.6, 2.1, 1.8] as const;
+
+/**
+ * Each tier's dot fill (DESIGN.md `mote.fillTier1..3`): `stroke-active` for the
+ * innermost, `ink-label` for the other two. A dot only: a label is a glyph, and
+ * glyphs take the ink ladder.
+ */
+export const MOTE_DOT_COLORS = [
+  tokens.colors['stroke-active-dark'],
+  tokens.colors['ink-label-dark'],
+  tokens.colors['ink-label-dark'],
+] as const;
+
+/** The orbit line: `stroke-dust` at `hairline` (DESIGN.md `mote-orbit-line`). */
+export const MOTE_ORBIT_LINE_COLOR = strokeColor('stroke-dust');
+export const MOTE_ORBIT_LINE_WIDTH_PX = strokeWidthPx('hairline');
+
+/** Segments in one drawn orbit line. */
+export const MOTE_ORBIT_LINE_SEGMENTS = 96;
+
+/** The label's type: the `mote-label` typography token (DESIGN.md `mote.label`). */
+export const MOTE_LABEL_TYPE = tokens.typography['mote-label'];
+
+/** The label's font size, in CSS pixels, read off the token. */
+export const MOTE_LABEL_FONT_PX = cssNumber(MOTE_LABEL_TYPE.fontSize, 'px');
+
+/**
+ * The estimated width of one label character, in CSS pixels: a sans advance of
+ * 0.6em plus the token's letter-spacing (0.16em) — about 7.2px at 9.5px.
+ * Tunable, and conservative on average: a sans face's mean advance is under
+ * 0.6em, so for typical strings the estimate errs wide — but not for every
+ * string (a run of wide capitals such as `MW` can exceed it).
+ */
+export const MOTE_LABEL_CHAR_PX = MOTE_LABEL_FONT_PX * (0.6 + cssNumber(MOTE_LABEL_TYPE.letterSpacing, 'em'));
+
+/** The estimated height of a label's box, in CSS pixels: one line at the token's line-height. */
+export const MOTE_LABEL_HEIGHT_PX = MOTE_LABEL_FONT_PX * MOTE_LABEL_TYPE.lineHeight;
 
 /** The gap between a dot and its label, in CSS pixels. */
 export const MOTE_LABEL_GAP_PX = 12;
 
-/**
- * The one Mote dot value: `stroke-active` (DESIGN.md `mote.fillTier1`).
- * Tiering across three values is story 3.5's; until then every Mote is tier 1.
- * A dot only: a label is a glyph, and glyphs take the ink ladder (3.2).
- */
-export const MOTE_COLOR = tokens.colors['stroke-active-dark'];
+/** The most labels shown at once (3.5's degradation rule; DESIGN.md D-G3). */
+export const MOTE_LABEL_LIMIT = 12;
+
+/** The least gap between two shown labels' boxes, in CSS pixels. */
+export const MOTE_LABEL_CLEARANCE_PX = 4;
 
 /**
- * The Mote label's ink: `ink-prose`, the ink step that pairs with the dot's
- * `stroke-active` (the same dark value, on the other ladder). A stroke token on a
- * glyph is what 3.2 forbids — the two ladders never borrow each other's tokens.
- * Legibility tiers are 3.5's.
+ * The Mote label's ink: `ink-label`, the floor every Mote label tier sits at
+ * (DESIGN.md §2). A stroke token on a glyph is what 3.2 forbids — the two
+ * ladders never borrow each other's tokens.
  */
-export const MOTE_LABEL_COLOR = tokens.colors['ink-prose-dark'];
+export const MOTE_LABEL_COLOR = tokens.colors['ink-label-dark'];
+
+/**
+ * A token's numeric value in `unit`: `9.5px` → 9.5, `.16em` → 0.16, `-0.02em` →
+ * −0.02, and a bare `0` (unitless, as CSS allows for zero) → 0. Throws on a token
+ * in another unit: the estimate would silently be wrong.
+ */
+export function cssNumber(value: string, unit: 'px' | 'em'): number {
+  if (/^[-+]?0*\.?0+$/.test(value.trim())) return 0;
+  const match = new RegExp(String.raw`^([-+]?(?:\d+(?:\.\d*)?|\.\d+))` + unit + '$').exec(value.trim());
+  const parsed = match === null ? Number.NaN : Number(match[1]);
+  if (!Number.isFinite(parsed)) throw new Error(`the mote-label token ${JSON.stringify(value)} is not in ${unit}.`);
+  return parsed;
+}
 
 // --- The artifact slice ------------------------------------------------------
 
 /**
  * The slice of the artifact Motes read, restated structurally as `SceneArtifact`
- * is: a Project's ID and its authored Skill list. `src/render-scene/` may not
- * import `src/derive/`, not even for a type.
+ * is: a Project's ID and its authored Skill list, and the ranked, tiered Skill
+ * list. `src/render-scene/` may not import `src/derive/`, not even for a type.
  */
 export interface MoteArtifact {
   readonly clients: readonly MoteArtifactClient[];
+  /** Every distinct Skill, most-shared first, each with its tier (3.5). A lookup: never counted here. */
+  readonly skills: readonly MoteArtifactSkill[];
 }
 
 export interface MoteArtifactClient {
@@ -142,6 +216,12 @@ export interface MoteArtifactClient {
 export interface MoteArtifactProject {
   readonly id: string;
   readonly content: { readonly skills: readonly string[] };
+}
+
+/** One entry of the artifact's Skill list. The tier is a string: `moteRanks` rejects one it does not name. */
+export interface MoteArtifactSkill {
+  readonly name: string;
+  readonly tier: string;
 }
 
 /**
@@ -173,35 +253,92 @@ export function projectSkills(artifact: MoteArtifact, id: string): readonly stri
   throw new Error(`Motes need a Project, but none carries ${JSON.stringify(id)}.`);
 }
 
+/** Where a Skill stands in the artifact's list: its rank (0 is the most shared) and its tier's orbit. */
+export interface MoteRank {
+  readonly rank: number;
+  readonly orbit: number;
+}
+
+/** The artifact's Skill list as a lookup, by name. */
+export type MoteRanks = ReadonlyMap<string, MoteRank>;
+
+/** One lookup per artifact object: `stepMotes` and every pooled dot's colour read it without rebuilding it. */
+const RANKS = new WeakMap<MoteArtifact, MoteRanks>();
+
+/**
+ * The artifact's `skills`, as a lookup: each name's rank (its index) and orbit
+ * (its tier's index in `MOTE_TIERS_BY_ORBIT`). Reads the list; counts nothing.
+ * Memoised per artifact object, which the scene never mutates.
+ *
+ * @throws naming the Skill when its tier is not one this renderer draws, or
+ * when the list carries its name twice — two ranks for one Mote.
+ */
+export function moteRanks(artifact: MoteArtifact): MoteRanks {
+  const known = RANKS.get(artifact);
+  if (known !== undefined) return known;
+  const ranks = new Map<string, MoteRank>();
+  artifact.skills.forEach((entry, rank) => {
+    const orbit = (MOTE_TIERS_BY_ORBIT as readonly string[]).indexOf(entry.tier);
+    if (orbit < 0) throw new Error(`the Skill ${JSON.stringify(entry.name)} has the tier ${JSON.stringify(entry.tier)}, which no orbit draws.`);
+    if (ranks.has(entry.name)) throw new Error(`the Skill ${JSON.stringify(entry.name)} is listed twice in the artifact's skills.`);
+    ranks.set(entry.name, { rank, orbit });
+  });
+  RANKS.set(artifact, ranks);
+  return ranks;
+}
+
+/**
+ * One Skill's rank and orbit.
+ *
+ * @throws naming the Skill when the artifact's list does not carry it — as
+ * `projectSkills` throws for a missing Project: a Mote with no tier has no orbit.
+ */
+export function moteRank(ranks: MoteRanks, skill: string): MoteRank {
+  const found = ranks.get(skill);
+  if (found === undefined) throw new Error(`Motes need a tier, but the artifact's skills carry none for ${JSON.stringify(skill)}.`);
+  return found;
+}
+
 // --- Orbits and slots ----------------------------------------------------------
 
-/** Where one Skill sits: an orbit and a slot on it. */
+/** Where one Skill sits: an orbit, a slot on it, and how many slots that orbit has. */
 export interface MoteSeat {
   readonly skill: string;
   readonly orbit: number;
   readonly slot: number;
+  readonly slots: number;
 }
 
-/** A Project's Skills seated, with the slot count every orbit has. */
+/** A Project's Skills seated. */
 export interface MoteAssignment {
-  readonly slots: number;
+  /** Slots on each orbit, innermost first. */
+  readonly slots: readonly number[];
+  /** In rank order. */
   readonly seats: readonly MoteSeat[];
 }
 
 /**
- * The seats of a Project's Skills: deduplicated in list order, Skill `i` on
- * orbit `i mod 3` at slot `2⌊i/3⌋`, with `S = max(MOTE_MIN_SLOTS, 2⌈n/3⌉)`
- * slots per orbit. Occupied slots are even and at most `S − 2`, so no two are
- * adjacent, wrap-around included.
+ * The seats of a Project's Skills: deduplicated, ordered by their rank in the
+ * artifact's list, each on its tier's orbit; the `j`-th on an orbit at slot
+ * `2j`, with `S = max(MOTE_MIN_SLOTS, 2k)` slots on an orbit holding `k`.
+ * Occupied slots are even and at most `S − 2`, so no two are adjacent,
+ * wrap-around included.
+ *
+ * @throws naming a Skill the artifact's list does not carry.
  */
-export function moteAssignment(skills: readonly string[]): MoteAssignment {
-  const distinct = [...new Set(skills)];
-  const orbits = MOTE_ORBIT_RADII.length;
-  const slots = Math.max(MOTE_MIN_SLOTS, 2 * Math.ceil(distinct.length / orbits));
-  return {
-    slots,
-    seats: distinct.map((skill, index) => ({ skill, orbit: index % orbits, slot: 2 * Math.floor(index / orbits) })),
-  };
+export function moteAssignment(skills: readonly string[], ranks: MoteRanks): MoteAssignment {
+  const ranked = [...new Set(skills)]
+    .map((skill) => ({ skill, ...moteRank(ranks, skill) }))
+    .sort((a, b) => a.rank - b.rank);
+  const held = MOTE_ORBIT_RADII.map((_, orbit) => ranked.filter((entry) => entry.orbit === orbit).length);
+  const slots = held.map((k) => Math.max(MOTE_MIN_SLOTS, 2 * k));
+  const next = MOTE_ORBIT_RADII.map(() => 0);
+  const seats = ranked.map(({ skill, orbit }): MoteSeat => {
+    const j = next[orbit] ?? 0;
+    next[orbit] = j + 1;
+    return { skill, orbit, slot: 2 * j, slots: slots[orbit] ?? MOTE_MIN_SLOTS };
+  });
+  return { slots, seats };
 }
 
 /** A slot's angle on its orbit before the orbit's phase and spin, in radians. */
@@ -376,9 +513,13 @@ export function labelTransform(side: LabelSide): string {
     : `translate(${MOTE_LABEL_GAP_PX}px, -50%)`;
 }
 
-/** A label's resting inline style: monospace, one line, inert to the pointer, hidden until placed. */
+/** A label's resting inline style: the `mote-label` type in `ink-label`, one line, inert to the pointer, hidden until placed. */
 export interface MoteLabelStyle {
-  readonly font: string;
+  readonly fontFamily: string;
+  readonly fontSize: string;
+  readonly fontWeight: number;
+  readonly lineHeight: number;
+  readonly letterSpacing: string;
   readonly whiteSpace: 'nowrap';
   readonly color: string;
   readonly pointerEvents: 'none';
@@ -390,7 +531,11 @@ export interface MoteLabelStyle {
 
 export function moteLabelStyle(): MoteLabelStyle {
   return {
-    font: `${MOTE_LABEL_FONT_PX}px monospace`,
+    fontFamily: MOTE_LABEL_TYPE.fontFamily,
+    fontSize: MOTE_LABEL_TYPE.fontSize,
+    fontWeight: MOTE_LABEL_TYPE.fontWeight,
+    lineHeight: MOTE_LABEL_TYPE.lineHeight,
+    letterSpacing: MOTE_LABEL_TYPE.letterSpacing,
     whiteSpace: 'nowrap',
     color: MOTE_LABEL_COLOR,
     pointerEvents: 'none',
@@ -399,6 +544,81 @@ export function moteLabelStyle(): MoteLabelStyle {
     opacity: 0,
     transform: labelTransform('right'),
   };
+}
+
+/** A label's estimated box on the canvas, in CSS pixels from its top-left corner. */
+export interface LabelBox {
+  readonly left: number;
+  readonly right: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
+/**
+ * Where a label's text sits on a `width` × `height` canvas: `MOTE_LABEL_GAP_PX`
+ * to `side` of the dot, `chars × MOTE_LABEL_CHAR_PX` wide and
+ * `MOTE_LABEL_HEIGHT_PX` tall, vertically centred on it — the box
+ * `labelTransform` draws.
+ */
+export function labelBox(dot: NdcPoint, side: LabelSide, chars: number, width: number, height: number): LabelBox {
+  const x = ((dot.x + 1) / 2) * width;
+  const y = ((1 - dot.y) / 2) * height;
+  const extent = Math.max(chars, 0) * MOTE_LABEL_CHAR_PX;
+  const left = side === 'right' ? x + MOTE_LABEL_GAP_PX : x - MOTE_LABEL_GAP_PX - extent;
+  const top = y - MOTE_LABEL_HEIGHT_PX / 2;
+  return { left, right: left + extent, top, bottom: top + MOTE_LABEL_HEIGHT_PX };
+}
+
+/** One label the pass may show: its Skill, its rank, whether it is the focused Project's, and its box. */
+export interface LabelCandidate {
+  readonly skill: string;
+  readonly rank: number;
+  readonly focused: boolean;
+  readonly box: LabelBox;
+}
+
+/** The region a shown label must lie in: the canvas, and left of `panelEdge` (the canvas width when nothing is focused). */
+export interface LabelBounds {
+  readonly width: number;
+  readonly height: number;
+  readonly panelEdge: number;
+}
+
+/**
+ * Which labels are shown this frame — **the degradation rule, in one function**.
+ *
+ * Candidates are visited the focused Project's first, then by rank (most shared
+ * first), so an inner-orbit, most-shared Skill always wins a collision. A label
+ * is shown only while fewer than `MOTE_LABEL_LIMIT` are, its box lies inside the
+ * canvas on all four edges and left of the panel edge, and it clears every label
+ * already shown by `MOTE_LABEL_CLEARANCE_PX`. A label hidden here is hidden, not
+ * re-slotted and never truncated. A later rule replaces this function whole.
+ */
+export function moteLabelPass(candidates: readonly LabelCandidate[], bounds: LabelBounds): Set<string> {
+  const ordered = [...candidates].sort((a, b) => Number(b.focused) - Number(a.focused) || a.rank - b.rank);
+  const shown: LabelBox[] = [];
+  const names = new Set<string>();
+  const gap = MOTE_LABEL_CLEARANCE_PX;
+  for (const candidate of ordered) {
+    if (shown.length >= MOTE_LABEL_LIMIT) break;
+    const { box } = candidate;
+    const inside =
+      [box.left, box.right, box.top, box.bottom].every(Number.isFinite) &&
+      box.left >= 0 &&
+      box.top >= 0 &&
+      box.bottom <= bounds.height &&
+      box.right <= bounds.width &&
+      box.right <= bounds.panelEdge;
+    if (!inside) continue;
+    const clear = shown.every(
+      (other) =>
+        box.left >= other.right + gap || other.left >= box.right + gap || box.top >= other.bottom + gap || other.top >= box.bottom + gap,
+    );
+    if (!clear) continue;
+    shown.push(box);
+    names.add(candidate.skill);
+  }
+  return names;
 }
 
 // --- The step ------------------------------------------------------------------
@@ -429,6 +649,11 @@ export interface Mote {
   readonly position: ScenePosition;
   readonly level: number;
   readonly labelSide: LabelSide;
+  /** Its label was placed this frame: in front, condensed, and neither drawn nor resting across the panel. */
+  readonly labelPlaced: boolean;
+  /** Its label's estimated box this frame, or `null` when it cannot be measured. */
+  readonly labelBox: LabelBox | null;
+  /** Placed, and kept by `moteLabelPass`: shown. */
   readonly labelVisible: boolean;
   /** Its label was blocked this frame: the next step re-slots it. */
   readonly blocked: boolean;
@@ -440,10 +665,44 @@ export interface MoteDraw {
   readonly visible: boolean;
   /** `null` while no Mote carries the Skill: the dot is hidden and left where it was. */
   readonly position: ScenePosition | null;
+  /** The level's scale: `MOTE_MIN_SCALE` at level 0, 1 condensed. */
   readonly scale: number;
+  /**
+   * What takes the mesh to its tier's screen radius at its drawn depth:
+   * `radiusPx · worldPerPixel / MOTE_RADIUS`; 1 when that cannot be measured.
+   * The mesh is scaled by `scale × dotScale`.
+   */
+  readonly dotScale: number;
   readonly opacity: number;
   readonly labelVisibility: 'visible' | 'hidden';
   readonly labelTransform: string;
+}
+
+/** Which of an orbit's two lines: around the focused Planet, or around the Planet just left. */
+export type MoteOrbitRole = 'condensing' | 'decaying';
+
+/** What the renderer applies to one orbit line. */
+export interface MoteOrbitDraw {
+  /** Its index among `moteOrbitLines()`: `2 · orbit` condensing, `2 · orbit + 1` decaying. */
+  readonly line: number;
+  readonly orbit: number;
+  readonly role: MoteOrbitRole;
+  /** Drawn: its opacity is above 0. */
+  readonly visible: boolean;
+  /** The Planet it circles, or `null` while it has none: the line is left where it was. */
+  readonly centre: ScenePosition | null;
+  readonly opacity: number;
+}
+
+/**
+ * An orbit's outgoing line, carried between frames: where it circles, the opacity
+ * it had when Focus left that Planet, and seconds since — it fades on the Focus
+ * curve, as the Motes leaving that Planet decay.
+ */
+export interface MoteOrbitFade {
+  readonly centre: ScenePosition | null;
+  readonly from: number;
+  readonly elapsed: number;
 }
 
 /** What the field carries between frames. */
@@ -454,6 +713,10 @@ export interface MoteField {
   readonly motes: readonly Mote[];
   /** One per `motePool` entry, in pool order. */
   readonly draws: readonly MoteDraw[];
+  /** Two per orbit, innermost first: condensing then decaying, aligned with `moteOrbitLines()`. */
+  readonly orbits: readonly MoteOrbitDraw[];
+  /** One per orbit: its outgoing line's fade. */
+  readonly fades: readonly MoteOrbitFade[];
 }
 
 /** What the step reads from the scene. */
@@ -463,11 +726,12 @@ export interface MoteScene {
   readonly media: readonly DustMedium[];
 }
 
-/** What the step reads from the camera: its matrices, as `three` stores them, and the canvas width. */
+/** What the step reads from the camera: its matrices, as `three` stores them, and the canvas size. */
 export interface MoteView {
   readonly view: ArrayLike<number>;
   readonly projection: ArrayLike<number>;
   readonly width: number;
+  readonly height: number;
 }
 
 /**
@@ -497,6 +761,17 @@ export interface MoteView {
  *     (condensing, level 1) or the fixed source (decaying, level 0).
  *   - **Labels:** `labelPlacement` over the projected dot and Planet for the
  *     side and the drawn crossing; over the destination slot for `blocked`.
+ *     Then `moteLabelPass` over every placed label decides which are shown.
+ *   - **Draws:** each dot at its tier's screen radius times the level scale.
+ *     Each orbit's condensing line circles the focused Planet at the highest
+ *     `min(level, ease(elapsed))` of the condensing Motes on it — so a Mote
+ *     handed off at level 1 fades the new line in rather than snapping it. On a
+ *     change of Focus, its decaying line takes over the condensing line as it
+ *     was drawn (unless the line already fading is brighter) and fades it out
+ *     over `FOCUS_SECONDS` on `easeFocus`.
+ *   - **The panel edge** bounds labels while a Project is focused, and still
+ *     while any Mote is decaying — after a release the panel is sliding out
+ *     over the same move.
  *
  * @throws naming the ID when the focused Project is not in the artifact or has
  * no Planet, and naming the Client when its medium is missing.
@@ -524,22 +799,39 @@ export function stepMotes(
     }))
     .filter((mote) => mote.condensing || mote.elapsed < FOCUS_SECONDS);
 
+  const ranks = moteRanks(scene.artifact);
   const targeted = changed
-    ? retarget(advanced, scene, focusedId, clock)
+    ? retarget(advanced, scene, ranks, focusedId, clock)
     : focusedId === null
       ? advanced
       : reslot(advanced, scene, view, clock);
 
-  const motes = targeted.map((mote) => label(pose(mote, scene, clock), scene, view, focusedId !== null, clock));
+  const placed = targeted.map((mote) => label(pose(mote, scene, clock), scene, view, focusedId !== null, clock));
+  const shown = moteLabelPass(
+    placed.flatMap((mote): LabelCandidate[] =>
+      mote.labelPlaced && mote.labelBox !== null
+        ? [{ skill: mote.skill, rank: moteRank(ranks, mote.skill).rank, focused: mote.condensing && mote.planetId === focusedId, box: mote.labelBox }]
+        : [],
+    ),
+    {
+      width: view.width,
+      height: view.height,
+      // After a release the panel slides out over the decay itself, so its edge
+      // still bounds the decaying labels until the last Mote has gone.
+      panelEdge: view.width * (1 - (focusedId !== null || placed.some((mote) => !mote.condensing) ? panelFraction(view.width) : 0)),
+    },
+  );
+  const motes = placed.map((mote) => ({ ...mote, labelVisible: shown.has(mote.skill) }));
   const byName = new Map(motes.map((mote) => [mote.skill, mote]));
-  const draws = motePool(scene.artifact).map((skill) => drawOf(skill, byName.get(skill)));
-  return { focusedId, clock, motes, draws };
+  const draws = motePool(scene.artifact).map((skill) => drawOf(skill, byName.get(skill), view));
+  const fades = orbitFades(previous, changed, step);
+  return { focusedId, clock, motes, draws, orbits: orbitDraws(motes, scene, focusedId, fades), fades };
 }
 
 /**
  * The frame loop's step, as a pure function, so the binding in
  * `mote-field.tsx` is executed rather than read: the store's focused ID, the
- * camera's matrices after the rig has moved it, and R3F's canvas width.
+ * camera's matrices after the rig has moved it, and R3F's canvas size.
  */
 export function moteFrame(
   previous: MoteField | null,
@@ -550,20 +842,21 @@ export function moteFrame(
   view: ArrayLike<number>,
   projection: ArrayLike<number>,
   width: number,
+  height: number,
   delta: number,
   reduced = false,
 ): MoteField {
-  return stepMotes(previous, { artifact, bodies, media }, focusedId, { view, projection, width }, delta, reduced);
+  return stepMotes(previous, { artifact, bodies, media }, focusedId, { view, projection, width, height }, delta, reduced);
 }
 
-function retarget(motes: readonly Mote[], scene: MoteScene, focusedId: string | null, clock: number): Mote[] {
-  const assignment = focusedId === null ? null : moteAssignment(projectSkills(scene.artifact, focusedId));
+function retarget(motes: readonly Mote[], scene: MoteScene, ranks: MoteRanks, focusedId: string | null, clock: number): Mote[] {
+  const assignment = focusedId === null ? null : moteAssignment(projectSkills(scene.artifact, focusedId), ranks);
   const seats = new Map((assignment?.seats ?? []).map((seat) => [seat.skill, seat]));
   const target = focusedId === null ? null : planetOf(scene.bodies, focusedId);
   const targetMedium = target === null ? null : mediumOf(scene.media, target);
   /** The Dust source of a seat on the focused Planet, at `clock`. */
-  const sourceOf = (seat: MoteSeat, slots: number, planet: Body, medium: DustMedium): ScenePosition =>
-    dustSource(orbitPoint(planet.position, seat.orbit, slotAngle(seat.slot, slots) + orbitSpin(seat.orbit, clock)), planet.position, medium);
+  const sourceOf = (seat: MoteSeat, planet: Body, medium: DustMedium): ScenePosition =>
+    dustSource(orbitPoint(planet.position, seat.orbit, slotAngle(seat.slot, seat.slots) + orbitSpin(seat.orbit, clock)), planet.position, medium);
   const kept = motes.map((mote): Mote => {
     const seat = seats.get(mote.skill);
     if (seat !== undefined && assignment !== null && focusedId !== null && target !== null && targetMedium !== null) {
@@ -572,13 +865,13 @@ function retarget(motes: readonly Mote[], scene: MoteScene, focusedId: string | 
         planetId: focusedId,
         orbit: seat.orbit,
         slot: seat.slot,
-        slots: assignment.slots,
-        angleFrom: slotAngle(seat.slot, assignment.slots),
+        slots: seat.slots,
+        angleFrom: slotAngle(seat.slot, seat.slots),
         reslotElapsed: MOTE_RESLOT_SECONDS,
         condensing: true,
         // Its source is always that of the slot it heads for: a handed-off Mote's
         // is B's Dust, where it would decay to if B were released at once.
-        source: sourceOf(seat, assignment.slots, target, targetMedium),
+        source: sourceOf(seat, target, targetMedium),
         from: mote.position,
         fromLevel: mote.level,
         elapsed: 0,
@@ -603,14 +896,14 @@ function retarget(motes: readonly Mote[], scene: MoteScene, focusedId: string | 
   const born = assignment.seats
     .filter((seat) => !present.has(seat.skill))
     .map((seat): Mote => {
-      const angle = slotAngle(seat.slot, assignment.slots);
-      const source = sourceOf(seat, assignment.slots, target, targetMedium);
+      const angle = slotAngle(seat.slot, seat.slots);
+      const source = sourceOf(seat, target, targetMedium);
       return {
         skill: seat.skill,
         planetId: focusedId,
         orbit: seat.orbit,
         slot: seat.slot,
-        slots: assignment.slots,
+        slots: seat.slots,
         angleFrom: angle,
         reslotElapsed: MOTE_RESLOT_SECONDS,
         condensing: true,
@@ -621,6 +914,8 @@ function retarget(motes: readonly Mote[], scene: MoteScene, focusedId: string | 
         position: source,
         level: 0,
         labelSide: 'right',
+        labelPlaced: false,
+        labelBox: null,
         labelVisible: false,
         blocked: false,
       };
@@ -675,17 +970,23 @@ function pose(mote: Mote, scene: MoteScene, clock: number): Mote {
  * as drawn, come from the drawn pose. Whether the Mote is *blocked* — and so
  * re-slotted on the next step — is judged at its destination: the slot it rests
  * on (a condensing Mote only; a decaying one has no slot to be moved from). A
- * label is shown when neither the drawn pose nor the destination crosses.
+ * label is *placed* when neither the drawn pose nor the destination crosses;
+ * whether a placed label is shown is `moteLabelPass`'s.
  */
 function label(mote: Mote, scene: MoteScene, view: MoteView, focused: boolean, clock: number): Mote {
   const planet = planetOf(scene.bodies, mote.planetId);
   const planetNdc = projectNdc(planet.position, view.view, view.projection);
   const chars = labelChars(mote.skill);
-  const drawn = labelPlacement(projectNdc(mote.position, view.view, view.projection), planetNdc, chars, view.width, focused);
+  const dotNdc = projectNdc(mote.position, view.view, view.projection);
+  const drawn = labelPlacement(dotNdc, planetNdc, chars, view.width, focused);
   const resting = orbitPoint(planet.position, mote.orbit, slotAngle(mote.slot, mote.slots) + orbitSpin(mote.orbit, clock));
   const blocked =
     mote.condensing && labelPlacement(projectNdc(resting, view.view, view.projection), planetNdc, chars, view.width, focused).blocked;
-  return { ...mote, labelSide: drawn.side, labelVisible: drawn.visible && !blocked && mote.level > 0, blocked };
+  const labelPlaced = drawn.visible && !blocked && mote.level > 0;
+  const box =
+    Number.isFinite(view.height) && view.height > 0 ? labelBox(dotNdc, drawn.side, chars, view.width, view.height) : null;
+  // `labelVisible` is the placement until `moteLabelPass` decides; `stepMotes` overwrites it.
+  return { ...mote, labelSide: drawn.side, labelPlaced, labelBox: box, labelVisible: labelPlaced, blocked };
 }
 
 /** A label's length for the width estimate: code points, so one astral character is one advance, not two. */
@@ -693,13 +994,14 @@ export function labelChars(skill: string): number {
   return [...skill].length;
 }
 
-function drawOf(skill: string, mote: Mote | undefined): MoteDraw {
+function drawOf(skill: string, mote: Mote | undefined, view: MoteView): MoteDraw {
   if (mote === undefined) {
     return {
       skill,
       visible: false,
       position: null,
       scale: MOTE_MIN_SCALE,
+      dotScale: 1,
       opacity: 0,
       labelVisibility: 'hidden',
       labelTransform: labelTransform('right'),
@@ -710,10 +1012,109 @@ function drawOf(skill: string, mote: Mote | undefined): MoteDraw {
     visible: mote.level > 0,
     position: mote.position,
     scale: MOTE_MIN_SCALE + (1 - MOTE_MIN_SCALE) * mote.level,
+    dotScale: moteDotScale(mote.orbit, mote.position, view),
     opacity: mote.level,
     labelVisibility: mote.labelVisible ? 'visible' : 'hidden',
     labelTransform: labelTransform(mote.labelSide),
   };
+}
+
+/**
+ * The mesh scale that draws a dot on orbit `orbit` at its tier's screen radius,
+ * `MOTE_DOT_RADII_PX[orbit]`, at `position`'s depth: `px · worldPerPixel / MOTE_RADIUS`.
+ * 1 — the mesh at its own radius — whenever the depth cannot be measured.
+ */
+export function moteDotScale(orbit: number, position: ScenePosition, view: Pick<MoteView, 'view' | 'projection' | 'height'>): number {
+  const perPixel = worldPerPixel(position, view.view, view.projection, view.height);
+  if (perPixel === null) return 1;
+  const scale = (requireOrbit(MOTE_DOT_RADII_PX, orbit) * perPixel) / MOTE_RADIUS;
+  return Number.isFinite(scale) && scale > 0 ? scale : 1;
+}
+
+/** The fill of a Skill's dot: its tier's `MOTE_DOT_COLORS` entry. @throws naming a Skill the artifact's list does not carry. */
+export function moteDotColor(artifact: MoteArtifact, skill: string): string {
+  return MOTE_DOT_COLORS[moteRank(moteRanks(artifact), skill).orbit] ?? MOTE_DOT_COLORS[0];
+}
+
+/** A fade's opacity: `from` at 0 seconds, eased to 0 at `FOCUS_SECONDS`. */
+function fadeOpacity(fade: MoteOrbitFade): number {
+  return fade.centre === null ? 0 : fade.from * (1 - easeFocus(fade.elapsed / FOCUS_SECONDS));
+}
+
+/**
+ * Each orbit's outgoing line this frame. On a change of Focus the condensing
+ * line as drawn last frame becomes the outgoing one, from its opacity — unless
+ * the line already fading is brighter now, which keeps fading instead. Otherwise
+ * the fade advances by `step`.
+ */
+function orbitFades(previous: MoteField | null, changed: boolean, step: number): MoteOrbitFade[] {
+  return MOTE_ORBIT_RADII.map((_, orbit): MoteOrbitFade => {
+    const was = previous?.fades[orbit] ?? { centre: null, from: 0, elapsed: FOCUS_SECONDS };
+    const advanced = { ...was, elapsed: Math.min(was.elapsed + step, FOCUS_SECONDS) };
+    if (!changed) return advanced;
+    const outgoing = previous?.orbits[2 * orbit];
+    if (outgoing === undefined || outgoing.centre === null || !(outgoing.opacity > 0)) return advanced;
+    if (fadeOpacity(advanced) > outgoing.opacity) return advanced;
+    return { centre: outgoing.centre, from: outgoing.opacity, elapsed: 0 };
+  });
+}
+
+/**
+ * Each orbit's two lines this frame, condensing then decaying. The condensing
+ * line circles the focused Planet at the highest `min(level, ease(elapsed))` of
+ * the condensing Motes on that orbit; the decaying line is the orbit's fade.
+ */
+function orbitDraws(motes: readonly Mote[], scene: MoteScene, focusedId: string | null, fades: readonly MoteOrbitFade[]): MoteOrbitDraw[] {
+  const centre = focusedId === null ? null : planetOf(scene.bodies, focusedId).position;
+  return MOTE_ORBIT_RADII.flatMap((_, orbit): MoteOrbitDraw[] => {
+    const arriving = Math.max(
+      0,
+      ...motes
+        .filter((mote) => mote.condensing && mote.orbit === orbit && mote.planetId === focusedId)
+        .map((mote) => Math.min(mote.level, easeFocus(mote.elapsed / FOCUS_SECONDS))),
+    );
+    const fade = fades[orbit] ?? { centre: null, from: 0, elapsed: FOCUS_SECONDS };
+    const leaving = fadeOpacity(fade);
+    return [
+      { line: 2 * orbit, orbit, role: 'condensing', visible: centre !== null && arriving > 0, centre, opacity: centre === null ? 0 : arriving },
+      { line: 2 * orbit + 1, orbit, role: 'decaying', visible: leaving > 0, centre: fade.centre, opacity: leaving },
+    ];
+  });
+}
+
+/** One orbit line's geometry: a full circle on the orbit's tilt, about the origin — the field moves it to its Planet. */
+export interface MoteOrbitLine {
+  readonly id: string;
+  /** Its index: the `line` of the draws applied to it. */
+  readonly line: number;
+  readonly orbit: number;
+  readonly role: MoteOrbitRole;
+  readonly points: readonly LinePoint[];
+  readonly color: string;
+  readonly widthPx: number;
+}
+
+/** Built once: every render hands drei the same points, so no line is rebuilt. */
+const ORBIT_LINES: readonly MoteOrbitLine[] = MOTE_ORBIT_RADII.flatMap((_, orbit) => {
+  const origin = { x: 0, y: 0, z: 0 };
+  const points = Array.from({ length: MOTE_ORBIT_LINE_SEGMENTS + 1 }, (_, i) => {
+    const point = orbitPoint(origin, orbit, (2 * Math.PI * (i % MOTE_ORBIT_LINE_SEGMENTS)) / MOTE_ORBIT_LINE_SEGMENTS);
+    return [point.x, point.y, point.z] as const;
+  });
+  return (['condensing', 'decaying'] as const).map((role, index) => ({
+    id: `mote-orbit:${String(orbit)}:${role}`,
+    line: 2 * orbit + index,
+    orbit,
+    role,
+    points,
+    color: MOTE_ORBIT_LINE_COLOR,
+    widthPx: MOTE_ORBIT_LINE_WIDTH_PX,
+  }));
+});
+
+/** The six orbit lines — per orbit, innermost first, a condensing one and a decaying one: `stroke-dust` at `hairline`, closed. The same array every call. */
+export function moteOrbitLines(): readonly MoteOrbitLine[] {
+  return ORBIT_LINES;
 }
 
 /** A Mote's slot angle before spin, part-way through a re-slot if one is running. */
@@ -770,7 +1171,7 @@ export function applyMoteDraw(dot: MoteDot | null | undefined, label: MoteLabel 
   if (dot !== null && dot !== undefined) {
     dot.visible = draw.visible;
     if (draw.position !== null) dot.position.set(draw.position.x, draw.position.y, draw.position.z);
-    dot.scale.setScalar(draw.scale);
+    dot.scale.setScalar(draw.scale * draw.dotScale);
     dot.material.opacity = draw.opacity;
   }
   if (label !== null && label !== undefined) {
@@ -778,4 +1179,19 @@ export function applyMoteDraw(dot: MoteDot | null | undefined, label: MoteLabel 
     label.style.opacity = String(draw.opacity);
     label.style.transform = draw.labelTransform;
   }
+}
+
+/** The slice of an orbit line a frame writes: drei's `Line` (a three `Line2`) satisfies it. */
+export interface MoteOrbitHandle {
+  visible: boolean;
+  readonly position: { set(x: number, y: number, z: number): unknown };
+  readonly material: { opacity: number };
+}
+
+/** Writes one orbit draw onto its line. A handle not mounted yet is skipped; a hidden line is left where it was. */
+export function applyMoteOrbitDraw(line: MoteOrbitHandle | null | undefined, draw: MoteOrbitDraw): void {
+  if (line === null || line === undefined) return;
+  line.visible = draw.visible;
+  if (draw.centre !== null) line.position.set(draw.centre.x, draw.centre.y, draw.centre.z);
+  line.material.opacity = draw.opacity;
 }

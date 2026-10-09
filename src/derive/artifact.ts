@@ -19,6 +19,7 @@ import { buildDestinations } from './destinations.ts';
 import { buildDwell } from './dwell.ts';
 import { buildRail } from './rail.ts';
 import { buildShots } from './shots.ts';
+import { buildSkills } from './skills.ts';
 
 /**
  * The position of one entity, or a failure naming it.
@@ -112,7 +113,8 @@ function clientOf(client: ClientEntity, layout: SolvedLayout): ArtifactClient {
  * channel that names it, and none pretending to be another.
  *
  * The destination set comes from `buildDestinations`, the Dwell list from
- * `buildDwell`, the Shot list from `buildShots`, and the Rail from `buildRail` —
+ * `buildDwell`, the Shot list from `buildShots`, the Rail from `buildRail`, and
+ * the ranked Skill list from `buildSkills` —
  * never from a walk inlined here. The assembler arranges; it never computes what
  * a module owns (AD-3). A second enumeration of the reachable set is precisely
  * the divergence Story 1.6 exists to make impossible, and a Deep count, a
@@ -141,6 +143,7 @@ export function buildArtifact(
     dwell: [...buildDwell(graph)],
     shots: [...buildShots(graph)],
     rail: [...buildRail(graph)],
+    skills: [...buildSkills(graph)],
   };
 }
 

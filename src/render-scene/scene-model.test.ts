@@ -1334,7 +1334,7 @@ test('the Bodies’ binding audit rejects the real binding with any one guarante
  * Every scene line takes a `stroke-*` token and every scene glyph an `ink-*` one,
  * as a pure function over files: an `ink-` token inside a line element or line
  * material, or anywhere in the stroke model, is a line drawn in a glyph's ink; a
- * `stroke-` token, or a stroke-backed constant (`MOTE_COLOR`, `strokeColor(`,
+ * `stroke-` token, or a stroke-backed constant (`MOTE_DOT_COLORS`, `strokeColor(`,
  * `DUST_*_COLOR`), inside a `*LabelStyle` function is a glyph drawn in a line's
  * stroke.
  */
@@ -1372,7 +1372,7 @@ function auditLadders(files: readonly { readonly path: string; readonly source: 
         }
       }
       const style = code.slice(start.index, end);
-      if (/\bstroke-|\bMOTE_COLOR\b|\bstrokeColor\s*\(|\bDUST_\w*COLOR\b/.test(style)) {
+      if (/\bstroke-|\bMOTE_DOT_COLORS\b|\bmoteDotColor\b|\bMOTE_ORBIT_LINE_COLOR\b|\bstrokeColor\s*\(|\bDUST_\w*COLOR\b/.test(style)) {
         failures.push(`${file.path} styles a label with a stroke token`);
       }
     }
@@ -1397,11 +1397,12 @@ test('the ladder audit rejects each borrowing', () => {
     ['src/render-scene/stroke-model.ts', "const c = tokens.colors['ink-label-dark'];"],
     ['src/render-scene/body-field.tsx', "<Line points={p} color={tokens.colors['ink-faint-dark']} />"],
     ['src/render-scene/x.tsx', "<lineBasicMaterial color={tokens.colors['ink-faint-dark']} />"],
-    ['src/render-scene/mote-model.ts', 'export function moteLabelStyle() {\n  return { color: MOTE_COLOR };\n}'],
+    ['src/render-scene/mote-model.ts', 'export function moteLabelStyle() {\n  return { color: MOTE_DOT_COLORS[0] };\n}'],
+    ['src/render-scene/mote-model.ts', 'export function moteLabelStyle() {\n  return { color: MOTE_ORBIT_LINE_COLOR };\n}'],
     ['src/render-scene/mote-model.ts', "export function moteLabelStyle() {\n  return { color: tokens.colors['stroke-rest-dark'] };\n}"],
     // The forms that escaped the first audit: an arrow-bound style, and a line whose
     // attribute holds an arrow before its ink.
-    ['src/render-scene/mote-model.ts', 'export const moteLabelStyle = () => ({ color: MOTE_COLOR });'],
+    ['src/render-scene/mote-model.ts', 'export const moteLabelStyle = () => ({ color: moteDotColor(a, s) });'],
     ['src/render-scene/mote-model.ts', "const sceneLabelStyle: () => Style = function () {\n  return { color: tokens.colors['stroke-focus-dark'] };\n};"],
     ['src/render-scene/body-field.tsx', "<Line points={p} onUpdate={(l) => l} color={tokens.colors['ink-lift-dark']} />"],
     ['src/render-scene/body-field.tsx', "<Line\n  points={p.map((q) => q)}\n  color={tokens.colors['ink-prose-dark']}\n/>"],
@@ -1411,7 +1412,7 @@ test('the ladder audit rejects each borrowing', () => {
   assert.deepEqual(
     auditLadders([
       { path: 'src/render-scene/mote-model.ts', source: 'export function moteLabelStyle() {\n  return { color: MOTE_LABEL_COLOR };\n}' },
-      { path: 'src/render-scene/mote-model.ts', source: 'export const moteLabelStyle = () => ({ color: MOTE_LABEL_COLOR });\nconst w = MOTE_COLOR;' },
+      { path: 'src/render-scene/mote-model.ts', source: 'export const moteLabelStyle = () => ({ color: MOTE_LABEL_COLOR });\nconst w = MOTE_DOT_COLORS;' },
       { path: 'src/render-scene/body-field.tsx', source: "<Line points={p.map((q) => q)} color={line.color} />\n<div style={{ color: tokens.colors['ink-label-dark'] }} />" },
       { path: 'src/render-scene/stroke-model.ts', source: "// glyphs take ink-*\nconst c = tokens.colors['stroke-rest-dark'];" },
     ]),
@@ -1635,8 +1636,11 @@ test('no module but the Bodies’ binding draws a line, edge, or connector', () 
   // a second, hand-made line elsewhere would be one no audit reads.
   // 3.4: the affordance's leader is an SVG `<path>`, which no connector here names —
   // `auditAffordanceField` holds it to one open segment.
+  // 3.5: the Motes' three orbit lines are `mote-field.tsx`'s, held to exactly that
+  // block by `auditMoteField`; with the block cut out, the field draws no line.
   for (const path of [SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, NOTABLE_MODEL_TS, MOON_FIELD_TSX, AFFORDANCE_MODEL_TS, AFFORDANCE_FIELD_TSX]) {
-    assert.deepEqual(auditConnectors(readFileSync(path, 'utf8')), [], `${path}: lines are body-field.tsx's alone`);
+    const source = readFileSync(path, 'utf8');
+    assert.deepEqual(auditConnectors(path === MOTE_FIELD_TSX ? withoutOrbitLines(source) : source), [], `${path}: lines are body-field.tsx's alone`);
   }
 });
 
@@ -2553,16 +2557,31 @@ test('the Rail-importer scan rejects every edge form from outside, and ignores p
  * no coordinate literal, no live region. Positively: a frame loop that is
  * *exactly* — update the camera's matrices, one `getState()` read, `moteFrame`
  * handed the carried field, the artifact, the Bodies, the media, the focused ID,
- * both matrices and the canvas width and written back, and each draw applied
- * with `applyMoteDraw` to its own pooled handles; one mesh per `motePool` entry
- * keyed by Skill, drawn at `BODY_RENDER_ORDER` in the transparent pass writing
- * no depth; one drei `<Html>` label each, at `zIndexRange={[1, 1]}` with no
- * pointer events, styled by the model.
+ * both matrices and the canvas width and height and written back, each draw
+ * applied with `applyMoteDraw` to its own pooled handles and each orbit draw with
+ * `applyMoteOrbitDraw` to its own line; one mesh per `motePool` entry keyed by
+ * Skill, filled by `moteDotColor`, drawn at `BODY_RENDER_ORDER` in the
+ * transparent pass writing no depth; one drei `<Html>` label each, at
+ * `zIndexRange={[1, 1]}` with no pointer events, styled by the model; and (3.5)
+ * exactly one `moteOrbitLines()` block of drei `Line`s, mounted hidden — the only
+ * lines here, so the connector ban runs over the source with that block cut out.
  */
 function auditMoteField(source: string): string[] {
   const code = blankProse(source);
   const quoted = blankComments(source);
   const failures: string[] = [];
+
+  // The orbit lines (3.5): exactly one block, exactly this shape.
+  const orbitBlocks = mapBlocks(code, 'moteOrbitLines\\(\\s*\\)');
+  if (orbitBlocks.length !== 1) failures.push(`maps moteOrbitLines() ${orbitBlocks.length} times — three orbit lines, one block`);
+  const orbitBlock = (orbitBlocks[0] ?? '').replace(/\s+/g, '');
+  const ORBIT_BLOCK =
+    'moteOrbitLines().map((line)=>(<Linekey={line.id}ref={(handle:MoteOrbitHandle|null)=>{orbits.current[line.line]=handle;}}' +
+    'points={line.points}color={line.color}lineWidth={line.widthPx}visible={false}transparentopacity={0}depthWrite={false}renderOrder={BODY_RENDER_ORDER}/>))';
+  if (orbitBlocks.length === 1 && orbitBlock !== ORBIT_BLOCK) {
+    failures.push('the orbit lines are not exactly the model’s lines, stored by line, mounted hidden and transparent, writing no depth, at BODY_RENDER_ORDER');
+  }
+  if ((code.match(/<Line\b/g) ?? []).length !== 1) failures.push('a drei Line outside the one orbit-line element');
 
   if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) failures.push('writes the store with setState');
   if (/\b(?:advanceScroll|selectClient|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation)\b/.test(code)) {
@@ -2586,7 +2605,7 @@ function auditMoteField(source: string): string[] {
   if (/aria-live|role\s*=\s*["'](?:status|alert|log|marquee|timer)["']/.test(quoted)) {
     failures.push('announces — the Motes are inside the aria-hidden canvas root, and no live region exists');
   }
-  failures.push(...auditConnectors(source));
+  failures.push(...auditConnectors(withoutOrbitLines(source)));
   failures.push(...coordinateLiterals(code));
 
   const loop = /\buseFrame\s*\(\s*\(\s*\{\s*camera\s*,\s*size\s*\}\s*,\s*delta\s*\)\s*=>\s*\{([\s\S]*?)\}\s*\)\s*;/.exec(code);
@@ -2600,14 +2619,15 @@ function auditMoteField(source: string): string[] {
     const expected = [
       'camera.updateMatrixWorld()',
       'conststate=navigationStore.getState()',
-      'field.current=moteFrame(field.current,artifact,bodies,media,state.focusedProjectId,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size.width,delta,reducedMotion())',
+      'field.current=moteFrame(field.current,artifact,bodies,media,state.focusedProjectId,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size.width,size.height,delta,reducedMotion())',
       'field.current.draws.forEach((draw,index)=>applyMoteDraw(dots.current[index],labels.current[index],draw))',
+      'field.current.orbits.forEach((draw)=>applyMoteOrbitDraw(orbits.current[draw.line],draw))',
     ];
     if (JSON.stringify(statements) !== JSON.stringify(expected)) {
       failures.push(
         'the frame loop is not exactly: camera.updateMatrixWorld(), one getState() read, moteFrame(field.current, artifact, ' +
           'bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, ' +
-          'size.width, delta, reducedMotion()) written back, and every draw applied to its own handles',
+          'size.width, size.height, delta, reducedMotion()) written back, every draw applied to its own handles and every orbit draw to its own line',
       );
     }
   }
@@ -2631,7 +2651,8 @@ function auditMoteField(source: string): string[] {
     failures.push('a pooled dot’s handle is not stored at its pool index');
   }
   if (!/\brenderOrder\s*=\s*\{\s*BODY_RENDER_ORDER\s*\}/.test(mesh)) failures.push('a Mote is not drawn at BODY_RENDER_ORDER — after the Dust');
-  if ((code.match(/\brenderOrder\s*=/g) ?? []).length !== 1) failures.push('a renderOrder other than the Mote’s');
+  if ((code.match(/\brenderOrder\s*=/g) ?? []).length !== 2) failures.push('a renderOrder other than the Mote’s and its orbit line’s');
+  if (!/\bcolor=\{\s*moteDotColor\(\s*artifact\s*,\s*skill\s*\)\s*\}/.test(pool)) failures.push('a pooled dot is not filled by its Skill’s tier');
   const materials = pool.match(/<\w+Material\b[^>]*>/g) ?? [];
   if (materials.length !== 1) failures.push('a Mote is not drawn with exactly one material');
   for (const material of materials) {
@@ -2652,8 +2673,19 @@ function auditMoteField(source: string): string[] {
   if (!/<div\s+ref=\{\s*\(\s*label\s*\)\s*=>\s*\{\s*labels\.current\[\s*index\s*\]\s*=\s*label\s*;?\s*\}\s*\}\s+style=\{\s*moteLabelStyle\(\s*\)\s*\}\s*>\s*\{\s*skill\s*\}\s*<\/div>/.test(pool)) {
     failures.push('the label is not the Skill’s name, in the model’s style, stored at its pool index');
   }
-  if (!/import\s*\{\s*Html\s*\}\s*from\s*'@react-three\/drei'/.test(quoted)) failures.push('the label is not drei’s Html');
+  if (!/import\s*\{\s*Html\s*,\s*Line\s*\}\s*from\s*'@react-three\/drei'/.test(quoted)) failures.push('the label is not drei’s Html, or the orbit line not drei’s Line');
   return failures;
+}
+
+/**
+ * `mote-field.tsx` with its one `moteOrbitLines()` block, and the `Line` import that
+ * block needs, cut out: what the connector ban reads. Anything else that draws a line
+ * is still there to be found.
+ */
+function withoutOrbitLines(source: string): string {
+  let out = source.replace(/import\s*\{\s*Html\s*,\s*Line\s*\}\s*from\s*'@react-three\/drei'/, "import { Html } from '@react-three/drei'");
+  for (const block of mapBlocks(out, 'moteOrbitLines\\(\\s*\\)')) out = out.replace(block, '');
+  return out;
 }
 
 test('the Motes’ renderer binds the model and holds no rule of its own', () => {
@@ -2663,7 +2695,7 @@ test('the Motes’ renderer binds the model and holds no rule of its own', () =>
 test('the Mote audit rejects the real renderer with any one guarantee broken', () => {
   const real = readFileSync(MOTE_FIELD_TSX, 'utf8');
   const CALL =
-    'moteFrame(field.current, artifact, bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.width, delta, reducedMotion())';
+    'moteFrame(field.current, artifact, bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.width, size.height, delta, reducedMotion())';
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
     ['a store write', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    navigationStore.setState({ focusedProjectId: null });')],
     ['a named event', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    releaseFocus();')],
@@ -2671,15 +2703,16 @@ test('the Mote audit rejects the real renderer with any one guarantee broken', (
     ['a hook binding', (s) => s.replace('state = navigationStore.getState()', 'state = useStore(navigationStore, (value) => value)')],
     ['reactive state', (s) => s.replace('const field = useRef', 'const [, force] = useState(0);\n  const field = useRef')],
     ['useThree', (s) => s.replace('const field = useRef', 'const { size } = useThree();\n  const field = useRef')],
-    ['a DOM read', (s) => s.replace('size.width, delta, reducedMotion())', 'window.innerWidth, delta, reducedMotion())')],
+    ['a DOM read', (s) => s.replace('size.width, size.height, delta, reducedMotion())', 'window.innerWidth, size.height, delta, reducedMotion())')],
     ['stale matrices', (s) => s.replace('camera.updateMatrixWorld();', '')],
     ['the matrices swapped', (s) => s.replace('camera.matrixWorldInverse.elements, camera.projectionMatrix.elements', 'camera.projectionMatrix.elements, camera.matrixWorldInverse.elements')],
     ['the world matrix for the view', (s) => s.replace('camera.matrixWorldInverse.elements', 'camera.matrixWorld.elements')],
-    ['a constant width', (s) => s.replace('size.width, delta, reducedMotion())', '1600, delta, reducedMotion())')],
-    ['no time', (s) => s.replace('size.width, delta, reducedMotion())', 'size.width, 0, reducedMotion())')],
+    ['a constant width', (s) => s.replace('size.width, size.height, delta, reducedMotion())', '1600, size.height, delta, reducedMotion())')],
+    ['a constant height', (s) => s.replace('size.width, size.height, delta, reducedMotion())', 'size.width, 900, delta, reducedMotion())')],
+    ['no time', (s) => s.replace('size.width, size.height, delta, reducedMotion())', 'size.width, size.height, 0, reducedMotion())')],
     // Reduced motion (2.10).
-    ['the orbits spin always', (s) => s.replace('size.width, delta, reducedMotion())', 'size.width, delta)')],
-    ['a constant preference', (s) => s.replace('size.width, delta, reducedMotion())', 'size.width, delta, false)')],
+    ['the orbits spin always', (s) => s.replace('size.height, delta, reducedMotion())', 'size.height, delta)')],
+    ['a constant preference', (s) => s.replace('size.height, delta, reducedMotion())', 'size.height, delta, false)')],
     ['the preference subscribed', (s) => s.replace('const field = useRef', 'const reduced = useSyncExternalStore(subscribeReducedMotion, reducedMotion);\n  const field = useRef')],
     ['Focus ignored', (s) => s.replace('state.focusedProjectId', 'null')],
     ['no Dust to condense from', (s) => s.replace('artifact, bodies, media, state', 'artifact, bodies, [], state')],
@@ -2691,7 +2724,19 @@ test('the Mote audit rejects the real renderer with any one guarantee broken', (
     ['a click', (s) => s.replace('visible={false}', 'visible={false}\n          onClick={() => undefined}')],
     ['a hover', (s) => s.replace('visible={false}', 'visible={false}\n          onPointerOver={() => undefined}')],
     ['an orbit line', (s) => s.replace('return (\n    <>', "return (\n    <>\n      <lineLoop />").replace('return (\r\n    <>', 'return (\r\n    <>\r\n      <lineLoop />')],
-    ['a drei connector', (s) => s.replace("import { Html } from '@react-three/drei';", "import { Html, Line } from '@react-three/drei';")],
+    ['a drei connector', (s) => s.replace('{motePool(artifact).map(', '<Line points={field.current?.draws ?? []} />\n      {motePool(artifact).map(')],
+    ['a drei connector imported', (s) => s.replace("import { Html, Line } from '@react-three/drei';", "import { Html, Line, QuadraticBezierLine } from '@react-three/drei';")],
+    // 3.5: the orbit lines.
+    ['the orbit lines not applied', (s) => s.replace(/\n\s*field\.current\.orbits\.forEach\([^\n]*\n/, '\n')],
+    ['an orbit line on the wrong handle', (s) => s.replace('applyMoteOrbitDraw(orbits.current[draw.line], draw)', 'applyMoteOrbitDraw(orbits.current[draw.orbit], draw)')],
+    ['an orbit line handle stored by orbit', (s) => s.replace('orbits.current[line.line] = handle;', 'orbits.current[line.orbit] = handle;')],
+    ['an orbit line writing depth', (s) => s.replace('          depthWrite={false}\n          renderOrder', '          renderOrder')],
+    ['an orbit line shown at mount', (s) => s.replace('visible={false}\n          transparent\n          opacity={0}', 'transparent\n          opacity={0}')],
+    ['an orbit line opaque', (s) => s.replace('visible={false}\n          transparent\n          opacity={0}', 'visible={false}\n          opacity={0}')],
+    ['an orbit line in another colour', (s) => s.replace('color={line.color}', "color={tokens.colors['stroke-near-dark']}")],
+    ['an orbit line handle not stored', (s) => s.replace('orbits.current[line.line] = handle;', 'void handle;')],
+    ['a second orbit-line block', (s) => s.replace('{motePool(artifact).map(', '{moteOrbitLines().map((line) => <mesh key={line.id} />)}\n      {motePool(artifact).map(')],
+    ['one colour for every tier', (s) => s.replace('color={moteDotColor(artifact, skill)}', 'color={MOTE_DOT_COLORS[0]}')],
     ['a selection of Skills', (s) => s.replace('motePool(artifact).map(', 'motePool(artifact).filter((skill) => skill !== "").map(')],
     ['a sort of Skills', (s) => s.replace('motePool(artifact).map(', 'motePool(artifact).sort().map(')],
     ['the pool keyed by index', (s) => s.replace('key={skill}', 'key={index}')],

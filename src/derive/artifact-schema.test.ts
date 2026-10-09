@@ -114,8 +114,8 @@ test('SCHEMA_VERSION is a literal in the schema, so a mismatch fails', () => {
   }
 });
 
-test('the version is 5 now that orbit planes landed, and changing the shape means changing it', () => {
-  assert.equal(SCHEMA_VERSION, 5, 'Story 3.2 added `orbitNormal`, so the shape version is 5');
+test('the version is 6 now that Skill tiers landed, and changing the shape means changing it', () => {
+  assert.equal(SCHEMA_VERSION, 6, 'Story 3.5 added `skills`, so the shape version is 6');
   assert.equal(valid().schemaVersion, SCHEMA_VERSION, 'the emitter declares it');
 
   // Read off the source: the literal must be in the schema, not merely compared
@@ -488,7 +488,7 @@ test('every declared field is required, so a truncated document fails', () => {
   const topLevel = Object.keys(artifact);
   assert.deepEqual(
     topLevel.sort(),
-    ['asOf', 'clients', 'destinations', 'dwell', 'rail', 'schemaVersion', 'shots'],
+    ['asOf', 'clients', 'destinations', 'dwell', 'rail', 'schemaVersion', 'shots', 'skills'],
     'the declared top-level shape',
   );
 
@@ -622,6 +622,43 @@ test('a unit orbitNormal whose plane does not contain its Planet is rejected, na
 
   // And the emitted plane, as solved, passes.
   assert.deepEqual(validateArtifact(artifact), []);
+});
+
+test('an artifact still declaring schemaVersion 5 is rejected', () => {
+  const old = copy(valid());
+  old['schemaVersion'] = 5;
+  assertFails(validateArtifact(old), /schemaVersion/, 'a pre-Skill-tier artifact must not be read on a guess');
+});
+
+test('the schema declares skills, and an artifact without it is rejected', () => {
+  const artifact = valid();
+  assert.ok(Array.isArray(artifact.skills) && artifact.skills.length > 0, 'the emitter populates it');
+  const without = copy(artifact);
+  delete without['skills'];
+  assertFails(validateArtifact(without), /skills/, 'an artifact with no Skill list must fail, not be read as having none');
+});
+
+test('a Skill entry carries a name and a declared tier, and nothing else', () => {
+  const base = (): { skills: Record<string, unknown>[] } & Record<string, unknown> =>
+    copy(valid()) as { skills: Record<string, unknown>[] } & Record<string, unknown>;
+
+  const counted = base();
+  counted.skills[0]!['shares'] = 3;
+  assertFails(validateArtifact(counted), /skills/, 'a share count must never ride along with the tier');
+
+  for (const bad of ['mote-enormous', 'mote-dense', 3, '']) {
+    const broken = base();
+    broken.skills[0]!['tier'] = bad;
+    assertFails(validateArtifact(broken), /skills\.0\.tier/, `${String(bad)} is not a Skill tier`);
+  }
+  for (const tier of ['mote-inner', 'mote-middle', 'mote-outer']) {
+    const ok = base();
+    ok.skills[0]!['tier'] = tier;
+    assert.deepEqual(validateArtifact(ok), [], `"${tier}" is a declared Skill tier`);
+  }
+  const blank = base();
+  blank.skills[0]!['name'] = '';
+  assertFails(validateArtifact(blank), /skills\.0\.name/, 'a Skill name is never blank');
 });
 
 test('an artifact still declaring schemaVersion 4 is rejected', () => {

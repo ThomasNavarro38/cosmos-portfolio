@@ -17,7 +17,7 @@
 import { z } from 'zod';
 import { ProjectSchema } from '../data/schema.ts';
 import { DWELL_TEMPOS } from './dwell.ts';
-import { MOTE_TIERS, RESTING_BANDS } from './rules.ts';
+import { MOTE_TIERS, RESTING_BANDS, SKILL_TIERS } from './rules.ts';
 import { SHOT_FRAMINGS } from './shots.ts';
 
 /**
@@ -26,19 +26,20 @@ import { SHOT_FRAMINGS } from './shots.ts';
  * on a guess.
  *
  * It started at 1, became **2** when Story 1.6 added `destinations`, **3** when
- * Story 1.7 added `dwell` and `shots`, **4** when Story 2.1 added `rail`, and is
- * **5** now that Story 3.2 has added each Project's `orbitNormal`: each time
- * the contract's shape changed, the number it declares changed with it. An
- * artifact still carrying `4` publishes no orbit planes, and must fail rather
- * than be read by a scene that draws them — it would have to reconstruct each
- * plane from two positions, which do not carry the inclination.
+ * Story 1.7 added `dwell` and `shots`, **4** when Story 2.1 added `rail`, **5**
+ * when Story 3.2 added each Project's `orbitNormal`, and is **6** now that Story
+ * 3.5 has added the top-level `skills`: each time the contract's shape changed,
+ * the number it declares changed with it. An artifact still carrying `5`
+ * publishes no Skill tiers, and must fail rather than be read by a scene that
+ * seats Motes by them — it would have to count shares itself, which is the
+ * classification AD-3 keeps out of the renderer.
  *
  * Every new field is **required**, not declared-and-empty. That is only possible
  * once something populates it — a required field nothing emits would have made
  * the artifact fail its own gate, which is precisely what the gate exists to
  * prevent, and is why each was deliberately absent until the story that emits it.
  */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 /** ISO 8601 year-month, matching the authored form exactly. */
 const IsoYearMonth = z
@@ -198,6 +199,20 @@ const ShotSchema = z.strictObject({
 });
 
 /**
+ * One Skill: its name and its tier (Story 3.5).
+ *
+ * Closed at exactly two fields. **A tier, never a share count** — the enum
+ * cannot carry a number, so a renderer structurally cannot read a count out of
+ * it and set its own thresholds. The list's rank, cardinality and tiers against
+ * the `clients` tree are asserted by the build gate (`checkSkills`), not by this
+ * schema, which can only see one entry at a time.
+ */
+const SkillSchema = z.strictObject({
+  name: z.string().min(1),
+  tier: z.enum(SKILL_TIERS),
+});
+
+/**
  * One Client in the artifact: a Rail stop, its Star's position, its Projects.
  *
  * **Each Project must lie in its own orbit plane.** A unit normal can still name a
@@ -289,6 +304,10 @@ export const ArtifactSchema = z.strictObject({
   // cardinality is asserted by the build gate, not by this schema, which can
   // only see one entry at a time.
   rail: z.array(z.string().min(1)),
+  // Every distinct Skill name across every Project, ranked by share count
+  // descending then name ascending, each with its tier (Story 3.5, D-A4). The
+  // renderer seats and labels Motes from it as a lookup, and never counts.
+  skills: z.array(SkillSchema),
 });
 
 /** The emitted artifact, as a type. */
@@ -302,6 +321,9 @@ export type ArtifactProject = z.infer<typeof ArtifactProjectSchema>;
 
 /** One entry in the emitted destination set. */
 export type Destination = z.infer<typeof DestinationSchema>;
+
+/** One Skill: a name and its tier. */
+export type Skill = z.infer<typeof SkillSchema>;
 
 /** One Client stop's Dwell: the entity it holds at, and its tempo class. */
 export type Dwell = z.infer<typeof DwellSchema>;

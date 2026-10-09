@@ -154,16 +154,36 @@ export function moonScale(
   projection: ArrayLike<number>,
   heightPx: number,
 ): number {
-  const { x, y, z } = moon.position;
+  const perPixel = worldPerPixel(moon.position, view, projection, heightPx);
+  if (perPixel === null) return 1;
+  if (!Number.isFinite(moon.radius) || !(moon.radius > 0)) return 1;
+  const scale = (MOON_MIN_RADIUS_PX * perPixel) / moon.radius;
+  return Number.isFinite(scale) && scale > 1 ? scale : 1;
+}
+
+/**
+ * How many world units one CSS pixel spans at `position`: `2·depth / (P[5] · heightPx)`,
+ * where `depth = −(V[2]x + V[6]y + V[10]z + V[14])` is the point's view-space depth and
+ * `P[5] = 1/tan(fov/2)`. `view` and `projection` are three's column-major `elements`.
+ *
+ * `null` whenever it cannot be measured: the point at or behind the camera
+ * (`depth ≤ 0`), a degenerate projection or height, or any non-finite input. Shared
+ * by the Moon's pixel floor and the Motes' screen-constant dots (3.5).
+ */
+export function worldPerPixel(
+  position: ScenePosition,
+  view: ArrayLike<number>,
+  projection: ArrayLike<number>,
+  heightPx: number,
+): number | null {
+  const { x, y, z } = position;
   const depth = -((view[2] ?? Number.NaN) * x + (view[6] ?? Number.NaN) * y + (view[10] ?? Number.NaN) * z + (view[14] ?? Number.NaN));
   const focal = projection[5] ?? Number.NaN;
-  if (!Number.isFinite(depth) || !(depth > 0)) return 1;
-  if (!Number.isFinite(focal) || !(focal > 0)) return 1;
-  if (!Number.isFinite(heightPx) || !(heightPx > 0)) return 1;
-  if (!Number.isFinite(moon.radius) || !(moon.radius > 0)) return 1;
-  const worldPerPixel = (2 * depth) / (focal * heightPx);
-  const scale = (MOON_MIN_RADIUS_PX * worldPerPixel) / moon.radius;
-  return Number.isFinite(scale) && scale > 1 ? scale : 1;
+  if (!Number.isFinite(depth) || !(depth > 0)) return null;
+  if (!Number.isFinite(focal) || !(focal > 0)) return null;
+  if (!Number.isFinite(heightPx) || !(heightPx > 0)) return null;
+  const perPixel = (2 * depth) / (focal * heightPx);
+  return Number.isFinite(perPixel) && perPixel > 0 ? perPixel : null;
 }
 
 /** The slice of a Moon's mesh a frame writes: a three `Mesh` satisfies it. */

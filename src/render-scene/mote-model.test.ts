@@ -20,11 +20,18 @@ import { tokens } from '../tokens/tokens.ts';
 import { DUST_MEDIUM_PEAK_OPACITY, buildDust, mediumAlphaAt, type DustMedium } from './dust-model.ts';
 import { FOCUS_REACH, focusPose } from './focus-model.ts';
 import {
-  MOTE_COLOR,
+  MOTE_DOT_COLORS,
+  MOTE_DOT_RADII_PX,
+  MOTE_LABEL_CLEARANCE_PX,
   MOTE_LABEL_COLOR,
   MOTE_LABEL_CHAR_PX,
   MOTE_LABEL_FONT_PX,
   MOTE_LABEL_GAP_PX,
+  MOTE_LABEL_HEIGHT_PX,
+  MOTE_LABEL_LIMIT,
+  MOTE_ORBIT_LINE_COLOR,
+  MOTE_ORBIT_LINE_WIDTH_PX,
+  MOTE_TIERS_BY_ORBIT,
   MOTE_MIN_SCALE,
   MOTE_MIN_SLOTS,
   MOTE_ORBIT_PHASES,
@@ -36,15 +43,24 @@ import {
   MOTE_SOURCE_ALPHA,
   MOTE_SOURCE_SPREAD,
   applyMoteDraw,
+  applyMoteOrbitDraw,
   blendMote,
   dustSource,
+  labelBox,
   labelChars,
   labelPlacement,
   labelTransform,
   moteAssignment,
+  moteDotColor,
+  moteDotScale,
   moteFrame,
+  moteLabelPass,
   moteLabelStyle,
+  moteOrbitLines,
   motePool,
+  moteRank,
+  moteRanks,
+  cssNumber,
   orbitPoint,
   orbitSpin,
   projectNdc,
@@ -52,8 +68,11 @@ import {
   slotAngle,
   sourceReach,
   stepMotes,
+  type LabelBox,
+  type LabelCandidate,
   type Mote,
   type MoteArtifact,
+  type MoteArtifactSkill,
   type MoteDraw,
   type MoteField,
   type MoteScene,
@@ -62,8 +81,10 @@ import {
 } from './mote-model.ts';
 import { RAIL_MAX_FRAME_SECONDS, buildRail } from './rail-model.ts';
 import { DEFAULT_FOV, DEFAULT_NEAR, buildScene, type SceneArtifact, type ScenePosition } from './scene-model.ts';
+import { worldPerPixel } from './notable-model.ts';
 
 const MODEL_TS = fileURLToPath(new URL('./mote-model.ts', import.meta.url));
+const RULES_TS = fileURLToPath(new URL('../derive/rules.ts', import.meta.url));
 const ARTIFACT_JSON = fileURLToPath(new URL('../../generated/layout.generated.json', import.meta.url));
 
 // --- Fixtures ---------------------------------------------------------------
@@ -77,7 +98,10 @@ function at(x: number, y = 0, z = 0): ScenePosition {
 const NINE = ['Java', 'Spring Boot', 'Tomcat', 'Oracle', 'Cloudera', 'MDM', 'technical leadership', 'code review', 'mentoring'];
 
 /** Two Clients; A carries nine Skills, B shares `Java` and `Oracle` with it, and A2 lists `Java` twice. */
-function fixture(skills: { a?: readonly string[]; b?: readonly string[] } = {}, offset: ScenePosition = at(0)): Artifact {
+function fixture(
+  skills: { a?: readonly string[]; b?: readonly string[]; a2?: readonly string[]; a2At?: ScenePosition } = {},
+  offset: ScenePosition = at(0),
+): Artifact {
   const shifted = (p: ScenePosition): ScenePosition => ({ x: p.x + offset.x, y: p.y + offset.y, z: p.z + offset.z });
   const planet = (id: string, clientId: string, position: ScenePosition, list: readonly string[]) => ({
     id,
@@ -96,7 +120,7 @@ function fixture(skills: { a?: readonly string[]; b?: readonly string[] } = {}, 
       position: shifted(at(0, 0, 0)),
       projects: [
         planet('project:a/1', 'client:a', at(10, 0, 0), skills.a ?? NINE),
-        planet('project:a/2', 'client:a', at(-6, 4, 3), ['Java', 'Java']),
+        planet('project:a/2', 'client:a', skills.a2At ?? at(-6, 4, 3), skills.a2 ?? ['Java', 'Java']),
       ],
     },
     {
@@ -107,6 +131,7 @@ function fixture(skills: { a?: readonly string[]; b?: readonly string[] } = {}, 
   ];
   return {
     clients,
+    skills: listTiers(clients),
     rail: ['client:a', 'client:b'],
     shots: [
       { subject: 'client:a', angle: Math.PI / 6, distance: 15 },
@@ -114,6 +139,18 @@ function fixture(skills: { a?: readonly string[]; b?: readonly string[] } = {}, 
     ],
     dwell: clients.map((entry) => ({ subject: entry.id, tempo: 'dwell-steady' })),
   };
+}
+
+/**
+ * A greybox Skill list for a fixture: every distinct name in first-appearance
+ * order, the `i`-th on tier `i mod 3`. So a Project whose Skills come first in the
+ * fixture is seated exactly as list order would seat it — Skill `i` on orbit
+ * `i mod 3` at slot `2⌊i/3⌋` — which keeps the blocking fixtures' geometry
+ * legible. The real list is ranked by share count in `src/derive/skills.ts`.
+ */
+function listTiers(clients: readonly { readonly projects: readonly { readonly content: { readonly skills: readonly string[] } }[] }[]): MoteArtifactSkill[] {
+  const names = [...new Set(clients.flatMap((client) => client.projects.flatMap((project) => project.content.skills)))];
+  return names.map((name, i) => ({ name, tier: MOTE_TIERS_BY_ORBIT[i % 3] ?? 'mote-outer' }));
 }
 
 function committed(): Artifact {
@@ -128,10 +165,10 @@ function sceneOf(artifact: Artifact): MoteScene {
 const WIDTH = 1600;
 const HEIGHT = 900;
 
-/** A real camera at `id`'s focus pose (or the pose given), `width` × `HEIGHT`. */
-function cameraFor(artifact: Artifact, id: string, width = WIDTH): PerspectiveCamera {
+/** A real camera at `id`'s focus pose (or the pose given), `width` × `height`. */
+function cameraFor(artifact: Artifact, id: string, width = WIDTH, height = HEIGHT): PerspectiveCamera {
   const { bodies } = buildScene(artifact);
-  const aspect = width / HEIGHT;
+  const aspect = width / height;
   const pose = focusPose(buildRail(artifact, bodies), bodies, id, aspect, panelFraction(width));
   const camera = new PerspectiveCamera(DEFAULT_FOV, aspect, DEFAULT_NEAR, 10_000);
   camera.position.set(pose.position.x, pose.position.y, pose.position.z);
@@ -141,8 +178,8 @@ function cameraFor(artifact: Artifact, id: string, width = WIDTH): PerspectiveCa
   return camera;
 }
 
-function viewOf(camera: PerspectiveCamera, width = WIDTH): MoteView {
-  return { view: camera.matrixWorldInverse.elements, projection: camera.projectionMatrix.elements, width };
+function viewOf(camera: PerspectiveCamera, width = WIDTH, height = HEIGHT): MoteView {
+  return { view: camera.matrixWorldInverse.elements, projection: camera.projectionMatrix.elements, width, height };
 }
 
 const DT = 1 / 60;
@@ -203,8 +240,18 @@ test('three orbits, ascending, inside FOCUS_REACH with the dot included, tilted 
   assert.ok(MOTE_ORBIT_RADIANS_PER_SECOND > 0, 'the orbits turn, so condensed Motes keep moving');
   assert.ok(MOTE_MIN_SLOTS >= 8 && MOTE_MIN_SLOTS % 2 === 0);
   assert.ok(MOTE_SOURCE_ALPHA > 0 && MOTE_SOURCE_ALPHA < DUST_MEDIUM_PEAK_OPACITY, 'a source is in Dust that is there to see');
-  assert.equal(MOTE_LABEL_CHAR_PX, MOTE_LABEL_FONT_PX * 0.6, 'a monospace advance');
-  assert.equal(moteLabelStyle().font, `${MOTE_LABEL_FONT_PX}px monospace`, 'the estimate is of the font drawn');
+  // The estimate is of the token drawn: 9.5px × (0.6 + 0.16em) ≈ 7.2px, one line at 1.2.
+  const type = tokens.typography['mote-label'];
+  assert.equal(MOTE_LABEL_FONT_PX, 9.5);
+  assert.ok(Math.abs(MOTE_LABEL_CHAR_PX - 9.5 * (0.6 + 0.16)) < 1e-12, 'a sans advance plus the token’s letter-spacing');
+  assert.ok(Math.abs(MOTE_LABEL_HEIGHT_PX - 9.5 * 1.2) < 1e-12);
+  const style = moteLabelStyle();
+  assert.deepEqual(
+    [style.fontFamily, style.fontSize, style.fontWeight, style.lineHeight, style.letterSpacing],
+    [type.fontFamily, type.fontSize, type.fontWeight, type.lineHeight, type.letterSpacing],
+    'the label is drawn in the mote-label token',
+  );
+  assert.ok(style.fontWeight <= 400, 'no weight above 400');
   assert.equal(MOTE_ORBIT_PHASES.length, MOTE_ORBIT_RADII.length, 'one phase per orbit, or requireOrbit throws in the frame loop');
   const turns = MOTE_ORBIT_PHASES.map((phase) => ((phase % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI));
   assert.ok(turns.every(Number.isFinite) && new Set(turns).size === turns.length, 'first slots do not line up across orbits');
@@ -215,35 +262,51 @@ test('three orbits, ascending, inside FOCUS_REACH with the dot included, tilted 
 
 // --- Seats --------------------------------------------------------------------
 
-test('Skill i sits on orbit i mod 3 at slot 2⌊i/3⌋, with max(8, 2⌈n/3⌉) slots per orbit', () => {
-  const assignment = moteAssignment(NINE);
-  assert.equal(assignment.slots, 8);
-  assert.deepEqual(
-    assignment.seats.map((seat) => [seat.skill, seat.orbit, seat.slot]),
-    NINE.map((skill, i) => [skill, i % 3, 2 * Math.floor(i / 3)]),
-  );
+/** A lookup over `n` Skills `s0..s(n−1)`, ranked in index order, on tiers chosen to load the orbits unevenly. */
+function ranksOf(n: number): ReturnType<typeof moteRanks> {
+  const skills = Array.from({ length: n }, (_, i) => ({ name: `s${String(i)}`, tier: MOTE_TIERS_BY_ORBIT[(i * i + i) % 3] ?? 'mote-outer' }));
+  return moteRanks({ clients: [], skills });
+}
+
+test('a Skill sits on its tier’s orbit, the j-th by rank at slot 2j, with max(8, 2k) slots on an orbit holding k', () => {
   for (let n = 0; n <= 40; n += 1) {
-    const skills = Array.from({ length: n }, (_, i) => `s${i}`);
-    const { slots, seats } = moteAssignment(skills);
-    assert.equal(slots, Math.max(8, 2 * Math.ceil(n / 3)), `n ${n}`);
+    const ranks = ranksOf(n);
+    const skills = Array.from({ length: n }, (_, i) => `s${String(i)}`);
+    // Authored order is not the seat order: the rank is.
+    const { slots, seats } = moteAssignment([...skills].reverse(), ranks);
+    assert.deepEqual(seats.map((seat) => seat.skill), skills, `n ${n}: seats in rank order`);
     for (let orbit = 0; orbit < 3; orbit += 1) {
-      const taken = seats.filter((seat) => seat.orbit === orbit).map((seat) => seat.slot);
-      assert.equal(new Set(taken).size, taken.length, `n ${n}: one Mote per slot`);
-      for (const slot of taken) {
-        assert.ok(slot >= 0 && slot < slots);
-        assert.ok(!taken.includes((slot + 1) % slots), `n ${n}, orbit ${orbit}: ${slot} and its neighbour both taken`);
-      }
+      const on = seats.filter((seat) => seat.orbit === orbit);
+      assert.equal(slots[orbit], Math.max(MOTE_MIN_SLOTS, 2 * on.length), `n ${n}, orbit ${orbit}: slot count`);
+      on.forEach((seat, j) => {
+        assert.equal(seat.slot, 2 * j, `n ${n}: ${seat.skill} at slot 2j`);
+        assert.equal(seat.slots, slots[orbit]);
+        assert.equal(seat.orbit, moteRank(ranks, seat.skill).orbit, 'tier index = orbit index');
+        assert.ok(!on.some((other) => other.slot === (seat.slot + 1) % seat.slots), `n ${n}, orbit ${orbit}: ${seat.slot} and its neighbour both taken`);
+      });
     }
   }
 });
 
-test('a Skill listed twice is seated once, at its first position', () => {
-  const { seats } = moteAssignment(['Java', 'Go', 'Java', 'Rust']);
+test('the inner tier sits on the innermost orbit, and the renderer’s tier order is derive’s', () => {
+  const ranks = moteRanks({ clients: [], skills: [{ name: 'Java', tier: 'mote-inner' }, { name: 'Kafka', tier: 'mote-middle' }, { name: 'Zig', tier: 'mote-outer' }] });
   assert.deepEqual(
-    seats.map((seat) => seat.skill),
-    ['Java', 'Go', 'Rust'],
+    moteAssignment(['Zig', 'Kafka', 'Java'], ranks).seats.map((seat) => [seat.skill, seat.orbit, MOTE_ORBIT_RADII[seat.orbit]]),
+    [['Java', 0, MOTE_ORBIT_RADII[0]], ['Kafka', 1, MOTE_ORBIT_RADII[1]], ['Zig', 2, MOTE_ORBIT_RADII[2]]],
   );
-  assert.deepEqual(motePool(fixture()), [...NINE, 'Go', 'Kafka'], 'the pool: one entry per distinct name, artifact order');
+  // Mirrored, because this directory may not import src/derive/: pinned to derive's literal as text.
+  const literal = /export const SKILL_TIERS = (\[[^\]]*\])/.exec(readFileSync(RULES_TS, 'utf8'))?.[1] ?? '';
+  assert.deepEqual(JSON.parse(literal.replace(/'/g, '"')), [...MOTE_TIERS_BY_ORBIT]);
+  assert.throws(() => moteRanks({ clients: [], skills: [{ name: 'Go', tier: 'mote-dense' }] }), /"Go"/, 'an undeclared tier is refused naming the Skill');
+});
+
+test('Skill missing from skills: the lookup throws naming the Skill, as projectSkills does', () => {
+  assert.throws(() => moteAssignment(['Java', 'Cobol'], moteRanks({ clients: [], skills: [{ name: 'Java', tier: 'mote-inner' }] })), /"Cobol"/);
+  const artifact = fixture();
+  const scene = sceneOf({ ...artifact, skills: artifact.skills.filter((skill) => skill.name !== 'Tomcat') });
+  const view = viewOf(cameraFor(artifact, 'project:a/1'));
+  assert.throws(() => stepMotes(null, scene, 'project:a/1', view, DT), /"Tomcat"/);
+  assert.throws(() => moteDotColor(scene.artifact, 'Tomcat'), /"Tomcat"/);
 });
 
 test('orbit points are exactly the orbit radius from the Planet, on a plane tilted by the orbit’s tilt', () => {
@@ -531,7 +594,7 @@ test('A → B: one Java Mote throughout, travelling from A’s slot to B’s; A-
   assert.equal(java.level, 1, 'still condensed');
   assert.equal(java.planetId, 'project:b/1');
   // Its source is B's now: the Dust of the slot it heads for, where it would decay to.
-  const seatB = moteAssignment(projectSkills(scene.artifact, 'project:b/1')).seats.find((seat) => seat.skill === 'Java');
+  const seatB = moteAssignment(projectSkills(scene.artifact, 'project:b/1'), moteRanks(scene.artifact)).seats.find((seat) => seat.skill === 'Java');
   assert.ok(seatB !== undefined);
   assert.deepEqual(
     java.source,
@@ -747,8 +810,8 @@ test('moteFrame hands its reduced to the step', () => {
   const camera = cameraFor(scene.artifact as Artifact, 'project:a/1');
   const view = viewOf(camera);
   const entered = stepMotes(null, scene, 'project:a/1', view, DT);
-  const reduced = moteFrame(entered, scene.artifact, scene.bodies, scene.media, 'project:a/1', view.view, view.projection, view.width, DT, true);
-  const full = moteFrame(entered, scene.artifact, scene.bodies, scene.media, 'project:a/1', view.view, view.projection, view.width, DT);
+  const reduced = moteFrame(entered, scene.artifact, scene.bodies, scene.media, 'project:a/1', view.view, view.projection, view.width, view.height, DT, true);
+  const full = moteFrame(entered, scene.artifact, scene.bodies, scene.media, 'project:a/1', view.view, view.projection, view.width, view.height, DT);
   assert.equal(reduced.clock, entered.clock);
   assert.ok(full.clock > entered.clock);
   assert.ok(Math.abs(moteNamed(reduced, 'Java').elapsed - moteNamed(full, 'Java').elapsed / motionPace(true)) < 1e-12);
@@ -904,7 +967,7 @@ test('Blocked at its slot: hidden that frame, then re-slotted on the next step, 
   // Once the glides land, every label reads.
   const settled = frames[MOVE_FRAMES + 60];
   assert.ok(settled !== undefined);
-  assert.ok(settled.motes.every((mote) => mote.labelVisible), 'every label shown once re-slotted');
+  assert.ok(settled.motes.every((mote) => mote.labelPlaced), 'every label placed once re-slotted (the label pass may still hide one)');
 });
 
 test('Blocked, crowded: nine long labels keep the quota and never teleport over ten seconds of turning orbits', () => {
@@ -920,13 +983,11 @@ test('Entry: a Mote whose slot label fits is never re-slotted, though its label 
   for (let length = 1; length <= 80 && !found; length += 1) {
     const skills = ['x'.repeat(length), 'b', 'c'];
     const base = committed();
-    const artifact: Artifact = {
-      ...base,
-      clients: base.clients.map((entry) => ({
-        ...entry,
-        projects: entry.projects.map((project) => ({ ...project, content: { skills } })),
-      })),
-    };
+    const clients = base.clients.map((entry) => ({
+      ...entry,
+      projects: entry.projects.map((project) => ({ ...project, content: { skills } })),
+    }));
+    const artifact: Artifact = { ...base, clients, skills: listTiers(clients) };
     const id = artifact.clients[0]?.projects[0]?.id ?? '';
     const scene = sceneOf(artifact);
     const view = viewOf(cameraFor(artifact, id));
@@ -944,7 +1005,7 @@ test('Entry: a Mote whose slot label fits is never re-slotted, though its label 
       assert.equal(now.slot, mote.slot, `length ${length}: a Mote whose slot fits is not re-slotted`);
       assert.equal(now.blocked, false);
     }
-    assert.equal(moteNamed(last(frames), mote.skill).labelVisible, true, 'and its label reads once it has arrived');
+    assert.equal(moteNamed(last(frames), mote.skill).labelPlaced, true, 'and its label is placed once it has arrived');
   }
   assert.ok(found, 'some label crosses at its source and fits at its slot, or this test proves nothing');
 });
@@ -981,8 +1042,11 @@ test('Blocked with no slot free: the Mote stays, and its label stays hidden', ()
 test('Resized while focused: blocking is re-judged at the new width, and a newly blocked Mote re-slots on the next step', () => {
   const artifact = fixture();
   const scene = sceneOf(artifact);
-  const settled = last(run(null, scene, 'project:a/1', 1 + MOVE_FRAMES + 30, viewOf(cameraFor(artifact, 'project:a/1'))));
-  assert.ok(settled.motes.every((mote) => !mote.blocked && mote.labelVisible), 'every label reads on the wide canvas');
+  // Settled ten seconds into the turn: the orbit angle where a right-hand label lies
+  // just inside the 1600px panel edge and a free slot exists at 600px (re-tuned when
+  // 3.5 moved MOTE_ORBIT_PHASES; the geometry, not the rule, picks the moment).
+  const settled = last(run(null, scene, 'project:a/1', 1 + MOVE_FRAMES + 600, viewOf(cameraFor(artifact, 'project:a/1'))));
+  assert.ok(settled.motes.every((mote) => !mote.blocked && mote.labelPlaced), 'every label is placed on the wide canvas');
   const planetNdc = (view: MoteView): NdcPoint => projectNdc(planetAt(scene, 'project:a/1'), view.view, view.projection);
   for (const width of [600, 390]) {
     const view = viewOf(cameraFor(artifact, 'project:a/1', width), width);
@@ -1017,8 +1081,8 @@ test('Resized while focused: blocking is re-judged at the new width, and a newly
       }
     });
     const end = last(frames);
-    if (width === 600) assert.ok(end.motes.every((mote) => mote.labelVisible), '600px: every label reads once the glide lands');
-    else assert.ok(end.motes.some((mote) => !mote.labelVisible), '390px: the degradation — a label with nowhere to go stays hidden');
+    if (width === 600) assert.ok(end.motes.every((mote) => mote.labelPlaced), '600px: every label is placed once the glide lands');
+    else assert.ok(end.motes.some((mote) => !mote.labelPlaced), '390px: the degradation — a label with nowhere to go stays hidden');
   }
 });
 
@@ -1037,14 +1101,14 @@ test('Unfocused, nothing is blocked: a decaying Mote’s label is never re-slott
 
 // --- The binding and the handles -------------------------------------------------------
 
-test('moteFrame binds the store’s ID, the camera’s matrices and the canvas width to stepMotes', () => {
+test('moteFrame binds the store’s ID, the camera’s matrices and the canvas size to stepMotes', () => {
   const scene = sceneOf(fixture());
   const camera = cameraFor(scene.artifact as Artifact, 'project:a/1');
   const view = viewOf(camera);
   let bound: MoteField | null = null;
   let direct: MoteField | null = null;
   for (let i = 0; i < 40; i += 1) {
-    bound = moteFrame(bound, scene.artifact, scene.bodies, scene.media, 'project:a/1', camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, WIDTH, DT);
+    bound = moteFrame(bound, scene.artifact, scene.bodies, scene.media, 'project:a/1', camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, WIDTH, HEIGHT, DT);
     direct = stepMotes(direct, scene, 'project:a/1', view, DT);
   }
   assert.deepEqual(bound, direct);
@@ -1064,6 +1128,7 @@ test('applyMoteDraw writes visibility, position, scale, opacity and the label’
     visible: true,
     position: at(1, 2, 3),
     scale: 0.65,
+    dotScale: 4,
     opacity: 0.5,
     labelVisibility: 'visible',
     labelTransform: labelTransform('left'),
@@ -1071,7 +1136,7 @@ test('applyMoteDraw writes visibility, position, scale, opacity and the label’
   assert.equal(dot.visible, true);
   assert.deepEqual(calls, [
     ['position', 1, 2, 3],
-    ['scale', 0.65],
+    ['scale', 0.65 * 4],
   ]);
   assert.equal(dot.material.opacity, 0.5);
   assert.deepEqual(label.style, { visibility: 'visible', opacity: '0.5', transform: labelTransform('left') });
@@ -1081,6 +1146,7 @@ test('applyMoteDraw writes visibility, position, scale, opacity and the label’
     visible: false,
     position: null,
     scale: 0.3,
+    dotScale: 1,
     opacity: 0,
     labelVisibility: 'hidden',
     labelTransform: labelTransform('right'),
@@ -1089,7 +1155,7 @@ test('applyMoteDraw writes visibility, position, scale, opacity and the label’
   assert.deepEqual(calls, [['scale', 0.3]], 'a hidden dot is left where it was');
   assert.equal(label.style.visibility, 'hidden');
   // Handles not mounted yet are skipped, not thrown on.
-  applyMoteDraw(null, undefined, { skill: 'x', visible: true, position: at(0), scale: 1, opacity: 1, labelVisibility: 'visible', labelTransform: '' });
+  applyMoteDraw(null, undefined, { skill: 'x', visible: true, position: at(0), scale: 1, dotScale: 1, opacity: 1, labelVisibility: 'visible', labelTransform: '' });
 });
 
 test('a draw’s scale and opacity follow the level, and its label shows only when placed and condensed', () => {
@@ -1102,7 +1168,9 @@ test('a draw’s scale and opacity follow the level, and its label shows only wh
       assert.equal(draw.opacity, mote.level);
       assert.equal(draw.visible, mote.level > 0);
       assert.ok(draw.scale > 0 && draw.scale <= 1);
+      assert.equal(draw.dotScale, moteDotScale(mote.orbit, mote.position, view));
       assert.equal(draw.labelVisibility, mote.labelVisible ? 'visible' : 'hidden');
+      if (mote.labelVisible) assert.ok(mote.labelPlaced, 'a shown label was placed');
       assert.equal(draw.labelTransform, labelTransform(mote.labelSide));
       if (mote.level === 0) assert.equal(draw.labelVisibility, 'hidden');
     }
@@ -1119,8 +1187,10 @@ function auditMoteModel(source: string): string[] {
     '../shell/motion-preference.ts',
     '../shell/panel-model.ts',
     './dust-model.ts',
+    './notable-model.ts',
     './rail-model.ts',
     './scene-model.ts',
+    './stroke-model.ts',
     '../tokens/tokens.ts',
   ]);
   for (const [, specifier] of code.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {
@@ -1136,12 +1206,15 @@ function auditMoteModel(source: string): string[] {
   }
   if (/\bskill\.length\b/.test(code)) failures.push('measures a label in UTF-16 units — labelChars counts code points');
   if (/\bmoteTier\b|\bluminanceBand\b|\bmass\b|\bisDeep\b/.test(code)) {
-    failures.push('reads a derived property — the orbit is greybox list order until 3.5');
+    failures.push('reads a Body’s derived property — a Mote’s orbit is its Skill’s artifact tier');
+  }
+  if (/\bshare\w*|\bcount\w*|\btally\w*|\boccurrence\w*/i.test(code)) {
+    failures.push('counts Skills across Projects — the tier is read off the artifact’s skills list');
   }
   return failures;
 }
 
-test('the mote model is pure: no Three, no React, no store, no clock, no tier', () => {
+test('the mote model is pure: no Three, no React, no store, no clock, no Body property, no share count', () => {
   assert.deepEqual(auditMoteModel(readFileSync(MODEL_TS, 'utf8')), []);
   for (const form of [
     "import { Vector3 } from 'three';",
@@ -1154,6 +1227,10 @@ test('the mote model is pure: no Three, no React, no store, no clock, no tier', 
     'const style = getComputedStyle(label);',
     'const id = navigationStore.getState().focusedProjectId;',
     'const orbit = project.moteTier === "mote-dense" ? 0 : 2;',
+    'const orbit = planet.isDeep ? 0 : 1;',
+    'const r = body.mass * 0.1;',
+    'const shares = new Map<string, number>();',
+    'for (const s of p.content.skills) counts.set(s, (counts.get(s) ?? 0) + 1);',
     "const fs = require('node:fs');",
     'const blocked = labelPlacement(dot, planetNdc, mote.skill.length, view.width, true);',
   ]) {
@@ -1161,18 +1238,428 @@ test('the mote model is pure: no Three, no React, no store, no clock, no tier', 
   }
 });
 
-// --- Colour, from the tokens ---------------------------------------------------------
+// --- Colour and size, from the tokens -----------------------------------------------
 
-test('a Mote dot is stroke-active from the generated tokens (DESIGN.md mote.fillTier1)', () => {
-  assert.equal(MOTE_COLOR, tokens.colors['stroke-active-dark']);
+test('a Mote dot is filled by tier: stroke-active innermost, ink-label beyond (DESIGN.md mote.fillTier1..3)', () => {
+  assert.deepEqual([...MOTE_DOT_COLORS], [tokens.colors['stroke-active-dark'], tokens.colors['ink-label-dark'], tokens.colors['ink-label-dark']]);
+  assert.deepEqual([...MOTE_DOT_RADII_PX], [2.6, 2.1, 1.8]);
+  const artifact = fixture();
+  for (const { name, tier } of artifact.skills) {
+    assert.equal(moteDotColor(artifact, name), MOTE_DOT_COLORS[MOTE_TIERS_BY_ORBIT.indexOf(tier as (typeof MOTE_TIERS_BY_ORBIT)[number])]);
+  }
 });
 
-test('a Mote label is a glyph, so it takes ink-prose — never a stroke token (3.2)', () => {
-  assert.equal(MOTE_LABEL_COLOR, tokens.colors['ink-prose-dark']);
+test('a Mote label is a glyph at ink-label — never a stroke token, never below the floor (3.2, 3.5)', () => {
+  assert.equal(MOTE_LABEL_COLOR, tokens.colors['ink-label-dark']);
   assert.equal(moteLabelStyle().color, MOTE_LABEL_COLOR);
-  // Read off the source too: the two dark values coincide, so a label quietly
-  // coloured `MOTE_COLOR` would pass the value check while borrowing a stroke.
   const style = /export function moteLabelStyle\(\)[\s\S]*?\n\}/.exec(readFileSync(MODEL_TS, 'utf8'))?.[0] ?? '';
   assert.match(style, /color:\s*MOTE_LABEL_COLOR\b/);
-  assert.doesNotMatch(style, /stroke-/);
+  assert.doesNotMatch(style, /stroke-|MOTE_DOT_COLORS/);
+  assert.doesNotMatch(readFileSync(MODEL_TS, 'utf8'), /ink-quiet|ink-faint|text-overflow|ellipsis|…/, 'no label below ink-label, and none truncated');
+});
+
+test('a condensed dot is its tier’s radius on screen, times the level scale, through three’s projection', () => {
+  const artifact = fixture();
+  const scene = sceneOf(artifact);
+  const camera = cameraFor(artifact, 'project:a/1');
+  const view = viewOf(camera);
+  const done = last(run(null, scene, 'project:a/1', MOVE_FRAMES + 2, view));
+  const orbits = new Set<number>();
+  for (const mote of done.motes) {
+    const draw = done.draws.find((entry) => entry.skill === mote.skill);
+    assert.ok(draw !== undefined);
+    orbits.add(mote.orbit);
+    const perPixel = worldPerPixel(mote.position, view.view, view.projection, HEIGHT);
+    assert.ok(perPixel !== null);
+    const px = (MOTE_RADIUS * draw.scale * draw.dotScale) / perPixel;
+    assert.ok(Math.abs(px - (MOTE_DOT_RADII_PX[mote.orbit] ?? 0)) < 1e-9, `${mote.skill}: ${px}px on orbit ${mote.orbit}`);
+  }
+  assert.equal(orbits.size, 3, 'every tier is drawn');
+  assert.equal(moteDotScale(0, at(0), { ...view, height: 0 }), 1, 'unmeasurable: the mesh at its own radius');
+});
+
+// --- Orbit lines ------------------------------------------------------------------------
+
+test('orbit lines: six closed stroke-dust hairline circles — a condensing and a decaying one per orbit — built once', () => {
+  const lines = moteOrbitLines();
+  assert.equal(lines.length, 6);
+  assert.equal(moteOrbitLines(), lines, 'the same array every call: no new points per render');
+  assert.equal(MOTE_ORBIT_LINE_COLOR, tokens.colors['stroke-dust-dark']);
+  assert.equal(MOTE_ORBIT_LINE_WIDTH_PX, 0.7);
+  lines.forEach((line, index) => {
+    const orbit = Math.floor(index / 2);
+    assert.equal(line.line, index);
+    assert.equal(line.orbit, orbit);
+    assert.equal(line.role, index % 2 === 0 ? 'condensing' : 'decaying');
+    assert.equal(line.color, MOTE_ORBIT_LINE_COLOR);
+    assert.equal(line.widthPx, MOTE_ORBIT_LINE_WIDTH_PX);
+    assert.deepEqual(line.points[0], line.points[line.points.length - 1], 'closed');
+    const tilt = ((MOTE_ORBIT_TILTS[orbit] ?? 0) * Math.PI) / 180;
+    for (const [x, y, z] of line.points) {
+      assert.ok(Math.abs(Math.hypot(x, y, z) - (MOTE_ORBIT_RADII[orbit] ?? 0)) < 1e-9, 'on the orbit radius');
+      assert.ok(Math.abs(y * Math.sin(tilt) - z * Math.cos(tilt)) < 1e-9, 'on the orbit’s tilted plane');
+    }
+  });
+});
+
+test('only an orbit holding a Mote is drawn, fading in with its Motes, around the focused Planet', () => {
+  const artifact = fixture({ a: ['Java', 'Spring Boot'] });
+  const scene = sceneOf(artifact);
+  const view = viewOf(cameraFor(artifact, 'project:a/1'));
+  const rest = run(null, scene, null, 2, view);
+  for (const field of rest) assert.ok(field.orbits.every((orbit) => !orbit.visible && orbit.opacity === 0));
+  const frames = run(last(rest), scene, 'project:a/1', MOVE_FRAMES + 2, view);
+  for (const field of frames) {
+    assert.equal(field.orbits.length, 6);
+    field.orbits.forEach((draw, line) => {
+      assert.equal(draw.line, line);
+      if (draw.role === 'decaying') {
+        assert.equal(draw.visible, false, 'nothing has been left');
+        return;
+      }
+      const on = field.motes.filter((mote) => mote.orbit === draw.orbit && mote.level > 0);
+      const top = Math.max(0, ...on.map((mote) => mote.level));
+      assert.ok(Math.abs(draw.opacity - top) < 1e-12, 'a fresh condensation: the line is at the highest level');
+      assert.equal(draw.visible, on.length > 0);
+      if (draw.visible) assert.deepEqual(draw.centre, planetAt(scene, 'project:a/1'));
+    });
+  }
+  const done = last(frames);
+  assert.deepEqual(
+    done.orbits.map((draw) => draw.visible),
+    [true, false, true, false, false, false],
+    'two Skills hold the two inner orbits; the third is not drawn',
+  );
+  const calls: number[][] = [];
+  const handle = { visible: false, position: { set: (...xyz: number[]) => void calls.push(xyz) }, material: { opacity: 0 } };
+  applyMoteOrbitDraw(handle, done.orbits[0]!);
+  assert.equal(handle.visible, true);
+  assert.equal(handle.material.opacity, 1);
+  assert.deepEqual(calls, [[10, 0, 0]]);
+  applyMoteOrbitDraw(handle, { line: 5, orbit: 2, role: 'decaying', visible: false, centre: null, opacity: 0 });
+  assert.equal(handle.visible, false);
+  assert.equal(calls.length, 1, 'a hidden line is left where it was');
+  applyMoteOrbitDraw(null, done.orbits[0]!);
+});
+
+/** The most a line's opacity may change in one frame: the Focus curve's steepest slope over `DT`. */
+function fadeStepBound(): number {
+  let steepest = 0;
+  for (let i = 1; i <= 4000; i += 1) steepest = Math.max(steepest, (easeFocus(i / 4000) - easeFocus((i - 1) / 4000)) * 4000);
+  return (steepest * DT * 1.05) / FOCUS_SECONDS;
+}
+
+/**
+ * No orbit line jumps between two frames: every line drawn in one frame is, in
+ * the next, a line of the same orbit around the same Planet within one frame's
+ * fade — or it was already faint enough to go — and the same backwards.
+ */
+function assertLinesContinuous(a: MoteField, b: MoteField, frame: number): void {
+  const bound = fadeStepBound();
+  const drawn = (field: MoteField) => field.orbits.filter((draw) => draw.visible);
+  for (const [from, to, way] of [[a, b, 'vanishes'], [b, a, 'appears']] as const) {
+    for (const line of drawn(from)) {
+      if (line.opacity <= bound) continue;
+      const kept = drawn(to).some(
+        (other) => other.orbit === line.orbit && JSON.stringify(other.centre) === JSON.stringify(line.centre) && Math.abs(other.opacity - line.opacity) <= bound,
+      );
+      assert.ok(kept, `frame ${frame}: orbit ${line.orbit}'s ${line.role} line ${way} or jumps at opacity ${line.opacity}`);
+    }
+  }
+}
+
+test('A → B: the orbit lines never jump between Planets — A’s fade out where they were, B’s fade in', () => {
+  const artifact = fixture();
+  const scene = sceneOf(artifact);
+  const view = viewOf(cameraFor(artifact, 'project:a/1'));
+  const onA = run(null, scene, 'project:a/1', MOVE_FRAMES + 30, view);
+  const toB = run(last(onA), scene, 'project:b/1', MOVE_FRAMES + 30, view);
+  const frames = [...onA, ...toB];
+  for (let i = 1; i < frames.length; i += 1) assertLinesContinuous(frames[i - 1]!, frames[i]!, i);
+  // Non-vacuous: at the switch, A's lines are fully drawn and become the decaying ones.
+  const before = last(onA);
+  const switched = toB[0]!;
+  const a = planetAt(scene, 'project:a/1');
+  const b = planetAt(scene, 'project:b/1');
+  for (let orbit = 0; orbit < 3; orbit += 1) {
+    const was = before.orbits[2 * orbit]!;
+    if (!was.visible) continue;
+    assert.deepEqual(was.centre, a);
+    assert.deepEqual(switched.orbits[2 * orbit + 1]!.centre, a, 'the decaying line takes over around A');
+    assert.equal(switched.orbits[2 * orbit + 1]!.opacity, was.opacity, 'from the opacity A’s line was drawn at');
+  }
+  const settled = last(toB);
+  for (const draw of settled.orbits) {
+    if (draw.role === 'decaying') assert.equal(draw.visible, false, 'A’s lines have faded');
+    else if (draw.visible) assert.deepEqual(draw.centre, b);
+  }
+  assert.ok(settled.orbits.some((draw) => draw.role === 'condensing' && draw.visible && draw.opacity === 1), 'B’s lines are drawn');
+  // And a release fades the lines out where they were.
+  const released = run(settled, scene, null, MOVE_FRAMES + 2, view);
+  for (let i = 1; i < released.length; i += 1) assertLinesContinuous(released[i - 1]!, released[i]!, i);
+  assert.ok(last(released).orbits.every((draw) => !draw.visible));
+});
+
+// --- The label pass ------------------------------------------------------------------------
+
+const BOUNDS = { width: 1440, height: 900, panelEdge: 1440 - 560 };
+
+function boxAt(left: number, top: number, chars = 6): LabelBox {
+  return { left, right: left + chars * MOTE_LABEL_CHAR_PX, top, bottom: top + MOTE_LABEL_HEIGHT_PX };
+}
+
+function candidate(skill: string, rank: number, box: LabelBox, focused = true): LabelCandidate {
+  return { skill, rank, focused, box };
+}
+
+test('over the cap: of 25 labels with room for all, the first 12 by rank are shown and the rest are dots', () => {
+  assert.equal(MOTE_LABEL_LIMIT, 12);
+  const all = Array.from({ length: 25 }, (_, i) => candidate(`s${String(i)}`, i, boxAt(20 + (i % 5) * 150, 20 + Math.floor(i / 5) * 60)));
+  // Handed over in reverse: the pass orders by rank itself.
+  const shown = moteLabelPass([...all].reverse(), BOUNDS);
+  assert.deepEqual([...shown].sort(), all.slice(0, 12).map((entry) => entry.skill).sort());
+});
+
+test('collision: a lower-ranked label whose box meets a shown one is hidden; the focused Project wins first', () => {
+  const a = candidate('Java', 0, boxAt(100, 100));
+  const b = candidate('Kafka', 3, boxAt(130, 104));
+  assert.deepEqual([...moteLabelPass([b, a], BOUNDS)], ['Java']);
+  // Clearance, not just contact: just inside the clearance collides, just outside it does not.
+  const near = candidate('Kafka', 3, boxAt(a.box.right + MOTE_LABEL_CLEARANCE_PX - 0.01, 100));
+  const clear = candidate('Kafka', 3, boxAt(a.box.right + MOTE_LABEL_CLEARANCE_PX, 100));
+  assert.deepEqual([...moteLabelPass([a, near], BOUNDS)], ['Java']);
+  assert.deepEqual([...moteLabelPass([a, clear], BOUNDS)].sort(), ['Java', 'Kafka']);
+  // A decaying Mote's label never beats the focused Project's, whatever its rank.
+  assert.deepEqual([...moteLabelPass([{ ...a, focused: false }, b], BOUNDS)], ['Kafka']);
+});
+
+test('off canvas: a box crossing the top, bottom, left or right edge, or the panel edge, is hidden', () => {
+  const ok = boxAt(200, 200);
+  assert.deepEqual([...moteLabelPass([candidate('in', 0, ok)], BOUNDS)], ['in']);
+  const w = ok.right - ok.left;
+  for (const [name, box] of [
+    ['top', boxAt(200, -1)],
+    ['bottom', boxAt(200, BOUNDS.height - MOTE_LABEL_HEIGHT_PX + 1)],
+    ['left', boxAt(-1, 200)],
+    ['right', boxAt(BOUNDS.width - w + 1, 200)],
+    ['panel', boxAt(BOUNDS.panelEdge - w + 1, 200)],
+    ['NaN', { ...ok, left: Number.NaN }],
+  ] as const) {
+    assert.deepEqual([...moteLabelPass([candidate(name, 0, box)], BOUNDS)], [], `${name}: hidden`);
+  }
+  // A hidden label leaves room: the next one by rank is considered in its place.
+  assert.deepEqual([...moteLabelPass([candidate('out', 0, boxAt(-5, 200)), candidate('in', 1, ok)], BOUNDS)], ['in']);
+});
+
+test('a label box is the text drawn by labelTransform: a gap off the dot, centred on it', () => {
+  const dot: NdcPoint = { x: 0, y: 0, z: 0.5, front: true };
+  const right = labelBox(dot, 'right', 4, 1000, 800);
+  assert.deepEqual(right, { left: 500 + MOTE_LABEL_GAP_PX, right: 500 + MOTE_LABEL_GAP_PX + 4 * MOTE_LABEL_CHAR_PX, top: 400 - MOTE_LABEL_HEIGHT_PX / 2, bottom: 400 + MOTE_LABEL_HEIGHT_PX / 2 });
+  const left = labelBox({ ...dot, x: -0.5, y: 0.5 }, 'left', 4, 1000, 800);
+  assert.equal(left.right, 250 - MOTE_LABEL_GAP_PX);
+  assert.equal(left.top, 200 - MOTE_LABEL_HEIGHT_PX / 2);
+});
+
+/**
+ * The acceptance sweep: `id` focused on a `width` × `height` canvas, stepped
+ * through a full orbit turn. On every frame, at most `MOTE_LABEL_LIMIT` labels
+ * are shown, none crosses the canvas or the panel edge, no two intersect, and a
+ * label hidden by the pass is not re-slotted. Returns the most shown on a frame.
+ */
+function sweep(artifact: Artifact, id: string, width: number, height: number): number {
+  const scene = sceneOf(artifact);
+  const view = viewOf(cameraFor(artifact, id, width, height), width, height);
+  const edge = width * (1 - panelFraction(width));
+  const turn = (2 * Math.PI) / MOTE_ORBIT_RADIANS_PER_SECOND;
+  const step = RAIL_MAX_FRAME_SECONDS;
+  let field: MoteField | null = null;
+  let most = 0;
+  for (let t = 0; t <= turn + MOVE_FRAMES * DT; t += step) {
+    const before: MoteField | null = field;
+    field = stepMotes(field, scene, id, view, step);
+    const shown = field.motes.filter((mote) => mote.labelVisible);
+    most = Math.max(most, shown.length);
+    assert.ok(shown.length <= MOTE_LABEL_LIMIT, `${width}×${height} at ${t.toFixed(1)}s: ${shown.length} labels`);
+    for (const mote of shown) {
+      const box = mote.labelBox;
+      assert.ok(box !== null);
+      assert.ok(box.left >= 0 && box.top >= 0 && box.right <= width && box.bottom <= height, `${mote.skill} crosses the canvas edge`);
+      assert.ok(box.right <= edge + 1e-9, `${mote.skill} crosses the panel edge`);
+      for (const other of shown) {
+        if (other === mote || other.labelBox === null) continue;
+        const o = other.labelBox;
+        const meets = box.left < o.right && o.left < box.right && box.top < o.bottom && o.top < box.bottom;
+        assert.ok(!meets, `${mote.skill} and ${other.skill} intersect at ${t.toFixed(1)}s`);
+      }
+    }
+    // Hidden by the pass is hidden, not re-slotted: only a blocked Mote moves.
+    if (before !== null) {
+      for (const mote of field.motes) {
+        const was = before.motes.find((entry) => entry.skill === mote.skill);
+        if (was !== undefined && was.slot !== mote.slot) assert.ok(was.blocked, `${mote.skill} re-slotted without being blocked`);
+      }
+    }
+  }
+  return most;
+}
+
+test('25 Skills and 9 Skills at 1440×900 and 390×844, through a full orbit turn: ≤ 12 labels, none clipped, none overlapping', () => {
+  const base = committed();
+  const sncf = 'project:sncf/client-referential';
+  assert.equal(new Set(projectSkills(base, sncf)).size, 25, 'the tested inventory maximum is 25 Skills');
+  const nine = fixture();
+  const desktop = [sweep(base, sncf, 1440, 900), sweep(nine, 'project:a/1', 1440, 900)];
+  for (const most of desktop) assert.ok(most > 0, 'labels are shown at desktop width, or this proves nothing');
+  assert.ok((desktop[0] ?? 0) <= MOTE_LABEL_LIMIT);
+  sweep(base, sncf, 390, 844);
+  sweep(nine, 'project:a/1', 390, 844);
+});
+
+// --- The label pass, stepped -------------------------------------------------------------
+
+/** Whether two label boxes come within the pass's clearance of each other. */
+function crowds(a: LabelBox, b: LabelBox): boolean {
+  const gap = MOTE_LABEL_CLEARANCE_PX;
+  return !(a.left >= b.right + gap || b.left >= a.right + gap || a.top >= b.bottom + gap || b.top >= a.bottom + gap);
+}
+
+function inside(box: LabelBox, width: number, height: number, edge: number): boolean {
+  return box.left >= 0 && box.top >= 0 && box.bottom <= height && box.right <= width && box.right <= edge;
+}
+
+/**
+ * Every placed label the pass hid, among `who`, is explained: out of bounds, past
+ * the cap of better-ranked shown labels, or crowding a better-ranked shown one.
+ * Only shown labels in `blockers` may explain a hidden one. Returns how many
+ * hidden labels were explained by a collision rather than the bounds or the cap.
+ */
+function assertRankWins(
+  field: MoteField,
+  ranks: ReturnType<typeof moteRanks>,
+  width: number,
+  height: number,
+  who: (mote: Mote) => boolean,
+  blockers: (mote: Mote) => boolean,
+): number {
+  const edge = width * (1 - panelFraction(width));
+  const shown = field.motes.filter((mote) => mote.labelVisible && blockers(mote));
+  let collided = 0;
+  for (const hidden of field.motes.filter((mote) => who(mote) && mote.labelPlaced && !mote.labelVisible)) {
+    const box = hidden.labelBox;
+    assert.ok(box !== null);
+    if (!inside(box, width, height, edge)) continue;
+    const rank = moteRank(ranks, hidden.skill).rank;
+    const better = shown.filter((mote) => moteRank(ranks, mote.skill).rank < rank);
+    if (better.length >= MOTE_LABEL_LIMIT) continue;
+    const blocked = better.some((mote) => mote.labelBox !== null && crowds(mote.labelBox, box));
+    assert.ok(blocked, `${hidden.skill} (rank ${rank}) is placeable, unblocked and under the cap, yet hidden while ${shown.length} show`);
+    collided += 1;
+  }
+  return collided;
+}
+
+test('stepped: on the committed 25-Skill Project at rest, the shown labels are the best-ranked placeable ones', () => {
+  const base = committed();
+  const sncf = 'project:sncf/client-referential';
+  const scene = sceneOf(base);
+  const view = viewOf(cameraFor(base, sncf, 1440, 900), 1440, 900);
+  const ranks = moteRanks(base);
+  // Arrive from another Project, so the field's own order (kept Motes first) is not rank order.
+  const before = last(run(null, scene, 'project:decathlon/store-labelling-generation', MOVE_FRAMES + 2, view));
+  const frames = run(before, scene, sncf, MOVE_FRAMES + 120, view);
+  const order = last(frames).motes.map((mote) => moteRank(ranks, mote.skill).rank);
+  assert.notDeepEqual(order, [...order].sort((a, b) => a - b), 'the field order is not rank order, or this proves nothing');
+  let shownMost = 0;
+  for (const field of frames.slice(MOVE_FRAMES)) {
+    assertRankWins(field, ranks, 1440, 900, () => true, () => true);
+    shownMost = Math.max(shownMost, field.motes.filter((mote) => mote.labelVisible).length);
+  }
+  assert.equal(shownMost, MOTE_LABEL_LIMIT, 'the cap is reached');
+});
+
+test('stepped: A → B, a condensing B label wins a collision with a decaying A label, whatever their ranks', () => {
+  // a/2 sits beside a/1, and its Skills rank below all of a/1's: by rank alone the
+  // decaying A labels would win every collision.
+  const artifact = fixture({ a2At: at(10.5, 0.4, 0.3), a2: ['Zeta one', 'Zeta two', 'Zeta three', 'Zeta four', 'Zeta five', 'Zeta six'] });
+  const scene = sceneOf(artifact);
+  const view = viewOf(cameraFor(artifact, 'project:a/1', 1440, 900), 1440, 900);
+  const ranks = moteRanks(artifact);
+  const onA = last(run(null, scene, 'project:a/1', MOVE_FRAMES + 2, view));
+  let collided = 0;
+  for (const field of run(onA, scene, 'project:a/2', MOVE_FRAMES, view)) {
+    const focusedB = (mote: Mote) => mote.condensing && mote.planetId === 'project:a/2';
+    // Only a better-ranked shown B label may explain a hidden B label: a decaying A label never does.
+    assertRankWins(field, ranks, 1440, 900, focusedB, focusedB);
+    const contested = field.motes.some(
+      (b) => focusedB(b) && b.labelVisible && field.motes.some((a) => !a.condensing && a.labelPlaced && !a.labelVisible && a.labelBox !== null && crowds(a.labelBox, b.labelBox!)),
+    );
+    if (contested) collided += 1;
+  }
+  assert.ok(collided > 0, 'a decaying A label and a shown condensing B label do collide, or this proves nothing');
+});
+
+test('stepped: the nine-Skill fixture at 1440×900, at rest, shows all nine labels at once', () => {
+  const artifact = fixture();
+  const scene = sceneOf(artifact);
+  const view = viewOf(cameraFor(artifact, 'project:a/1', 1440, 900), 1440, 900);
+  const frames = run(null, scene, 'project:a/1', MOVE_FRAMES + 1, view);
+  const rest = last(frames);
+  assert.equal(rest.motes.length, 9);
+  assert.deepEqual(rest.motes.filter((mote) => !mote.labelVisible).map((mote) => mote.skill), [], 'every one of the nine reads at once');
+});
+
+test('after a release, decaying labels are still kept left of the panel while it slides out', () => {
+  // Each committed Project in turn, carrying one Skill: no cap and no collision can
+  // hide its label, only the panel edge can. Released at many orbit angles, its
+  // decay toward the Dust can carry the label right, under the panel, which is
+  // still sliding out over the same move.
+  const edge = 1440 * (1 - panelFraction(1440));
+  let crossing = 0;
+  const ids = committed().clients.flatMap((client) => client.projects.map((project) => project.id));
+  for (const id of ids) {
+    const raw = JSON.parse(readFileSync(ARTIFACT_JSON, 'utf8')) as { clients: { projects: { id: string; content: { skills: string[] } }[] }[] };
+    for (const client of raw.clients) for (const project of client.projects) if (project.id === id) project.content.skills = ['master data management'];
+    const artifact = { ...raw, skills: listTiers(raw.clients) } as unknown as Artifact;
+    const scene = sceneOf(artifact);
+    const view = viewOf(cameraFor(artifact, id, 1440, 900), 1440, 900);
+    let focused = last(run(null, scene, id, MOVE_FRAMES + 2, view));
+    for (let turn = 0; turn < 20; turn += 1) {
+      for (const field of run(focused, scene, null, MOVE_FRAMES, view)) {
+        for (const mote of field.motes) {
+          if (mote.labelVisible) assert.ok(mote.labelBox !== null && mote.labelBox.right <= edge + 1e-9, `${id}: ${mote.skill} shown under the sliding panel`);
+          if (mote.labelPlaced && mote.labelBox !== null && mote.labelBox.right > edge && inside(mote.labelBox, 1440, 900, 1440)) crossing += 1;
+        }
+      }
+      focused = last(run(focused, scene, id, 190, view));
+    }
+  }
+  assert.ok(crossing > 0, 'some decaying label reaches under the panel, or this proves nothing');
+});
+
+// --- The lookup, the pool, the token parser ------------------------------------------------
+
+test('moteRanks refuses a Skill listed twice, naming it, and is built once per artifact', () => {
+  assert.throws(() => moteRanks({ clients: [], skills: [{ name: 'Java', tier: 'mote-inner' }, { name: 'Java', tier: 'mote-outer' }] }), /"Java"/);
+  const artifact = fixture();
+  assert.equal(moteRanks(artifact), moteRanks(artifact), 'memoised on the artifact object');
+  assert.notEqual(moteRanks({ ...artifact }), moteRanks(artifact), 'a different artifact gets its own lookup');
+});
+
+test('motePool: one entry per distinct Skill name, in artifact order', () => {
+  assert.deepEqual(motePool(fixture()), [...NINE, 'Go', 'Kafka']);
+  const twice = fixture({ a: ['Java', 'Go', 'Java'], b: ['Go', 'Rust', 'Java'] });
+  assert.deepEqual(motePool(twice), ['Java', 'Go', 'Rust']);
+});
+
+test('cssNumber reads px and em tokens, bare 0, negatives and leading-dot decimals, and refuses another unit', () => {
+  assert.equal(cssNumber('9.5px', 'px'), 9.5);
+  assert.equal(cssNumber('0.16em', 'em'), 0.16);
+  assert.equal(cssNumber('.16em', 'em'), 0.16);
+  assert.equal(cssNumber('-0.02em', 'em'), -0.02);
+  assert.equal(cssNumber('0', 'em'), 0);
+  assert.equal(cssNumber('0', 'px'), 0);
+  assert.equal(cssNumber('12px', 'px'), 12);
+  for (const bad of ['9.5', '9.5em', '1rem', 'calc(1px)', '', 'px', '1.2.3px']) {
+    assert.throws(() => cssNumber(bad, 'px'), new RegExp(JSON.stringify(bad).replace(/[.()*]/g, '\\$&')), bad);
+  }
 });
