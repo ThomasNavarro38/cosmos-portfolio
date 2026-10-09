@@ -718,3 +718,35 @@ leaves open.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-4-the-hover-and-keyboard-focus-affordance.md`
   summary: Body hit spheres have no on-screen minimum size, so distant Planets are a few pixels wide and impractical to hover or click.
   evidence: The hit sphere uses the Body's world radius (src/render-scene/body-field.tsx), unlike the Moon which got a pixel floor in 3.3; 3.4's hover reuses this 3.2 click target, making the gap more visible.
+
+## Closed by: spec-3-5-mote-tiering-and-label-legibility.md (2026-10-09)
+
+These 2.8 and 3.1 Mote items are closed by 3.5. The entries above are left as they were written.
+
+- 2.8 — "The orbit a Skill sits on is greybox composition by list index": closed. The artifact now emits `skills: [{ name, tier }]` (schema v6), and `mote-model.ts` seats each Mote on its tier's orbit by rank. It still reads no `moteTier`.
+- 2.8 — "Label width is estimated as `chars × 0.6em` (a monospace advance at 12px)": closed. Labels are drawn in the `mote-label` token, and `MOTE_LABEL_CHAR_PX` is re-derived from it: `9.5 × (0.6 + 0.16)` ≈ 7.2px. It is still an estimate (see below).
+- 2.8 review — "Mote labels on different orbits can project to nearly the same screen point and overlap; the quota is per orbit only": closed. `moteLabelPass` hides any label whose box comes within `MOTE_LABEL_CLEARANCE_PX` of a label already shown, across orbits.
+- 2.8 review — "Mote labels are checked only against the panel edge, not the canvas's top and bottom edges": closed. All four canvas edges are checked, as well as the panel edge.
+- 2.8 — "A focused Project's Skills are visual only … until the panel's Skills list lands in 3.5": closed. The panel now carries a static `<ul aria-label="Skills">`.
+- 2.8 — "When a label is blocked and no free slot keeps the no-adjacency rule … the fix belongs with 3.5's tiering and typography": addressed, not removed. Labels are smaller and the slots are tiered. A label with no free slot still stays hidden, and the panel list now carries that Skill.
+- 3.1 review — "Mote labels take `stroke-active-dark` (a stroke token)": closed. Dot and label are now separate. The dot is `MOTE_DOT_COLORS` per tier, and the label is `MOTE_LABEL_COLOR` = `ink-label-dark`.
+
+Still open after 3.5:
+
+- 2.8 review: a label at a threshold still switches visibility instantly. 3.5 adds new thresholds (the cap, overlap, and the four edges), so a label may flicker as the orbits turn. There is no fade and no hysteresis. Judge this in a browser.
+- The width estimate assumes Latin text (`labelChars`). It is conservative: a sans face averages under 0.6em, so the estimate can hide a label that would have fitted. Tune it by looking.
+- `MOTE_RADIUS` (the mesh radius) is still what the `FOCUS_REACH` and innermost-orbit-clearance assertions use. The drawn dot is now screen-constant (2.6 / 2.1 / 1.8px), so its world size depends on depth. Those assertions no longer bound the drawn dot exactly.
+- `SceneArtifact` (`scene-model.ts`) does not restate `skills`. The slice is `MoteArtifact`'s, which the scene's prop already intersects. Adding it to `SceneArtifact` would have forced every unrelated scene fixture to carry it.
+- The panel's `<ul>` gets the browser's default list styling. Its type and rhythm belong to 3.6 (the information panel).
+
+## Deferred from: code review of spec-3-5-mote-tiering-and-label-legibility (2026-10-09)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-5-mote-tiering-and-label-legibility.md`
+  summary: On a crowded orbit (k ≥ 4 Motes, slots = max(8, 2k)) every even slot is taken, so a panel-blocked label has no free non-adjacent slot and stays hidden; tiering now puts up to 12 Motes on the outer orbit.
+  evidence: The slot rule predates 3.5 (2.8's "no such slot: it stays"); `reslot` needs a free slot with no occupied neighbour, which 2k slots with k occupied evens never leave.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-5-mote-tiering-and-label-legibility.md`
+  summary: The label width estimate (9.5px × (0.6 + 0.16) per code point) errs wide on average only; capital-heavy names (`AWS`, `MongoDB`) can render wider than their box, so two shown labels may touch or run past the panel edge.
+  evidence: No test measures rendered text; the sweep compares estimated boxes only. Re-derive from the shipped font in 3.9's audit.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-5-mote-tiering-and-label-legibility.md`
+  summary: The per-Project `moteTier` (`MOTE_TIERS`) is still emitted but no renderer reads it now that Motes use the per-Skill `SKILL_TIERS`; decide whether to drop it (a schema change) and rename to avoid the near-identical names.
+  evidence: `src/render-scene/README.md` states `moteTier` is "not read by the Motes"; `MOTE_TIERS` and `SKILL_TIERS` both use `mote-*` values.

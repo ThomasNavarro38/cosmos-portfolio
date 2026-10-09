@@ -106,6 +106,11 @@ export interface SceneHostArtifact {
     readonly subject: string;
     readonly tempo: string;
   }[];
+  // The ranked, tiered Skill list the Motes seat and label by (3.5).
+  readonly skills: readonly {
+    readonly name: string;
+    readonly tier: string;
+  }[];
   readonly clients: readonly {
     readonly id: string;
     readonly position: { readonly x: number; readonly y: number; readonly z: number };

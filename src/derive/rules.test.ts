@@ -23,10 +23,12 @@ import { deriveEntities } from './entities.ts';
 import {
   MOTE_TIERS,
   RESTING_BANDS,
+  SKILL_TIERS,
   deriveLuminanceBand,
   deriveMass,
   deriveMoteTier,
   deriveRailDistance,
+  deriveSkillTier,
   deriveTimeAxis,
   durationInMonths,
   recencyOf,
@@ -66,7 +68,7 @@ function brightness(band: LuminanceBand): number {
 
 // --- Exactly three rules ----------------------------------------------------
 
-test('the module exports exactly three mapping rules and two projections', async () => {
+test('the module exports exactly three mapping rules and three projections', async () => {
   // A fourth *rule* is a spec violation, not a feature. The whole export surface
   // is asserted rather than a `derive`-prefixed subset: a prefix filter only
   // enforces a naming convention, and a fourth mapping named `opacityFromTeamSize`
@@ -74,13 +76,13 @@ test('the module exports exactly three mapping rules and two projections', async
   const module: Record<string, unknown> = await import('./rules.ts');
 
   const RULES = ['deriveLuminanceBand', 'deriveMass', 'deriveRailDistance'];
-  const PROJECTIONS = ['deriveMoteTier', 'deriveTimeAxis'];
-  const HELPERS = ['MOTE_TIERS', 'RESTING_BANDS', 'durationInMonths', 'recencyOf'];
+  const PROJECTIONS = ['deriveMoteTier', 'deriveSkillTier', 'deriveTimeAxis'];
+  const HELPERS = ['MOTE_TIERS', 'RESTING_BANDS', 'SKILL_TIERS', 'durationInMonths', 'recencyOf'];
 
   assert.deepEqual(
     Object.keys(module).sort(),
     [...RULES, ...PROJECTIONS, ...HELPERS].sort(),
-    'the module exports exactly the three rules, the two projections, and its named helpers',
+    'the module exports exactly the three rules, the three projections, and its named helpers',
   );
 });
 
@@ -100,7 +102,7 @@ test('the projections structurally cannot read an authored field', () => {
     'team_size', 'duration', 'notable', 'skills', 'weight',
   ];
 
-  for (const name of ['deriveMoteTier', 'deriveTimeAxis']) {
+  for (const name of ['deriveMoteTier', 'deriveSkillTier', 'deriveTimeAxis']) {
     const match = new RegExp(`export function ${name}\\(([^)]*)\\)`).exec(source);
     assert.ok(match !== null, `${name} must be an exported function with a readable signature`);
     const params = match[1] ?? '';
@@ -118,6 +120,19 @@ test('the projections structurally cannot read an authored field', () => {
 });
 
 // --- The projections --------------------------------------------------------
+
+test('a Skill tier follows its share count: three or more inner, two middle, one outer', () => {
+  // The matrix row "Tiers": shares 4 / 2 / 1 → inner / middle / outer.
+  assert.equal(deriveSkillTier(4), 'mote-inner');
+  assert.equal(deriveSkillTier(3), 'mote-inner');
+  assert.equal(deriveSkillTier(2), 'mote-middle');
+  assert.equal(deriveSkillTier(1), 'mote-outer');
+  assert.equal(deriveSkillTier(99), 'mote-inner');
+  assert.deepEqual([...SKILL_TIERS], ['mote-inner', 'mote-middle', 'mote-outer'], 'innermost first');
+  for (const odd of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 2.5]) {
+    assert.throws(() => deriveSkillTier(odd), RangeError, `${odd} is not a share count`);
+  }
+});
 
 test('a Deep Body is denser than a Shallow one of the same mass', () => {
   // UX-DR11 forbids brightness and size from carrying the Deep signal, because

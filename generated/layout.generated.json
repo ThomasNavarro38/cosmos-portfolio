@@ -1,5 +1,5 @@
 { "$banner": "GENERATED FILE — do not edit by hand. Produced by src/derive/index.ts from src/data/career.json; run `npm run solve` to regenerate. Hand edits are overwritten by the next solve and are not validated by the build gate.",
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "asOf": "2026-09",
   "clients": [
     {
@@ -600,5 +600,303 @@
     "client:sncf-connect-tech",
     "client:air-france-klm",
     "client:decathlon"
+  ],
+  "skills": [
+    {
+      "name": "Java",
+      "tier": "mote-inner"
+    },
+    {
+      "name": "GitLab",
+      "tier": "mote-inner"
+    },
+    {
+      "name": "Spring Boot",
+      "tier": "mote-inner"
+    },
+    {
+      "name": "Jenkins",
+      "tier": "mote-inner"
+    },
+    {
+      "name": "PostgreSQL",
+      "tier": "mote-inner"
+    },
+    {
+      "name": "code review",
+      "tier": "mote-inner"
+    },
+    {
+      "name": "mentoring",
+      "tier": "mote-inner"
+    },
+    {
+      "name": "technical design",
+      "tier": "mote-inner"
+    },
+    {
+      "name": "technical leadership",
+      "tier": "mote-inner"
+    },
+    {
+      "name": "Angular",
+      "tier": "mote-inner"
+    },
+    {
+      "name": "Oracle Database",
+      "tier": "mote-inner"
+    },
+    {
+      "name": "Spring",
+      "tier": "mote-inner"
+    },
+    {
+      "name": "Apache Kafka",
+      "tier": "mote-middle"
+    },
+    {
+      "name": "Datadog",
+      "tier": "mote-middle"
+    },
+    {
+      "name": "performance optimisation",
+      "tier": "mote-middle"
+    },
+    {
+      "name": "AWS",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "ActiveMQ",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Android",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Apache Cordova",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Bamboo",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Bitbucket",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Bluetooth",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Chamilo",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Cloudera",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Cucumber",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Docker",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Experian",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Express.js",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Flux CD",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "GCP",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "GitHub",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "GitHub Actions",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "GitHub Copilot",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "GitLab CI",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "H2",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "HBase",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Hazelcast",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Hibernate",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "HornetQ",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "IBM MQ",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Ionic",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "JBoss",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Kubernetes",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Microsoft Azure",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "OpenID Connect",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Oracle MDM",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "PHP",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Playwright",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "React",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Rundeck",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Symfony",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Tomcat",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "UWP",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "Zebra RFID",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "architecture review",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "continuous integration",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "data centre migration",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "data synchronisation",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "estimation",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "iOS",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "integration",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "legacy modernisation",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "master data management",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "microservices",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "monitoring",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "payment integration",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "product ownership",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "proof of concept",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "refactoring",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "release management",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "technical scoping",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "test automation",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "testing",
+      "tier": "mote-outer"
+    },
+    {
+      "name": "user story splitting",
+      "tier": "mote-outer"
+    }
   ]
 }

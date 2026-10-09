@@ -1,6 +1,6 @@
 /**
- * The three mapping rules, and nothing else — plus two projections of what they
- * already produced.
+ * The three mapping rules, and nothing else — plus three projections: two of
+ * what they already produced, and `deriveSkillTier`, of a Skill's share count.
  *
  * FR-3 binds Body appearance to the career data through exactly three rules:
  * mass from `duration`, luminance band from recency, distance from the Rail from
@@ -213,6 +213,41 @@ export function deriveMoteTier(mass: number, range: Range, isDeep: boolean): Mot
   // `noUncheckedIndexedAccess`: `index` is 0..2 by construction, but the type
   // system cannot see it, and a non-null assertion would hide a real bug later.
   return MOTE_TIERS[index] ?? 'mote-sparse';
+}
+
+/**
+ * The Skill tiers, innermost first (Story 3.5, D-A4). Order is load-bearing: a
+ * renderer's orbit index *is* the tier's index here, so `mote-inner` sits on the
+ * innermost orbit; the tests and the renderer index it.
+ */
+export const SKILL_TIERS = ['mote-inner', 'mote-middle', 'mote-outer'] as const;
+
+/** How central a Skill is to the whole career, as a closed tier — one of `SKILL_TIERS`. */
+export type SkillTier = (typeof SKILL_TIERS)[number];
+
+/**
+ * Skill tier from how many Projects share the Skill: three or more → inner,
+ * two → middle, one → outer.
+ *
+ * A projection, not a fourth mapping. It reads a count over the authored set —
+ * never a `Project`, never an authored field — and it reaches no *Body's*
+ * appearance: it seats a Skill's Mote, the stack drawn geometrically (FR-13).
+ * Closed rather than numeric for the same reason `MoteTier` is: a share count
+ * handed to the renderer would let it invent its own thresholds.
+ *
+ * `shares` must be a whole number of Projects, at least 1: a Skill exists only
+ * by being listed, so a count below one, a fraction, or a non-finite number is
+ * an emitter bug, not a tier.
+ *
+ * @throws RangeError naming the count when it is not an integer ≥ 1.
+ */
+export function deriveSkillTier(shares: number): SkillTier {
+  if (!Number.isInteger(shares) || shares < 1) {
+    throw new RangeError(`a Skill's share count must be a whole number of Projects, at least 1; got ${String(shares)}.`);
+  }
+  if (shares >= 3) return 'mote-inner';
+  if (shares === 2) return 'mote-middle';
+  return 'mote-outer';
 }
 
 /**

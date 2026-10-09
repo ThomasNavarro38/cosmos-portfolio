@@ -19,6 +19,8 @@ Pure pipeline: validate → derive → solve. No DOM, no React, no Three. The si
 | `destinations.test.ts` | Cardinality, ID order under a re-order, and mutation guards that fail if the walk drops a Project or emits Clients only. |
 | `rail.ts` | The Rail's ordering — Clients by earliest `duration.start`, ties by ID — owned here, imported by `solve.ts`, and emitted as the artifact's `rail`. |
 | `rail.test.ts` | The ordering key on a fixture where start order opposes recency and ID order, the tie-break, Client granularity, and a source scan pinning that `solve.ts` imports the rule rather than restating it. |
+| `skills.ts` | The Skill list (3.5): every distinct Skill name, ranked by how many Projects share it (descending, then name by codepoint), each with its tier — emitted as the artifact's `skills`, so no renderer counts. |
+| `skills.test.ts` | Rank order, the tier thresholds through the graph, a twice-listed Skill shared once, and `checkSkills` pinned by mutation — missing, extra, duplicate, mistiered, misordered — plus the CLI exiting 1 naming the Skill. |
 | `dwell.ts` | Dwell as a **tempo class**, one per Client, from the count of Deep Projects in its system. Never a duration. |
 | `dwell.test.ts` | The Deep/Shallow separation, the count ceiling, and mutation guards that fail if the tempo ignores the Deep count or counts volume instead. |
 | `shots.ts` | The default Shot: one per Client — entity ID, angle, distance, framing — with the distance computed to contain the system's widest orbit. |
@@ -151,7 +153,13 @@ Bytes are LF and end with a newline. `.gitattributes` normalizes the repository 
 
 `SCHEMA_VERSION` is `z.literal` in the schema, not a range: an artifact declaring any other version fails validation rather than being read on a guess. Every level is a `strictObject`, so a consumer writing an undeclared field fails the gate.
 
-The version is **5**. It started at 1; Story 1.6 added `destinations`, Story 1.7 added `dwell` and `shots`, Story 2.1 added `rail`, and Story 3.2 added each Project's `orbitNormal`. Each time the contract's shape changed, the number it declares changed with it. An artifact still carrying `4` publishes no orbit planes, and fails the gate rather than being read by a scene that draws them.
+The version is **6**. It started at 1; Story 1.6 added `destinations`, Story 1.7 added `dwell` and `shots`, Story 2.1 added `rail`, Story 3.2 added each Project's `orbitNormal`, and Story 3.5 added the top-level `skills`. Each time the contract's shape changed, the number it declares changed with it. An artifact still carrying `5` publishes no Skill tiers, and fails the gate rather than being read by a scene that seats Motes by them — it would have to count shares itself.
+
+### Mote tiers (3.5)
+
+`skills` is `[{ name, tier }]`: one entry per distinct Skill name across every Project, ordered by share count descending, then name ascending. `tier` is `deriveSkillTier(shares)` from `SKILL_TIERS = ['mote-inner', 'mote-middle', 'mote-outer']` — shared by three or more Projects is inner, two middle, one outer (D-A4: the most-shared Skills are the through-line and sit on the innermost orbit). `deriveSkillTier` is a projection of a count, not a fourth rule: it names no `Project` and no authored field, and `rules.test.ts` reads its signature to keep it that way. A tier, never a count, is emitted, so a renderer cannot set its own thresholds. Per-Project `moteTier` is unchanged and still not read by the Motes.
+
+`checkSkills` (pre-write and at the gate) re-counts the artifact's own `content.skills` through the emitter's own `shareCounts` and `rankSkills`, and names any missing, extra, duplicate, mistiered or misordered entry — a hand-edited tier fails `npm run gate` naming the Skill. Misordered entries are the ones outside the longest run already in rank order, so a Skill moved several places, either way, is reported by its own name. `deriveSkillTier` throws a `RangeError` on a count that is not a whole number ≥ 1.
 
 ### Orbit planes are derived, not drawn from a guess (3.2)
 

@@ -25,6 +25,7 @@ import {
   RING_RADIUS_RATIO,
   applyMoonScale,
   moonScale,
+  worldPerPixel,
   notableMoons,
   notableRings,
 } from './notable-model.ts';
@@ -264,6 +265,22 @@ test('the floor follows the Planet’s own view depth, off-axis and from a turne
   const expected = (MOON_MIN_RADIUS_PX * ((2 * depth) / ((camera.projectionMatrix.elements[5] ?? 0) * 600))) / moon.radius;
   assert.ok(expected > 1, 'the fixture is under the floor');
   assert.ok(close(scale, expected));
+});
+
+test('worldPerPixel: one CSS pixel at a point’s view depth, null when it cannot be measured', () => {
+  const camera = cameraAt(200);
+  const v = camera.matrixWorldInverse.elements;
+  const p = camera.projectionMatrix.elements;
+  const perPixel = worldPerPixel({ x: 0, y: 0, z: 0 }, v, p, 800);
+  assert.ok(perPixel !== null);
+  assert.ok(close(perPixel, (2 * 200) / ((p[5] ?? 0) * 800)));
+  // moonScale is that number against the floor, unchanged by the extraction.
+  const moon = moonAtOrigin();
+  assert.ok(close(moonScale(moon, v, p, 800), (MOON_MIN_RADIUS_PX * perPixel) / moon.radius));
+  assert.equal(worldPerPixel({ x: 0, y: 0, z: 0 }, v, p, 0), null, 'a collapsed canvas');
+  assert.equal(worldPerPixel({ x: 0, y: 0, z: 0 }, v, p, Number.NaN), null, 'a non-finite height');
+  assert.equal(worldPerPixel({ x: Number.NaN, y: 0, z: 0 }, v, p, 800), null, 'a non-finite point');
+  assert.equal(worldPerPixel({ x: 0, y: 0, z: 400 }, v, p, 800), null, 'behind the camera');
 });
 
 test('behind the camera, at it, or on any non-finite input, the Moon is drawn at scale 1', () => {

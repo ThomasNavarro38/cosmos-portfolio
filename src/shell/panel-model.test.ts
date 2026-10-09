@@ -53,6 +53,7 @@ function project(id: string, isDeep: boolean, notable: string | null | undefined
       role: 'Lead',
       team_size: 6,
       built: `What ${id} built.`,
+      skills: ['Java', 'Kafka', 'Java', 'Spring Boot'],
       ...(notable === undefined ? {} : { notable }),
     },
   };
@@ -90,9 +91,9 @@ function block<K extends string>(id: string, kind: K, source: PanelArtifact = ar
 
 // --- Contents and order -----------------------------------------------------
 
-test('the panel carries kicker, title, reading position, fields and release, in that order', () => {
+test('the panel carries kicker, title, reading position, fields, Skills and release, in that order', () => {
   for (const id of ['project:a/deep', 'project:a/shallow', 'project:b/shallow-with-prose']) {
-    assert.deepEqual(kinds(id), ['kicker', 'title', 'reading', 'fields', 'release'], id);
+    assert.deepEqual(kinds(id), ['kicker', 'title', 'reading', 'fields', 'skills', 'release'], id);
   }
 });
 
@@ -131,7 +132,25 @@ test('the field table is Role, Team, Built — and no Skills row', () => {
     ],
   });
   assert.deepEqual(Object.values(FIELD_LABELS), ['Role', 'Team', 'Built']);
-  assert.doesNotMatch(JSON.stringify(buildPanel(artifact(), 'project:a/deep')), /skill/i, 'the Dust is the display');
+  assert.doesNotMatch(JSON.stringify(fields), /skill|Java/i, 'no Skills row in the field table');
+});
+
+test('a Project with no Skills carries no Skills block — no empty list', () => {
+  const bare: PanelArtifactProject = { ...project('p', false, null), content: { ...project('p', false, null).content, skills: [] } };
+  const source: PanelArtifact = { clients: [{ id: 'c', name: 'C', projects: [bare] }] };
+  assert.deepEqual(kinds('p', source), ['kicker', 'title', 'reading', 'fields', 'release']);
+});
+
+test('the Skills block lists the Project’s Skills in authored order, each once (3.5)', () => {
+  assert.deepEqual(block('project:a/deep', 'skills'), { kind: 'skills', items: ['Java', 'Kafka', 'Spring Boot'] });
+  const committed = JSON.parse(readFileSync(ARTIFACT_JSON, 'utf8')) as PanelArtifact;
+  for (const client of committed.clients) {
+    for (const entry of client.projects) {
+      const skills = block(entry.id, 'skills', committed);
+      assert.ok(skills.kind === 'skills');
+      assert.deepEqual(skills.items, [...new Set(entry.content.skills)], `${entry.id}: every Skill, in the DOM`);
+    }
+  }
 });
 
 test('the panel ends with the release button, named by its word', () => {
@@ -386,7 +405,7 @@ function auditModel(source: string): string[] {
   if (/\bnotable\s*(?:\?\s|!==?|===?|&&|\|\|)|if\s*\(\s*!?\s*\w*\.?notable\b/.test(code)) {
     failures.push('branches on notable — Deep/Shallow is isDeep’s');
   }
-  if (/\bskills?\b/i.test(code.replace(/No `Skills` row/g, ''))) failures.push('names Skills — no Skills row');
+  if (/label:\s*['"]Skills?['"]|FIELD_LABELS\s*=\s*\{[^}]*skill/i.test(code)) failures.push('a Skills row — the Skills are their own list, never a field');
   return failures;
 }
 
@@ -574,6 +593,16 @@ function auditPanel(source: string): string[] {
   ) {
     failures.push('the fields case does not put row.label in <th> and row.value in <td>');
   }
+  // The Skills list (3.5): a static <ul> named for assistive tech, one <li> per Skill, no heading and no live region.
+  if (
+    !/case\s*'skills'\s*:\s*return\s*\(?\s*<ul\s+key=\{\s*block\.kind\s*\}\s+aria-label="Skills"\s*>\s*\{\s*block\.items\.map\(\s*\(\s*(\w+)\s*\)\s*=>\s*\(?\s*<li\s+key=\{\s*\1\s*\}\s*>\s*\{\s*\1\s*\}\s*<\/li>\s*\)?\s*\)\s*\}\s*<\/ul>/.test(
+      code,
+    )
+  ) {
+    failures.push('the Skills are not a <ul aria-label="Skills"> of one <li> per item');
+  }
+  if (/aria-live|role=["'](?:status|alert|log|marquee|timer)["']/.test(code)) failures.push('a live region — the Skills list is static');
+  if (/<h[1-6]\b[^>]*>\s*Skills\b|>\s*Skills\s*</.test(code)) failures.push('a visible Skills heading');
   if (!/const\s+shown\s*=\s*useRef<string\s*\|\s*null>\(\s*null\s*\)/.test(code) ||
     !/if\s*\(\s*focusedProjectId\s*!==\s*null\s*\)\s*shown\.current\s*=\s*focusedProjectId\s*;/.test(code) ||
     !/const\s+panel\s*=\s*buildPanel\(\s*artifact\s*,\s*shown\.current\s*\)/.test(code)) {
@@ -730,6 +759,12 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
     ['the focus effect blind to flight', (s) => s.replace('}, [focusedProjectId, flight]);', '}, [focusedProjectId]);')],
     ['the last flight key seeded blank', (s) => s.replace('const previousFlight = useRef(flight);', "const previousFlight = useRef('');")],
     ['the layout effect remembers the flight key', (s) => s.replace('    const fade = crossFade(', '    previousFlight.current = flight;\n    const fade = crossFade(')],
+    // 3.5's Skills list.
+    ['the Skills list dropped', (s) => s.replace("case 'skills':", "case 'skills':\n        return null;")],
+    ['the Skills list unnamed', (s) => s.replace(' aria-label="Skills"', '')],
+    ['the Skills list announced', (s) => s.replace(' aria-label="Skills"', ' aria-label="Skills" aria-live="polite"')],
+    ['a visible Skills heading', (s) => s.replace('<ul key={block.kind} aria-label="Skills">', '<h3>Skills</h3>\n          <ul key={block.kind} aria-label="Skills">')],
+    ['the Skills as one string', (s) => s.replace('<li key={item}>{item}</li>', '<li key={item}>{block.items.join(", ")}</li>')],
     ['the previous ID written twice', (s) => s.replace('previous.current = focusedProjectId;', 'previous.current = focusedProjectId;\n    previous.current = null;')],
   ];
   for (const [name, mutate] of mutations) {

@@ -28,6 +28,7 @@ import { BANNER, buildArtifact, serializeArtifact, stripBanner } from './artifac
 import { parseArtifact, validateArtifact, type Artifact } from './artifact-schema.ts';
 import { SRC_ROOT, checkImportBoundaries } from './boundaries.ts';
 import { deriveEntities } from './entities.ts';
+import { rankSkills, shareCounts } from './skills.ts';
 import { solveLayout } from './solve.ts';
 
 const CAREER_JSON = fileURLToPath(new URL('../data/career.json', import.meta.url));
@@ -69,9 +70,10 @@ export type PipelineResult =
  * Every check an assembled artifact must pass **before its bytes are written**.
  * Returns the failure lines, empty on success.
  *
- * Three of them: the document against its own declared schema, the destination
- * set against the entities it addresses, and the Dwell, Shot and Rail lists
- * against the Client set they pace, frame and order. None is redundant with the
+ * Four of them: the document against its own declared schema, the destination
+ * set against the entities it addresses, the Dwell, Shot and Rail lists
+ * against the Client set they pace, frame and order, and the Skill list against
+ * the Projects whose Skills it ranks. None is redundant with the
  * gate — without them the *first* bad emission would be the one committed, and
  * the gate would only ever reject it afterwards, when the artifact on disk is
  * already wrong.
@@ -100,6 +102,11 @@ export function checkEmittedArtifact(artifact: Artifact): string[] {
   const stopFailures = checkStops(artifact);
   if (stopFailures.length > 0) {
     return ['the emitted Dwell, Shot or Rail list disagrees with its Clients:', ...stopFailures];
+  }
+
+  const skillFailures = checkSkills(artifact);
+  if (skillFailures.length > 0) {
+    return ['the emitted Skill list disagrees with its Projects:', ...skillFailures];
   }
 
   return [];
@@ -394,6 +401,101 @@ export function checkStops(artifact: Artifact): string[] {
 }
 
 /**
+ * Asserts a validated artifact's `skills` against the Skill lists its own
+ * Projects carry (Story 3.5). Returns the failure lines, empty on success.
+ *
+ * The expected list is re-counted from the document's own `content.skills` —
+ * through the same `shareCounts` and `rankSkills` the emitter uses, so the two
+ * cannot count two ways — never from a fresh derive (AD-1). Five ways the list
+ * can diverge, and each names the Skill rather than reporting a count alone:
+ *
+ * - a Skill no Project lists (extra),
+ * - a Skill some Project lists that the list does not carry (missing),
+ * - the same name listed twice (duplicate),
+ * - a tier that disagrees with the Skill's share count (mistiered — a
+ *   hand-edited tier),
+ * - an entry ranked ahead of one that outranks it (misordered).
+ */
+export function checkSkills(artifact: Artifact): string[] {
+  const failures: string[] = [];
+  const counts = shareCounts(artifact.clients.flatMap((client) => client.projects.map((project) => project.content)));
+  const expected = rankSkills(counts);
+  const rank = new Map(expected.map((skill, index) => [skill.name, index]));
+  const tierOf = new Map(expected.map((skill) => [skill.name, skill.tier]));
+
+  const seen = new Set<string>();
+  const placed: { readonly name: string; readonly at: number }[] = [];
+  for (const skill of artifact.skills) {
+    const at = rank.get(skill.name);
+    if (at === undefined) {
+      failures.push(`"${skill.name}" is in the Skill list but no Project in the artifact lists it.`);
+      continue;
+    }
+    if (seen.has(skill.name)) {
+      failures.push(`"${skill.name}" appears more than once in the Skill list.`);
+      continue;
+    }
+    seen.add(skill.name);
+    const tier = tierOf.get(skill.name);
+    if (skill.tier !== tier) {
+      failures.push(
+        `"${skill.name}" is shared by ${String(counts.get(skill.name))} Project(s), so its tier is ` +
+          `"${String(tier)}", but the Skill list carries "${skill.tier}".`,
+      );
+    }
+    placed.push({ name: skill.name, at });
+  }
+
+  // Misordered: every entry outside the longest run already in rank order. Judged
+  // against what stays in order rather than against the entry just before, so a
+  // Skill moved several places — up or down — is the one named, and the entries it
+  // was moved past are not reported for it.
+  const inOrder = longestInOrder(placed.map((entry) => entry.at));
+  placed.forEach((entry, index) => {
+    if (inOrder.has(index)) return;
+    failures.push(
+      `"${entry.name}" is out of rank order (it ranks ${String(entry.at + 1)} of ${String(expected.length)}) — ` +
+        'the Skill list is ordered by share count descending, then name ascending.',
+    );
+  });
+
+  for (const skill of expected) {
+    if (!seen.has(skill.name)) {
+      failures.push(`"${skill.name}" is listed by a Project in the artifact but missing from the Skill list.`);
+    }
+  }
+
+  if (failures.length > 0) {
+    failures.push(`the artifact's Projects list ${expected.length} distinct Skills; its Skill list carries ${artifact.skills.length}.`);
+  }
+  return failures;
+}
+
+/**
+ * The indices of one longest strictly increasing subsequence of `values` — the
+ * entries that already stand in order. O(n log n), deterministic: among equally
+ * long runs it keeps the one ending earliest at each length.
+ */
+function longestInOrder(values: readonly number[]): Set<number> {
+  const tails: number[] = [];
+  const back: number[] = [];
+  values.forEach((value, index) => {
+    let lo = 0;
+    let hi = tails.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((values[tails[mid] ?? 0] ?? 0) < value) lo = mid + 1;
+      else hi = mid;
+    }
+    back[index] = lo > 0 ? (tails[lo - 1] ?? -1) : -1;
+    tails[lo] = index;
+  });
+  const kept = new Set<number>();
+  for (let at = tails[tails.length - 1] ?? -1; at >= 0; at = back[at] ?? -1) kept.add(at);
+  return kept;
+}
+
+/**
  * Reads and validates the committed artifact. Returns the failure lines, empty
  * on success.
  *
@@ -491,6 +593,19 @@ export function checkArtifact(path: string = ARTIFACT_PATH, sourceRoot: string =
     return [
       'the committed layout artifact has a Dwell, Shot or Rail list that disagrees with its Clients:',
       ...stops,
+      'Run `npm run solve` and commit the result.',
+    ];
+  }
+
+  // The Skill list against the Projects' own Skill lists in the *same document*
+  // (Story 3.5). The schema cannot tell that a Skill is missing, invented, named
+  // twice, out of rank, or carries a hand-edited tier; this names whichever it
+  // is. Counted from the artifact's own tree, never from a fresh derive (AD-1).
+  const skills = checkSkills(schema.artifact);
+  if (skills.length > 0) {
+    return [
+      'the committed layout artifact has a Skill list that disagrees with its Projects:',
+      ...skills,
       'Run `npm run solve` and commit the result.',
     ];
   }

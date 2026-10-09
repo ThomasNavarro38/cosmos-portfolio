@@ -9,6 +9,11 @@
  * runner at all (`.tsx`), so it is kept thin enough that reading it suffices, and
  * `panel-model.test.ts` scans it for anything that would be a rule of its own.
  *
+ * The Skills block (3.5) renders as a static list labelled "Skills", one
+ * `<li>` per item: named for assistive tech, with no visible heading and no live
+ * region. It is where every Skill is read, because the Motes' canvas labels are
+ * capped.
+ *
  * What it holds, and why each is here rather than in the model:
  *
  *   - **Two selector subscriptions** — `focusedProjectId`, and the flight key
@@ -187,6 +192,14 @@ function PanelBlocks({ blocks, titleId }: PanelBlocksProps) {
               ))}
             </tbody>
           </table>
+        );
+      case 'skills':
+        return (
+          <ul key={block.kind} aria-label="Skills">
+            {block.items.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
         );
       case 'release':
         return (
