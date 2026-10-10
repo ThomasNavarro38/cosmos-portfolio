@@ -93,7 +93,7 @@ context:
 - [x] `src/render-scene/mote-model.ts` (+ test) -- tier seats, dot px scale, label token/ink, the greedy label pass with cap/clearance/four edges, orbit-line opacities. Test the rows Over the cap, Collision, Off canvas and Skill missing, plus a 25-Skill fixture.
 - [x] `src/render-scene/mote-field.tsx` + `scene-model.test.ts` -- bind tiers, height, orbit lines; audits and mutations.
 - [x] `src/shell/panel-model.ts`, `focus-panel.tsx`, `scene-host.tsx` (+ tests) -- Skills list block; artifact slices.
-- [ ] READMEs; record in `deferred-work.md` which 2.8/3.1 Mote items this closes.
+- [x] READMEs; record in `deferred-work.md` which 2.8/3.1 Mote items this closes.
 
 **Acceptance Criteria:**
 - Given any focused Project, when its Motes condense, then each sits on the orbit of its artifact tier, at its tier's px radius, and every label is `ink-label`.
@@ -101,6 +101,21 @@ context:
 - Given a focused Project, when the panel opens, then its Skills are a `<ul>` in the panel DOM, with no `aria-live` anywhere.
 - Given the 25-Skill and a 9-Skill fixture at 1440×900 and 390×844, when stepped through a full orbit turn, then no two shown labels' boxes intersect, none crosses the panel or the canvas edges, and at most 12 are shown.
 - Given `npm test`, `npm run typecheck`, `npm run gate`, then all pass.
+
+### Review Findings
+
+- [x] [Review][Patch] Conform the orbit lines to the spec (decided by Thomas, 2026-10-10): three lines, one per orbit, each drawn only while its orbit holds a Mote, at the highest level of any Mote on that orbit. The line jumps on a Focus change, and that is accepted [src/render-scene/mote-model.ts:1024]
+- [x] [Review][Patch] ~~The "keep the brighter fade" branch is never taken by any test~~ — obsolete: `orbitFades` removed with the conforming orbit lines
+- [x] [Review][Patch] ~~No reduced-motion test of the decaying orbit line~~ — obsolete: the line now follows Mote levels, which reduced-motion tests already pace
+- [x] [Review][Patch] The 390×844 sweeps discard their result, so they pass with zero labels shown. A probe shows 9 labels (25-Skill) and 5 (9-Skill); assert `most > 0` [src/render-scene/mote-model.test.ts:1514]
+- [x] [Review][Patch] The comment and failure text say "three orbit lines"; there are six, two per orbit [src/render-scene/scene-model.test.ts:1639]
+- [x] [Review][Patch] The `auditLadders` doc calls `MOTE_DOT_COLORS` "stroke-backed"; two of its three entries are `ink-label-dark` [src/render-scene/scene-model.test.ts:1337]
+- [x] [Review][Patch] The "never solves" scan's slice is not guarded against `indexOf` returning −1 or the two functions being reordered [src/derive/skills.test.ts:172]
+- [x] [Review][Patch] The execution task "READMEs; record in `deferred-work.md`" is still unticked, although `deferred-work.md` already has the "Closed by: spec-3-5" record [this file, Tasks]
+- [x] [Review][Defer] The label pass still visits decaying Motes after the focused ones, and holds the panel edge while they decay — beyond "visiting the focused Project's Motes"; kept so labels decay with their dots [src/render-scene/mote-model.ts:789] — deferred, deviation recorded
+- [x] [Review][Defer] The Mote label pass ignores the 3.4 affordance label and leader, so a Mote label can sit under a hovered Planet's label [src/render-scene/mote-model.ts:597] — deferred, cross-story layout
+- [x] [Review][Defer] `reslot` picks a free slot by the panel test alone, so a Mote can glide to a slot whose label then fails the top, bottom or left edge in the pass [src/render-scene/mote-model.ts:926] — deferred, pre-existing (re-slotting kept as it was by spec)
+- [x] [Review][Defer] Skill names are counted by exact string, so `Java`/`java` or a stray space split the share count and the tier [src/derive/skills.ts:36] — deferred, authoring policy
 
 ## Design Notes
 
@@ -160,10 +175,10 @@ Width estimate: `chars × 9.5 × (0.6 + 0.16)` ≈ 7.2px (sans advance plus lett
 
 **Orbit lines**
 
-- Condensing and decaying line per orbit; the decaying one fades as carried state.
-  [`mote-model.ts:827`](../../src/render-scene/mote-model.ts#L827)
+- One line per orbit, at the highest level of any Mote on it, around that Mote's Planet.
+  [`mote-model.ts:1024`](../../src/render-scene/mote-model.ts#L1024)
 
-- Six memoised `stroke-dust` hairlines, no depth write.
+- Three memoised `stroke-dust` hairlines, no depth write.
   [`mote-field.tsx:89`](../../src/render-scene/mote-field.tsx#L89)
 
 **Panel Skills list**

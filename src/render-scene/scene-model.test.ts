@@ -1334,9 +1334,10 @@ test('the Bodies’ binding audit rejects the real binding with any one guarante
  * Every scene line takes a `stroke-*` token and every scene glyph an `ink-*` one,
  * as a pure function over files: an `ink-` token inside a line element or line
  * material, or anywhere in the stroke model, is a line drawn in a glyph's ink; a
- * `stroke-` token, or a stroke-backed constant (`MOTE_DOT_COLORS`, `strokeColor(`,
- * `DUST_*_COLOR`), inside a `*LabelStyle` function is a glyph drawn in a line's
- * stroke.
+ * `stroke-` token, or a line's or dot's colour constant (`strokeColor(`,
+ * `DUST_*_COLOR`, and `MOTE_DOT_COLORS` — part `stroke-`, part `ink-label`, so
+ * only this name scan, not the hex, keeps a label off the dot's fill), inside a
+ * `*LabelStyle` function is a glyph drawn in a line's stroke.
  */
 function auditLadders(files: readonly { readonly path: string; readonly source: string }[]): string[] {
   const failures: string[] = [];
@@ -2563,7 +2564,8 @@ test('the Rail-importer scan rejects every edge form from outside, and ignores p
  * Skill, filled by `moteDotColor`, drawn at `BODY_RENDER_ORDER` in the
  * transparent pass writing no depth; one drei `<Html>` label each, at
  * `zIndexRange={[1, 1]}` with no pointer events, styled by the model; and (3.5)
- * exactly one `moteOrbitLines()` block of drei `Line`s, mounted hidden — the only
+ * exactly one `moteOrbitLines()` block of drei `Line`s, mounted at opacity 0 with no
+ * `visible` prop (drei spreads it onto the material, which would then never draw) — the only
  * lines here, so the connector ban runs over the source with that block cut out.
  */
 function auditMoteField(source: string): string[] {
@@ -2573,13 +2575,13 @@ function auditMoteField(source: string): string[] {
 
   // The orbit lines (3.5): exactly one block, exactly this shape.
   const orbitBlocks = mapBlocks(code, 'moteOrbitLines\\(\\s*\\)');
-  if (orbitBlocks.length !== 1) failures.push(`maps moteOrbitLines() ${orbitBlocks.length} times — three orbit lines, one block`);
+  if (orbitBlocks.length !== 1) failures.push(`maps moteOrbitLines() ${orbitBlocks.length} times — one block of three orbit lines`);
   const orbitBlock = (orbitBlocks[0] ?? '').replace(/\s+/g, '');
   const ORBIT_BLOCK =
-    'moteOrbitLines().map((line)=>(<Linekey={line.id}ref={(handle:MoteOrbitHandle|null)=>{orbits.current[line.line]=handle;}}' +
-    'points={line.points}color={line.color}lineWidth={line.widthPx}visible={false}transparentopacity={0}depthWrite={false}renderOrder={BODY_RENDER_ORDER}/>))';
+    'moteOrbitLines().map((line)=>(<Linekey={line.id}ref={(handle:MoteOrbitHandle|null)=>{orbits.current[line.orbit]=handle;}}' +
+    'points={line.points}color={line.color}lineWidth={line.widthPx}transparentopacity={0}depthWrite={false}renderOrder={BODY_RENDER_ORDER}/>))';
   if (orbitBlocks.length === 1 && orbitBlock !== ORBIT_BLOCK) {
-    failures.push('the orbit lines are not exactly the model’s lines, stored by line, mounted hidden and transparent, writing no depth, at BODY_RENDER_ORDER');
+    failures.push('the orbit lines are not exactly the model’s lines, stored by orbit, mounted transparent at opacity 0 with no visible prop, writing no depth, at BODY_RENDER_ORDER');
   }
   if ((code.match(/<Line\b/g) ?? []).length !== 1) failures.push('a drei Line outside the one orbit-line element');
 
@@ -2621,7 +2623,7 @@ function auditMoteField(source: string): string[] {
       'conststate=navigationStore.getState()',
       'field.current=moteFrame(field.current,artifact,bodies,media,state.focusedProjectId,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size.width,size.height,delta,reducedMotion())',
       'field.current.draws.forEach((draw,index)=>applyMoteDraw(dots.current[index],labels.current[index],draw))',
-      'field.current.orbits.forEach((draw)=>applyMoteOrbitDraw(orbits.current[draw.line],draw))',
+      'field.current.orbits.forEach((draw)=>applyMoteOrbitDraw(orbits.current[draw.orbit],draw))',
     ];
     if (JSON.stringify(statements) !== JSON.stringify(expected)) {
       failures.push(
@@ -2728,13 +2730,13 @@ test('the Mote audit rejects the real renderer with any one guarantee broken', (
     ['a drei connector imported', (s) => s.replace("import { Html, Line } from '@react-three/drei';", "import { Html, Line, QuadraticBezierLine } from '@react-three/drei';")],
     // 3.5: the orbit lines.
     ['the orbit lines not applied', (s) => s.replace(/\n\s*field\.current\.orbits\.forEach\([^\n]*\n/, '\n')],
-    ['an orbit line on the wrong handle', (s) => s.replace('applyMoteOrbitDraw(orbits.current[draw.line], draw)', 'applyMoteOrbitDraw(orbits.current[draw.orbit], draw)')],
-    ['an orbit line handle stored by orbit', (s) => s.replace('orbits.current[line.line] = handle;', 'orbits.current[line.orbit] = handle;')],
+    ['an orbit line on the wrong handle', (s) => s.replace('applyMoteOrbitDraw(orbits.current[draw.orbit], draw)', 'applyMoteOrbitDraw(orbits.current[draw.orbit + 1], draw)')],
+    ['an orbit line handle stored at the wrong index', (s) => s.replace('orbits.current[line.orbit] = handle;', 'orbits.current[line.orbit + 1] = handle;')],
     ['an orbit line writing depth', (s) => s.replace('          depthWrite={false}\n          renderOrder', '          renderOrder')],
-    ['an orbit line shown at mount', (s) => s.replace('visible={false}\n          transparent\n          opacity={0}', 'transparent\n          opacity={0}')],
-    ['an orbit line opaque', (s) => s.replace('visible={false}\n          transparent\n          opacity={0}', 'visible={false}\n          opacity={0}')],
+    ['an orbit line hidden through its material', (s) => s.replace('          transparent\n          opacity={0}', '          visible={false}\n          transparent\n          opacity={0}')],
+    ['an orbit line opaque', (s) => s.replace('          transparent\n          opacity={0}', '          opacity={0}')],
     ['an orbit line in another colour', (s) => s.replace('color={line.color}', "color={tokens.colors['stroke-near-dark']}")],
-    ['an orbit line handle not stored', (s) => s.replace('orbits.current[line.line] = handle;', 'void handle;')],
+    ['an orbit line handle not stored', (s) => s.replace('orbits.current[line.orbit] = handle;', 'void handle;')],
     ['a second orbit-line block', (s) => s.replace('{motePool(artifact).map(', '{moteOrbitLines().map((line) => <mesh key={line.id} />)}\n      {motePool(artifact).map(')],
     ['one colour for every tier', (s) => s.replace('color={moteDotColor(artifact, skill)}', 'color={MOTE_DOT_COLORS[0]}')],
     ['a selection of Skills', (s) => s.replace('motePool(artifact).map(', 'motePool(artifact).filter((skill) => skill !== "").map(')],

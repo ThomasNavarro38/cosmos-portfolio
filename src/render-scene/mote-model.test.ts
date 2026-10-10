@@ -1280,17 +1280,14 @@ test('a condensed dot is its tier’s radius on screen, times the level scale, t
 
 // --- Orbit lines ------------------------------------------------------------------------
 
-test('orbit lines: six closed stroke-dust hairline circles — a condensing and a decaying one per orbit — built once', () => {
+test('orbit lines: three closed stroke-dust hairline circles, one per orbit, built once', () => {
   const lines = moteOrbitLines();
-  assert.equal(lines.length, 6);
+  assert.equal(lines.length, 3);
   assert.equal(moteOrbitLines(), lines, 'the same array every call: no new points per render');
   assert.equal(MOTE_ORBIT_LINE_COLOR, tokens.colors['stroke-dust-dark']);
   assert.equal(MOTE_ORBIT_LINE_WIDTH_PX, 0.7);
-  lines.forEach((line, index) => {
-    const orbit = Math.floor(index / 2);
-    assert.equal(line.line, index);
+  lines.forEach((line, orbit) => {
     assert.equal(line.orbit, orbit);
-    assert.equal(line.role, index % 2 === 0 ? 'condensing' : 'decaying');
     assert.equal(line.color, MOTE_ORBIT_LINE_COLOR);
     assert.equal(line.widthPx, MOTE_ORBIT_LINE_WIDTH_PX);
     assert.deepEqual(line.points[0], line.points[line.points.length - 1], 'closed');
@@ -1302,32 +1299,44 @@ test('orbit lines: six closed stroke-dust hairline circles — a condensing and 
   });
 });
 
-test('only an orbit holding a Mote is drawn, fading in with its Motes, around the focused Planet', () => {
+/**
+ * The orbit-line rule, frame by frame: one draw per orbit, drawn only while a
+ * Mote is on that orbit, at the highest level of any Mote on it — condensing or
+ * decaying, around whichever Planet — and circling the Planet of a Mote at that
+ * level. Returns the Planet IDs the drawn lines circle.
+ */
+function assertOrbitDraws(field: MoteField, scene: MoteScene, frame: number): string[] {
+  assert.equal(field.orbits.length, 3);
+  const circled: string[] = [];
+  field.orbits.forEach((draw, orbit) => {
+    assert.equal(draw.orbit, orbit);
+    const on = field.motes.filter((mote) => mote.orbit === orbit && mote.level > 0);
+    const top = Math.max(0, ...on.map((mote) => mote.level));
+    assert.ok(Math.abs(draw.opacity - top) < 1e-12, `frame ${frame}: orbit ${orbit} at ${draw.opacity}, its highest Mote at ${top}`);
+    assert.equal(draw.visible, on.length > 0, `frame ${frame}: orbit ${orbit} is drawn exactly while a Mote is on it`);
+    if (!draw.visible) return;
+    const holders = on.filter((mote) => mote.level === top).map((mote) => mote.planetId);
+    const holder = holders.find((id) => JSON.stringify(planetAt(scene, id)) === JSON.stringify(draw.centre));
+    assert.ok(holder !== undefined, `frame ${frame}: orbit ${orbit} circles a Planet none of its highest Motes is on`);
+    circled.push(holder);
+  });
+  return circled;
+}
+
+test('only an orbit holding a Mote is drawn, at the highest level on it, around the focused Planet', () => {
   const artifact = fixture({ a: ['Java', 'Spring Boot'] });
   const scene = sceneOf(artifact);
   const view = viewOf(cameraFor(artifact, 'project:a/1'));
   const rest = run(null, scene, null, 2, view);
-  for (const field of rest) assert.ok(field.orbits.every((orbit) => !orbit.visible && orbit.opacity === 0));
+  for (const field of rest) assert.ok(field.orbits.every((orbit) => !orbit.visible && orbit.opacity === 0 && orbit.centre === null));
   const frames = run(last(rest), scene, 'project:a/1', MOVE_FRAMES + 2, view);
-  for (const field of frames) {
-    assert.equal(field.orbits.length, 6);
-    field.orbits.forEach((draw, line) => {
-      assert.equal(draw.line, line);
-      if (draw.role === 'decaying') {
-        assert.equal(draw.visible, false, 'nothing has been left');
-        return;
-      }
-      const on = field.motes.filter((mote) => mote.orbit === draw.orbit && mote.level > 0);
-      const top = Math.max(0, ...on.map((mote) => mote.level));
-      assert.ok(Math.abs(draw.opacity - top) < 1e-12, 'a fresh condensation: the line is at the highest level');
-      assert.equal(draw.visible, on.length > 0);
-      if (draw.visible) assert.deepEqual(draw.centre, planetAt(scene, 'project:a/1'));
-    });
-  }
+  frames.forEach((field, frame) => {
+    for (const id of assertOrbitDraws(field, scene, frame)) assert.equal(id, 'project:a/1');
+  });
   const done = last(frames);
   assert.deepEqual(
     done.orbits.map((draw) => draw.visible),
-    [true, false, true, false, false, false],
+    [true, true, false],
     'two Skills hold the two inner orbits; the third is not drawn',
   );
   const calls: number[][] = [];
@@ -1336,68 +1345,28 @@ test('only an orbit holding a Mote is drawn, fading in with its Motes, around th
   assert.equal(handle.visible, true);
   assert.equal(handle.material.opacity, 1);
   assert.deepEqual(calls, [[10, 0, 0]]);
-  applyMoteOrbitDraw(handle, { line: 5, orbit: 2, role: 'decaying', visible: false, centre: null, opacity: 0 });
+  applyMoteOrbitDraw(handle, { orbit: 2, visible: false, centre: null, opacity: 0 });
   assert.equal(handle.visible, false);
   assert.equal(calls.length, 1, 'a hidden line is left where it was');
   applyMoteOrbitDraw(null, done.orbits[0]!);
 });
 
-/** The most a line's opacity may change in one frame: the Focus curve's steepest slope over `DT`. */
-function fadeStepBound(): number {
-  let steepest = 0;
-  for (let i = 1; i <= 4000; i += 1) steepest = Math.max(steepest, (easeFocus(i / 4000) - easeFocus((i - 1) / 4000)) * 4000);
-  return (steepest * DT * 1.05) / FOCUS_SECONDS;
-}
-
-/**
- * No orbit line jumps between two frames: every line drawn in one frame is, in
- * the next, a line of the same orbit around the same Planet within one frame's
- * fade — or it was already faint enough to go — and the same backwards.
- */
-function assertLinesContinuous(a: MoteField, b: MoteField, frame: number): void {
-  const bound = fadeStepBound();
-  const drawn = (field: MoteField) => field.orbits.filter((draw) => draw.visible);
-  for (const [from, to, way] of [[a, b, 'vanishes'], [b, a, 'appears']] as const) {
-    for (const line of drawn(from)) {
-      if (line.opacity <= bound) continue;
-      const kept = drawn(to).some(
-        (other) => other.orbit === line.orbit && JSON.stringify(other.centre) === JSON.stringify(line.centre) && Math.abs(other.opacity - line.opacity) <= bound,
-      );
-      assert.ok(kept, `frame ${frame}: orbit ${line.orbit}'s ${line.role} line ${way} or jumps at opacity ${line.opacity}`);
-    }
-  }
-}
-
-test('A → B: the orbit lines never jump between Planets — A’s fade out where they were, B’s fade in', () => {
+test('A → B, then a release: each line follows the highest Mote on its orbit — it may move between Planets, never outlives its Motes', () => {
   const artifact = fixture();
   const scene = sceneOf(artifact);
   const view = viewOf(cameraFor(artifact, 'project:a/1'));
   const onA = run(null, scene, 'project:a/1', MOVE_FRAMES + 30, view);
   const toB = run(last(onA), scene, 'project:b/1', MOVE_FRAMES + 30, view);
-  const frames = [...onA, ...toB];
-  for (let i = 1; i < frames.length; i += 1) assertLinesContinuous(frames[i - 1]!, frames[i]!, i);
-  // Non-vacuous: at the switch, A's lines are fully drawn and become the decaying ones.
-  const before = last(onA);
-  const switched = toB[0]!;
-  const a = planetAt(scene, 'project:a/1');
-  const b = planetAt(scene, 'project:b/1');
-  for (let orbit = 0; orbit < 3; orbit += 1) {
-    const was = before.orbits[2 * orbit]!;
-    if (!was.visible) continue;
-    assert.deepEqual(was.centre, a);
-    assert.deepEqual(switched.orbits[2 * orbit + 1]!.centre, a, 'the decaying line takes over around A');
-    assert.equal(switched.orbits[2 * orbit + 1]!.opacity, was.opacity, 'from the opacity A’s line was drawn at');
-  }
-  const settled = last(toB);
-  for (const draw of settled.orbits) {
-    if (draw.role === 'decaying') assert.equal(draw.visible, false, 'A’s lines have faded');
-    else if (draw.visible) assert.deepEqual(draw.centre, b);
-  }
-  assert.ok(settled.orbits.some((draw) => draw.role === 'condensing' && draw.visible && draw.opacity === 1), 'B’s lines are drawn');
-  // And a release fades the lines out where they were.
-  const released = run(settled, scene, null, MOVE_FRAMES + 2, view);
-  for (let i = 1; i < released.length; i += 1) assertLinesContinuous(released[i - 1]!, released[i]!, i);
-  assert.ok(last(released).orbits.every((draw) => !draw.visible));
+  const released = run(last(toB), scene, null, MOVE_FRAMES + 2, view);
+  const circled = [...onA, ...toB, ...released].map((field, frame) => assertOrbitDraws(field, scene, frame));
+  // Non-vacuous: lines circle A, then B; after the hand-off a line still circles A
+  // while A's leaving Motes outshine B's arriving ones; the release ends undrawn.
+  const onAEnd = circled[onA.length - 1] ?? [];
+  assert.ok(onAEnd.length > 0 && onAEnd.every((id) => id === 'project:a/1'), 'A’s lines are drawn');
+  assert.ok(circled.slice(onA.length).some((ids) => ids.includes('project:a/1')), 'a line stays around A while A’s Motes decay above B’s');
+  const onBEnd = circled[onA.length + toB.length - 1] ?? [];
+  assert.ok(onBEnd.length > 0 && onBEnd.every((id) => id === 'project:b/1'), 'B’s lines are drawn');
+  assert.ok(last(released).orbits.every((draw) => !draw.visible), 'released: every line gone with its Motes');
 });
 
 // --- The label pass ------------------------------------------------------------------------
@@ -1511,8 +1480,9 @@ test('25 Skills and 9 Skills at 1440×900 and 390×844, through a full orbit tur
   const desktop = [sweep(base, sncf, 1440, 900), sweep(nine, 'project:a/1', 1440, 900)];
   for (const most of desktop) assert.ok(most > 0, 'labels are shown at desktop width, or this proves nothing');
   assert.ok((desktop[0] ?? 0) <= MOTE_LABEL_LIMIT);
-  sweep(base, sncf, 390, 844);
-  sweep(nine, 'project:a/1', 390, 844);
+  for (const most of [sweep(base, sncf, 390, 844), sweep(nine, 'project:a/1', 390, 844)]) {
+    assert.ok(most > 0, 'labels are shown at phone width too, or the phone sweeps prove nothing');
+  }
 });
 
 // --- The label pass, stepped -------------------------------------------------------------

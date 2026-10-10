@@ -21,12 +21,11 @@
  * is that object moving — and a frame allocates no mesh. Its material takes the
  * Skill's tier fill, `moteDotColor` (3.5); its radius on screen is the model's.
  *
- * **Six orbit lines** (3.5): one drei `Line` per `moteOrbitLines()` entry — per
- * orbit, one around the focused Planet and one around the Planet just left, each
- * a closed circle on the orbit's tilt at `stroke-dust` and `hairline`, writing no
- * depth, built once by the model — bound the
- * way `body-field.tsx` binds `sceneLines`, mounted hidden, and moved, shown and
- * faded per frame by `applyMoteOrbitDraw`. They are the only lines here: a
+ * **Three orbit lines** (3.5): one drei `Line` per `moteOrbitLines()` entry — one
+ * per orbit, a closed circle on the orbit's tilt at `stroke-dust` and `hairline`,
+ * writing no depth, built once by the model — bound the
+ * way `body-field.tsx` binds `sceneLines`, mounted at opacity 0, and moved, shown
+ * and faded per frame by `applyMoteOrbitDraw`. They are the only lines here: a
  * Mote is never connected to its Project (FR-14).
  *
  * **Drawn after the Dust, labelled below the panel.** Every dot carries
@@ -80,21 +79,23 @@ export function MoteField({ artifact, bodies, media }: MoteFieldProps) {
     const state = navigationStore.getState();
     field.current = moteFrame(field.current, artifact, bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.width, size.height, delta, reducedMotion());
     field.current.draws.forEach((draw, index) => applyMoteDraw(dots.current[index], labels.current[index], draw));
-    field.current.orbits.forEach((draw) => applyMoteOrbitDraw(orbits.current[draw.line], draw));
+    field.current.orbits.forEach((draw) => applyMoteOrbitDraw(orbits.current[draw.orbit], draw));
   });
 
   return (
     <>
       {moteOrbitLines().map((line) => (
+        // No `visible` prop: drei spreads a Line's leftover props onto its
+        // material too, and a hidden material never draws however the frame
+        // sets the line's own `visible`. Opacity 0 hides it until then.
         <Line
           key={line.id}
           ref={(handle: MoteOrbitHandle | null) => {
-            orbits.current[line.line] = handle;
+            orbits.current[line.orbit] = handle;
           }}
           points={line.points}
           color={line.color}
           lineWidth={line.widthPx}
-          visible={false}
           transparent
           opacity={0}
           depthWrite={false}
