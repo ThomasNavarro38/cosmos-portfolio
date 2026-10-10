@@ -141,13 +141,15 @@ export interface PanelField {
 export const EDITORIAL_RULE = 'Entries carry a written argument only where there was an argument to have.';
 
 /**
- * The marks around a Notable's constraint sentence. The schema that gates them
- * is `src/data/schema.ts` (`LIFT_OPEN`, `LIFT_CLOSE`); `src/shell/` may not import
- * it, so they are restated here, and the committed-artifact test re-marks the
- * runs and compares them with the authored prose.
+ * The marks around a Notable's constraint sentence, and its paragraph break. The
+ * schema that gates them is `src/data/schema.ts` (`LIFT_OPEN`, `LIFT_CLOSE`,
+ * `PARAGRAPH_BREAK`); `src/shell/` may not import it, so they are restated here,
+ * a test holds them equal to the schema's source, and the committed-artifact
+ * test re-marks the runs and compares them with the authored prose.
  */
 export const LIFT_OPEN = '[[';
 export const LIFT_CLOSE = ']]';
+export const PARAGRAPH_BREAK = /\n\s*\n/;
 
 /** A stretch of one Notable paragraph; the `lifted` one is the constraint sentence (DESIGN.md §7.7). */
 export interface PanelRun {
@@ -257,7 +259,7 @@ function skillsBlock(skills: readonly string[]): PanelBlock[] {
  */
 function paragraphsOf(text: string): PanelRun[][] {
   return text
-    .split(/\n\s*\n/)
+    .split(PARAGRAPH_BREAK)
     .map((paragraph) => paragraph.trim())
     .filter((paragraph) => paragraph !== '')
     .map(runsOf);

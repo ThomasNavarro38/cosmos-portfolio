@@ -22,6 +22,7 @@ import {
   EDITORIAL_RULE,
   LIFT_CLOSE,
   LIFT_OPEN,
+  PARAGRAPH_BREAK,
   RELEASE_LABEL,
   buildPanel,
   kickerText,
@@ -156,6 +157,10 @@ test('a lift at a paragraph’s start or end is one run beside the rest, never a
   assert.deepEqual(reading('Then. [[Last.]]'), { kind: 'reading', reading: { kind: 'notable', paragraphs: [[run('Then. '), run('Last.', true)]] } });
   // Hand-edited past the gate, a Notable with no marks is still prose, lifted nowhere.
   assert.deepEqual(reading('Unmarked.'), { kind: 'reading', reading: { kind: 'notable', paragraphs: [[run('Unmarked.')]] } });
+  // …and so is a stray mark: a lone open, or a close before the open, lifts nothing.
+  for (const stray of ['Before. [[Never closed.', 'Before.]] The middle. [[After.']) {
+    assert.deepEqual(reading(stray), { kind: 'reading', reading: { kind: 'notable', paragraphs: [[run(stray)]] } }, stray);
+  }
 });
 
 test('a Shallow Project’s reading position holds the editorial rule line — no error, placeholder or skeleton', () => {
@@ -248,6 +253,9 @@ test('the panel splits on the very marks the schema gates', () => {
   const literal = (name: string) => new RegExp(`export const ${name} = '([^']*)';`).exec(schema)?.[1];
   assert.equal(literal('LIFT_OPEN'), LIFT_OPEN);
   assert.equal(literal('LIFT_CLOSE'), LIFT_CLOSE);
+  // …and on the paragraph break it reads the marks within.
+  assert.equal(/export const PARAGRAPH_BREAK = (\/.*\/);/.exec(schema)?.[1], String(PARAGRAPH_BREAK));
+  assert.ok(schema.includes('.split(PARAGRAPH_BREAK)'), 'the schema finds the marked paragraph by the same break');
 });
 
 test('every committed Deep Project shows its authored prose verbatim, with exactly one sentence lifted', () => {
@@ -277,15 +285,22 @@ test('every committed Shallow Project carries the same rule line, in a panel ord
   const shallow = panels.filter(({ entry }) => !entry.isDeep);
   const deep = panels.find(({ entry }) => entry.isDeep);
   assert.ok(shallow.length > 1 && deep !== undefined, 'two Shallow Projects and a Deep one, or this case is vacuous');
+  const deepKinds = deep.panel.blocks.map((b) => b.kind);
+  assert.ok(deepKinds.includes('skills'), 'the Deep panel carries Skills, or the full-order case is vacuous');
+  let withSkills = 0;
   for (const { entry, panel, reading } of shallow) {
     assert.deepEqual(reading, shallow[0]?.reading, entry.id);
     assert.deepEqual(reading, { kind: 'rule', text: EDITORIAL_RULE }, entry.id);
-    assert.deepEqual(
-      panel.blocks.map((b) => b.kind).filter((k) => k !== 'skills'),
-      deep.panel.blocks.map((b) => b.kind).filter((k) => k !== 'skills'),
-      entry.id,
-    );
+    const kinds = panel.blocks.map((b) => b.kind);
+    // Skills is the one conditional block (3.5): absent, every other kind keeps the Deep order; present, so does it.
+    if (kinds.includes('skills')) {
+      withSkills += 1;
+      assert.deepEqual(kinds, deepKinds, entry.id);
+    } else {
+      assert.deepEqual(kinds, deepKinds.filter((k) => k !== 'skills'), entry.id);
+    }
   }
+  assert.ok(withSkills > 0, 'a Shallow Project carries Skills, or the full-order case is vacuous');
 });
 
 test('the model is identical across repeated builds and never mutates the artifact', () => {
@@ -1009,7 +1024,7 @@ function auditPanel(source: string): string[] {
     failures.push('the Notable is not one <p class="panel-prose"> per paragraph, its lifted run a <span class="panel-lift"> in the flow');
   }
   // Weight is not an emphasis channel (UX-DR5), and the lift is ink and nothing else (DESIGN.md §7.7).
-  if (/<(?:strong|b|em|i|mark|u|s|small|big|cite|q|dfn|ins|del)\b|fontWeight|fontStyle|textDecoration/.test(code)) {
+  if (/<(?:strong|b|em|i|mark|u|s|small|big|cite|q|dfn|ins|del|code|kbd|samp|var|sup|sub|abbr)\b|fontWeight|fontStyle|fontVariant|textDecoration|textTransform/.test(code)) {
     failures.push('an element or style that carries weight or emphasis — the lift is ink alone');
   }
   if (
@@ -1113,6 +1128,8 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
     ['the lift in bold', (s) => s.replace(/<span key=\{at\} className="panel-lift">\{run\.text\}<\/span>/, '<strong key={at} className="panel-lift">{run.text}</strong>')],
     ['the lift as its own paragraph', (s) => s.replace(/<span key=\{at\} className="panel-lift">\{run\.text\}<\/span>/, '<p key={at} className="panel-lift">{run.text}</p>')],
     ['an underlined lift', (s) => s.replace('<span key={at} className="panel-lift">', '<span key={at} className="panel-lift"><ins>').replace('{run.text}</span> : run.text', '{run.text}</ins></span> : run.text')],
+    ['the lift as code', (s) => s.replace(/<span key=\{at\} className="panel-lift">\{run\.text\}<\/span>/, '<code key={at} className="panel-lift">{run.text}</code>')],
+    ['a small-caps lift', (s) => s.replace('<span key={at} className="panel-lift">', '<span key={at} className="panel-lift" style={{ fontVariant: "small-caps" }}>')],
     ['an emphasised rule',(s) => s.replace('<p className="panel-rule">{block.reading.text}</p>', '<p className="panel-rule"><em>{block.reading.text}</em></p>')],
     ['a rule worded in the renderer', (s) => s.replace('<p className="panel-rule">{block.reading.text}</p>', '<p className="panel-rule">Nothing to read here.</p>')],
     ['the field table unclassed', (s) => s.replace(' className="panel-fields"', '')],

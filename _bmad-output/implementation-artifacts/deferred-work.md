@@ -768,3 +768,10 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-6-the-information-panel.md`
   summary: Below about 1217px the panel is `46vw`. At a 390px phone width that is a column of about 180px, which drops to about 148px once the 16px phone padding is taken off. The field-label column (74px plus a 28px gap, about 102px) takes about 70% of that, leaving roughly 46px for a value. The overflow part is fixed: the 3.6 review added `overflow-wrap: anywhere` on the panel, so long words break instead of spilling out. The cramped phone layout remains.
   evidence: `panelWidthCss()` is `min(560px, 46vw)` (2.7, D-A3), and DESIGN.md gives no phone layout. 3.6's Never list forbids width changes, so a phone layout (a full-width panel, or labels stacked above values) needs a design ruling first.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-the-notable-and-the-editorial-rule-line.md`
+  summary: The Focus panel's rendered reading position (`p.panel-prose`, `span.panel-lift`, `p.panel-rule`) is held only by source-text regex audits, never by an executed render.
+  evidence: `node --test` strips types and has no JSX transform, so `focus-panel.tsx` cannot be imported by a test; a render check needs a JSX path (e.g. `react-dom/server` over a non-JSX entry) or a runner change. 3.6 set the source-audit pattern.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-7-the-notable-and-the-editorial-rule-line.md`
+  summary: A stale test comment says `career.json` "holds one Client with one Project and that Project is already Deep".
+  evidence: `src/derive/maintenance.test.ts:274`; the committed file now holds 8 Projects (1 Deep, 7 Shallow).
