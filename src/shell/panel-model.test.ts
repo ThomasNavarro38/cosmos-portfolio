@@ -21,6 +21,7 @@ import {
   PANEL_PADDING,
   RELEASE_LABEL,
   buildPanel,
+  kickerText,
   crossFade,
   crossFadeLayerStyle,
   crossFadeTiming,
@@ -44,12 +45,13 @@ const ARTIFACT_JSON = fileURLToPath(new URL('../../generated/layout.generated.js
 
 // --- Fixtures ---------------------------------------------------------------
 
-function project(id: string, isDeep: boolean, notable: string | null | undefined): PanelArtifactProject {
+function project(id: string, isDeep: boolean, notable: string | null | undefined, company: string | null = null): PanelArtifactProject {
   return {
     id,
     isDeep,
     content: {
       project: `Title of ${id}`,
+      company,
       role: 'Lead',
       team_size: 6,
       built: `What ${id} built.`,
@@ -66,7 +68,7 @@ function artifact(): PanelArtifact {
         id: 'client:a',
         name: 'Alpha',
         projects: [
-          project('project:a/deep', true, 'First paragraph.\n\nSecond paragraph,\nwrapped.\n\n\n  Third.  '),
+          project('project:a/deep', true, 'First paragraph.\n\nSecond paragraph,\nwrapped.\n\n\n  Third.  ', 'Capgemini'),
           project('project:a/shallow', false, null),
         ],
       },
@@ -97,10 +99,32 @@ test('the panel carries kicker, title, reading position, fields, Skills and rele
   }
 });
 
-test('the kicker is the Client’s name and the title the Project’s', () => {
-  assert.deepEqual(block('project:a/deep', 'kicker'), { kind: 'kicker', text: 'Alpha' });
+test('the kicker is the Client’s name, then the Company after a mid-dot, and the title the Project’s', () => {
+  assert.deepEqual(block('project:a/deep', 'kicker'), { kind: 'kicker', text: 'Alpha · Capgemini' });
+  assert.deepEqual(block('project:a/shallow', 'kicker'), { kind: 'kicker', text: 'Alpha' }, 'no Company: the Client alone, no separator');
   assert.deepEqual(block('project:b/shallow-with-prose', 'kicker'), { kind: 'kicker', text: 'Bravo' });
   assert.deepEqual(block('project:a/deep', 'title'), { kind: 'title', text: 'Title of project:a/deep' });
+});
+
+test('kickerText names the Client verbatim and the Company only when there is one', () => {
+  assert.equal(kickerText('SNCF', 'Capgemini'), 'SNCF · Capgemini');
+  assert.equal(kickerText('SNCF', null), 'SNCF');
+  assert.equal(kickerText('Decathlon', 'Sfeir'), 'Decathlon · Sfeir');
+});
+
+test('the committed artifact’s kickers carry each real Client and Company verbatim', () => {
+  const committed = JSON.parse(readFileSync(ARTIFACT_JSON, 'utf8')) as PanelArtifact;
+  let seen = 0;
+  for (const client of committed.clients) {
+    for (const entry of client.projects) {
+      const { company } = entry.content;
+      assert.ok(company === null || (company.trim() === company && company !== ''), `${entry.id}: a Company is null or a trimmed, non-blank name`);
+      const text = company === null ? client.name : `${client.name} · ${company}`;
+      assert.deepEqual(block(entry.id, 'kicker', committed), { kind: 'kicker', text }, entry.id);
+      seen += 1;
+    }
+  }
+  assert.ok(seen > 0, 'the artifact carries Projects');
 });
 
 test('a Deep Project’s reading position holds its notable, one paragraph per blank-line break', () => {
@@ -246,7 +270,7 @@ test('the slide runs on the Focus duration and curve, and hides the panel only o
 test('the panel paints its own column and nothing else — no scrim, no backdrop, no overlay', () => {
   const allowed = [
     'position', 'top', 'right', 'bottom', 'zIndex', 'width', 'boxSizing', 'overflowY', 'overscrollBehavior',
-    'padding', 'background', 'color', 'borderLeft', 'transform', 'visibility', 'transition',
+    'padding', 'background', 'color', 'borderLeft', 'outline', 'transform', 'visibility', 'transition',
   ];
   for (const style of [panelStyle(true), panelStyle(false)]) {
     assert.deepEqual(Object.keys(style).sort(), [...allowed].sort());
@@ -254,6 +278,18 @@ test('the panel paints its own column and nothing else — no scrim, no backdrop
     assert.notEqual(style.width, '100vw');
     assert.doesNotMatch(JSON.stringify(style), /\binset\b|\bleft\b|backdrop|filter|box-shadow/i);
   }
+});
+
+test('the panel is surface-raised with one surface-edge left border, from tokens, and nothing else bounds it', () => {
+  for (const style of [panelStyle(true), panelStyle(false)]) {
+    assert.equal(style.background, 'var(--color-surface-raised-dark)');
+    assert.equal(style.color, 'var(--color-ink-prose-dark)');
+    assert.equal(style.borderLeft, '1px solid var(--color-surface-edge-dark)');
+    assert.equal(style.outline, 'none', 'a focus ring on the container would be a second boundary');
+    assert.equal(style.padding, 'var(--panel-padding)', 'the stylesheet steps it at 1200px');
+    assert.doesNotMatch(JSON.stringify(style), /Canvas|GrayText|radius/, 'no system colour, no radius');
+  }
+  assert.equal(PANEL_PADDING, 'var(--panel-padding)');
 });
 
 // --- DOM focus -------------------------------------------------------------------
@@ -428,6 +464,241 @@ test('the model audit rejects the real model with any one impurity added', () =>
   }
 });
 
+// --- The stylesheet ---------------------------------------------------------------------
+
+/** One declaration of `focus-panel.css`, with the selector and `@media` condition it sits under. */
+interface CssDeclaration {
+  readonly media: string | null;
+  readonly selector: string;
+  readonly property: string;
+  readonly value: string;
+}
+
+/**
+ * The stylesheet as a flat list of declarations. Enough CSS for this file: rules
+ * and one level of `@media`, comments blanked. Whitespace inside a selector or a
+ * value is collapsed so a reformat is not a failure.
+ */
+function declarationsOf(css: string): CssDeclaration[] {
+  const code = css.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  const out: CssDeclaration[] = [];
+  const squash = (text: string) => text.trim().replace(/\s+/g, ' ');
+  const rules = (body: string, media: string | null) => {
+    for (const [, selector, block] of body.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
+      for (const declaration of (block ?? '').split(';')) {
+        const colon = declaration.indexOf(':');
+        if (colon === -1) continue;
+        out.push({ media, selector: squash(selector ?? ''), property: squash(declaration.slice(0, colon)), value: squash(declaration.slice(colon + 1)) });
+      }
+    }
+  };
+  let rest = code;
+  for (const media of code.matchAll(/@media\s*([^{]+)\{((?:[^{}]*\{[^{}]*\})*)\s*\}/g)) {
+    rules(media[2] ?? '', squash(media[1] ?? ''));
+    rest = rest.replace(media[0], ' ');
+  }
+  for (const [atRule] of rest.matchAll(/@[\w-]+/g)) out.push({ media: null, selector: '@', property: atRule, value: '' });
+  rules(rest.replace(/@[\w-]+[^{;]*[{;]/g, ' '), null);
+  return out;
+}
+
+/** The type roles each block is set in (DESIGN.md §3), and the five properties a role sets. */
+const TYPE_ROLES: readonly (readonly [string, string])[] = [
+  ['.panel-kicker', 'panel-kicker'],
+  ['.panel-title', 'panel-title'],
+  ['.panel-reading p', 'notable-prose'],
+  ['.panel-fields th', 'field-label'],
+  ['.panel-fields td', 'field-value'],
+  ['.panel-skills', 'field-value'],
+  ['.panel-release', 'chrome'],
+];
+const TYPE_PROPERTIES = ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing'] as const;
+
+/** The two `@media` conditions the stylesheet may hold: the 1200px padding step and forced colours. */
+const BREAKPOINT = '(max-width: 1199.98px)';
+const FORCED_COLORS = '(forced-colors: active)';
+
+/** Every other value the panel's treatment fixes, as `[media, selector, property, value]`. */
+const EXPECTED: readonly (readonly [string | null, string, string, string])[] = [
+  // Padding: 56/56/60, the sides stepping down below 1200px (DESIGN.md §4, D-A3).
+  [null, `#${FOCUS_PANEL_ID}`, '--panel-padding', 'var(--space-panel-pad-top) var(--space-panel-pad-x) var(--space-panel-pad-bottom)'],
+  [null, `#${FOCUS_PANEL_ID}`, 'color-scheme', 'dark'],
+  [BREAKPOINT, `#${FOCUS_PANEL_ID}`, '--panel-padding', 'var(--space-panel-pad-top) clamp(16px, 5vw, var(--space-xl)) var(--space-panel-pad-bottom)'],
+  // Rhythm (DESIGN.md §4): kicker→title 22, title→prose 40, ¶→¶ 20, prose→table 52.
+  [null, '.panel-kicker', 'margin', '0 0 22px'],
+  [null, '.panel-title', 'margin', '0 0 var(--space-xl)'],
+  [null, '.panel-reading', 'margin', '0'],
+  [null, '.panel-reading p', 'margin', '0 0 var(--space-md)'],
+  [null, '.panel-reading p:last-child', 'margin-bottom', '0'],
+  [null, '.panel-fields', 'margin', 'var(--space-xxl) 0 0'],
+  // Field rows: 12px each side of a 1px surface-edge rule; a 74px label column and a 28px gap.
+  [null, '.panel-fields th, .panel-fields td', 'padding', 'var(--space-sm) 0'],
+  [null, '.panel-fields th, .panel-fields td', 'border-top', '1px solid var(--color-surface-edge-dark)'],
+  [null, '.panel-fields th', 'width', '74px'],
+  [null, '.panel-fields th', 'padding-right', 'var(--space-lg)'],
+  // Measures: they do not widen with the panel.
+  [null, '.panel-title', 'max-width', 'var(--space-measure-title)'],
+  [null, '.panel-reading p', 'max-width', 'var(--space-measure-prose)'],
+  // Ink.
+  [null, '.panel-kicker', 'color', 'var(--color-ink-label-dark)'],
+  [null, '.panel-title', 'color', 'var(--color-ink-lift-dark)'],
+  [null, '.panel-reading p', 'color', 'var(--color-ink-prose-dark)'],
+  [null, '.panel-fields th', 'color', 'var(--color-ink-label-dark)'],
+  [null, '.panel-fields td', 'color', 'var(--color-ink-prose-dark)'],
+  [null, '.panel-skills', 'color', 'var(--color-ink-label-dark)'],
+  [null, '.panel-release', 'color', 'var(--color-ink-label-dark)'],
+  // Plate designations are uppercase (DESIGN.md §3 Rules).
+  [null, '.panel-kicker', 'text-transform', 'uppercase'],
+  [null, '.panel-fields th', 'text-transform', 'uppercase'],
+  // The Skills: 28px below the table, an inline run with no bullets.
+  [null, '.panel-skills', 'margin', 'var(--space-lg) 0 0'],
+  [null, '.panel-skills', 'list-style', 'none'],
+  [null, '.panel-skills', 'flex-wrap', 'wrap'],
+  [null, '.panel-skills', 'column-gap', 'var(--space-sm)'],
+  // Release (DESIGN.md §7.6a): 40px below, a 12px stroke-rest hairline 8px before the word…
+  [null, '.panel-release', 'margin', 'var(--space-xl) 0 0'],
+  [null, '.panel-release', 'gap', 'var(--space-xs)'],
+  [null, '.panel-release', 'background', 'none'],
+  [null, '.panel-release', 'border', '0'],
+  [null, '.panel-release::before', 'width', 'var(--space-sm)'],
+  [null, '.panel-release::before', 'border-top', 'var(--stroke-hairline) solid var(--color-stroke-rest-dark)'],
+  // …raised to ink-prose and a 20px hairline on hover and keyboard focus — no box.
+  [null, '.panel-release:hover, .panel-release:focus-visible', 'color', 'var(--color-ink-prose-dark)'],
+  [null, '.panel-release:hover, .panel-release:focus-visible', 'outline', 'none'],
+  [null, '.panel-release:hover::before, .panel-release:focus-visible::before', 'width', 'var(--space-md)'],
+  // Forced colours flatten the ink step, so keyboard focus there is the system outline.
+  [FORCED_COLORS, '.panel-release:focus-visible', 'outline', '1px solid CanvasText'],
+];
+
+/**
+ * Literal lengths the stylesheet may write, in any unit: rhythm values DESIGN.md
+ * states without a token, the 1px rule, the padding step's phone floor and slope,
+ * the breakpoint, and the field table's full width.
+ */
+const LITERAL_LENGTHS = new Set(['22px', '74px', '1px', '16px', '5vw', '1199.98px', '100%']);
+
+/** The only selectors that may draw a `border-top`: the field rows' rule and the release hairline. */
+const TOP_RULES = new Set(['.panel-fields th, .panel-fields td', '.panel-release::before']);
+
+function auditStylesheet(css: string, tokensCss: string): string[] {
+  const declarations = declarationsOf(css);
+  const failures: string[] = [];
+  const find = (media: string | null, selector: string, property: string) =>
+    declarations.filter((d) => d.media === media && d.selector === selector && d.property === property).map((d) => d.value);
+  for (const [media, selector, property, value] of EXPECTED) {
+    const found = find(media, selector, property);
+    if (found.length !== 1 || found[0] !== value) failures.push(`${media ?? ''} ${selector} { ${property}: ${value} } — found ${JSON.stringify(found)}`);
+  }
+  for (const [selector, role] of TYPE_ROLES) {
+    for (const property of TYPE_PROPERTIES) {
+      const value = `var(--type-${role}-${property})`;
+      const found = find(null, selector, property);
+      if (found.length !== 1 || found[0] !== value) failures.push(`${selector} is not set in ${role}: ${property} found ${JSON.stringify(found)}`);
+    }
+  }
+  const tokens = new Set([...tokensCss.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+  for (const { media, selector, property, value } of declarations) {
+    if (selector === '@') {
+      failures.push(`an unread at-rule ${property} — its declarations would escape this audit`);
+      continue;
+    }
+    for (const [, name] of value.matchAll(/var\(\s*(--[\w-]+)/g)) {
+      if (name !== '--panel-padding' && !tokens.has(name)) failures.push(`${selector} reads ${name}, which no token defines`);
+    }
+    for (const [length] of value.matchAll(/-?\d*\.?\d+(?:px|rem|em|ch|pt|vh|vw|vmin|vmax|%)(?![\w-])/g)) {
+      if (!LITERAL_LENGTHS.has(length)) failures.push(`${selector} { ${property} } writes ${length} — read it from a token`);
+    }
+    if (property === 'font-weight' && !/^var\(--type-[\w-]+-font-weight\)$/.test(value)) failures.push(`${selector} sets a weight of its own — weight is not an emphasis channel`);
+    if (/radius|shadow|filter|backdrop/.test(property)) failures.push(`${selector} sets ${property} — no radius, shadow or blur`);
+    if (
+      /^border-(?:right|bottom|left|inline|block|width|color|style)/.test(property) ||
+      (property === 'border' && value !== '0') ||
+      (property === 'border-top' && !TOP_RULES.has(selector))
+    ) {
+      failures.push(`${selector} draws a ${property} — the panel has one boundary, its left border`);
+    }
+    if (/^outline/.test(property) && value !== 'none' && media !== FORCED_COLORS) failures.push(`${selector} draws an outline — no box (DESIGN.md §7.6a)`);
+    if (/ink-quiet|ink-faint/.test(value)) failures.push(`${selector} uses ${value} — below the contrast floor`);
+  }
+  for (const media of new Set(declarations.map((d) => d.media))) {
+    if (media !== null && media !== BREAKPOINT && media !== FORCED_COLORS) failures.push(`an @media ${media} beyond the 1200px step and forced colours`);
+  }
+  return failures;
+}
+
+const MAIN_TSX = fileURLToPath(new URL('../main.tsx', import.meta.url));
+
+/**
+ * `src/main.tsx` loads `tokens.css`, once, ahead of `App`. Every colour, size and
+ * padding the panel draws is a `var()` of it; without the import each one is
+ * invalid at computed-value time and the panel is a transparent column with no
+ * padding — while every other test here stays green.
+ */
+function auditTokensImport(source: string): string[] {
+  const code = blank(source);
+  const imports = [...code.matchAll(/^import\s+'\.\/tokens\/tokens\.css'\s*;/gm)];
+  if (imports.length !== 1) return ['src/main.tsx does not import ./tokens/tokens.css exactly once'];
+  const app = code.search(/^import\s*\{\s*App\s*\}/m);
+  return app === -1 || (imports[0]?.index ?? Infinity) > app ? ['the tokens are imported after App — its stylesheets would precede them'] : [];
+}
+
+test('the entry loads the design tokens once, ahead of the app', () => {
+  const real = readFileSync(MAIN_TSX, 'utf8');
+  assert.deepEqual(auditTokensImport(real), []);
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['the import dropped', (s) => s.replace("import './tokens/tokens.css';", '')],
+    ['the import commented out', (s) => s.replace("import './tokens/tokens.css';", "// import './tokens/tokens.css';")],
+    ['the import twice', (s) => s.replace("import './tokens/tokens.css';", "import './tokens/tokens.css';\nimport './tokens/tokens.css';")],
+    ['the import after App', (s) => s.replace("import './tokens/tokens.css';", '').replace("import { App } from './App';", "import { App } from './App';\nimport './tokens/tokens.css';")],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
+    assert.notDeepEqual(auditTokensImport(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
+const PANEL_CSS = fileURLToPath(new URL('./focus-panel.css', import.meta.url));
+const TOKENS_CSS = fileURLToPath(new URL('../tokens/tokens.css', import.meta.url));
+
+test('the stylesheet sets the surface, rhythm, type, ink, measure and release states from tokens', () => {
+  assert.deepEqual(auditStylesheet(readFileSync(PANEL_CSS, 'utf8'), readFileSync(TOKENS_CSS, 'utf8')), []);
+});
+
+test('the stylesheet audit rejects the real stylesheet with any one departure', () => {
+  const real = readFileSync(PANEL_CSS, 'utf8');
+  const tokensCss = readFileSync(TOKENS_CSS, 'utf8');
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['kicker→title at 24px', (s) => s.replace('margin: 0 0 22px;', 'margin: 0 0 24px;')],
+    ['title→prose at 20px', (s) => s.replace('margin: 0 0 var(--space-xl);', 'margin: 0 0 var(--space-md);')],
+    ['prose→table at 40px', (s) => s.replace('margin: var(--space-xxl) 0 0;', 'margin: var(--space-xl) 0 0;')],
+    ['no 1200px step', (s) => s.replace('(max-width: 1199.98px)', '(max-width: 799.98px)')],
+    ['the panel selector renamed', (s) => s.replace(/#focus-panel \{/g, '#panel {')],
+    ['no dark color-scheme', (s) => s.replace('color-scheme: dark;', '')],
+    ['no forced-colours focus', (s) => s.replace('outline: 1px solid CanvasText;', 'outline: none;')],
+    ['an outline on hover', (s) => s.replace(/(:focus-visible \{\s*color: var\(--color-ink-prose-dark\);\s*)outline: none;/, '$1outline: 1px solid var(--color-stroke-focus-dark);')],
+    ['an @supports block', (s) => `${s}\n@supports (display: grid) {\n  .panel-title {\n    font-size: 30px;\n  }\n}\n`],
+    ['a rem literal', (s) => s.replace('margin: var(--space-lg) 0 0;', 'margin: 1.75rem 0 0;')],
+    ['a rule under the title', (s) => s.replace('.panel-title {', '.panel-title {\n  border-top: 1px solid var(--color-surface-edge-dark);')],
+    ['a logical border', (s) => s.replace('.panel-kicker {', '.panel-kicker {\n  border-inline-end: 1px solid var(--color-surface-edge-dark);')],
+    ['a prose measure that widens', (s) => s.replace('max-width: var(--space-measure-prose);', 'max-width: none;')],
+    ['the hover ink unchanged', (s) => s.replace(/color: var\(--color-ink-prose-dark\);(\r?\n\s*)outline/, 'color: var(--color-ink-label-dark);$1outline')],
+    ['the hairline not extended', (s) => s.replace('width: var(--space-md);', 'width: var(--space-sm);')],
+    ['a radius', (s) => s.replace('.panel-title {', '.panel-title {\n  border-radius: 2px;')],
+    ['a weight', (s) => s.replace('.panel-title {', '.panel-title {\n  font-weight: 500;')],
+    ['a missing token', (s) => s.replace('var(--color-ink-lift-dark)', 'var(--color-ink-brightest-dark)')],
+    ['a right border', (s) => s.replace('.panel-kicker {', '.panel-kicker {\n  border-right: 1px solid var(--color-surface-edge-dark);')],
+    ['a quiet kicker', (s) => s.replace(/color: var\(--color-ink-label-dark\);(\r?\n\s*)text-transform: uppercase;/, 'color: var(--color-ink-quiet-dark);$1text-transform: uppercase;')],
+    ['a literal size', (s) => s.replace('font-size: var(--type-panel-title-font-size);', 'font-size: 23px;')],
+    ['a mixed-case kicker', (s) => s.replace('text-transform: uppercase;', 'text-transform: none;')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
+    assert.notDeepEqual(auditStylesheet(mutated, tokensCss), [], `"${name}" must be rejected`);
+  }
+});
+
 // --- The renderer stays thin ----------------------------------------------------------
 
 /**
@@ -595,12 +866,24 @@ function auditPanel(source: string): string[] {
   }
   // The Skills list (3.5): a static <ul> named for assistive tech, one <li> per Skill, no heading and no live region.
   if (
-    !/case\s*'skills'\s*:\s*return\s*\(?\s*<ul\s+key=\{\s*block\.kind\s*\}\s+aria-label="Skills"\s*>\s*\{\s*block\.items\.map\(\s*\(\s*(\w+)\s*\)\s*=>\s*\(?\s*<li\s+key=\{\s*\1\s*\}\s*>\s*\{\s*\1\s*\}\s*<\/li>\s*\)?\s*\)\s*\}\s*<\/ul>/.test(
+    !/case\s*'skills'\s*:\s*return\s*\(?\s*<ul\s+key=\{\s*block\.kind\s*\}(?:\s+className="panel-skills")?\s+aria-label="Skills"\s*>\s*\{\s*block\.items\.map\(\s*\(\s*(\w+)\s*\)\s*=>\s*\(?\s*<li\s+key=\{\s*\1\s*\}\s*>\s*\{\s*\1\s*\}\s*<\/li>\s*\)?\s*\)\s*\}\s*<\/ul>/.test(
       code,
     )
   ) {
     failures.push('the Skills are not a <ul aria-label="Skills"> of one <li> per item');
   }
+  // Each block carries the class `focus-panel.css` sets it by, and the stylesheet is imported here, once.
+  const classed: readonly (readonly [string, RegExp])[] = [
+    ['kicker', /case\s*'kicker'\s*:\s*return\s*\(?\s*<p\b[^>]*\bclassName="panel-kicker"/],
+    ['title', /case\s*'title'\s*:\s*return\s*\(?\s*<h2\b[^>]*\bclassName="panel-title"/],
+    ['reading', /case\s*'reading'\s*:\s*return\s*\(?\s*<div\b[^>]*\bclassName="panel-reading"/],
+    ['fields', /case\s*'fields'\s*:\s*return\s*\(?\s*<table\b[^>]*\bclassName="panel-fields"/],
+    ['skills', /case\s*'skills'\s*:\s*return\s*\(?\s*<ul\b[^>]*\bclassName="panel-skills"/],
+    ['release', /case\s*'release'\s*:\s*return\s*\(?\s*<button\b[^>]*\bclassName="panel-release"/],
+  ];
+  for (const [kind, pattern] of classed) if (!pattern.test(code)) failures.push(`the ${kind} block does not carry its panel-${kind} class`);
+  if ((code.match(/^import\s+'\.\/focus-panel\.css'\s*;/gm) ?? []).length !== 1) failures.push('the stylesheet is not imported, once');
+  if (/\bstyle=\{\{/.test(code)) failures.push('an inline style literal — the treatment lives in focus-panel.css and the model');
   if (/aria-live|role=["'](?:status|alert|log|marquee|timer)["']/.test(code)) failures.push('a live region — the Skills list is static');
   if (/<h[1-6]\b[^>]*>\s*Skills\b|>\s*Skills\s*</.test(code)) failures.push('a visible Skills heading');
   if (!/const\s+shown\s*=\s*useRef<string\s*\|\s*null>\(\s*null\s*\)/.test(code) ||
@@ -663,7 +946,14 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
     ['unlabelled', (s) => s.replace('aria-labelledby={panel === null ? undefined : FOCUS_PANEL_TITLE_ID}', '')],
     ['labelled before any title exists', (s) => s.replace('aria-labelledby={panel === null ? undefined : FOCUS_PANEL_TITLE_ID}', 'aria-labelledby={FOCUS_PANEL_TITLE_ID}')],
     ['the wrong id', (s) => s.replace('id={FOCUS_PANEL_ID}', 'id="panel"')],
-    ['the title unmarked', (s) => s.replace('<h2 key={block.kind} id={titleId}>', '<h2 key={block.kind}>')],
+    ['the title unmarked', (s) => s.replace('<h2 key={block.kind} id={titleId}', '<h2 key={block.kind}')],
+    ['the kicker unclassed', (s) => s.replace(' className="panel-kicker"', '')],
+    ['the title unclassed', (s) => s.replace(' className="panel-title"', '')],
+    ['the release unclassed', (s) => s.replace(' className="panel-release"', '')],
+    ['the prose unclassed', (s) => s.replace(' className="panel-reading"', '')],
+    ['the field table unclassed', (s) => s.replace(' className="panel-fields"', '')],
+    ['the stylesheet not imported', (s) => s.replace("import './focus-panel.css';", '')],
+    ['an inline style', (s) => s.replace('<h2 key={block.kind}', '<h2 style={{ fontWeight: 700 }} key={block.kind}')],
     // 2.8's cross-fade, one guarantee removed at a time.
     ['the outgoing layer dropped', (s) => s.replace(/\{leaving === null \? null : \([\s\S]*?\)\}\r?\n/, '')],
     ['the outgoing layer narrated', (s) => s.replace('<div ref={outgoing} aria-hidden="true" inert', '<div ref={outgoing} inert')],
@@ -721,7 +1011,7 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
     ['focus to the root on release', (s) => s.replace('document.getElementById(indexEntryId(move.entry))?.focus();', 'document.body.focus();')],
     ['the previous ID forgotten', (s) => s.replace('previous.current = focusedProjectId;', '')],
     ['a viewport read', (s) => s.replace('const container = useRef', 'const wide = window.innerWidth > 1200;\n  const container = useRef')],
-    ['the kicker shows the wrong field', (s) => s.replace('return <p key={block.kind}>{block.text}</p>;', 'return <p key={block.kind}>{block.kind}</p>;')],
+    ['the kicker shows the wrong field', (s) => s.replace(/(className="panel-kicker">\s*)\{block\.text\}/, '$1{block.kind}')],
     ['the reading position dropped', (s) => s.replace("case 'reading':", "case 'reading':\n            return null;")],
     ['paragraphs not in <p>', (s) => s.replace('<p key={index}>{paragraph}</p>', '<span key={index}>{paragraph}</span>')],
     ['the label not a header cell', (s) => s.replace('<th scope="row">{row.label}</th>', '<td>{row.label}</td>')],
@@ -763,7 +1053,8 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
     ['the Skills list dropped', (s) => s.replace("case 'skills':", "case 'skills':\n        return null;")],
     ['the Skills list unnamed', (s) => s.replace(' aria-label="Skills"', '')],
     ['the Skills list announced', (s) => s.replace(' aria-label="Skills"', ' aria-label="Skills" aria-live="polite"')],
-    ['a visible Skills heading', (s) => s.replace('<ul key={block.kind} aria-label="Skills">', '<h3>Skills</h3>\n          <ul key={block.kind} aria-label="Skills">')],
+    ['a visible Skills heading', (s) => s.replace('<ul key={block.kind} className="panel-skills"', '<h3>Skills</h3>\n          <ul key={block.kind} className="panel-skills"')],
+    ['the Skills unclassed', (s) => s.replace(' className="panel-skills"', '')],
     ['the Skills as one string', (s) => s.replace('<li key={item}>{item}</li>', '<li key={item}>{block.items.join(", ")}</li>')],
     ['the previous ID written twice', (s) => s.replace('previous.current = focusedProjectId;', 'previous.current = focusedProjectId;\n    previous.current = null;')],
   ];

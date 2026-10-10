@@ -15,7 +15,7 @@ Because this directory is exempt from the literal-colour scan, the gate also fai
 
 | File | Role |
 | --- | --- |
-| `tokens.css` | CSS custom properties on `:root`, for the DOM: `--color-<key>`, `--font-<key>`, `--type-<role>-{font-family,font-size,font-weight,line-height,letter-spacing}`, `--space-<key>`, `--radius-<key>`, `--stroke-<key>`. Not imported anywhere yet; the first DOM story wires it in. |
+| `tokens.css` | CSS custom properties on `:root`, for the DOM: `--color-<key>`, `--font-<key>`, `--type-<role>-{font-family,font-size,font-weight,line-height,letter-spacing}`, `--space-<key>`, `--radius-<key>`, `--stroke-<key>`. Imported once, by `src/main.tsx`, so every DOM stylesheet (first `src/shell/focus-panel.css`, 3.6) reads the same values. |
 | `tokens.ts` | The same values as one `as const` object (`tokens`), for code that cannot read a custom property — scene materials above all. Literal types, `{group.key}` aliases resolved. |
 
 ## What is emitted

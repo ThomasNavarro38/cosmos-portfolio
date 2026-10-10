@@ -1,0 +1,165 @@
+/*
+ * The Focus panel's visual treatment (DESIGN.md §3, §4, §7.6, §7.6a). Every
+ * colour, family, size and spacing step is a token custom property from
+ * `src/tokens/tokens.css`; the only literal lengths are values DESIGN.md states
+ * without a token (the 22px kicker gap, the 74px label column, the 1px rule) and
+ * the phone floor of the padding step. `panel-model.test.ts` holds each value.
+ *
+ * The rhythm is margins in normal flow, not a flex gap, so a Shallow Project's
+ * empty reading slot collapses away: the title's 40px and the table's 52px meet
+ * and collapse to 52px, leaving no hole where the Notable would be.
+ *
+ * The container's own surface, border and slide are inline (`panelStyle`); this
+ * file sets only the padding they read, because only a stylesheet can step it.
+ */
+
+/* `color-scheme` so the scrollbar the browser draws is a dark one on the dark surface. */
+#focus-panel {
+  --panel-padding: var(--space-panel-pad-top) var(--space-panel-pad-x) var(--space-panel-pad-bottom);
+  color-scheme: dark;
+}
+
+@media (max-width: 1199.98px) {
+  #focus-panel {
+    --panel-padding: var(--space-panel-pad-top) clamp(16px, 5vw, var(--space-xl)) var(--space-panel-pad-bottom);
+  }
+}
+
+.panel-kicker {
+  margin: 0 0 22px;
+  font-family: var(--type-panel-kicker-font-family);
+  font-size: var(--type-panel-kicker-font-size);
+  font-weight: var(--type-panel-kicker-font-weight);
+  line-height: var(--type-panel-kicker-line-height);
+  letter-spacing: var(--type-panel-kicker-letter-spacing);
+  color: var(--color-ink-label-dark);
+  text-transform: uppercase;
+}
+
+.panel-title {
+  margin: 0 0 var(--space-xl);
+  max-width: var(--space-measure-title);
+  font-family: var(--type-panel-title-font-family);
+  font-size: var(--type-panel-title-font-size);
+  font-weight: var(--type-panel-title-font-weight);
+  line-height: var(--type-panel-title-line-height);
+  letter-spacing: var(--type-panel-title-letter-spacing);
+  color: var(--color-ink-lift-dark);
+}
+
+.panel-reading {
+  margin: 0;
+}
+
+.panel-reading p {
+  margin: 0 0 var(--space-md);
+  max-width: var(--space-measure-prose);
+  font-family: var(--type-notable-prose-font-family);
+  font-size: var(--type-notable-prose-font-size);
+  font-weight: var(--type-notable-prose-font-weight);
+  line-height: var(--type-notable-prose-line-height);
+  letter-spacing: var(--type-notable-prose-letter-spacing);
+  color: var(--color-ink-prose-dark);
+}
+
+.panel-reading p:last-child {
+  margin-bottom: 0;
+}
+
+.panel-fields {
+  margin: var(--space-xxl) 0 0;
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.panel-fields th,
+.panel-fields td {
+  padding: var(--space-sm) 0;
+  border-top: 1px solid var(--color-surface-edge-dark);
+  text-align: left;
+  vertical-align: baseline;
+}
+
+.panel-fields th {
+  width: 74px;
+  padding-right: var(--space-lg);
+  font-family: var(--type-field-label-font-family);
+  font-size: var(--type-field-label-font-size);
+  font-weight: var(--type-field-label-font-weight);
+  line-height: var(--type-field-label-line-height);
+  letter-spacing: var(--type-field-label-letter-spacing);
+  color: var(--color-ink-label-dark);
+  text-transform: uppercase;
+}
+
+.panel-fields td {
+  font-family: var(--type-field-value-font-family);
+  font-size: var(--type-field-value-font-size);
+  font-weight: var(--type-field-value-font-weight);
+  line-height: var(--type-field-value-line-height);
+  letter-spacing: var(--type-field-value-letter-spacing);
+  color: var(--color-ink-prose-dark);
+}
+
+.panel-skills {
+  margin: var(--space-lg) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--space-sm);
+  font-family: var(--type-field-value-font-family);
+  font-size: var(--type-field-value-font-size);
+  font-weight: var(--type-field-value-font-weight);
+  line-height: var(--type-field-value-line-height);
+  letter-spacing: var(--type-field-value-letter-spacing);
+  color: var(--color-ink-label-dark);
+}
+
+/* The end of the document, not a dismissal: the word after a hairline, no box. */
+.panel-release {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: var(--space-xl) 0 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--type-chrome-font-family);
+  font-size: var(--type-chrome-font-size);
+  font-weight: var(--type-chrome-font-weight);
+  line-height: var(--type-chrome-line-height);
+  letter-spacing: var(--type-chrome-letter-spacing);
+  color: var(--color-ink-label-dark);
+}
+
+.panel-release::before {
+  content: '';
+  flex: none;
+  width: var(--space-sm);
+  border-top: var(--stroke-hairline) solid var(--color-stroke-rest-dark);
+}
+
+.panel-release:hover,
+.panel-release:focus-visible {
+  color: var(--color-ink-prose-dark);
+  outline: none;
+}
+
+.panel-release:hover::before,
+.panel-release:focus-visible::before {
+  width: var(--space-md);
+}
+
+/*
+ * Forced colours replace the ink step with one system colour, and the hairline's
+ * growth alone is too slight to find: there, and only there, keyboard focus gets
+ * the system's own outline, in the system's own colour.
+ */
+@media (forced-colors: active) {
+  .panel-release:focus-visible {
+    outline: 1px solid CanvasText;
+  }
+}

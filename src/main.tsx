@@ -1,5 +1,9 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+// The design tokens as custom properties on `:root`, once, and ahead of `App` so
+// they precede every DOM stylesheet it imports (AD-12). Values only — it styles
+// no element. `panel-model.test.ts` holds the import.
+import './tokens/tokens.css';
 import { App } from './App';
 
 // The mount, and only the mount. `App` renders the DOM destination index
