@@ -169,7 +169,9 @@ test('gate drift: npm run gate exits 1 naming the Skill on a hand-edited tier', 
 
 test('the Skill check never solves', () => {
   const source = readFileSync(INDEX_TS, 'utf8');
-  const body = source.slice(source.indexOf('export function checkSkills'), source.indexOf('export function checkArtifact'));
-  assert.ok(body.length > 0, 'the scan must find the function');
+  const start = source.indexOf('export function checkSkills');
+  const end = source.indexOf('export function checkArtifact');
+  assert.ok(start >= 0 && end > start, 'the scan must find checkSkills, and checkArtifact after it');
+  const body = source.slice(start, end);
   assert.doesNotMatch(body, /runPipeline|writeFileSync|solveLayout|buildArtifact|deriveEntities|buildSkills/);
 });

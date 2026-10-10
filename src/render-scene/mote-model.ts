@@ -33,9 +33,9 @@
  * one Planet ever occupy adjacent slots of one orbit. Each tier draws its dot at
  * a screen-constant radius (2.6 / 2.1 / 1.8px) in its DESIGN.md `mote` fill, and
  * every orbit holding a Mote draws as a `stroke-dust` hairline circle on its tilt
- * — two lines per orbit, one around the focused Planet fading in with its
- * Motes and one around the Planet just left fading out with them, so an
- * `A → B` hand-off never moves a line between Planets in one frame.
+ * — one line per orbit, at the highest level of any Mote on it and around that
+ * Mote's Planet, so on an `A → B` hand-off a line may move between Planets in
+ * one frame.
  * Nothing here reads `moteTier`.
  *
  * **Labels never sit under the panel.** A label is placed from NDC positions,
@@ -678,31 +678,15 @@ export interface MoteDraw {
   readonly labelTransform: string;
 }
 
-/** Which of an orbit's two lines: around the focused Planet, or around the Planet just left. */
-export type MoteOrbitRole = 'condensing' | 'decaying';
-
 /** What the renderer applies to one orbit line. */
 export interface MoteOrbitDraw {
-  /** Its index among `moteOrbitLines()`: `2 · orbit` condensing, `2 · orbit + 1` decaying. */
-  readonly line: number;
+  /** Its orbit, innermost first: also its index among `moteOrbitLines()`. */
   readonly orbit: number;
-  readonly role: MoteOrbitRole;
-  /** Drawn: its opacity is above 0. */
+  /** Drawn: a Mote is on the orbit, so its opacity is above 0. */
   readonly visible: boolean;
   /** The Planet it circles, or `null` while it has none: the line is left where it was. */
   readonly centre: ScenePosition | null;
   readonly opacity: number;
-}
-
-/**
- * An orbit's outgoing line, carried between frames: where it circles, the opacity
- * it had when Focus left that Planet, and seconds since — it fades on the Focus
- * curve, as the Motes leaving that Planet decay.
- */
-export interface MoteOrbitFade {
-  readonly centre: ScenePosition | null;
-  readonly from: number;
-  readonly elapsed: number;
 }
 
 /** What the field carries between frames. */
@@ -713,10 +697,8 @@ export interface MoteField {
   readonly motes: readonly Mote[];
   /** One per `motePool` entry, in pool order. */
   readonly draws: readonly MoteDraw[];
-  /** Two per orbit, innermost first: condensing then decaying, aligned with `moteOrbitLines()`. */
+  /** One per orbit, innermost first, aligned with `moteOrbitLines()`. */
   readonly orbits: readonly MoteOrbitDraw[];
-  /** One per orbit: its outgoing line's fade. */
-  readonly fades: readonly MoteOrbitFade[];
 }
 
 /** What the step reads from the scene. */
@@ -763,12 +745,9 @@ export interface MoteView {
  *     side and the drawn crossing; over the destination slot for `blocked`.
  *     Then `moteLabelPass` over every placed label decides which are shown.
  *   - **Draws:** each dot at its tier's screen radius times the level scale.
- *     Each orbit's condensing line circles the focused Planet at the highest
- *     `min(level, ease(elapsed))` of the condensing Motes on it — so a Mote
- *     handed off at level 1 fades the new line in rather than snapping it. On a
- *     change of Focus, its decaying line takes over the condensing line as it
- *     was drawn (unless the line already fading is brighter) and fades it out
- *     over `FOCUS_SECONDS` on `easeFocus`.
+ *     Each orbit's line is drawn only while a Mote is on that orbit, at the
+ *     highest level of any Mote on it, around that Mote's Planet — so on a
+ *     change of Focus it may move between Planets in one frame.
  *   - **The panel edge** bounds labels while a Project is focused, and still
  *     while any Mote is decaying — after a release the panel is sliding out
  *     over the same move.
@@ -824,8 +803,7 @@ export function stepMotes(
   const motes = placed.map((mote) => ({ ...mote, labelVisible: shown.has(mote.skill) }));
   const byName = new Map(motes.map((mote) => [mote.skill, mote]));
   const draws = motePool(scene.artifact).map((skill) => drawOf(skill, byName.get(skill), view));
-  const fades = orbitFades(previous, changed, step);
-  return { focusedId, clock, motes, draws, orbits: orbitDraws(motes, scene, focusedId, fades), fades };
+  return { focusedId, clock, motes, draws, orbits: orbitDraws(motes, scene) };
 }
 
 /**
@@ -1036,83 +1014,46 @@ export function moteDotColor(artifact: MoteArtifact, skill: string): string {
   return MOTE_DOT_COLORS[moteRank(moteRanks(artifact), skill).orbit] ?? MOTE_DOT_COLORS[0];
 }
 
-/** A fade's opacity: `from` at 0 seconds, eased to 0 at `FOCUS_SECONDS`. */
-function fadeOpacity(fade: MoteOrbitFade): number {
-  return fade.centre === null ? 0 : fade.from * (1 - easeFocus(fade.elapsed / FOCUS_SECONDS));
-}
-
 /**
- * Each orbit's outgoing line this frame. On a change of Focus the condensing
- * line as drawn last frame becomes the outgoing one, from its opacity — unless
- * the line already fading is brighter now, which keeps fading instead. Otherwise
- * the fade advances by `step`.
+ * Each orbit's line this frame. Drawn only while a Mote is on the orbit, at the
+ * highest level of any Mote on it — condensing or decaying — and circling that
+ * Mote's Planet; on a tie the condensing Mote wins, so a line sides with the
+ * focused Planet. On a change of Focus the line therefore moves to whichever
+ * Planet holds the brighter Mote on that orbit: it may jump, by design.
  */
-function orbitFades(previous: MoteField | null, changed: boolean, step: number): MoteOrbitFade[] {
-  return MOTE_ORBIT_RADII.map((_, orbit): MoteOrbitFade => {
-    const was = previous?.fades[orbit] ?? { centre: null, from: 0, elapsed: FOCUS_SECONDS };
-    const advanced = { ...was, elapsed: Math.min(was.elapsed + step, FOCUS_SECONDS) };
-    if (!changed) return advanced;
-    const outgoing = previous?.orbits[2 * orbit];
-    if (outgoing === undefined || outgoing.centre === null || !(outgoing.opacity > 0)) return advanced;
-    if (fadeOpacity(advanced) > outgoing.opacity) return advanced;
-    return { centre: outgoing.centre, from: outgoing.opacity, elapsed: 0 };
-  });
-}
-
-/**
- * Each orbit's two lines this frame, condensing then decaying. The condensing
- * line circles the focused Planet at the highest `min(level, ease(elapsed))` of
- * the condensing Motes on that orbit; the decaying line is the orbit's fade.
- */
-function orbitDraws(motes: readonly Mote[], scene: MoteScene, focusedId: string | null, fades: readonly MoteOrbitFade[]): MoteOrbitDraw[] {
-  const centre = focusedId === null ? null : planetOf(scene.bodies, focusedId).position;
-  return MOTE_ORBIT_RADII.flatMap((_, orbit): MoteOrbitDraw[] => {
-    const arriving = Math.max(
-      0,
-      ...motes
-        .filter((mote) => mote.condensing && mote.orbit === orbit && mote.planetId === focusedId)
-        .map((mote) => Math.min(mote.level, easeFocus(mote.elapsed / FOCUS_SECONDS))),
-    );
-    const fade = fades[orbit] ?? { centre: null, from: 0, elapsed: FOCUS_SECONDS };
-    const leaving = fadeOpacity(fade);
-    return [
-      { line: 2 * orbit, orbit, role: 'condensing', visible: centre !== null && arriving > 0, centre, opacity: centre === null ? 0 : arriving },
-      { line: 2 * orbit + 1, orbit, role: 'decaying', visible: leaving > 0, centre: fade.centre, opacity: leaving },
-    ];
+function orbitDraws(motes: readonly Mote[], scene: MoteScene): MoteOrbitDraw[] {
+  return MOTE_ORBIT_RADII.map((_, orbit): MoteOrbitDraw => {
+    let top: Mote | null = null;
+    for (const mote of motes) {
+      if (mote.orbit !== orbit || !(mote.level > 0)) continue;
+      if (top === null || mote.level > top.level || (mote.level === top.level && mote.condensing && !top.condensing)) top = mote;
+    }
+    if (top === null) return { orbit, visible: false, centre: null, opacity: 0 };
+    return { orbit, visible: true, centre: planetOf(scene.bodies, top.planetId).position, opacity: top.level };
   });
 }
 
 /** One orbit line's geometry: a full circle on the orbit's tilt, about the origin — the field moves it to its Planet. */
 export interface MoteOrbitLine {
   readonly id: string;
-  /** Its index: the `line` of the draws applied to it. */
-  readonly line: number;
+  /** Its orbit: the `orbit` of the draws applied to it. */
   readonly orbit: number;
-  readonly role: MoteOrbitRole;
   readonly points: readonly LinePoint[];
   readonly color: string;
   readonly widthPx: number;
 }
 
 /** Built once: every render hands drei the same points, so no line is rebuilt. */
-const ORBIT_LINES: readonly MoteOrbitLine[] = MOTE_ORBIT_RADII.flatMap((_, orbit) => {
+const ORBIT_LINES: readonly MoteOrbitLine[] = MOTE_ORBIT_RADII.map((_, orbit) => {
   const origin = { x: 0, y: 0, z: 0 };
   const points = Array.from({ length: MOTE_ORBIT_LINE_SEGMENTS + 1 }, (_, i) => {
     const point = orbitPoint(origin, orbit, (2 * Math.PI * (i % MOTE_ORBIT_LINE_SEGMENTS)) / MOTE_ORBIT_LINE_SEGMENTS);
     return [point.x, point.y, point.z] as const;
   });
-  return (['condensing', 'decaying'] as const).map((role, index) => ({
-    id: `mote-orbit:${String(orbit)}:${role}`,
-    line: 2 * orbit + index,
-    orbit,
-    role,
-    points,
-    color: MOTE_ORBIT_LINE_COLOR,
-    widthPx: MOTE_ORBIT_LINE_WIDTH_PX,
-  }));
+  return { id: `mote-orbit:${String(orbit)}`, orbit, points, color: MOTE_ORBIT_LINE_COLOR, widthPx: MOTE_ORBIT_LINE_WIDTH_PX };
 });
 
-/** The six orbit lines — per orbit, innermost first, a condensing one and a decaying one: `stroke-dust` at `hairline`, closed. The same array every call. */
+/** The three orbit lines — one per orbit, innermost first: `stroke-dust` at `hairline`, closed. The same array every call. */
 export function moteOrbitLines(): readonly MoteOrbitLine[] {
   return ORBIT_LINES;
 }

@@ -750,3 +750,18 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-5-mote-tiering-and-label-legibility.md`
   summary: The per-Project `moteTier` (`MOTE_TIERS`) is still emitted but no renderer reads it now that Motes use the per-Skill `SKILL_TIERS`; decide whether to drop it (a schema change) and rename to avoid the near-identical names.
   evidence: `src/render-scene/README.md` states `moteTier` is "not read by the Motes"; `MOTE_TIERS` and `SKILL_TIERS` both use `mote-*` values.
+
+## Deferred from: code review of spec-3-5-mote-tiering-and-label-legibility.md (2026-10-10)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-5-mote-tiering-and-label-legibility.md`
+  summary: The label pass visits decaying Motes too, after the focused Project's, and holds the panel edge until the last one has gone. The spec names only "the focused Project's Motes". This is kept so a decaying label fades with its dot rather than vanishing on release.
+  evidence: `stepMotes` hands every placed Mote to `moteLabelPass` (`focused: false` for decaying ones). The review (2026-10-10) brought the orbit lines back to the spec, but left this as it was.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-5-mote-tiering-and-label-legibility.md`
+  summary: `moteLabelPass` checks Mote labels against each other, the canvas and the panel, but not against the 3.4 hover/keyboard-focus label and leader. Both sit at `zIndexRange={[1, 1]}`, so they can overlap.
+  evidence: The pass's `LabelBounds` carries no affordance box; no test hovers a Planet while a Project is focused.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-5-mote-tiering-and-label-legibility.md`
+  summary: `reslot` accepts a free slot by the panel test alone. The pass now also checks the top, bottom and left edges, so a Mote can glide to a slot where its label is still hidden.
+  evidence: The spec keeps re-slotting as it was; `reslot`'s candidate filter does not call `labelBox`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-5-mote-tiering-and-label-legibility.md`
+  summary: Skill names are counted by exact string. Case or whitespace variants (`Java`/`java`) become separate Skills, splitting the share count and lowering the tier.
+  evidence: `shareCounts` (`src/derive/skills.ts`) keys a Map by the raw name; `NonBlankString` rejects only blank names. A normalisation or near-duplicate warning belongs to the content gate.
