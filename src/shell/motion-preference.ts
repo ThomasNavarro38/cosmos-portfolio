@@ -22,7 +22,8 @@
  *
  * **One writer:** a `matchMedia(REDUCED_MOTION_QUERY)` listener in
  * `scene-host.tsx`, guarded where `matchMedia` is absent. **The readers** are
- * the camera rig, the Mote field and the Focus panel; the models take `reduced`
+ * the camera rig, the Mote field, the Focus panel and the corner chrome (3.8,
+ * whose slot moves with the panel); the models take `reduced`
  * as an argument and map it through `motionPace`. A source audit in
  * `scene-model.test.ts` pins that set, so no capability judgement reads it.
  *

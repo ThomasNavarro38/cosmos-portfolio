@@ -1,0 +1,110 @@
+/**
+ * The corner chrome, rendered (3.8, DESIGN.md §7.9, UX-DR27): the identity line
+ * top-left, and the stateful slot bottom-right.
+ *
+ * **A mapping, and nothing else.** What each corner says, which state makes the
+ * slot a control, and where the slot sits while the panel is open all live in
+ * `chrome-model.ts`, which is pure and executed under `node --test`. This file
+ * cannot be loaded by that runner (`.tsx`), so it is kept thin enough that
+ * reading it suffices, and `chrome-model.test.ts` scans it for anything that
+ * would be a rule of its own.
+ *
+ * What it holds, and why each is here rather than in the model:
+ *
+ *   - **Two selector subscriptions** — `mode` and `focusedProjectId`, the slot's
+ *     only inputs — never the whole store, so the Rail's sixty progress writes a
+ *     second re-render nothing.
+ *   - **The reduced-motion pace** (2.10), read with `useSyncExternalStore` as
+ *     `focus-panel.tsx` reads it, and handed to `slotStyle`, so the slot moves
+ *     with the panel's slide on `FOCUS_SECONDS × pace`.
+ *   - **The hand-back** — a stable React 19 ref cleanup on the slot's button. A
+ *     button that unmounts while it holds DOM focus would drop focus to
+ *     `<body>`. On resume (a click, `Escape`, or `Home` through `goHome`) the
+ *     button gives way to the
+ *     instruction text, so the cleanup hands focus to the index's `overview`,
+ *     found by `OVERVIEW_ID`, exactly when the button still holds it — and only
+ *     when the button's last action was `return`, read off its own
+ *     `data-action` rather than the store (which has already moved on). A
+ *     release from the Rail unmounts the button too, but its focus target is
+ *     `focusMove`'s alone (the Project's entry), so the cleanup leaves it be:
+ *     DOM focus moves once, never to `overview` first. Stable (`useCallback`, no
+ *     dependencies), so it runs on unmount and never on a re-render: a release
+ *     in free flight turns the button from `esc — release` into `↩ resume the
+ *     journey` in place — the same element — and its cleanup does not run.
+ *
+ * **Exactly two lines, and one persistent slot.** The slot is one `<p>` mounted
+ * in every state, carrying the position and the `right` transition, so the
+ * transition runs on every change of Focus — Rail ↔ Focus included — and the
+ * slot moves with the panel rather than jumping. Its content is the instruction
+ * text or one `<button>` — one element for both actions, so a swap of action
+ * keeps the element. Each button's accessible name is its visible text. No store
+ * event is called here: the click hands the model's `action` to its door in
+ * `activate.ts`, `returnToRail` or `releaseLayer`.
+ *
+ * **One click, one layer.** Because the element is reused, a double-click in
+ * free flight while Focused would release Focus on its first click and then —
+ * the same button now reading resume — return to the Rail on its second,
+ * unwinding two layers. So a click whose `event.detail > 1` (the second or later
+ * click of a multi-click) is ignored. The trade-off is deliberate: a second
+ * click meant as a second action, landing within the system's double-click
+ * interval, is ignored too — one click, one layer. A keyboard activation has
+ * `detail` 0, so it passes that guard; instead a held Enter, whose auto-repeated
+ * keydowns would each synthesize a click (release, then resume on the same
+ * button), has the default of every repeated keydown prevented, so one press
+ * releases one layer — the rule `keyAction` applies to `Escape`. Space activates
+ * on keyup and needs nothing.
+ *
+ * **The treatment is `corner-chrome.css`**: the `chrome` type role at
+ * `ink-label`, fixed at the `--space-xl` inset, below the panel. Only the slot's
+ * `right` and its transition are inline, because they follow the state.
+ */
+
+import { useCallback, useSyncExternalStore } from 'react';
+import { useStore } from 'zustand/react';
+import { releaseLayer, returnToRail } from './activate.ts';
+import { IDENTITY_LINE, chromeSlot, slotStyle } from './chrome-model.ts';
+import { OVERVIEW_ID } from './index-model.ts';
+import { motionPace, reducedMotion, subscribeReducedMotion } from './motion-preference.ts';
+import { navigationStore } from './state.ts';
+import './corner-chrome.css';
+
+/** The two chrome lines. Always in the document; the slot swaps its content. */
+export function CornerChrome() {
+  const mode = useStore(navigationStore, (state) => state.mode);
+  const focusedProjectId = useStore(navigationStore, (state) => state.focusedProjectId);
+  const pace = motionPace(useSyncExternalStore(subscribeReducedMotion, reducedMotion));
+  const slot = chromeSlot(mode, focusedProjectId);
+  const style = slotStyle(focusedProjectId !== null, pace);
+  // Stable, so React calls its cleanup only when the button unmounts — an inline
+  // callback would be cleaned up on every re-render and move focus spuriously.
+  const handBack = useCallback(
+    (button: HTMLButtonElement | null) => () => {
+      if (button?.dataset.action === 'return' && button.matches(':focus')) document.getElementById(OVERVIEW_ID)?.focus();
+    },
+    [],
+  );
+
+  return (
+    <>
+      <p className="chrome-identity">{IDENTITY_LINE}</p>
+      <p className="chrome-slot" style={style}>
+        {slot.kind === 'control' ? (
+          <button
+            type="button"
+            ref={handBack}
+            className="chrome-slot-control"
+            data-action={slot.action}
+            onClick={(event) => (event.detail > 1 ? undefined : slot.action === 'return' ? returnToRail() : releaseLayer())}
+            onKeyDown={(event) => {
+              if (event.repeat) event.preventDefault();
+            }}
+          >
+            {slot.text}
+          </button>
+        ) : (
+          slot.text
+        )}
+      </p>
+    </>
+  );
+}

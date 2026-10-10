@@ -17,6 +17,12 @@
  * responsibility, and it comes last in document order because it is read after a
  * destination is chosen.
  *
+ * The corner chrome (3.8) sits between the index and the scene host:
+ * `./shell/corner-chrome.tsx` holds it — the identity line and the stateful slot
+ * whose button is the page's one return button. After the index, so the destinations
+ * are walked first; before the scene and the panel. So the document order is
+ * index, chrome, scene host, panel.
+ *
  * `generated/layout.generated.json` resolves outside `src/`, so importing it
  * crosses no declared boundary — `src/shell/` names it explicitly as a permitted
  * static import, and the entry stub's own rule bans only `src/data/` and
@@ -27,6 +33,7 @@
  */
 
 import artifact from '../generated/layout.generated.json';
+import { CornerChrome } from './shell/corner-chrome.tsx';
 import { FocusPanel } from './shell/focus-panel.tsx';
 import { DestinationNav } from './shell/index-nav.tsx';
 import { SceneHost } from './shell/scene-host.tsx';
@@ -41,6 +48,7 @@ export function App() {
   return (
     <main>
       <DestinationNav artifact={artifact} />
+      <CornerChrome />
       <SceneHost artifact={artifact} />
       <FocusPanel artifact={artifact} />
     </main>

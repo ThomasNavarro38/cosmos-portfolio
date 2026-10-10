@@ -775,3 +775,19 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-7-the-notable-and-the-editorial-rule-line.md`
   summary: A stale test comment says `career.json` "holds one Client with one Project and that Project is already Deep".
   evidence: `src/derive/maintenance.test.ts:274`; the committed file now holds 8 Projects (1 Deep, 7 Shallow).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-corner-chrome-and-the-stateful-instruction-slot.md`
+  summary: The fixed left-top identity line overlaps the still-unstyled greybox destination index on a white page, and the vertical scrollbar shifts the 40px inset.
+  evidence: Seen in the 3.8 browser check at 1440×900 — the page outside the scene has no layout yet, so the chrome sits over the in-flow `<nav>` list; the fix is page layout, not chrome.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-corner-chrome-and-the-stateful-instruction-slot.md`
+  summary: `src/derive/solve.test.ts` writes and deletes `src/derive/.mutant-N.ts` inside the tree while concurrent tests scan `src/`, so `npm test` intermittently fails with ENOENT on a mutant file.
+  evidence: Observed during 3.8 verification — 1 of 3 full runs failed (`ENOENT … src\derive\.mutant-4.ts`) with `src/derive/` untouched by the diff; passes with `--test-concurrency=1`. Fix: write mutants to an OS temp directory.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-corner-chrome-and-the-stateful-instruction-slot.md`
+  summary: The corner slot's runtime behaviour — the focus hand-back to `overview` after a resume (and never after a release), the in-place release → resume element reuse, and the multi-click/repeat guards — is pinned only by source-text audits; no test renders `CornerChrome`.
+  evidence: 3.8 review (verification gap) — `node --test` has no JSX transform or DOM, the same gap deferred in 3.7; checked live in the browser only. A jsdom-backed harness or a scripted browser check would close it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-8-corner-chrome-and-the-stateful-instruction-slot.md`
+  summary: The Rail instruction `scroll ↓ — time runs backward` reads only `mode`/`focusedProjectId`, so it still shows when the scene chunk fails and the error boundary leaves the DOM index alone.
+  evidence: 3.8 review — `chromeSlot` has no input for renderer availability; the Fallback's own chrome (Epic 4, DESIGN.md §7.10) is where the slot's wording for a scene-less surface belongs.

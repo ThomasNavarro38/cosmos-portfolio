@@ -1,0 +1,69 @@
+/*
+ * The corner chrome's treatment (3.8, DESIGN.md §3, §7.9). Every colour, family,
+ * size and inset is a token custom property from `src/tokens/tokens.css`; the
+ * only literal length is the forced-colours outline's 1px. `chrome-model.test.ts`
+ * holds each declaration.
+ *
+ * Both lines are fixed at the `--space-xl` (40px) inset, in the `chrome` type
+ * role at `ink-label`, below the panel's layer (`z-index` 1). The slot's
+ * `right` and its transition are inline (`slotStyle`), because they follow the
+ * state: 40px with nothing focused, 40px left of the panel while Focused.
+ *
+ * The strings are set as authored — no `text-transform`. The lines take no
+ * pointer; the slot's button does, and mirrors `.panel-release`: no box, no
+ * background, no border, the line's type and ink inherited, raised to
+ * `ink-prose` on hover and `:focus-visible`.
+ */
+
+.chrome-identity,
+.chrome-slot {
+  position: fixed;
+  z-index: 1;
+  margin: 0;
+  pointer-events: none;
+  font-family: var(--type-chrome-font-family);
+  font-size: var(--type-chrome-font-size);
+  font-weight: var(--type-chrome-font-weight);
+  line-height: var(--type-chrome-line-height);
+  letter-spacing: var(--type-chrome-letter-spacing);
+  color: var(--color-ink-label-dark);
+}
+
+.chrome-identity {
+  top: var(--space-xl);
+  left: var(--space-xl);
+}
+
+.chrome-slot {
+  bottom: var(--space-xl);
+}
+
+/* The control inside the slot: the line's own type and ink, no box. */
+.chrome-slot-control {
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.chrome-slot-control:hover,
+.chrome-slot-control:focus-visible {
+  color: var(--color-ink-prose-dark);
+  outline: none;
+}
+
+/*
+ * Forced colours replace the ink step with one system colour, so the raised ink
+ * cannot show keyboard focus: there, and only there, it gets the system's own
+ * outline, in the system's own colour.
+ */
+@media (forced-colors: active) {
+  .chrome-slot-control:focus-visible {
+    outline: 1px solid CanvasText;
+  }
+}
