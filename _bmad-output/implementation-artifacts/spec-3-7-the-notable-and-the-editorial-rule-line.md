@@ -115,7 +115,7 @@ context:
 
 ### Review Findings
 
-- [ ] [Review][Decision] Under `forced-colors` the `ink-prose` → `ink-lift` step is flattened, so the constraint sentence is not distinguished there. The frozen spec gives `.panel-lift` `color` as its only declaration; any fallback (as 3.6 ruled for the release outline) needs Thomas's ruling.
+- [x] [Review][Decision] (Resolved 2026-10-10: Thomas ruled it an exception, as in 3.6 — see Design Notes) Under `forced-colors` the `ink-prose` → `ink-lift` step is flattened, so the constraint sentence is not distinguished there. The frozen spec gives `.panel-lift` `color` as its only declaration; any fallback (as 3.6 ruled for the release outline) needs Thomas's ruling.
 - [x] [Review][Patch] A lift holding several sentences passed; it now fails ("one sentence, not several") [src/data/schema.ts]
 - [x] [Review][Patch] Two spaces or a hard-wrapped newline before `[[` was rejected; whitespace runs are now accepted [src/data/schema.ts]
 - [x] [Review][Patch] `…` and `»` were not sentence ends; both are now [src/data/schema.ts]
@@ -130,6 +130,8 @@ context:
 ## Design Notes
 
 The marker lives in the data because only the author knows which sentence carries the constraint. An inline marker keeps the ten-field schema and keeps promotion a one-string edit (FR-5). Parsing it in the panel model is presentation, like the paragraph split. It is not classification, which stays `isDeep` (AD-3). The Colophon's raw data view (Epic 5) will show `[[…]]`; that is the data as authored.
+
+Ruled exception (Thomas, 2026-10-10, mirroring 3.6's release outline): under `@media (forced-colors: active)` only, `.panel-lift` takes `color: Highlight`. Forced colours flatten the `ink-prose` → `ink-lift` step, which would leave the constraint sentence indistinguishable. It is the one exception to "`color: ink-lift` as its only declaration". `Highlight` is a system colour, not a palette colour, and the treatment stays ink alone: no box, rule or weight.
 
 Each reading child now carries its own top margin, and the title carries none, because a collapsing 40px would swallow the rule's 34px.
 

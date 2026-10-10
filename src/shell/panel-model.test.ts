@@ -680,6 +680,8 @@ const EXPECTED: readonly (readonly [string | null, string, string, string])[] = 
   [null, '.panel-release:hover::before, .panel-release:focus-visible::before', 'width', 'var(--space-md)'],
   // Forced colours flatten the ink step, so keyboard focus there is the system outline.
   [FORCED_COLORS, '.panel-release:focus-visible', 'outline', '1px solid CanvasText'],
+  // …and the lift, whose ink step is flattened there, takes the system accent — ink alone (ruled 2026-10-10).
+  [FORCED_COLORS, '.panel-lift', 'color', 'Highlight'],
 ];
 
 /**
@@ -807,6 +809,8 @@ test('the stylesheet audit rejects the real stylesheet with any one departure', 
     ['the panel selector renamed', (s) => s.replace(/#focus-panel \{/g, '#panel {')],
     ['no dark color-scheme', (s) => s.replace('color-scheme: dark;', '')],
     ['no forced-colours focus', (s) => s.replace('outline: 1px solid CanvasText;', 'outline: none;')],
+    ['no forced-colours lift', (s) => s.replace('color: Highlight;', '')],
+    ['a forced-colours lift boxed', (s) => s.replace('color: Highlight;', 'color: Highlight;\n    outline: 1px solid Highlight;')],
     ['an outline on hover', (s) => s.replace(/(:focus-visible \{\s*color: var\(--color-ink-prose-dark\);\s*)outline: none;/, '$1outline: 1px solid var(--color-stroke-focus-dark);')],
     ['an @supports block', (s) => `${s}\n@supports (display: grid) {\n  .panel-title {\n    font-size: 30px;\n  }\n}\n`],
     ['a rem literal', (s) => s.replace('margin: var(--space-lg) 0 0;', 'margin: 1.75rem 0 0;')],

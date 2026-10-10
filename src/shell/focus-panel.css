@@ -189,10 +189,17 @@
 /*
  * Forced colours replace the ink step with one system colour, and the hairline's
  * growth alone is too slight to find: there, and only there, keyboard focus gets
- * the system's own outline, in the system's own colour.
+ * the system's own outline, in the system's own colour. The lift's ink step is
+ * flattened the same way, so there the constraint sentence takes the system's
+ * accent colour instead — a colour still, never a box or a rule.
  */
 @media (forced-colors: active) {
   .panel-release:focus-visible {
     outline: 1px solid CanvasText;
+  }
+
+  /* The ink step is flattened too, so the lifted sentence takes the system's accent — still ink alone, still in the flow. */
+  .panel-lift {
+    color: Highlight;
   }
 }
