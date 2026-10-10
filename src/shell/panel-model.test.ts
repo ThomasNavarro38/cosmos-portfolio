@@ -487,7 +487,11 @@ function declarationsOf(css: string): CssDeclaration[] {
     for (const [, selector, block] of body.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
       for (const declaration of (block ?? '').split(';')) {
         const colon = declaration.indexOf(':');
-        if (colon === -1) continue;
+        if (colon === -1) {
+          // A fragment with no colon is a typo the browser drops; keep it so the audit fails on it.
+          if (declaration.trim() !== '') out.push({ media, selector: squash(selector ?? ''), property: squash(declaration), value: '' });
+          continue;
+        }
         out.push({ media, selector: squash(selector ?? ''), property: squash(declaration.slice(0, colon)), value: squash(declaration.slice(colon + 1)) });
       }
     }
@@ -518,11 +522,17 @@ const TYPE_PROPERTIES = ['font-family', 'font-size', 'font-weight', 'line-height
 const BREAKPOINT = '(max-width: 1199.98px)';
 const FORCED_COLORS = '(forced-colors: active)';
 
-/** Every other value the panel's treatment fixes, as `[media, selector, property, value]`. */
+/**
+ * Every other declaration of the treatment, as `[media, selector, property, value]`.
+ * With `TYPE_ROLES` this is the whole stylesheet: a declaration in neither fails,
+ * so a dropped `display: flex` or a stray rule is a failure, not a silent pass.
+ */
 const EXPECTED: readonly (readonly [string | null, string, string, string])[] = [
   // Padding: 56/56/60, the sides stepping down below 1200px (DESIGN.md §4, D-A3).
   [null, `#${FOCUS_PANEL_ID}`, '--panel-padding', 'var(--space-panel-pad-top) var(--space-panel-pad-x) var(--space-panel-pad-bottom)'],
   [null, `#${FOCUS_PANEL_ID}`, 'color-scheme', 'dark'],
+  // A long word, URL or Skill breaks rather than overflow a narrow column; no width changes.
+  [null, `#${FOCUS_PANEL_ID}`, 'overflow-wrap', 'anywhere'],
   [BREAKPOINT, `#${FOCUS_PANEL_ID}`, '--panel-padding', 'var(--space-panel-pad-top) clamp(16px, 5vw, var(--space-xl)) var(--space-panel-pad-bottom)'],
   // Rhythm (DESIGN.md §4): kicker→title 22, title→prose 40, ¶→¶ 20, prose→table 52.
   [null, '.panel-kicker', 'margin', '0 0 22px'],
@@ -531,11 +541,16 @@ const EXPECTED: readonly (readonly [string | null, string, string, string])[] = 
   [null, '.panel-reading p', 'margin', '0 0 var(--space-md)'],
   [null, '.panel-reading p:last-child', 'margin-bottom', '0'],
   [null, '.panel-fields', 'margin', 'var(--space-xxl) 0 0'],
+  [null, '.panel-fields', 'width', '100%'],
+  [null, '.panel-fields', 'border-collapse', 'collapse'],
+  [null, '.panel-fields', 'border-spacing', '0'],
   // Field rows: 12px each side of a 1px surface-edge rule; a 74px label column and a 28px gap.
   [null, '.panel-fields th, .panel-fields td', 'padding', 'var(--space-sm) 0'],
   [null, '.panel-fields th, .panel-fields td', 'border-top', '1px solid var(--color-surface-edge-dark)'],
   [null, '.panel-fields th', 'width', '74px'],
   [null, '.panel-fields th', 'padding-right', 'var(--space-lg)'],
+  [null, '.panel-fields th, .panel-fields td', 'text-align', 'left'],
+  [null, '.panel-fields th, .panel-fields td', 'vertical-align', 'baseline'],
   // Measures: they do not widen with the panel.
   [null, '.panel-title', 'max-width', 'var(--space-measure-title)'],
   [null, '.panel-reading p', 'max-width', 'var(--space-measure-prose)'],
@@ -552,14 +567,22 @@ const EXPECTED: readonly (readonly [string | null, string, string, string])[] = 
   [null, '.panel-fields th', 'text-transform', 'uppercase'],
   // The Skills: 28px below the table, an inline run with no bullets.
   [null, '.panel-skills', 'margin', 'var(--space-lg) 0 0'],
+  [null, '.panel-skills', 'padding', '0'],
   [null, '.panel-skills', 'list-style', 'none'],
+  [null, '.panel-skills', 'display', 'flex'],
   [null, '.panel-skills', 'flex-wrap', 'wrap'],
   [null, '.panel-skills', 'column-gap', 'var(--space-sm)'],
   // Release (DESIGN.md §7.6a): 40px below, a 12px stroke-rest hairline 8px before the word…
   [null, '.panel-release', 'margin', 'var(--space-xl) 0 0'],
+  [null, '.panel-release', 'display', 'flex'],
+  [null, '.panel-release', 'align-items', 'center'],
   [null, '.panel-release', 'gap', 'var(--space-xs)'],
+  [null, '.panel-release', 'padding', '0'],
   [null, '.panel-release', 'background', 'none'],
   [null, '.panel-release', 'border', '0'],
+  [null, '.panel-release', 'cursor', 'pointer'],
+  [null, '.panel-release::before', 'content', "''"],
+  [null, '.panel-release::before', 'flex', 'none'],
   [null, '.panel-release::before', 'width', 'var(--space-sm)'],
   [null, '.panel-release::before', 'border-top', 'var(--stroke-hairline) solid var(--color-stroke-rest-dark)'],
   // …raised to ink-prose and a 20px hairline on hover and keyboard focus — no box.
@@ -594,6 +617,15 @@ function auditStylesheet(css: string, tokensCss: string): string[] {
       const value = `var(--type-${role}-${property})`;
       const found = find(null, selector, property);
       if (found.length !== 1 || found[0] !== value) failures.push(`${selector} is not set in ${role}: ${property} found ${JSON.stringify(found)}`);
+    }
+  }
+  const known = new Set([
+    ...EXPECTED.map(([media, selector, property]) => `${media ?? ''}|${selector}|${property}`),
+    ...TYPE_ROLES.flatMap(([selector]) => TYPE_PROPERTIES.map((property) => `|${selector}|${property}`)),
+  ]);
+  for (const { media, selector, property, value } of declarations) {
+    if (selector !== '@' && !known.has(`${media ?? ''}|${selector}|${property}`)) {
+      failures.push(`${media ?? ''} ${selector} { ${property}: ${value} } is not part of the treatment`);
     }
   }
   const tokens = new Set([...tokensCss.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
@@ -691,6 +723,18 @@ test('the stylesheet audit rejects the real stylesheet with any one departure', 
     ['a quiet kicker', (s) => s.replace(/color: var\(--color-ink-label-dark\);(\r?\n\s*)text-transform: uppercase;/, 'color: var(--color-ink-quiet-dark);$1text-transform: uppercase;')],
     ['a literal size', (s) => s.replace('font-size: var(--type-panel-title-font-size);', 'font-size: 23px;')],
     ['a mixed-case kicker', (s) => s.replace('text-transform: uppercase;', 'text-transform: none;')],
+    ['the release not a flex row', (s) => s.replace(/(\.panel-release \{\s*)display: flex;/, '$1')],
+    ['the Skills not a flex run', (s) => s.replace(/(\.panel-skills \{[^}]*?)display: flex;/, '$1')],
+    ['the field rules not collapsed', (s) => s.replace('border-collapse: collapse;', '')],
+    ['no overflow-wrap', (s) => s.replace('overflow-wrap: anywhere;', '')],
+    ['a stray rule', (s) => `${s}\n#focus-panel h2 {\n  margin: 0;\n}\n`],
+    ['an !important', (s) => s.replace('margin: 0 0 22px;', 'margin: 0 0 22px !important;')],
+    ['a font shorthand', (s) => s.replace('.panel-title {', '.panel-title {\n  font: 500 30px serif;')],
+    ['a border-top longhand', (s) => s.replace('.panel-kicker {', '.panel-kicker {\n  border-top-style: solid;')],
+    ['an ex literal', (s) => s.replace('margin: var(--space-lg) 0 0;', 'margin: 3ex 0 0;')],
+    ['a label set as a value', (s) => s.replace('font-family: var(--type-field-label-font-family);', 'font-family: var(--type-field-value-font-family);')],
+    ['a declaration with no colon', (s) => s.replace('cursor: pointer;', 'cursor pointer;')],
+    ['no last-paragraph reset', (s) => s.replace(/\.panel-reading p:last-child \{\s*margin-bottom: 0;\s*\}/, '')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);

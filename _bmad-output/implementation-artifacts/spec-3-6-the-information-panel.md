@@ -3,7 +3,7 @@ title: 'The information panel'
 type: 'feature'
 created: '2026-10-10'
 status: 'done'
-review_loop_iteration: 0
+review_loop_iteration: 1
 baseline_commit: '8b194f36bc4d820cd57debf5bb7136d6f6b7d0e9'
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-3-context.md'
@@ -113,11 +113,19 @@ context:
 - [x] [Review][Patch] The committed-kicker test repeated the model's formula. It now also asserts that every Company is null or a trimmed, non-blank name [src/shell/panel-model.test.ts]
 - [x] [Review][Defer] At phone width the `46vw` panel leaves a ~150px text column, with no `overflow-wrap` — deferred, pre-existing (2.7 width, D-A3)
 
+Second pass (2026-10-10):
+
+- [x] [Review][Decision] (Resolved 2026-10-10: Thomas ruled it an exception — see Design Notes) The forced-colours focus outline and `CanvasText` versus the frozen spec — Always › Release says "no outline", and AC2 says "no literal colour". The first pass added `@media (forced-colors: active) { .panel-release:focus-visible { outline: 1px solid CanvasText } }`, and the audit exempts it. DESIGN.md §7.3 says "Focus visibility is never suppressed", and §7.6a says only "No fill, no box". The spec text has not been renegotiated, so either the human owner rules it an exception or it comes out.
+- [x] [Review][Patch] The stylesheet audit is not exhaustive. `display: flex` on `.panel-release` (without it the `::before` hairline vanishes) and on `.panel-skills` (without it the wrap and gap are dead), as well as `border-collapse`, `border-spacing`, `list-style`, `padding`, `cursor` and `align-items`, can each be deleted with no test failing. Unknown selectors, `!important`, the `font` shorthand, `border-top-*` longhands and units outside the regex list (`ex`, `lh`, `dvw`…) all pass. Make the declaration set exact, so that every declaration is in `EXPECTED` or `TYPE_ROLES` and nothing else is allowed, and add mutations [src/shell/panel-model.test.ts:648]
+- [x] [Review][Patch] There is no `overflow-wrap` on the panel text. A long unbroken word, URL or Skill overflows the narrow column. Adding `overflow-wrap` changes no width, so the Never list does not block it. Also correct the deferred entry, whose reason and arithmetic are wrong: 74 + 28 ≈ 70% of a ~148px column [src/shell/focus-panel.css:271]
+
 ## Design Notes
 
 Margins in normal flow, rather than flex `gap`, are what let the empty Shallow reading slot collapse. The title's 40px and the table's 52px collapse to 52px, so a Shallow panel shows no hole. In 3.7 the rule line's 34px top margin slots in the same way.
 
 The release uses no outline because DESIGN §7.6a says "no box". Its focus indicator is the ink step plus the hairline extension. The container `outline: none` stops a focus ring from becoming a second panel boundary on programmatic focus; the container has `tabindex=-1` and is never in the tab order.
+
+Ruled exception (Thomas, 2026-10-10): under `@media (forced-colors: active)` only, the release's `:focus-visible` draws `outline: 1px solid CanvasText`. Forced colours flatten the ink step, and DESIGN.md §7.3 says "Focus visibility is never suppressed". This is the one exception to "no outline" and "no literal colour". `CanvasText` is a system colour, not a palette colour, and it applies only in that mode.
 
 ## Verification
 

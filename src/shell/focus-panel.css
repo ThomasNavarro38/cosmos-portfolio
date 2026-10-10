@@ -13,10 +13,15 @@
  * file sets only the padding they read, because only a stylesheet can step it.
  */
 
-/* `color-scheme` so the scrollbar the browser draws is a dark one on the dark surface. */
+/*
+ * `color-scheme` so the scrollbar the browser draws is a dark one on the dark
+ * surface. `overflow-wrap`, inherited by every block (the outgoing layer too), so
+ * a long word, URL or Skill breaks inside a narrow column instead of overflowing it.
+ */
 #focus-panel {
   --panel-padding: var(--space-panel-pad-top) var(--space-panel-pad-x) var(--space-panel-pad-bottom);
   color-scheme: dark;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 1199.98px) {
