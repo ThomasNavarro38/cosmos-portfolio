@@ -2,12 +2,15 @@
  * The Focus panel's visual treatment (DESIGN.md §3, §4, §7.6, §7.6a). Every
  * colour, family, size and spacing step is a token custom property from
  * `src/tokens/tokens.css`; the only literal lengths are values DESIGN.md states
- * without a token (the 22px kicker gap, the 74px label column, the 1px rule) and
- * the phone floor of the padding step. `panel-model.test.ts` holds each value.
+ * without a token (the 22px kicker gap, the 34px rule gap, the 74px label column,
+ * the 1px rule) and the phone floor of the padding step. `panel-model.test.ts`
+ * holds each value.
  *
- * The rhythm is margins in normal flow, not a flex gap, so a Shallow Project's
- * empty reading slot collapses away: the title's 40px and the table's 52px meet
- * and collapse to 52px, leaving no hole where the Notable would be.
+ * The rhythm is margins in normal flow, not a flex gap. The title carries no
+ * bottom margin: each reading child brings its own top margin — 40px before the
+ * Notable, 34px before the rule line — because a collapsing 40px on the title
+ * would swallow the rule's 34px. The reading slot itself has no margin, so the
+ * children's margins pass through it to meet the table's 52px.
  *
  * The container's own surface, border and slide are inline (`panelStyle`); this
  * file sets only the padding they read, because only a stylesheet can step it.
@@ -42,7 +45,7 @@
 }
 
 .panel-title {
-  margin: 0 0 var(--space-xl);
+  margin: 0;
   max-width: var(--space-measure-title);
   font-family: var(--type-panel-title-font-family);
   font-size: var(--type-panel-title-font-size);
@@ -56,7 +59,7 @@
   margin: 0;
 }
 
-.panel-reading p {
+.panel-prose {
   margin: 0 0 var(--space-md);
   max-width: var(--space-measure-prose);
   font-family: var(--type-notable-prose-font-family);
@@ -67,8 +70,33 @@
   color: var(--color-ink-prose-dark);
 }
 
-.panel-reading p:last-child {
+.panel-prose:first-child {
+  margin-top: var(--space-xl);
+}
+
+.panel-prose:last-child {
   margin-bottom: 0;
+}
+
+/* The constraint sentence (DESIGN.md §7.7): brighter ink, and nothing else — it stays in the flow of its paragraph. */
+.panel-lift {
+  color: var(--color-ink-lift-dark);
+}
+
+/*
+ * A Shallow Project's reading position (DESIGN.md §7.8): an aside in the author's
+ * voice, closer to the title than prose would sit, on a shorter measure, raised
+ * to ink-label by the contrast floor.
+ */
+.panel-rule {
+  margin: 34px 0 0;
+  max-width: var(--space-measure-rule);
+  font-family: var(--type-editorial-rule-font-family);
+  font-size: var(--type-editorial-rule-font-size);
+  font-weight: var(--type-editorial-rule-font-weight);
+  line-height: var(--type-editorial-rule-line-height);
+  letter-spacing: var(--type-editorial-rule-letter-spacing);
+  color: var(--color-ink-label-dark);
 }
 
 .panel-fields {

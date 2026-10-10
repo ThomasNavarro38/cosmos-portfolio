@@ -60,8 +60,10 @@
  * **The treatment is `focus-panel.css`** (3.6): each block carries a
  * `panel-<kind>` class and the stylesheet sets its type, ink, rhythm and measure
  * from the token custom properties; the release's hover and `:focus-visible`
- * states are there too, because no inline style can hold them. The Notable's
- * lifted sentence and the Shallow editorial rule are 3.7's.
+ * states are there too, because no inline style can hold them. The reading
+ * position (3.7) is the Notable's paragraphs, its constraint sentence an inline
+ * `panel-lift` span in the flow of its paragraph — brighter ink, no element that
+ * carries weight or emphasis — or, on a Shallow Project, the `panel-rule` line.
  */
 
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
@@ -183,9 +185,15 @@ function PanelBlocks({ blocks, titleId }: PanelBlocksProps) {
       case 'reading':
         return (
           <div key={block.kind} className="panel-reading">
-            {block.paragraphs.map((paragraph, index) => (
-              <p key={index}>{paragraph}</p>
-            ))}
+            {block.reading.kind === 'rule' ? (
+              <p className="panel-rule">{block.reading.text}</p>
+            ) : (
+              block.reading.paragraphs.map((runs, index) => (
+                <p key={index} className="panel-prose">
+                  {runs.map((run, at) => (run.lifted ? <span key={at} className="panel-lift">{run.text}</span> : run.text))}
+                </p>
+              ))
+            )}
           </div>
         );
       case 'fields':

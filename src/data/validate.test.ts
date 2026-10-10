@@ -26,6 +26,9 @@ import { readCareerFile, validateCareer } from './validate.ts';
 const CAREER_JSON = fileURLToPath(new URL('./career.json', import.meta.url));
 const VALIDATE_TS = fileURLToPath(new URL('./validate.ts', import.meta.url));
 
+/** A valid Notable: prose with its one constraint sentence marked for the lift. */
+const MARKED = 'Problem stated. [[The constraint, in one sentence.]] The decision taken.';
+
 /** A minimal valid entry. Tests clone and mutate it one field at a time. */
 function baseEntry(): Record<string, unknown> {
   return {
@@ -36,7 +39,7 @@ function baseEntry(): Record<string, unknown> {
     built: 'Replaced a commercial Oracle MDM with a Spring Boot application.',
     team_size: 11,
     duration: { start: '2019-01', end: '2021-01' },
-    notable: 'Problem, constraint, decision.',
+    notable: MARKED,
     skills: ['Java', 'Spring Boot'],
   };
 }
@@ -73,7 +76,7 @@ test('a minimal valid entry passes', () => {
 test('a `notabel` typo fails and names both the field and the entry', () => {
   const entry = baseEntry();
   delete entry['notable'];
-  entry['notabel'] = 'Problem, constraint, decision.';
+  entry['notabel'] = 'Problem stated. [[The constraint, in one sentence.]] The decision taken.';
 
   const failures = validateCareer(fileWith(baseEntry(), entry));
   assertFails(failures, /notabel/, 'the message must name the unknown field');
@@ -114,7 +117,7 @@ test('an unknown field on an entry missing its names still reports an index', ()
 
 test('a populated `notable` passes with no type flag in the data', () => {
   const entry = baseEntry();
-  entry['notable'] = 'A real decision, argued for and against.';
+  entry['notable'] = 'A real decision. [[It was argued for and against.]]';
   assert.deepEqual(validateCareer(fileWith(entry)), []);
 
   const parsed = CareerSchema.parse(fileWith(entry));
@@ -125,6 +128,63 @@ test('a populated `notable` passes with no type flag in the data', () => {
     [],
     'no field may encode entity kind',
   );
+});
+
+// --- The lifted constraint sentence -------------------------------------------
+
+test('a Notable marks its constraint as one whole sentence inside a paragraph, wherever it sits', () => {
+  for (const notable of [
+    MARKED,
+    '[[The constraint comes first.]] Then the rest.',
+    'The rest comes first. [[Then the constraint!]]',
+    'First paragraph.\n\nA second. [[The constraint, “quoted.”]] A third.',
+    'A question first? [[Then the constraint.)]]\n\nThen more.',
+    'Two spaces before.  [[The constraint.]] After.',
+    'A hard-wrapped line.\n  [[The constraint, wrapped\nacross a line.]] After.',
+    'First paragraph.\n\n   [[The second opens with it.]] Then more.',
+    'It trailed off… [[The constraint ends the same way…]] After.',
+    '«Quoted.» [[The constraint, «quoted.»]] After.',
+  ]) {
+    const entry = baseEntry();
+    entry['notable'] = notable;
+    assert.deepEqual(validateCareer(fileWith(entry)), [], JSON.stringify(notable));
+  }
+});
+
+test('a Notable without exactly one well-formed whole-sentence lift fails, naming `notable`', () => {
+  for (const [why, notable] of [
+    ['no marker', 'Prose with no constraint marked.'],
+    ['two spans', '[[One.]] [[Two.]]'],
+    ['unclosed', 'Before. [[The constraint.'],
+    ['unopened', 'Before. The constraint.]] After.'],
+    ['reversed', 'Before.]] The constraint. [[After.'],
+    ['mid-sentence', 'A sentence that [[carries the constraint.]] After.'],
+    ['glued after', 'Before. [[The constraint.]]After.'],
+    ['glued before', 'Before.[[The constraint.]] After.'],
+    ['several sentences', 'Before. [[One sentence. And another.]] After.'],
+    ['a stray bracket', 'Before. [[[The constraint.]] After.'],
+    ['no terminal punctuation', 'Before. [[The constraint]] after.'],
+    ['spans paragraphs', 'Before. [[The constraint.\n\nContinues.]] After.'],
+    ['the whole paragraph', 'First paragraph.\n\n[[The constraint, alone.]]'],
+    ['blank', 'Before. [[ ]] After.'],
+    ['edge whitespace', 'Before. [[ The constraint.]] After.'],
+  ] as const) {
+    const entry = baseEntry();
+    entry['notable'] = notable;
+    assertFails(validateCareer(fileWith(entry)), /notable/, `${why} must be rejected`);
+  }
+});
+
+test('a Notable is connected prose: a line set like a list item fails, naming `notable`', () => {
+  for (const line of ['- Kafka', '* Kafka', '• Kafka', '+ Kafka', '– Kafka', '— Kafka', '1. Kafka', '2) Kafka', 'a) Kafka', '  - Kafka']) {
+    const entry = baseEntry();
+    entry['notable'] = `${MARKED}\n${line}`;
+    assertFails(validateCareer(fileWith(entry)), /notable/, `${JSON.stringify(line)} must be rejected`);
+  }
+  // A dash inside a sentence is prose, not a list.
+  const entry = baseEntry();
+  entry['notable'] = 'One choice — and its rejection. [[The constraint - stated.]]';
+  assert.deepEqual(validateCareer(fileWith(entry)), []);
 });
 
 // --- Matrix row: Shallow, three ways ----------------------------------------
@@ -433,7 +493,7 @@ test('the CLI exits 1 and writes to stderr on invalid data', () => {
   assert.ok(first !== undefined);
   // Set rather than renamed: a Shallow first entry has no `notable` to rename,
   // and `JSON.stringify` would drop a `notabel: undefined` without a trace.
-  first['notabel'] = first['notable'] ?? 'Problem, constraint, decision.';
+  first['notabel'] = first['notable'] ?? 'Problem stated. [[The constraint, in one sentence.]] The decision taken.';
   delete first['notable'];
   const client = String(first['client']);
 

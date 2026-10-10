@@ -498,6 +498,27 @@ test('tokens.ts: resolved values with literal types', () => {
   assert.equal(Object.keys(tokens.typography).length, 12, 'the font families plus eleven ramp roles');
 });
 
+/** The type roles of a generated `tokens.css` set heavier than 400 — weight is not an emphasis channel (UX-DR5). */
+function heavyRoles(css: string): string[] {
+  // `normal` is 400 by definition; any other keyword (`bold`, `bolder`), a blank or a non-number counts as heavy.
+  const weightOf = (value: string) => (value.trim() === 'normal' ? 400 : value.trim() === '' ? NaN : Number(value));
+  return [...css.matchAll(/--type-([\w-]+)-font-weight:\s*([^;]*);/g)].filter(([, , weight]) => !(weightOf(weight ?? '') <= 400)).map(([, role]) => role ?? '');
+}
+
+test('no type role is set heavier than 400, so no glyph in the product is', () => {
+  const committed = readFileSync(join(TOKENS_DIR, CSS_FILE), 'utf8');
+  assert.deepEqual(heavyRoles(committed), []);
+  assert.equal([...committed.matchAll(/-font-weight:/g)].length, 11, 'every ramp role carries a weight, or this case is vacuous');
+  for (const [role, style] of Object.entries(tokens.typography)) {
+    if (typeof style === 'object' && 'fontWeight' in style) assert.ok(style.fontWeight <= 400, `${role} is heavier than 400`);
+  }
+  // The check bites: a role raised to 500, or set to a keyword, is named.
+  assert.deepEqual(heavyRoles(generate(mutate('    fontWeight: 200\n    lineHeight: 1.35\n', '    fontWeight: 500\n    lineHeight: 1.35\n')).css), ['panel-title']);
+  assert.deepEqual(heavyRoles(committed.replace('--type-panel-title-font-weight: 200;', '--type-panel-title-font-weight: bold;')), ['panel-title']);
+  assert.deepEqual(heavyRoles(committed.replace('--type-panel-title-font-weight: 200;', '--type-panel-title-font-weight: ;')), ['panel-title']);
+  assert.deepEqual(heavyRoles(committed.replace('--type-panel-title-font-weight: 200;', '--type-panel-title-font-weight: normal;')), []);
+});
+
 test('tokens.ts is emitted `as const`, so its literal types survive without a typecheck run', () => {
   // The annotated assignments above prove the literal types only under `tsc`,
   // which neither `npm test` nor `npm run gate` runs; this holds the emitter to it.

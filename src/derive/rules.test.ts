@@ -47,7 +47,7 @@ function baseEntry(): Record<string, unknown> {
     built: 'Replaced a commercial Oracle MDM with a Spring Boot application.',
     team_size: 11,
     duration: { start: '2019-01', end: '2021-01' },
-    notable: 'Problem, constraint, decision.',
+    notable: 'Problem stated. [[The constraint, in one sentence.]] The decision taken.',
     skills: ['Java', 'Spring Boot'],
   };
 }
@@ -177,7 +177,7 @@ test('the mote tier never leaves the declared set, including at the ceiling', ()
 
 test('the mote tier holds through the graph, not only through the projection', () => {
   const graph = derive(
-    { ...baseEntry(), client: 'Deep', project: 'D', notable: 'A real decision.' },
+    { ...baseEntry(), client: 'Deep', project: 'D', notable: 'A real decision. [[Its constraint, stated.]]' },
     { ...baseEntry(), client: 'Shallow', project: 'S', notable: '' },
   );
   const all = allProjects(graph);
