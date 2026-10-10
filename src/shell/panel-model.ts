@@ -134,6 +134,37 @@ export interface PanelField {
 }
 
 /**
+ * The Shallow Project's reading position (DESIGN.md §7.8): one line in the
+ * author's voice, worded identically on every Shallow Project — a convention
+ * repeated is a convention; a convention reworded is a defence.
+ */
+export const EDITORIAL_RULE = 'Entries carry a written argument only where there was an argument to have.';
+
+/**
+ * The marks around a Notable's constraint sentence. The schema that gates them
+ * is `src/data/schema.ts` (`LIFT_OPEN`, `LIFT_CLOSE`); `src/shell/` may not import
+ * it, so they are restated here, and the committed-artifact test re-marks the
+ * runs and compares them with the authored prose.
+ */
+export const LIFT_OPEN = '[[';
+export const LIFT_CLOSE = ']]';
+
+/** A stretch of one Notable paragraph; the `lifted` one is the constraint sentence (DESIGN.md §7.7). */
+export interface PanelRun {
+  readonly text: string;
+  readonly lifted: boolean;
+}
+
+/**
+ * What the reading position holds: the Notable on a Deep Project, the editorial
+ * rule line on a Shallow one. One slot, two contents — the Shallow panel is the
+ * Deep panel with a different final block, never the Deep panel minus one.
+ */
+export type PanelReading =
+  | { readonly kind: 'notable'; readonly paragraphs: readonly (readonly PanelRun[])[] }
+  | { readonly kind: 'rule'; readonly text: string };
+
+/**
  * One block of the panel, in DOM order. The kinds are UX-DR22's list plus the
  * Skills list (3.5), in that order. `buildPanel` emits every kind, except the
  * Skills list for a Project with no Skills — an empty `<ul>` names nothing.
@@ -141,7 +172,7 @@ export interface PanelField {
 export type PanelBlock =
   | { readonly kind: 'kicker'; readonly text: string }
   | { readonly kind: 'title'; readonly text: string }
-  | { readonly kind: 'reading'; readonly paragraphs: readonly string[] }
+  | { readonly kind: 'reading'; readonly reading: PanelReading }
   | { readonly kind: 'fields'; readonly rows: readonly PanelField[] }
   | { readonly kind: 'skills'; readonly items: readonly string[] }
   | { readonly kind: 'release'; readonly label: string };
@@ -161,9 +192,10 @@ export interface FocusPanelModel {
  * Project's Skills as a static list in authored order, deduplicated (3.5: the
  * Motes' labels are canvas-only and capped, so the DOM carries every Skill —
  * no heading, no live region), the release button. The **reading position is always present**, because it is a
- * slot rather than an optional block: on a Deep Project it holds the `notable`
- * paragraphs, on a Shallow one it holds nothing — no error, no placeholder, no
- * skeleton. The branch is on `isDeep`, never on `notable`.
+ * slot rather than an optional block: on a Deep Project it holds the Notable's
+ * paragraphs with the constraint sentence as a lifted run, on a Shallow one the
+ * editorial rule line — no error, no placeholder, no skeleton. The branch is on
+ * `isDeep`, never on `notable`, so promotion swaps this block and nothing else.
  *
  * `null` for a `null` ID and for an ID no Project carries: the renderer then
  * draws the panel closed rather than a panel about nothing. The camera, which
@@ -180,7 +212,10 @@ export function buildPanel(artifact: PanelArtifact, id: string | null): FocusPan
         blocks: [
           { kind: 'kicker', text: kickerText(client.name, content.company) },
           { kind: 'title', text: content.project },
-          { kind: 'reading', paragraphs: project.isDeep ? paragraphsOf(content.notable ?? '') : [] },
+          {
+            kind: 'reading',
+            reading: project.isDeep ? { kind: 'notable', paragraphs: paragraphsOf(content.notable ?? '') } : { kind: 'rule', text: EDITORIAL_RULE },
+          },
           {
             kind: 'fields',
             rows: [
@@ -214,12 +249,29 @@ function skillsBlock(skills: readonly string[]): PanelBlock[] {
   return items.length === 0 ? [] : [{ kind: 'skills', items }];
 }
 
-/** Authored prose split on blank lines into paragraphs, each trimmed, none empty. */
-function paragraphsOf(text: string): string[] {
+/**
+ * Authored prose split on blank lines into paragraphs, each trimmed, none empty;
+ * each paragraph split into runs at the lift marks, which are dropped, with no
+ * empty run. The marks are presentation, like the blank lines — the schema has
+ * already gated them, so a stray mark here is prose, not an error.
+ */
+function paragraphsOf(text: string): PanelRun[][] {
   return text
     .split(/\n\s*\n/)
     .map((paragraph) => paragraph.trim())
-    .filter((paragraph) => paragraph !== '');
+    .filter((paragraph) => paragraph !== '')
+    .map(runsOf);
+}
+
+function runsOf(paragraph: string): PanelRun[] {
+  const open = paragraph.indexOf(LIFT_OPEN);
+  const close = paragraph.indexOf(LIFT_CLOSE, open + LIFT_OPEN.length);
+  if (open === -1 || close === -1) return [{ text: paragraph, lifted: false }];
+  return [
+    { text: paragraph.slice(0, open), lifted: false },
+    { text: paragraph.slice(open + LIFT_OPEN.length, close), lifted: true },
+    { text: paragraph.slice(close + LIFT_CLOSE.length), lifted: false },
+  ].filter((run) => run.text !== '');
 }
 
 /**

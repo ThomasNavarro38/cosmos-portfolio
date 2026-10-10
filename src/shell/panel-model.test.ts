@@ -19,6 +19,9 @@ import {
   PANEL_FRACTION,
   PANEL_MAX_PX,
   PANEL_PADDING,
+  EDITORIAL_RULE,
+  LIFT_CLOSE,
+  LIFT_OPEN,
   RELEASE_LABEL,
   buildPanel,
   kickerText,
@@ -42,6 +45,7 @@ const PANEL_TSX = fileURLToPath(new URL('./focus-panel.tsx', import.meta.url));
 const NAV_TSX = fileURLToPath(new URL('./index-nav.tsx', import.meta.url));
 const APP_TSX = fileURLToPath(new URL('../App.tsx', import.meta.url));
 const ARTIFACT_JSON = fileURLToPath(new URL('../../generated/layout.generated.json', import.meta.url));
+const SCHEMA_TS = fileURLToPath(new URL('../data/schema.ts', import.meta.url));
 
 // --- Fixtures ---------------------------------------------------------------
 
@@ -68,7 +72,7 @@ function artifact(): PanelArtifact {
         id: 'client:a',
         name: 'Alpha',
         projects: [
-          project('project:a/deep', true, 'First paragraph.\n\nSecond paragraph,\nwrapped.\n\n\n  Third.  ', 'Capgemini'),
+          project('project:a/deep', true, 'First paragraph.\n\nSecond paragraph. [[A lifted sentence,\nwrapped.]] After.\n\n\n  Third.  ', 'Capgemini'),
           project('project:a/shallow', false, null),
         ],
       },
@@ -127,22 +131,57 @@ test('the committed artifact’s kickers carry each real Client and Company verb
   assert.ok(seen > 0, 'the artifact carries Projects');
 });
 
-test('a Deep Project’s reading position holds its notable, one paragraph per blank-line break', () => {
+const run = (text: string, lifted = false) => ({ text, lifted });
+
+test('a Deep Project’s reading position holds its Notable, one paragraph per blank-line break, its marked sentence lifted in place', () => {
   assert.deepEqual(block('project:a/deep', 'reading'), {
     kind: 'reading',
-    paragraphs: ['First paragraph.', 'Second paragraph,\nwrapped.', 'Third.'],
+    reading: {
+      kind: 'notable',
+      paragraphs: [
+        [run('First paragraph.')],
+        [run('Second paragraph. '), run('A lifted sentence,\nwrapped.', true), run(' After.')],
+        [run('Third.')],
+      ],
+    },
   });
 });
 
-test('a Shallow Project opens normally, with an empty reading position — no error, placeholder or skeleton', () => {
-  assert.deepEqual(block('project:a/shallow', 'reading'), { kind: 'reading', paragraphs: [] });
+test('a lift at a paragraph’s start or end is one run beside the rest, never an empty run', () => {
+  const reading = (notable: string) => {
+    const source: PanelArtifact = { clients: [{ id: 'c', name: 'C', projects: [project('p', true, notable)] }] };
+    return block('p', 'reading', source);
+  };
+  assert.deepEqual(reading('[[First.]] Then.'), { kind: 'reading', reading: { kind: 'notable', paragraphs: [[run('First.', true), run(' Then.')]] } });
+  assert.deepEqual(reading('Then. [[Last.]]'), { kind: 'reading', reading: { kind: 'notable', paragraphs: [[run('Then. '), run('Last.', true)]] } });
+  // Hand-edited past the gate, a Notable with no marks is still prose, lifted nowhere.
+  assert.deepEqual(reading('Unmarked.'), { kind: 'reading', reading: { kind: 'notable', paragraphs: [[run('Unmarked.')]] } });
+});
+
+test('a Shallow Project’s reading position holds the editorial rule line — no error, placeholder or skeleton', () => {
+  const rule = { kind: 'reading', reading: { kind: 'rule', text: EDITORIAL_RULE } };
+  assert.equal(EDITORIAL_RULE, 'Entries carry a written argument only where there was an argument to have.');
+  assert.deepEqual(block('project:a/shallow', 'reading'), rule);
   // The branch is on isDeep, never on notable: prose on a Shallow Project stays hidden…
-  assert.deepEqual(block('project:b/shallow-with-prose', 'reading'), { kind: 'reading', paragraphs: [] });
+  assert.deepEqual(block('project:b/shallow-with-prose', 'reading'), rule);
   // …and a Deep Project with no prose is not an error either.
   for (const notable of [null, undefined, '', '  \n\n  ']) {
     const source: PanelArtifact = { clients: [{ id: 'c', name: 'C', projects: [project('p', true, notable)] }] };
-    assert.deepEqual(block('p', 'reading', source), { kind: 'reading', paragraphs: [] }, JSON.stringify(notable));
+    assert.deepEqual(block('p', 'reading', source), { kind: 'reading', reading: { kind: 'notable', paragraphs: [] } }, JSON.stringify(notable));
   }
+});
+
+test('promotion changes the reading block and nothing else: the rule line gives way to the Notable in the same slot', () => {
+  const shallow = project('p', false, null);
+  const deep: PanelArtifactProject = { ...shallow, isDeep: true, content: { ...shallow.content, notable: 'Before. [[The constraint.]] After.' } };
+  const panelOf = (entry: PanelArtifactProject) => buildPanel({ clients: [{ id: 'c', name: 'C', projects: [entry] }] }, 'p')?.blocks ?? [];
+  const before = panelOf(shallow);
+  const after = panelOf(deep);
+  assert.deepEqual(before.map((b) => b.kind), after.map((b) => b.kind));
+  const index = before.findIndex((b) => b.kind === 'reading');
+  assert.deepEqual(before.filter((_, i) => i !== index), after.filter((_, i) => i !== index));
+  assert.deepEqual(before[index], { kind: 'reading', reading: { kind: 'rule', text: EDITORIAL_RULE } });
+  assert.equal(after[index]?.kind === 'reading' && after[index].reading.kind, 'notable');
 });
 
 test('the field table is Role, Team, Built — and no Skills row', () => {
@@ -189,23 +228,64 @@ test('no ID, or an ID no Project carries, yields no panel', () => {
   assert.equal(buildPanel({ clients: [] }, 'project:a/deep'), null);
 });
 
-test('the committed artifact opens its one Project with its authored prose', () => {
+/** Every Project of the committed artifact, with its panel. */
+function committedPanels() {
   const committed = JSON.parse(readFileSync(ARTIFACT_JSON, 'utf8')) as PanelArtifact;
-  const first = committed.clients[0]?.projects[0];
-  assert.ok(first !== undefined);
-  const panel = buildPanel(committed, first.id);
-  assert.ok(panel !== null);
-  assert.equal(panel.projectId, first.id);
-  const reading = panel.blocks.find((entry) => entry.kind === 'reading');
-  assert.ok(reading?.kind === 'reading');
-  // The expectation is derived from the artifact's own prose by the same split rule
-  // (blank-line breaks, trimmed, none empty), so editing the prose cannot break it.
-  const authored = (first.content.notable ?? '')
-    .split(/\n\s*\n/)
-    .map((paragraph) => paragraph.trim())
-    .filter((paragraph) => paragraph !== '');
-  assert.deepEqual(reading.paragraphs, first.isDeep ? authored : []);
-  if (first.isDeep) assert.ok(authored.length > 0, 'a Deep Project carries prose, or this case is vacuous');
+  return committed.clients.flatMap((client) =>
+    client.projects.map((entry) => {
+      const panel = buildPanel(committed, entry.id);
+      assert.ok(panel !== null, entry.id);
+      const reading = panel.blocks.find((b) => b.kind === 'reading');
+      assert.ok(reading?.kind === 'reading', entry.id);
+      return { client, entry, panel, reading: reading.reading };
+    }),
+  );
+}
+
+test('the panel splits on the very marks the schema gates', () => {
+  // `src/shell/` may not import `src/data/`, so the schema's constants are read from its source.
+  const schema = readFileSync(SCHEMA_TS, 'utf8');
+  const literal = (name: string) => new RegExp(`export const ${name} = '([^']*)';`).exec(schema)?.[1];
+  assert.equal(literal('LIFT_OPEN'), LIFT_OPEN);
+  assert.equal(literal('LIFT_CLOSE'), LIFT_CLOSE);
+});
+
+test('every committed Deep Project shows its authored prose verbatim, with exactly one sentence lifted', () => {
+  const deep = committedPanels().filter(({ entry }) => entry.isDeep);
+  assert.ok(deep.length > 0, 'the artifact carries a Deep Project, or this case is vacuous');
+  for (const { entry, reading } of deep) {
+    assert.ok(reading.kind === 'notable', entry.id);
+    // Re-marked and re-joined, the runs are the authored paragraphs: nothing dropped, nothing added.
+    const rejoined = reading.paragraphs.map((runs) => runs.map((r) => (r.lifted ? `${LIFT_OPEN}${r.text}${LIFT_CLOSE}` : r.text)).join('')).join('\n\n');
+    const authored = (entry.content.notable ?? '').split(/\n\s*\n/).map((p) => p.trim()).filter((p) => p !== '').join('\n\n');
+    assert.equal(rejoined, authored, entry.id);
+    assert.equal(reading.paragraphs.flat().filter((r) => r.lifted).length, 1, `${entry.id}: one lifted sentence`);
+  }
+});
+
+test('SNCF Client referential lifts its authored second sentence, verbatim', () => {
+  const found = committedPanels().find(({ client, entry }) => client.name === 'SNCF' && entry.content.project === 'Client referential');
+  assert.ok(found !== undefined && found.reading.kind === 'notable');
+  const lifted = found.reading.paragraphs.flat().filter((r) => r.lifted).map((r) => r.text);
+  assert.deepEqual(lifted, [
+    "Replacing it meant rebuilding a mature product's behaviour with no specification to work from — documentation was absent or years stale, so the incumbent's real rules had to be recovered from the system itself.",
+  ]);
+});
+
+test('every committed Shallow Project carries the same rule line, in a panel ordered like the Deep one', () => {
+  const panels = committedPanels();
+  const shallow = panels.filter(({ entry }) => !entry.isDeep);
+  const deep = panels.find(({ entry }) => entry.isDeep);
+  assert.ok(shallow.length > 1 && deep !== undefined, 'two Shallow Projects and a Deep one, or this case is vacuous');
+  for (const { entry, panel, reading } of shallow) {
+    assert.deepEqual(reading, shallow[0]?.reading, entry.id);
+    assert.deepEqual(reading, { kind: 'rule', text: EDITORIAL_RULE }, entry.id);
+    assert.deepEqual(
+      panel.blocks.map((b) => b.kind).filter((k) => k !== 'skills'),
+      deep.panel.blocks.map((b) => b.kind).filter((k) => k !== 'skills'),
+      entry.id,
+    );
+  }
 });
 
 test('the model is identical across repeated builds and never mutates the artifact', () => {
@@ -454,7 +534,7 @@ test('the model audit rejects the real model with any one impurity added', () =>
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
     ['a store import', (s) => `import { navigationStore } from './state.ts';\n${s}`],
     ['a viewport read', (s) => s.replace('return Math.min(PANEL_MAX_PX, PANEL_FRACTION * width);', 'return Math.min(PANEL_MAX_PX, PANEL_FRACTION * window.innerWidth);')],
-    ['a branch on notable', (s) => s.replace('project.isDeep ? paragraphsOf', "content.notable ? paragraphsOf")],
+    ['a branch on notable', (s) => s.replace("reading: project.isDeep ? { kind: 'notable'", "reading: content.notable ? { kind: 'notable'")],
     ['a Skills row', (s) => s.replace("{ label: FIELD_LABELS.built, value: content.built },", "{ label: FIELD_LABELS.built, value: content.built },\n              { label: 'Skills', value: '' },")],
   ];
   for (const [name, mutate] of mutations) {
@@ -510,7 +590,8 @@ function declarationsOf(css: string): CssDeclaration[] {
 const TYPE_ROLES: readonly (readonly [string, string])[] = [
   ['.panel-kicker', 'panel-kicker'],
   ['.panel-title', 'panel-title'],
-  ['.panel-reading p', 'notable-prose'],
+  ['.panel-prose', 'notable-prose'],
+  ['.panel-rule', 'editorial-rule'],
   ['.panel-fields th', 'field-label'],
   ['.panel-fields td', 'field-value'],
   ['.panel-skills', 'field-value'],
@@ -534,12 +615,15 @@ const EXPECTED: readonly (readonly [string | null, string, string, string])[] = 
   // A long word, URL or Skill breaks rather than overflow a narrow column; no width changes.
   [null, `#${FOCUS_PANEL_ID}`, 'overflow-wrap', 'anywhere'],
   [BREAKPOINT, `#${FOCUS_PANEL_ID}`, '--panel-padding', 'var(--space-panel-pad-top) clamp(16px, 5vw, var(--space-xl)) var(--space-panel-pad-bottom)'],
-  // Rhythm (DESIGN.md §4): kicker→title 22, title→prose 40, ¶→¶ 20, prose→table 52.
+  // Rhythm (DESIGN.md §4): kicker→title 22, title→prose 40, title→rule 34, ¶→¶ 20, reading→table 52.
+  // The title carries no bottom margin, so each reading child's own top margin is the gap.
   [null, '.panel-kicker', 'margin', '0 0 22px'],
-  [null, '.panel-title', 'margin', '0 0 var(--space-xl)'],
+  [null, '.panel-title', 'margin', '0'],
   [null, '.panel-reading', 'margin', '0'],
-  [null, '.panel-reading p', 'margin', '0 0 var(--space-md)'],
-  [null, '.panel-reading p:last-child', 'margin-bottom', '0'],
+  [null, '.panel-prose', 'margin', '0 0 var(--space-md)'],
+  [null, '.panel-prose:first-child', 'margin-top', 'var(--space-xl)'],
+  [null, '.panel-prose:last-child', 'margin-bottom', '0'],
+  [null, '.panel-rule', 'margin', '34px 0 0'],
   [null, '.panel-fields', 'margin', 'var(--space-xxl) 0 0'],
   [null, '.panel-fields', 'width', '100%'],
   [null, '.panel-fields', 'border-collapse', 'collapse'],
@@ -553,11 +637,16 @@ const EXPECTED: readonly (readonly [string | null, string, string, string])[] = 
   [null, '.panel-fields th, .panel-fields td', 'vertical-align', 'baseline'],
   // Measures: they do not widen with the panel.
   [null, '.panel-title', 'max-width', 'var(--space-measure-title)'],
-  [null, '.panel-reading p', 'max-width', 'var(--space-measure-prose)'],
+  [null, '.panel-prose', 'max-width', 'var(--space-measure-prose)'],
+  [null, '.panel-rule', 'max-width', 'var(--space-measure-rule)'],
   // Ink.
   [null, '.panel-kicker', 'color', 'var(--color-ink-label-dark)'],
   [null, '.panel-title', 'color', 'var(--color-ink-lift-dark)'],
-  [null, '.panel-reading p', 'color', 'var(--color-ink-prose-dark)'],
+  [null, '.panel-prose', 'color', 'var(--color-ink-prose-dark)'],
+  // The constraint sentence: brighter ink, and nothing else (DESIGN.md §7.7).
+  [null, '.panel-lift', 'color', 'var(--color-ink-lift-dark)'],
+  // The rule line is raised to ink-label, never ink-quiet (DESIGN.md §7.8).
+  [null, '.panel-rule', 'color', 'var(--color-ink-label-dark)'],
   [null, '.panel-fields th', 'color', 'var(--color-ink-label-dark)'],
   [null, '.panel-fields td', 'color', 'var(--color-ink-prose-dark)'],
   [null, '.panel-skills', 'color', 'var(--color-ink-label-dark)'],
@@ -598,7 +687,7 @@ const EXPECTED: readonly (readonly [string | null, string, string, string])[] = 
  * states without a token, the 1px rule, the padding step's phone floor and slope,
  * the breakpoint, and the field table's full width.
  */
-const LITERAL_LENGTHS = new Set(['22px', '74px', '1px', '16px', '5vw', '1199.98px', '100%']);
+const LITERAL_LENGTHS = new Set(['22px', '34px', '74px', '1px', '16px', '5vw', '1199.98px', '100%']);
 
 /** The only selectors that may draw a `border-top`: the field rows' rule and the release hairline. */
 const TOP_RULES = new Set(['.panel-fields th, .panel-fields td', '.panel-release::before']);
@@ -702,7 +791,17 @@ test('the stylesheet audit rejects the real stylesheet with any one departure', 
   const tokensCss = readFileSync(TOKENS_CSS, 'utf8');
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
     ['kicker→title at 24px', (s) => s.replace('margin: 0 0 22px;', 'margin: 0 0 24px;')],
-    ['title→prose at 20px', (s) => s.replace('margin: 0 0 var(--space-xl);', 'margin: 0 0 var(--space-md);')],
+    ['title→prose at 20px', (s) => s.replace('margin-top: var(--space-xl);', 'margin-top: var(--space-md);')],
+    ['a title margin back', (s) => s.replace(/(\.panel-title \{\s*)margin: 0;/, '$1margin: 0 0 var(--space-xl);')],
+    ['title→rule at 40px', (s) => s.replace('margin: 34px 0 0;', 'margin: var(--space-xl) 0 0;')],
+    ['the rule at the prose measure', (s) => s.replace('max-width: var(--space-measure-rule);', 'max-width: var(--space-measure-prose);')],
+    ['the rule in quiet ink', (s) => s.replace(/(\.panel-rule \{[^}]*?)color: var\(--color-ink-label-dark\);/, '$1color: var(--color-ink-quiet-dark);')],
+    ['the rule in prose type', (s) => s.replace('font-size: var(--type-editorial-rule-font-size);', 'font-size: var(--type-notable-prose-font-size);')],
+    ['no lift', (s) => s.replace(/(\.panel-lift \{\s*)color: var\(--color-ink-lift-dark\);/, '$1color: var(--color-ink-prose-dark);')],
+    ['a boxed lift', (s) => s.replace('.panel-lift {', '.panel-lift {\n  background: var(--color-surface-edge-dark);')],
+    ['a lift on its own line', (s) => s.replace('.panel-lift {', '.panel-lift {\n  display: block;')],
+    ['an indented lift', (s) => s.replace('.panel-lift {', '.panel-lift {\n  padding-left: var(--space-md);')],
+    ['a bold lift', (s) => s.replace('.panel-lift {', '.panel-lift {\n  font-weight: var(--type-panel-title-font-weight);')],
     ['prose→table at 40px', (s) => s.replace('margin: var(--space-xxl) 0 0;', 'margin: var(--space-xl) 0 0;')],
     ['no 1200px step', (s) => s.replace('(max-width: 1199.98px)', '(max-width: 799.98px)')],
     ['the panel selector renamed', (s) => s.replace(/#focus-panel \{/g, '#panel {')],
@@ -734,7 +833,7 @@ test('the stylesheet audit rejects the real stylesheet with any one departure', 
     ['an ex literal', (s) => s.replace('margin: var(--space-lg) 0 0;', 'margin: 3ex 0 0;')],
     ['a label set as a value', (s) => s.replace('font-family: var(--type-field-label-font-family);', 'font-family: var(--type-field-value-font-family);')],
     ['a declaration with no colon', (s) => s.replace('cursor: pointer;', 'cursor pointer;')],
-    ['no last-paragraph reset', (s) => s.replace(/\.panel-reading p:last-child \{\s*margin-bottom: 0;\s*\}/, '')],
+    ['no last-paragraph reset', (s) => s.replace(/\.panel-prose:last-child \{\s*margin-bottom: 0;\s*\}/, '')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);
@@ -894,12 +993,20 @@ function auditPanel(source: string): string[] {
   if (!/case\s*'kicker'\s*:\s*return\s*\(?\s*<p\b[^>]*>\s*\{\s*block\.text\s*\}\s*<\/p>/.test(code)) {
     failures.push('the kicker case does not render block.text');
   }
+  // The reading position (3.7): the rule line, or the Notable's paragraphs with the lifted run an inline span in its <p>.
+  if (!/case\s*'reading'\s*:\s*return\s*\(?\s*<div\b[^>]*>\s*\{\s*block\.reading\.kind\s*===\s*'rule'\s*\?\s*\(?\s*<p\s+className="panel-rule"\s*>\s*\{\s*block\.reading\.text\s*\}\s*<\/p>/.test(code)) {
+    failures.push('the Shallow reading position is not one <p class="panel-rule"> of the model’s rule text');
+  }
   if (
-    !/case\s*'reading'\s*:\s*return\s*\(?\s*<div\b[^>]*>\s*\{\s*block\.paragraphs\.map\(\s*\(\s*(\w+)\s*,\s*\w+\s*\)\s*=>\s*\(?\s*<p\b[^>]*>\s*\{\s*\1\s*\}\s*<\/p>/.test(
+    !/block\.reading\.paragraphs\.map\(\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)\s*=>\s*\(?\s*<p\s+key=\{\s*\2\s*\}\s+className="panel-prose"\s*>\s*\{\s*\1\.map\(\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)\s*=>\s*\(?\s*\3\.lifted\s*\?\s*<span\s+key=\{\s*\4\s*\}\s+className="panel-lift"\s*>\s*\{\s*\3\.text\s*\}\s*<\/span>\s*:\s*\3\.text\s*\)?\s*\)\s*\}\s*<\/p>/.test(
       code,
     )
   ) {
-    failures.push('the reading case does not map block.paragraphs to <p> elements');
+    failures.push('the Notable is not one <p class="panel-prose"> per paragraph, its lifted run a <span class="panel-lift"> in the flow');
+  }
+  // Weight is not an emphasis channel (UX-DR5), and the lift is ink and nothing else (DESIGN.md §7.7).
+  if (/<(?:strong|b|em|i|mark|u|s|small|big|cite|q|dfn|ins|del)\b|fontWeight|fontStyle|textDecoration/.test(code)) {
+    failures.push('an element or style that carries weight or emphasis — the lift is ink alone');
   }
   if (
     !/block\.rows\.map\(\s*\(\s*row\s*\)\s*=>[\s\S]*?<th\b[^>]*>\s*\{\s*row\.label\s*\}\s*<\/th>\s*<td\b[^>]*>\s*\{\s*row\.value\s*\}\s*<\/td>/.test(
@@ -920,7 +1027,7 @@ function auditPanel(source: string): string[] {
   const classed: readonly (readonly [string, RegExp])[] = [
     ['kicker', /case\s*'kicker'\s*:\s*return\s*\(?\s*<p\b[^>]*\bclassName="panel-kicker"/],
     ['title', /case\s*'title'\s*:\s*return\s*\(?\s*<h2\b[^>]*\bclassName="panel-title"/],
-    ['reading', /case\s*'reading'\s*:\s*return\s*\(?\s*<div\b[^>]*\bclassName="panel-reading"/],
+    ['reading', /case\s*'reading'\s*:\s*return\s*\(?\s*<div\s+key=\{\s*block\.kind\s*\}\s+className="panel-reading"\s*>/],
     ['fields', /case\s*'fields'\s*:\s*return\s*\(?\s*<table\b[^>]*\bclassName="panel-fields"/],
     ['skills', /case\s*'skills'\s*:\s*return\s*\(?\s*<ul\b[^>]*\bclassName="panel-skills"/],
     ['release', /case\s*'release'\s*:\s*return\s*\(?\s*<button\b[^>]*\bclassName="panel-release"/],
@@ -994,7 +1101,16 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
     ['the kicker unclassed', (s) => s.replace(' className="panel-kicker"', '')],
     ['the title unclassed', (s) => s.replace(' className="panel-title"', '')],
     ['the release unclassed', (s) => s.replace(' className="panel-release"', '')],
-    ['the prose unclassed', (s) => s.replace(' className="panel-reading"', '')],
+    ['the reading slot unclassed', (s) => s.replace(' className="panel-reading"', '')],
+    ['the prose unclassed', (s) => s.replace(' className="panel-prose"', '')],
+    ['the lift unclassed', (s) => s.replace(' className="panel-lift"', '')],
+    ['the rule unclassed', (s) => s.replace(' className="panel-rule"', '')],
+    ['the lift dropped', (s) => s.replace(/\(run\.lifted \? <span[^]*?<\/span> : run\.text\)/, 'run.text')],
+    ['the lift in bold', (s) => s.replace(/<span key=\{at\} className="panel-lift">\{run\.text\}<\/span>/, '<strong key={at} className="panel-lift">{run.text}</strong>')],
+    ['the lift as its own paragraph', (s) => s.replace(/<span key=\{at\} className="panel-lift">\{run\.text\}<\/span>/, '<p key={at} className="panel-lift">{run.text}</p>')],
+    ['an underlined lift', (s) => s.replace('<span key={at} className="panel-lift">', '<span key={at} className="panel-lift"><ins>').replace('{run.text}</span> : run.text', '{run.text}</ins></span> : run.text')],
+    ['an emphasised rule',(s) => s.replace('<p className="panel-rule">{block.reading.text}</p>', '<p className="panel-rule"><em>{block.reading.text}</em></p>')],
+    ['a rule worded in the renderer', (s) => s.replace('<p className="panel-rule">{block.reading.text}</p>', '<p className="panel-rule">Nothing to read here.</p>')],
     ['the field table unclassed', (s) => s.replace(' className="panel-fields"', '')],
     ['the stylesheet not imported', (s) => s.replace("import './focus-panel.css';", '')],
     ['an inline style', (s) => s.replace('<h2 key={block.kind}', '<h2 style={{ fontWeight: 700 }} key={block.kind}')],
@@ -1057,7 +1173,7 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
     ['a viewport read', (s) => s.replace('const container = useRef', 'const wide = window.innerWidth > 1200;\n  const container = useRef')],
     ['the kicker shows the wrong field', (s) => s.replace(/(className="panel-kicker">\s*)\{block\.text\}/, '$1{block.kind}')],
     ['the reading position dropped', (s) => s.replace("case 'reading':", "case 'reading':\n            return null;")],
-    ['paragraphs not in <p>', (s) => s.replace('<p key={index}>{paragraph}</p>', '<span key={index}>{paragraph}</span>')],
+    ['paragraphs not in <p>', (s) => s.replace(/<p key=\{index\} className="panel-prose">([^]*?)<\/p>/, '<span key={index} className="panel-prose">$1</span>')],
     ['the label not a header cell', (s) => s.replace('<th scope="row">{row.label}</th>', '<td>{row.label}</td>')],
     ['the value replaced by the label', (s) => s.replace('<td>{row.value}</td>', '<td>{row.label}</td>')],
     ['no scroll reset on entry', (s) => s.replace('container.current?.scrollTo({ top: 0 });', '')],

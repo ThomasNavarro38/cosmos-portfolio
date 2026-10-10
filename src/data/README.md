@@ -37,6 +37,7 @@ So the schema uses `z.strictObject`, not `z.object`. Zod's default `object` *str
 | --- | --- |
 | `duration.end` must not precede `start` | A negative span feeds FR-3's mass derivation. Both halves are valid ISO, so only an ordering check catches it. |
 | `notable` is trimmed before the emptiness check | `"   "` classifies as Deep and renders a blank panel. Trimmed, it means Shallow. |
+| A non-empty `notable` marks exactly one whole sentence `[[…]]`, inside one paragraph and not the whole of it, and sets no line as a list item | The constraint is the Notable's falsifiability (FR-8): the panel lifts the marked sentence in brighter ink so it is findable at a scan (DESIGN.md §7.7). Unmarked, the panel lifts nothing; marked across a clause or a paragraph, it lifts the wrong thing; a list line is a technology roll-call (FR-10). The sentence tests are heuristics: `[[`, `]]` and `[[[` cannot appear in a Notable as prose, and an abbreviation like `e.g.` inside the lifted sentence reads as a second sentence. |
 | `weight` must be positive | `0` is a degenerate distance from the Rail; a negative one is meaningless. |
 | `client` and `project` trimmed non-empty | `"   "` produces an unnamed Star and breaks the error label that names the entry. |
 
@@ -72,7 +73,7 @@ Exactly ten fields. No entry has a field another lacks — there are no hero-ent
 | `built` | string | Short description of what was built. |
 | `team_size` | integer | Positive. Factual content, not a tuning value. |
 | `duration` | `{ start, end }` | **Required.** ISO `YYYY-MM`; `end: null` means ongoing, and otherwise must not precede `start`. |
-| `notable` | string, optional | Problem → constraint → decision. Absent, `null`, `""`, and whitespace-only all mean Shallow. |
+| `notable` | string, optional | Problem → constraint → decision, as connected prose, the constraint sentence marked `[[…]]`. Absent, `null`, `""`, and whitespace-only all mean Shallow. |
 | `skills` | string[] | Each entry trimmed and non-blank. May be empty. |
 | `weight` | number, optional | Positive. Defaults to `1`. |
 
@@ -86,7 +87,7 @@ Exactly ten fields. No entry has a field another lacks — there are no hero-ent
 
 Entity kind is **not** a field. There is no `kind`, no type flag, no schema variant, and no `isDeep` in this directory. A Project is Deep if `notable` is populated and Shallow otherwise, and that determination happens once in `src/derive/` (Story 1.3) — never here, and never in a renderer.
 
-The schema accepts all three Shallow forms — `notable` absent, `notable: null`, and `notable: ""` — and all three mean Shallow. A whitespace-only `notable` is trimmed and joins them. This is deliberate. Promoting a Shallow entry to Deep must be free: populate the string, change nothing else. No structural edit, no flag to flip, no second file to touch.
+The schema accepts all three Shallow forms — `notable` absent, `notable: null`, and `notable: ""` — and all three mean Shallow. A whitespace-only `notable` is trimmed and joins them. This is deliberate. Promoting a Shallow entry to Deep must be free: populate the string — its constraint sentence marked — change nothing else. No structural edit, no flag to flip, no second file to touch.
 
 They are equivalent in *meaning*, but not identical in *parsed shape*: an absent `notable` yields an object with nine keys, while `null` and `""` yield ten. **Story 1.3's classifier must therefore treat `undefined`, `null`, and `""` as one case** rather than assuming a single representation reaches it. The schema deliberately does not normalize the three into one, because doing so would mean writing a value the author did not author — and the classification belongs in the derive layer regardless.
 

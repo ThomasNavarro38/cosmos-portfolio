@@ -59,7 +59,7 @@ function baseEntry(): Record<string, unknown> {
     built: 'Replaced a commercial Oracle MDM with a Spring Boot application.',
     team_size: 11,
     duration: { start: '2019-01', end: '2021-01' },
-    notable: 'Problem, constraint, decision.',
+    notable: 'Problem stated. [[The constraint, in one sentence.]] The decision taken.',
     skills: ['Java', 'Spring Boot'],
   };
 }
@@ -285,7 +285,7 @@ test('every authored field is present and equal on the emitted Project', () => {
     built: 'Something specific.',
     team_size: 7,
     duration: { start: '2021-03', end: '2022-11' },
-    notable: 'Problem, constraint, decision — at length.',
+    notable: 'Problem stated at length. [[The constraint, in one sentence.]] The decision taken.',
     skills: ['Kotlin', 'Postgres', 'Kafka'],
     weight: 2.5,
   };
@@ -1651,7 +1651,7 @@ test('every emitted Shot distance contains its Client’s widest orbit', () => {
 test('a Deep-bearing Client is held longer than a Shallow-only one in the emitted artifact', () => {
   const shallowEntry = { ...baseEntry(), client: 'Plain', project: 'P', notable: '' };
   const artifact = artifactOf(
-    { ...baseEntry(), client: 'Rich', project: 'R', notable: 'Problem, constraint, decision.' },
+    { ...baseEntry(), client: 'Rich', project: 'R', notable: 'Problem stated. [[The constraint, in one sentence.]] The decision taken.' },
     shallowEntry,
   );
   const tempoOf = (name: string): string => {

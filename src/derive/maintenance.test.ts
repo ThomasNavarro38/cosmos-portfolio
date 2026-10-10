@@ -274,7 +274,7 @@ test('promoting a Shallow Project to Deep flips isDeep and lengthens its Client 
   // committed data, because `career.json` holds one Client with one Project and
   // that Project is already Deep — there is nothing in it to promote.
   const shallowPath = writeTemp(JSON.stringify(shallowFixture(), null, 2));
-  const deepPath = writeTemp(JSON.stringify(shallowFixture('Problem, constraint, decision.'), null, 2));
+  const deepPath = writeTemp(JSON.stringify(shallowFixture('Problem stated. [[The constraint, in one sentence.]] The decision taken.'), null, 2));
 
   const before = solve(shallowPath);
   const after_ = solve(deepPath);
@@ -309,9 +309,9 @@ test('promoting a Shallow Project to Deep flips isDeep and lengthens its Client 
 test('promotion changes only depth-derived values, and no schema or structural field', () => {
   // The "for free" half. Promotion that also moved a position, a mass, a band, a
   // railDistance or the schema version would not be free — it would be a re-tune
-  // wearing a one-character edit, and the diff would say so.
+  // wearing a one-string edit, and the diff would say so.
   const before = solve(writeTemp(JSON.stringify(shallowFixture(), null, 2)));
-  const after_ = solve(writeTemp(JSON.stringify(shallowFixture('Problem, constraint, decision.'), null, 2)));
+  const after_ = solve(writeTemp(JSON.stringify(shallowFixture('Problem stated. [[The constraint, in one sentence.]] The decision taken.'), null, 2)));
 
   const flatten = (document: unknown): Record<string, unknown> => {
     const doc = document as {

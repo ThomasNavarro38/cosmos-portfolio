@@ -34,14 +34,14 @@ function baseEntry(): Record<string, unknown> {
     built: 'Replaced a commercial Oracle MDM with a Spring Boot application.',
     team_size: 11,
     duration: { start: '2019-01', end: '2021-01' },
-    notable: 'Problem, constraint, decision.',
+    notable: 'Problem stated. [[The constraint, in one sentence.]] The decision taken.',
     skills: ['Java', 'Spring Boot'],
   };
 }
 
 /** A Deep entry: `notable` carries prose. */
 function deep(client: string, project: string): Record<string, unknown> {
-  return { ...baseEntry(), client, project, notable: 'Problem, constraint, decision.' };
+  return { ...baseEntry(), client, project, notable: 'Problem stated. [[The constraint, in one sentence.]] The decision taken.' };
 }
 
 /** A Shallow entry: `notable` is empty, which is one of the three Shallow forms. */

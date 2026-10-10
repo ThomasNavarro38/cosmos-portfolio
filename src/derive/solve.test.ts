@@ -63,7 +63,7 @@ function baseEntry(): Record<string, unknown> {
     built: 'Replaced a commercial Oracle MDM with a Spring Boot application.',
     team_size: 11,
     duration: { start: '2019-01', end: '2021-01' },
-    notable: 'Problem, constraint, decision.',
+    notable: 'Problem stated. [[The constraint, in one sentence.]] The decision taken.',
     skills: ['Java', 'Spring Boot'],
   };
 }

@@ -78,14 +78,77 @@ export const DurationSchema = z
     path: ['end'],
   });
 
+/** The marks around a Notable's one constraint sentence, which the panel lifts in brighter ink. */
+export const LIFT_OPEN = '[[';
+export const LIFT_CLOSE = ']]';
+
+/** Sentence-ending punctuation, optionally closed by a quote, guillemet or bracket. */
+const END = String.raw`[.!?…]["'”’»)\]]*`;
+const SENTENCE_END = new RegExp(`${END}$`);
+/** The end of a sentence before the lift: its punctuation, then whitespace. */
+const SENTENCE_BEFORE = new RegExp(`${END}\\s+$`);
+/**
+ * One sentence ending and another beginning inside the marks. A heuristic, like
+ * every sentence test here: an abbreviation such as `e.g.` mid-sentence reads as
+ * a break, and the author re-words or keeps it out of the lifted sentence.
+ */
+const SENTENCE_BREAK = new RegExp(`${END}\\s+\\S`);
+
+/** A line set like a list item: a bullet or dash, or a number or letter followed by `.` or `)`. */
+const LIST_LINE = /^\s*(?:[-*•+–—]|\d+[.)]|[a-z]\))\s/m;
+
+/**
+ * Why a non-empty Notable is not authorable prose, one message per problem.
+ *
+ * The Notable is connected prose (FR-8, FR-10), so no line may be set like a
+ * list item. It places its constraint in one findable sentence (DESIGN.md §7.7),
+ * which the author marks `[[…]]`: exactly one span, inside one paragraph,
+ * holding a whole sentence — it starts a paragraph or follows a sentence's end,
+ * and ends one — and never the whole paragraph, since the lift must stay in the
+ * flow of the prose.
+ */
+function notableProblems(notable: string): string[] {
+  const problems: string[] = [];
+  if (LIST_LINE.test(notable)) problems.push('must be connected prose — no line may be set as a list item');
+  const opens = notable.split(LIFT_OPEN).length - 1;
+  const closes = notable.split(LIFT_CLOSE).length - 1;
+  const open = notable.indexOf(LIFT_OPEN);
+  const close = notable.indexOf(LIFT_CLOSE);
+  if (opens !== 1 || closes !== 1 || close < open || /\[\[\[|\]\]\]/.test(notable)) {
+    problems.push(`must mark its constraint sentence exactly once, as ${LIFT_OPEN}…${LIFT_CLOSE}`);
+    return problems;
+  }
+  const paragraph = notable.split(/\n\s*\n/).find((p) => p.includes(LIFT_OPEN)) ?? '';
+  if (!paragraph.includes(LIFT_CLOSE)) {
+    problems.push('must keep the marked constraint sentence inside one paragraph');
+    return problems;
+  }
+  const at = paragraph.indexOf(LIFT_OPEN);
+  const end = paragraph.indexOf(LIFT_CLOSE);
+  const before = paragraph.slice(0, at).trim() === '' ? '' : paragraph.slice(0, at);
+  const inner = paragraph.slice(at + LIFT_OPEN.length, end);
+  const after = paragraph.slice(end + LIFT_CLOSE.length);
+  if (inner.trim() === '' || inner !== inner.trim() || !SENTENCE_END.test(inner)) {
+    problems.push('must mark a whole sentence, ending in . ! ? or …, with no space inside the marks');
+  } else if (SENTENCE_BREAK.test(inner)) {
+    problems.push('must mark one sentence, not several');
+  } else if ((before !== '' && !SENTENCE_BEFORE.test(before)) || (after !== '' && !/^\s/.test(after))) {
+    problems.push('must mark a whole sentence, not part of one');
+  } else if (before === '' && after.trim() === '') {
+    problems.push('must keep the marked constraint sentence inside the paragraph, not as a paragraph of its own');
+  }
+  return problems;
+}
+
 /**
  * The Project field set, exactly ten fields. No entry has a field another lacks.
  *
  * `notable` is `nullish()`: absent, `null`, and `""` are all accepted and all
  * mean Shallow. Promoting a Shallow Project to Deep is free — populate the
- * string, change nothing else. It is trimmed first, so a whitespace-only value
+ * string, its constraint sentence marked, and change nothing else. It is trimmed first, so a whitespace-only value
  * normalizes to `""` and joins that set rather than passing as Deep prose and
- * rendering a blank panel.
+ * rendering a blank panel. A non-empty Notable must pass `notableProblems`:
+ * connected prose with its one constraint sentence marked `[[…]]`.
  *
  * Note the three Shallow forms differ in *parsed shape* — absent yields nine
  * keys, `null` and `""` yield ten — so Story 1.3's classifier must treat
@@ -106,6 +169,10 @@ export const ProjectSchema = z.strictObject({
   notable: z
     .string()
     .transform((s) => s.trim())
+    .superRefine((s, ctx) => {
+      if (s === '') return;
+      for (const message of notableProblems(s)) ctx.addIssue({ code: 'custom', message });
+    })
     .nullish(),
   skills: z.array(NonBlankString),
   weight: z.number().positive().default(1),
