@@ -3340,6 +3340,8 @@ const PREFERENCE_ROLES: Readonly<Record<string, 'writer' | 'reader' | 'model'>> 
   'src/render-scene/rail-camera.tsx': 'reader',
   'src/render-scene/mote-field.tsx': 'reader',
   'src/shell/focus-panel.tsx': 'reader',
+  // 3.8: the corner slot moves with the panel's slide, on the same pace.
+  'src/shell/corner-chrome.tsx': 'reader',
   'src/render-scene/rail-model.ts': 'model',
   'src/render-scene/flight-model.ts': 'model',
   'src/render-scene/focus-model.ts': 'model',

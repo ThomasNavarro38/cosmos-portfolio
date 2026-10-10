@@ -422,10 +422,10 @@ test('the renderer holds no logic the model could own', () => {
   // banned is the renderer keeping a copy of anything, because a second home for
   // "where the visitor is" is how the canvas and the index start disagreeing.
   assert.doesNotMatch(code, /\buseState\b|\buseEffect\b|\buseReducer\b|\buseMemo\b/, 'no local state in the renderer');
-  // The one ref (2.9) is to the `overview` element, so the return button can hand
-  // DOM focus to it as it unmounts; it holds no copy of anything, and
-  // `auditDoors` pins its shape. Any other ref, or a write to one, is a finding.
-  assert.equal((code.match(/\buseRef\s*[<(]/g) ?? []).length, 1, 'exactly one ref');
+  // No ref (3.8): the return and its focus hand-back left for the corner chrome,
+  // which finds `overview` by `OVERVIEW_ID` instead. A ref here, or a write to
+  // one, is a finding.
+  assert.equal((code.match(/\buseRef\s*[<(]/g) ?? []).length, 0, 'no ref');
   assert.doesNotMatch(code, /\.current\s*=(?!=)/, 'no ref is written — a ref here is an element, not state');
   assert.doesNotMatch(code, /\bisDeep\b|\bduration\b|\bnotable\b|\btimeAxis\b/, 'no re-derivation of a Body property');
   assert.doesNotMatch(code, /\bwindow\b|\bdocument\b|\bcamera\b|innerWidth/, 'no render, camera, or viewport state');
@@ -613,22 +613,27 @@ test('each handler is tied to its own element, so a transposition cannot pass', 
   //
   // Since 2.9 every button is a door in `activate.ts`, so the pins are on the
   // doors: `auditDoors` below, driven over the transpositions as well as the file.
+  // Since 3.8 there are three: the return is the corner chrome's.
   // `selectClient` is no longer called from here — or anywhere: the Client button
   // flies (`activateClient`), so `railPosition` has no shipped writer.
   assert.deepEqual(auditDoors(readFileSync(NAV_TSX, 'utf8')), []);
 });
 
 /**
- * The index's four doors, as a pure function over the renderer's source.
+ * The index's three doors, as a pure function over the renderer's source.
  *
  * Each handler is pinned to its own element and its own arguments: the Client
  * button activates `client.id`, the Project button activates `project.id` with its
- * own `client.id`, `overview` pulls back, and the return button returns — and
- * exists only while `mode === 'freeflight'`. As it unmounts, on a click or on
- * `Escape` (2.10), a stable ref cleanup hands DOM focus to `overview` through the
- * one `useRef`, exactly when the button still holds it. Exactly four `onClick`s, and no
- * store event called directly: a door composed by hand here would agree with the
- * scene's until the first time one of them changed.
+ * own `client.id`, and `overview` pulls back and carries `id={OVERVIEW_ID}`, the
+ * model's, so the corner chrome can hand DOM focus to it. Exactly three
+ * `onClick`s, no ref, no focus moved, and no store event called directly: a door
+ * composed by hand here would agree with the scene's until the first time one of
+ * them changed.
+ *
+ * **The return is banned here** (3.8, ruled 2a): `↩ resume the journey` is the
+ * corner chrome's slot, so there is one return button. No element here calls
+ * `returnToRail`, and its hand-back — the ref, the `mode` selector, the `.focus(`
+ * — left with it.
  */
 function auditDoors(source: string): string[] {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
@@ -641,32 +646,17 @@ function auditDoors(source: string): string[] {
   if (!/onClick=\{\(\)\s*=>\s*activateProject\(\s*project\.id\s*,\s*client\.id\s*\)\}/.test(code)) {
     failures.push('the Project button does not activate its own Project with its own Client');
   }
-  if (!/<button\s+type="button"\s+ref=\{overview\}\s+onClick=\{\(\)\s*=>\s*pullBack\(\)\}\s*>\s*overview\s*<\/button>/.test(code)) {
-    failures.push('no overview button, carrying the ref, pulling back');
+  if (!/<button\s+type="button"\s+id=\{OVERVIEW_ID\}\s+onClick=\{\(\)\s*=>\s*pullBack\(\)\}\s*>\s*overview\s*<\/button>/.test(code)) {
+    failures.push('no overview button, carrying OVERVIEW_ID, pulling back');
   }
-  if (!/const\s+overview\s*=\s*useRef<HTMLButtonElement>\(\s*null\s*\)/.test(code)) failures.push('the overview ref is not an empty button ref');
-  if ((code.match(/\bref=\{/g) ?? []).length !== 2) failures.push('a ref other than the overview button’s and the return’s hand-back');
-  const ret =
-    /<button\s+type="button"\s+ref=\{handBack\}\s+onClick=\{\(\)\s*=>\s*returnToRail\(\)\}\s*>\s*↩ resume the journey\s*<\/button>/.exec(code);
-  if (ret === null) failures.push('no return button that returns, carrying the hand-back ref');
-  else if (!/\{\s*mode\s*===\s*'freeflight'\s*\?\s*\(\s*$/.test(code.slice(0, ret.index))) {
-    failures.push('the return button is not conditional on free flight');
-  }
-  // 2.10: DOM focus is handed to `overview` where the unmount is — a ref cleanup —
-  // so a click and Escape are covered alike, and only while the button holds focus.
-  // Stable (`useCallback`, no dependencies): an inline callback is cleaned up on
-  // every re-render, and would move focus while the button stays.
-  if (
-    !/const\s+handBack\s*=\s*useCallback\(\s*\(\s*button\s*:\s*HTMLButtonElement\s*\|\s*null\s*\)\s*=>\s*\(\)\s*=>\s*\{\s*if\s*\(\s*button\?\.matches\(\s*':focus'\s*\)\s*===\s*true\s*\)\s*overview\.current\?\.focus\(\)\s*;\s*\}\s*,\s*\[\s*\]\s*,?\s*\)/.test(
-      code,
-    )
-  ) {
-    failures.push('the return button’s unmount does not hand DOM focus to overview, exactly when it holds focus, from a stable ref cleanup');
-  }
-  if ((code.match(/\.focus\(/g) ?? []).length !== 1) failures.push('DOM focus is moved other than once, in the hand-back');
-  if (!/const\s+mode\s*=\s*useStore\(\s*navigationStore\s*,\s*\(\s*(\w+)\s*\)\s*=>\s*\1\.mode\s*\)/.test(code)) {
-    failures.push('the mode is not read through its own selector');
-  }
+  if (!/import\s*\{[^}]*\bOVERVIEW_ID\b[^}]*\}\s*from\s*'\.\/index-model\.ts'/.test(code)) failures.push('OVERVIEW_ID is not the model’s');
+  if ((code.match(/\bOVERVIEW_ID\b/g) ?? []).length !== 2) failures.push('OVERVIEW_ID is used other than in the import and on overview');
+  // 3.8: the return and everything that served it are gone.
+  if (/\breturnToRail\b/.test(code)) failures.push('an element calls returnToRail — the return is the corner slot’s alone');
+  if (/resume the journey/.test(code)) failures.push('the return’s text is still in the index');
+  if (/\bref=\{|\buseRef\b|\buseCallback\b|\bhandBack\b/.test(code)) failures.push('a ref or a hand-back — the index moves no focus since 3.8');
+  if (/\.focus\(/.test(code)) failures.push('DOM focus is moved from the index');
+  if (/\bstate\.mode\b|\bmode\s*===/.test(code)) failures.push('the mode is read — nothing in the index depends on it since 3.8');
   if (/activateClient\(\s*project\.|activateProject\(\s*client\.|activateProject\(\s*project\.id\s*,\s*project\./.test(code)) {
     failures.push('a door is handed the other entity’s ID — a ProjectId where a ClientId belongs is AD-4a');
   }
@@ -686,16 +676,18 @@ function auditDoors(source: string): string[] {
   if (!/activateProject\(\s*project\.id\s*,\s*client\.id\s*\)\}\s*onFocus=/.test(code)) {
     failures.push('the focus handler is not on the Project button');
   }
-  if (/\b(?:selectClient|focusProject|enterFreeFlight|enterRail|releaseFocus|advanceScroll|hoverProject|keyboardApproach)\b/.test(code)) {
-    failures.push('a store event called directly — every button is a door in activate.ts');
+  if (/\b(?:selectClient|focusProject|enterFreeFlight|enterRail|releaseFocus|advanceScroll|hoverProject|keyboardApproach|releaseLayer|goHome)\b/.test(code)) {
+    failures.push('a store event or a chrome door called — every index button is one of its own doors in activate.ts');
   }
   const clicks = (code.match(/onClick=\{/g) ?? []).length;
-  if (clicks !== 4) failures.push(`exactly four buttons carry a handler — found ${clicks}`);
+  if (clicks !== 3) failures.push(`exactly three buttons carry a handler — found ${clicks}`);
   return failures;
 }
 
 test('the door audit rejects the real renderer with any one door miswired', () => {
   const real = readFileSync(NAV_TSX, 'utf8');
+  const returnButton =
+    "\n      {mode === 'freeflight' ? (\n        <button type=\"button\" onClick={() => returnToRail()}>\n          ↩ resume the journey\n        </button>\n      ) : null}";
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
     ['the Client door handed a Project', (s) => s.replace('activateClient(client.id)', 'activateClient(project.id)')],
     ['the Project door handed a Client', (s) => s.replace('activateProject(project.id, client.id)', 'activateProject(client.id, client.id)')],
@@ -704,19 +696,21 @@ test('the door audit rejects the real renderer with any one door miswired', () =
     ['Focus called directly', (s) => s.replace('activateProject(project.id, client.id)', 'focusProject(project.id)')],
     ['the overview dropped', (s) => s.replace('onClick={() => pullBack()}', '')],
     ['the overview returns instead', (s) => s.replace('onClick={() => pullBack()}', 'onClick={() => returnToRail()}')],
-    ['the return always rendered', (s) => s.replace("{mode === 'freeflight' ? (", '{true ? (')],
-    ['the return on the Rail', (s) => s.replace("{mode === 'freeflight' ? (", "{mode === 'rail' ? (")],
-    ['the return pulls back', (s) => s.replace('onClick={() => returnToRail()}', 'onClick={() => pullBack()}')],
-    ['focus left on the unmounted button', (s) => s.replace(/\s*if \(button\?\.matches\(':focus'\) === true\) overview\.current\?\.focus\(\);/, '')],
-    ['the hand-back dropped from the button', (s) => s.replace(' ref={handBack}', '')],
-    ['focus taken whether or not the button held it', (s) => s.replace("if (button?.matches(':focus') === true) overview", 'overview')],
-    ['focus moved on mount, not on unmount', (s) => s.replace(/\(\) => \{\s*if \(button\?\.matches/, '{\n      if (button?.matches')],
-    ['an inline hand-back, cleaned up every render', (s) => s.replace('ref={handBack}', "ref={(button) => () => { if (button?.matches(':focus') === true) overview.current?.focus(); }}")],
-    ['a hand-back with dependencies', (s) => s.replace(/\},\s*\[\],\s*\);/, '},\n    [mode],\n  );')],
-    ['focus moved by the click as well', (s) => s.replace('onClick={() => returnToRail()}', 'onClick={() => { returnToRail(); overview.current?.focus(); }}')],
-    ['the ref dropped from overview', (s) => s.replace(' ref={overview}', '')],
-    ['the ref on the Client button', (s) => s.replace(' ref={overview}', '').replace('<button type="button" onClick={() => activateClient', '<button type="button" ref={overview} onClick={() => activateClient')],
-    ['the mode read off the wrong field', (s) => s.replace('(state) => state.mode)', '(state) => state.focusOrigin)')],
+    ['the overview releases a layer instead', (s) => s.replace('onClick={() => pullBack()}', 'onClick={() => releaseLayer()}')],
+    ['the overview id dropped', (s) => s.replace(' id={OVERVIEW_ID}', '')],
+    ['the overview id composed', (s) => s.replace(' id={OVERVIEW_ID}', ' id="index-overview"')],
+    [
+      'the overview id on the Client button',
+      (s) =>
+        s
+          .replace(' id={OVERVIEW_ID}', '')
+          .replace('<button type="button" onClick={() => activateClient', '<button type="button" id={OVERVIEW_ID} onClick={() => activateClient'),
+    ],
+    ['the return kept in the index', (s) => s.replace(/(overview\n\s*<\/button>)/, `$1${returnButton}`)],
+    ['the return by another door', (s) => s.replace(/(overview\n\s*<\/button>)/, '$1\n      <button type="button" onClick={() => goHome()}>↩ resume the journey</button>')],
+    ['a ref back on overview', (s) => s.replace(' id={OVERVIEW_ID}', ' id={OVERVIEW_ID} ref={overview}')],
+    ['focus moved from the index', (s) => s.replace('onClick={() => pullBack()}', 'onClick={() => { pullBack(); document.getElementById(OVERVIEW_ID)?.focus(); }}')],
+    ['the mode subscribed again', (s) => s.replace('const focusedProjectId =', 'const mode = useStore(navigationStore, (state) => state.mode);\n  const focusedProjectId =')],
     ['a Client button with no handler', (s) => s.replace(' onClick={() => activateClient(client.id)}', '')],
     // 3.4: the keyboard's approach.
     ['a mouse focus approaches too', (s) => s.replace("event.currentTarget.matches(':focus-visible')", 'true')],
@@ -725,7 +719,14 @@ test('the door audit rejects the real renderer with any one door miswired', () =
     ['the blur dropped', (s) => s.replace(/\s*onBlur=\{\(\) => leaveByKeyboard\(project\.id\)\}/, '')],
     ['the blur writes the store directly', (s) => s.replace('leaveByKeyboard(project.id)', 'keyboardApproach(null)')],
     ['a hover written from the index', (s) => s.replace('leaveByKeyboard(project.id)', 'hoverProject(project.id)')],
-    ['a second focus handler', (s) => s.replace('<button type="button" onClick={() => activateClient(client.id)}>', '<button type="button" onClick={() => activateClient(client.id)} onFocus={() => pullBack()}>')],
+    [
+      'a second focus handler',
+      (s) =>
+        s.replace(
+          '<button type="button" onClick={() => activateClient(client.id)}>',
+          '<button type="button" onClick={() => activateClient(client.id)} onFocus={() => pullBack()}>',
+        ),
+    ],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real.replace(/\r\n/g, '\n'));
@@ -840,9 +841,7 @@ test('each Client’s Projects are nested inside its own list item, not beside i
     tags,
     [
       '<nav',
-      // `overview`, then the return button (rendered only in free flight).
-      '<button',
-      '</button',
+      // `overview` alone — the return is the corner chrome's since 3.8.
       '<button',
       '</button',
       '<ul',

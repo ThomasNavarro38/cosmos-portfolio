@@ -83,6 +83,14 @@ export interface IndexArtifactProject {
  */
 export const DEPTH_LABELS = { deep: 'Deep', shallow: 'Shallow' } as const;
 
+/**
+ * The `id` of the index's `overview` button (3.8): where DOM focus is handed when
+ * the corner slot's button unmounts while holding it. The slot lives outside
+ * the index, so it finds `overview` by this `id` rather than by a ref. Not an
+ * `index-entry:` ID, so it can collide with no Project's entry.
+ */
+export const OVERVIEW_ID = 'index-overview';
+
 /** One Project entry in the index: a destination, its title, and its depth. */
 export interface IndexProjectEntry {
   /** The entity ID, exactly as the artifact minted it. The one handle a consumer holds. */

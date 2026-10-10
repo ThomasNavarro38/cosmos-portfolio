@@ -33,10 +33,9 @@
  * this. Semantics only.
  */
 
-import { useCallback, useRef } from 'react';
 import { useStore } from 'zustand/react';
-import { activateClient, activateProject, approachByKeyboard, leaveByKeyboard, pullBack, returnToRail } from './activate.ts';
-import { buildDestinationIndex, type IndexArtifact } from './index-model.ts';
+import { activateClient, activateProject, approachByKeyboard, leaveByKeyboard, pullBack } from './activate.ts';
+import { OVERVIEW_ID, buildDestinationIndex, type IndexArtifact } from './index-model.ts';
 import { indexEntryId } from './panel-model.ts';
 import { navigationStore } from './state.ts';
 
@@ -70,19 +69,15 @@ export interface DestinationNavProps {
  *
  * **Every button is a door in `activate.ts`** (2.9), the same doors the scene's
  * picks call: a Client flies to its stop, a Project focuses (flying to its Client
- * first when already in free flight), `overview` pulls back to frame the whole
- * universe, and `↩ resume the journey` returns to the Rail where it was left. The
- * return button exists only while `mode === 'freeflight'`, read through a second
- * selector so a `scrollProgress` write re-renders nothing here either.
+ * first when already in free flight), and `overview` pulls back to frame the
+ * whole universe.
  *
- * Leaving free flight unmounts the return button, which would drop DOM focus to
- * `<body>` if the button held it. That happens on a click and on `Escape`
- * (2.10) alike, so it is handled where the unmount is, not in either handler: a
- * React 19 ref cleanup on the button hands DOM focus to `overview` — the button
- * beside it that stays, through the one `useRef` this renderer holds — exactly
- * when the button still has focus as it goes. The callback is stable
- * (`useCallback`, no dependencies), so its cleanup runs on unmount and never on a
- * re-render. Refs to elements, not copies of any state.
+ * **The return is not here** (3.8, ruled 2a). `↩ resume the journey` is the corner
+ * chrome's stateful slot (`corner-chrome.tsx`), so there is one return button,
+ * not two. `overview` carries `id={OVERVIEW_ID}` (the model's) because the slot
+ * hands DOM focus to it when its button unmounts while holding focus — on a click
+ * or on `Escape` alike — and the slot, outside this tree, finds it by that `id`.
+ * This renderer holds no ref and moves no focus.
  *
  * **A Project button's focus is the keyboard's approach** (3.4): `onFocus` hands
  * the door `approachByKeyboard` its own ID and whether the focus is
@@ -94,27 +89,12 @@ export interface DestinationNavProps {
 export function DestinationNav({ artifact }: DestinationNavProps) {
   const index = buildDestinationIndex(artifact);
   const focusedProjectId = useStore(navigationStore, (state) => state.focusedProjectId);
-  const mode = useStore(navigationStore, (state) => state.mode);
-  const overview = useRef<HTMLButtonElement>(null);
-  // Stable, so React calls its cleanup only when the button unmounts — an inline
-  // callback would be cleaned up on every re-render and move focus spuriously.
-  const handBack = useCallback(
-    (button: HTMLButtonElement | null) => () => {
-      if (button?.matches(':focus') === true) overview.current?.focus();
-    },
-    [],
-  );
 
   return (
     <nav aria-label="Destinations">
-      <button type="button" ref={overview} onClick={() => pullBack()}>
+      <button type="button" id={OVERVIEW_ID} onClick={() => pullBack()}>
         overview
       </button>
-      {mode === 'freeflight' ? (
-        <button type="button" ref={handBack} onClick={() => returnToRail()}>
-          ↩ resume the journey
-        </button>
-      ) : null}
       <ul>
         {index.clients.map((client) => (
           <li key={client.id}>

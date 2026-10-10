@@ -1256,7 +1256,9 @@ function auditEntryIds(source: string): string[] {
   if (!/\bid=\{\s*indexEntryId\(\s*project\.id\s*\)\s*\}/.test(projectButton[1] ?? '')) {
     failures.push('the Project button does not carry id={indexEntryId(project.id)} — focus cannot return to it');
   }
-  if ((code.match(/\bid=\{/g) ?? []).length !== 1) failures.push('an id other than the Project entry’s');
+  // Two ids: the Project entry's, and `overview`'s (3.8), where the corner slot hands focus back.
+  const ids = code.match(/\bid=\{[^}]*\}+/g) ?? [];
+  if (ids.length !== 2 || !ids.includes('id={OVERVIEW_ID}')) failures.push('an id other than the Project entry’s and overview’s');
   if (!/import\s*\{\s*indexEntryId\s*\}\s*from\s*'\.\/panel-model\.ts'/.test(code)) failures.push('the id is not the model’s');
   return failures;
 }
@@ -1271,6 +1273,8 @@ test('each Project entry in the index carries the id focus returns to', () => {
     ['the id dropped', (s: string) => s.replace(ENTRY_ID_LINE, '')],
     ['the Client’s id instead', (s: string) => s.replace(ENTRY_ID_LINE, ' id={indexEntryId(client.id)}')],
     ['a composed id', (s: string) => s.replace(ENTRY_ID_LINE, ' id={`entry-${project.id}`}')],
+    ['a third id', (s: string) => s.replace('<button type="button" onClick={() => activateClient', '<button type="button" id={client.id} onClick={() => activateClient')],
+    ['the overview id swapped for another', (s: string) => s.replace('id={OVERVIEW_ID} onClick', 'id={FOCUS_PANEL_ID} onClick')],
   ] as const) {
     const mutated = mutate(real);
     assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
@@ -1288,11 +1292,19 @@ function auditMount(source: string): string[] {
   const scene = code.indexOf('<SceneHost');
   const panel = code.indexOf('<FocusPanel');
   if (scene === -1 || panel === -1 || panel < scene) failures.push('the panel does not follow the scene in document order');
+  // 3.8: index, chrome, scene host, panel — the corner chrome once, with no props, between the index and the scene.
+  if (!/import\s*\{\s*CornerChrome\s*\}\s*from\s*'\.\/shell\/corner-chrome\.tsx'/.test(code)) failures.push('CornerChrome is not imported from the shell');
+  const chromes = code.match(/<CornerChrome\b[^>]*>/g) ?? [];
+  if (chromes.length !== 1 || !/<CornerChrome\s*\/>/.test(code)) failures.push(`CornerChrome is not mounted once, bare — found ${chromes.length}`);
+  const order = ['<DestinationNav', '<CornerChrome', '<SceneHost', '<FocusPanel'].map((tag) => code.indexOf(tag));
+  if (order.some((at) => at === -1) || order.some((at, i) => i > 0 && at < (order[i - 1] ?? 0))) {
+    failures.push('the document order is not index, chrome, scene host, panel');
+  }
   return failures;
 }
 
-test('App.tsx mounts the panel after the scene host', () => {
-  const real = readFileSync(APP_TSX, 'utf8');
+test('App.tsx mounts index, chrome, scene host and panel, in that order', () => {
+  const real = readFileSync(APP_TSX, 'utf8').replace(/\r\n/g, '\n');
   assert.deepEqual(auditMount(real), []);
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
     ['the panel not mounted', (s) => s.replace(/^\s*<FocusPanel artifact=\{artifact\} \/>\r?\n/m, '')],
@@ -1301,6 +1313,14 @@ test('App.tsx mounts the panel after the scene host', () => {
     ['mounted twice', (s) => s.replace('<FocusPanel artifact={artifact} />', '<FocusPanel artifact={artifact} />\n      <FocusPanel artifact={artifact} />')],
     ['no artifact', (s) => s.replace('<FocusPanel artifact={artifact} />', '<FocusPanel artifact={{ clients: [] }} />')],
     ['imported from elsewhere', (s) => s.replace("from './shell/focus-panel.tsx'", "from './panel.tsx'")],
+    ['the chrome not mounted', (s) => s.replace(/^\s*<CornerChrome \/>\n/m, '')],
+    ['the chrome mounted twice', (s) => s.replace('<CornerChrome />', '<CornerChrome />\n      <CornerChrome />')],
+    ['the chrome before the index', (s) => s.replace(/^(\s*)<CornerChrome \/>\n/m, '').replace('<DestinationNav', '<CornerChrome />\n      <DestinationNav')],
+    ['the chrome after the scene', (s) => s.replace(/^(\s*)<CornerChrome \/>\n/m, '').replace('<FocusPanel', '<CornerChrome />\n      <FocusPanel')],
+    ['the chrome after the panel', (s) => s.replace(/^(\s*)<CornerChrome \/>\n/m, '').replace('</main>', '  <CornerChrome />\n    </main>')],
+    ['the chrome handed props', (s) => s.replace('<CornerChrome />', '<CornerChrome artifact={artifact} />')],
+    ['the chrome imported from elsewhere', (s) => s.replace("from './shell/corner-chrome.tsx'", "from './chrome.tsx'")],
+    ['the index after the scene', (s) => s.replace(/^\s*<DestinationNav artifact=\{artifact\} \/>\n/m, '').replace('<FocusPanel', '<DestinationNav artifact={artifact} />\n      <FocusPanel')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);
