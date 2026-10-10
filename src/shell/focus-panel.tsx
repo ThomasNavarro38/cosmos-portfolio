@@ -57,8 +57,11 @@
  * (`src/render-scene/focus-model.ts`), on the same duration and curve as the
  * slide below.
  *
- * **Greybox.** Semantics and the slide only; typography, the Notable treatment
- * and the editorial rule are Epic 3's.
+ * **The treatment is `focus-panel.css`** (3.6): each block carries a
+ * `panel-<kind>` class and the stylesheet sets its type, ink, rhythm and measure
+ * from the token custom properties; the release's hover and `:focus-visible`
+ * states are there too, because no inline style can hold them. The Notable's
+ * lifted sentence and the Shallow editorial rule are 3.7's.
  */
 
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
@@ -80,6 +83,7 @@ import {
 } from './panel-model.ts';
 import { motionPace, reducedMotion, subscribeReducedMotion } from './motion-preference.ts';
 import { navigationStore, releaseFocus } from './state.ts';
+import './focus-panel.css';
 
 /** What the panel needs: the artifact, and nothing else. */
 export interface FocusPanelProps {
@@ -165,16 +169,20 @@ function PanelBlocks({ blocks, titleId }: PanelBlocksProps) {
   return blocks.map((block) => {
     switch (block.kind) {
       case 'kicker':
-        return <p key={block.kind}>{block.text}</p>;
+        return (
+          <p key={block.kind} className="panel-kicker">
+            {block.text}
+          </p>
+        );
       case 'title':
         return (
-          <h2 key={block.kind} id={titleId}>
+          <h2 key={block.kind} id={titleId} className="panel-title">
             {block.text}
           </h2>
         );
       case 'reading':
         return (
-          <div key={block.kind}>
+          <div key={block.kind} className="panel-reading">
             {block.paragraphs.map((paragraph, index) => (
               <p key={index}>{paragraph}</p>
             ))}
@@ -182,7 +190,7 @@ function PanelBlocks({ blocks, titleId }: PanelBlocksProps) {
         );
       case 'fields':
         return (
-          <table key={block.kind}>
+          <table key={block.kind} className="panel-fields">
             <tbody>
               {block.rows.map((row) => (
                 <tr key={row.label}>
@@ -195,7 +203,7 @@ function PanelBlocks({ blocks, titleId }: PanelBlocksProps) {
         );
       case 'skills':
         return (
-          <ul key={block.kind} aria-label="Skills">
+          <ul key={block.kind} className="panel-skills" aria-label="Skills">
             {block.items.map((item) => (
               <li key={item}>{item}</li>
             ))}

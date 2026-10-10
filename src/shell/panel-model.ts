@@ -42,8 +42,14 @@ export const PANEL_MAX_PX = 560;
 /** The panel's share of the viewport width once 560px is more than that share (DESIGN.md: 46%). */
 export const PANEL_FRACTION = 0.46;
 
-/** The panel's padding, shared by the column and the outgoing layer so their content aligns. */
-export const PANEL_PADDING = '56px clamp(16px, 5vw, 40px) 60px';
+/**
+ * The panel's padding, shared by the column and the outgoing layer so their
+ * content aligns. A custom property, because the value steps at 1200px
+ * (DESIGN.md §4: 56/56/60; below it the sides are `clamp(16px, 5vw, 40px)`,
+ * 40px down to a 16px phone floor) and only a stylesheet
+ * can hold a media query: `focus-panel.css` defines it on the panel.
+ */
+export const PANEL_PADDING = 'var(--panel-padding)';
 
 /** The panel element's `id`: where the wheel handler scrolls and where DOM focus lands on entry. */
 export const FOCUS_PANEL_ID = 'focus-panel';
@@ -112,6 +118,7 @@ export interface PanelArtifactProject {
   readonly isDeep: boolean;
   readonly content: {
     readonly project: string;
+    readonly company: string | null;
     readonly role: string;
     readonly team_size: number;
     readonly built: string;
@@ -171,7 +178,7 @@ export function buildPanel(artifact: PanelArtifact, id: string | null): FocusPan
       return {
         projectId: project.id,
         blocks: [
-          { kind: 'kicker', text: client.name },
+          { kind: 'kicker', text: kickerText(client.name, content.company) },
           { kind: 'title', text: content.project },
           { kind: 'reading', paragraphs: project.isDeep ? paragraphsOf(content.notable ?? '') : [] },
           {
@@ -189,6 +196,16 @@ export function buildPanel(artifact: PanelArtifact, id: string | null): FocusPan
     }
   }
   return null;
+}
+
+/**
+ * The kicker's text: the Client, then the Company after a mid-dot, or the Client
+ * alone when there is no Company. FR-6 puts the Company on the information
+ * layer as a label, never as a Body; FR-11 ships both names verbatim — the
+ * stylesheet sets them in capitals, the text stays as authored.
+ */
+export function kickerText(client: string, company: string | null): string {
+  return company === null ? client : `${client} · ${company}`;
 }
 
 /** The Skills block, deduplicated in authored order — or none at all for a Project with no Skills. */
@@ -355,6 +372,7 @@ export interface PanelStyle {
   readonly background: string;
   readonly color: string;
   readonly borderLeft: string;
+  readonly outline: 'none';
   readonly transform: string;
   readonly visibility: 'visible' | 'hidden';
   readonly transition: string;
@@ -375,8 +393,11 @@ export interface PanelStyle {
  * the reduced-motion pace the camera's Focus ease is dilated by, so the two
  * halves still start and end together.
  *
- * Greybox: CSS system colours and a hairline, no token. It paints its own
- * column and nothing else — no scrim, no backdrop, no overlay.
+ * The surface is DESIGN.md §7.6's: `surface-raised` with one 1px
+ * `surface-edge` left border, read from the token custom properties. No outline:
+ * the container takes programmatic focus (`tabindex="-1"`, never tabbed to),
+ * and a focus ring there would be a second boundary. It paints its own column
+ * and nothing else — no scrim, no backdrop, no overlay.
  */
 export function panelStyle(open: boolean, pace = 1): PanelStyle {
   const seconds = FOCUS_SECONDS * usablePace(pace);
@@ -392,9 +413,10 @@ export function panelStyle(open: boolean, pace = 1): PanelStyle {
     overflowY: 'auto',
     overscrollBehavior: 'contain',
     padding: PANEL_PADDING,
-    background: 'Canvas',
-    color: 'CanvasText',
-    borderLeft: '1px solid GrayText',
+    background: 'var(--color-surface-raised-dark)',
+    color: 'var(--color-ink-prose-dark)',
+    borderLeft: '1px solid var(--color-surface-edge-dark)',
+    outline: 'none',
     transform: open ? 'translateX(0)' : 'translateX(100%)',
     visibility: open ? 'visible' : 'hidden',
     transition: `transform ${curve}, visibility 0s linear ${open ? 0 : seconds}s`,
