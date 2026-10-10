@@ -76,7 +76,7 @@ test('a minimal valid entry passes', () => {
 test('a `notabel` typo fails and names both the field and the entry', () => {
   const entry = baseEntry();
   delete entry['notable'];
-  entry['notabel'] = 'Problem stated. [[The constraint, in one sentence.]] The decision taken.';
+  entry['notabel'] = MARKED;
 
   const failures = validateCareer(fileWith(baseEntry(), entry));
   assertFails(failures, /notabel/, 'the message must name the unknown field');
@@ -151,27 +151,36 @@ test('a Notable marks its constraint as one whole sentence inside a paragraph, w
   }
 });
 
-test('a Notable without exactly one well-formed whole-sentence lift fails, naming `notable`', () => {
-  for (const [why, notable] of [
-    ['no marker', 'Prose with no constraint marked.'],
-    ['two spans', '[[One.]] [[Two.]]'],
-    ['unclosed', 'Before. [[The constraint.'],
-    ['unopened', 'Before. The constraint.]] After.'],
-    ['reversed', 'Before.]] The constraint. [[After.'],
-    ['mid-sentence', 'A sentence that [[carries the constraint.]] After.'],
-    ['glued after', 'Before. [[The constraint.]]After.'],
-    ['glued before', 'Before.[[The constraint.]] After.'],
-    ['several sentences', 'Before. [[One sentence. And another.]] After.'],
-    ['a stray bracket', 'Before. [[[The constraint.]] After.'],
-    ['no terminal punctuation', 'Before. [[The constraint]] after.'],
-    ['spans paragraphs', 'Before. [[The constraint.\n\nContinues.]] After.'],
-    ['the whole paragraph', 'First paragraph.\n\n[[The constraint, alone.]]'],
-    ['blank', 'Before. [[ ]] After.'],
-    ['edge whitespace', 'Before. [[ The constraint.]] After.'],
+/** The problem each malformed lift must be rejected for, so no case passes for another reason. */
+const ONCE = /notable.*exactly once/;
+const PART = /notable.*not part of one/;
+const WHOLE = /notable.*whole sentence, ending in/;
+const OWN = /notable.*not as a paragraph of its own/;
+
+test('a Notable without exactly one well-formed whole-sentence lift fails, naming `notable` and the problem', () => {
+  for (const [why, notable, problem] of [
+    ['no marker', 'Prose with no constraint marked.', ONCE],
+    ['two spans', '[[One.]] [[Two.]]', ONCE],
+    ['unclosed', 'Before. [[The constraint.', ONCE],
+    ['unopened', 'Before. The constraint.]] After.', ONCE],
+    ['reversed', 'Before.]] The constraint. [[After.', ONCE],
+    ['mid-sentence', 'A sentence that [[carries the constraint.]] After.', PART],
+    ['glued after', 'Before. [[The constraint.]]After.', PART],
+    ['glued before', 'Before.[[The constraint.]] After.', PART],
+    ['several sentences', 'Before. [[One sentence. And another.]] After.', /notable.*one sentence, not several/],
+    ['a stray bracket', 'Before. [[[The constraint.]] After.', ONCE],
+    ['no terminal punctuation', 'Before. [[The constraint]] after.', WHOLE],
+    ['spans paragraphs', 'Before. [[The constraint.\n\nContinues.]] After.', /notable.*inside one paragraph/],
+    ['the whole paragraph', 'First paragraph.\n\n[[The constraint, alone.]]', OWN],
+    ['the whole Notable', '[[Only the constraint.]]', OWN],
+    ['blank', 'Before. [[ ]] After.', WHOLE],
+    ['edge whitespace', 'Before. [[ The constraint.]] After.', WHOLE],
   ] as const) {
     const entry = baseEntry();
     entry['notable'] = notable;
-    assertFails(validateCareer(fileWith(entry)), /notable/, `${why} must be rejected`);
+    const failures = validateCareer(fileWith(entry));
+    assertFails(failures, problem, `${why} must be rejected for its own problem`);
+    assert.ok(!failures.some((line) => /list item/.test(line)), `${why} is not a list`);
   }
 });
 
@@ -179,7 +188,13 @@ test('a Notable is connected prose: a line set like a list item fails, naming `n
   for (const line of ['- Kafka', '* Kafka', '• Kafka', '+ Kafka', '– Kafka', '— Kafka', '1. Kafka', '2) Kafka', 'a) Kafka', '  - Kafka']) {
     const entry = baseEntry();
     entry['notable'] = `${MARKED}\n${line}`;
-    assertFails(validateCareer(fileWith(entry)), /notable/, `${JSON.stringify(line)} must be rejected`);
+    assertFails(validateCareer(fileWith(entry)), /notable.*list item/, `${JSON.stringify(line)} must be rejected`);
+  }
+  // As the first line, or as a paragraph of its own.
+  for (const notable of [`- Kafka\n${MARKED}`, `${MARKED}\n\n- Kafka`]) {
+    const entry = baseEntry();
+    entry['notable'] = notable;
+    assertFails(validateCareer(fileWith(entry)), /notable.*list item/, `${JSON.stringify(notable)} must be rejected`);
   }
   // A dash inside a sentence is prose, not a list.
   const entry = baseEntry();
@@ -493,7 +508,7 @@ test('the CLI exits 1 and writes to stderr on invalid data', () => {
   assert.ok(first !== undefined);
   // Set rather than renamed: a Shallow first entry has no `notable` to rename,
   // and `JSON.stringify` would drop a `notabel: undefined` without a trace.
-  first['notabel'] = first['notable'] ?? 'Problem stated. [[The constraint, in one sentence.]] The decision taken.';
+  first['notabel'] = first['notable'] ?? MARKED;
   delete first['notable'];
   const client = String(first['client']);
 

@@ -127,6 +127,24 @@ context:
 - [x] [Review][Patch] `heavyRoles` read `normal` as heavy and a blank weight as 0; `normal` is now 400, and a blank or non-number weight counts as heavy [scripts/tokens.test.ts]
 - [x] [Review][Patch] The docs overstated "free" promotion and omitted the heuristics' limits (no literal `[[` in prose, `e.g.` reads as a break) [src/data/schema.ts, src/data/README.md, src/derive/maintenance.test.ts]
 
+#### Pass 2 (2026-10-10)
+
+- [x] [Review][Decision] (Resolved 2026-10-10: Thomas chose to keep the rule and document it, which became the patch below) The list-line heuristic misfires both ways. Under the `m` flag, `LIST_LINE` rejects a hard-wrapped prose line that opens with `— `, `- ` or `2019. `, and it accepts real list forms: `-Kafka` (no space), `A)`, `a.` and `ii)`.
+- [x] [Review][Patch] Document the list-line heuristic's limits: a hard-wrapped line that opens with a dash or `2019. ` reads as a list item, and a marker glued to its text, upper-case or roman, is not caught [src/data/README.md:40]
+- [x] [Review][Patch] The negative matrix asserts only `/notable/`, not the expected problem, so a case can pass for the wrong reason (for example a `LIST_LINE` false positive) [src/data/validate.test.ts:154]
+- [x] [Review][Patch] Missing cases: `'[[Only.]]'` as a single-paragraph Notable; a list line as the first line or as its own paragraph [src/data/validate.test.ts:154]
+- [x] [Review][Patch] `runsOf`'s stray-mark fallback is unpinned: a lone `[[`, and `]]` before `[[`, should each stay one unlifted run [src/shell/panel-model.test.ts:150]
+- [x] [Review][Patch] The Shallow-order test filters out `skills` on both sides; when a Shallow panel has Skills, compare the full order [src/shell/panel-model.test.ts:284]
+- [x] [Review][Patch] The paragraph split `/\n\s*\n/` is restated in `panel-model.ts` with no tie to the schema's; pin it like `LIFT_OPEN`/`LIFT_CLOSE` [src/shell/panel-model.test.ts:245]
+- [x] [Review][Patch] The emphasis ban still allows `<code>`, `<kbd>`, `<var>`, `<sup>`, `<sub>`, `<abbr>`, `fontVariant` and `textTransform` [src/shell/panel-model.test.ts:1012]
+- [x] [Review][Patch] The error message "with no space inside the marks" is misleading: only edge whitespace is rejected [src/data/schema.ts:132]
+- [x] [Review][Patch] Undocumented heuristic limits: an abbreviation directly before `[[` (`e.g. [[…]]`) passes as a sentence end; `]]]` cannot appear, so a lift cannot end in `]` despite `END` listing it [src/data/README.md:40]
+- [x] [Review][Patch] `validate.test.ts` defines `MARKED` and then repeats its literal twice [src/data/validate.test.ts:79]
+- [x] [Review][Patch] The forced-colours rationale is stated twice in the stylesheet; keep the block comment [src/shell/focus-panel.css:201]
+- [x] [Review][Patch] Doc debris: the `ProjectSchema` JSDoc line overruns the wrap width, and the data README "populate the string — its constraint sentence marked — change nothing else" lacks "and" [src/data/schema.ts:148]
+- [x] [Review][Defer] The rendered reading position (`p.panel-prose`, `span.panel-lift`, `p.panel-rule`) is held only by source-text audits; no test renders the component [src/shell/focus-panel.tsx:185] — deferred, pre-existing: `node --test` strips types and has no JSX transform, and 3.6 set the source-audit pattern
+- [x] [Review][Defer] A stale comment says `career.json` "holds one Client with one Project … already Deep"; it now holds 8 Projects [src/derive/maintenance.test.ts:274] — deferred, pre-existing
+
 ## Design Notes
 
 The marker lives in the data because only the author knows which sentence carries the constraint. An inline marker keeps the ten-field schema and keeps promotion a one-string edit (FR-5). Parsing it in the panel model is presentation, like the paragraph split. It is not classification, which stays `isDeep` (AD-3). The Colophon's raw data view (Epic 5) will show `[[…]]`; that is the data as authored.

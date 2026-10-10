@@ -81,6 +81,8 @@ export const DurationSchema = z
 /** The marks around a Notable's one constraint sentence, which the panel lifts in brighter ink. */
 export const LIFT_OPEN = '[[';
 export const LIFT_CLOSE = ']]';
+/** A paragraph break in a Notable: a blank line. The panel splits on the same rule. */
+export const PARAGRAPH_BREAK = /\n\s*\n/;
 
 /** Sentence-ending punctuation, optionally closed by a quote, guillemet or bracket. */
 const END = String.raw`[.!?…]["'”’»)\]]*`;
@@ -118,7 +120,7 @@ function notableProblems(notable: string): string[] {
     problems.push(`must mark its constraint sentence exactly once, as ${LIFT_OPEN}…${LIFT_CLOSE}`);
     return problems;
   }
-  const paragraph = notable.split(/\n\s*\n/).find((p) => p.includes(LIFT_OPEN)) ?? '';
+  const paragraph = notable.split(PARAGRAPH_BREAK).find((p) => p.includes(LIFT_OPEN)) ?? '';
   if (!paragraph.includes(LIFT_CLOSE)) {
     problems.push('must keep the marked constraint sentence inside one paragraph');
     return problems;
@@ -129,7 +131,7 @@ function notableProblems(notable: string): string[] {
   const inner = paragraph.slice(at + LIFT_OPEN.length, end);
   const after = paragraph.slice(end + LIFT_CLOSE.length);
   if (inner.trim() === '' || inner !== inner.trim() || !SENTENCE_END.test(inner)) {
-    problems.push('must mark a whole sentence, ending in . ! ? or …, with no space inside the marks');
+    problems.push('must mark a whole sentence, ending in . ! ? or …, with no space just inside the marks');
   } else if (SENTENCE_BREAK.test(inner)) {
     problems.push('must mark one sentence, not several');
   } else if ((before !== '' && !SENTENCE_BEFORE.test(before)) || (after !== '' && !/^\s/.test(after))) {
@@ -145,9 +147,9 @@ function notableProblems(notable: string): string[] {
  *
  * `notable` is `nullish()`: absent, `null`, and `""` are all accepted and all
  * mean Shallow. Promoting a Shallow Project to Deep is free — populate the
- * string, its constraint sentence marked, and change nothing else. It is trimmed first, so a whitespace-only value
- * normalizes to `""` and joins that set rather than passing as Deep prose and
- * rendering a blank panel. A non-empty Notable must pass `notableProblems`:
+ * string, its constraint sentence marked, and change nothing else. It is
+ * trimmed first, so a whitespace-only value normalizes to `""` and joins that
+ * set rather than passing as Deep prose and rendering a blank panel. A non-empty Notable must pass `notableProblems`:
  * connected prose with its one constraint sentence marked `[[…]]`.
  *
  * Note the three Shallow forms differ in *parsed shape* — absent yields nine

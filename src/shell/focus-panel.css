@@ -198,7 +198,6 @@
     outline: 1px solid CanvasText;
   }
 
-  /* The ink step is flattened too, so the lifted sentence takes the system's accent — still ink alone, still in the flow. */
   .panel-lift {
     color: Highlight;
   }
