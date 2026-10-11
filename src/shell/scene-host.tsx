@@ -185,6 +185,10 @@ class SceneBoundary extends Component<SceneBoundaryProps, SceneBoundaryState> {
  * `fallback={null}` rather than a spinner: the index is already in the document and
  * complete, so there is nothing to wait for and nothing to announce. A placeholder
  * would be a visual element Epic 3 has not designed.
+ *
+ * The wrapper carries `scene-host` (3.9, `page.css`): fixed to the viewport,
+ * `inset: 0`, so the canvas inside fills the frame and the wheel listener covers
+ * all of it. The chrome and the panel are fixed above it.
  */
 export function SceneHost({ artifact }: SceneHostProps) {
   const host = useRef<HTMLDivElement>(null);
@@ -261,7 +265,7 @@ export function SceneHost({ artifact }: SceneHostProps) {
   }, []);
 
   return (
-    <div ref={host}>
+    <div ref={host} className="scene-host">
       <SceneBoundary>
         <Suspense fallback={null}>
           <Scene artifact={artifact} />

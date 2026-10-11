@@ -5,7 +5,7 @@
  *
  * **Strokes encode distance and state, never category** (DESIGN.md §2). A
  * Planet at rest takes its `luminanceBand` — the token the derive layer resolved
- * from recency, confined to the resting band `stroke-dust` … `stroke-near` — and
+ * from recency, confined to the two resting steps `stroke-rest` and `stroke-near` — and
  * a Star at rest takes `stroke-rest`. `stroke-focus` is a camera-state overlay
  * spent on **one** subject per frame (`sceneSubject`): the Focused Planet if any,
  * else the free-flight target, else on the Rail the Star the camera is heading
@@ -42,14 +42,16 @@ export const STROKE_STEPS = ['stroke-dust', 'stroke-rest', 'stroke-near', 'strok
 export type StrokeStep = (typeof STROKE_STEPS)[number];
 
 /**
- * The resting band a Planet's `luminanceBand` may name: `stroke-dust` …
- * `stroke-near`. The two brighter steps are camera state, never data.
+ * The resting band a Planet's `luminanceBand` may name: `stroke-rest` and
+ * `stroke-near`. The two brighter steps are camera state, never data, and
+ * `stroke-dust` is the Rail's and the Dust's — no Body is drawn there (3.9: an
+ * old Planet at `stroke-dust` sank below its own `stroke-rest` orbit).
  *
  * Derive's `RESTING_BANDS`, mirrored: this directory may not import
  * `src/derive/`, so `stroke-model.test.ts` reads that literal as text and pins
  * the two equal — a band the gate accepts and this refuses would throw at render.
  */
-export const RESTING_STEPS: readonly StrokeStep[] = ['stroke-dust', 'stroke-rest', 'stroke-near'];
+export const RESTING_STEPS: readonly StrokeStep[] = ['stroke-rest', 'stroke-near'];
 
 /** A weight key of `components.stroke-weight`. */
 export type StrokeWeightKey = keyof (typeof tokens)['components']['stroke-weight'];
@@ -175,7 +177,7 @@ export function bodyStroke(body: Body, subjectId: string | null, approachedId: s
   if (band === undefined) {
     throw new Error(
       `${body.id} carries the band ${JSON.stringify(body.luminanceBand)}; ` +
-        'a resting Planet is drawn at stroke-dust, stroke-rest or stroke-near only.',
+        'a resting Planet is drawn at stroke-rest or stroke-near only.',
     );
   }
   return { step: band, color: strokeColor(band), widthPx: strokeWidthPx('hairline') };

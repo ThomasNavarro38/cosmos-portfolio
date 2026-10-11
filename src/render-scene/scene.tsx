@@ -125,15 +125,13 @@ export function Scene({ artifact }: SceneProps) {
   const rail = buildRail(artifact, bodies);
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <Canvas
         aria-hidden="true"
-        // Inline rather than in a stylesheet because no stylesheet is wired in yet:
-        // R3F's wrapper is `height: 100%` inside a `<main>` with no height of its
-        // own, so viewport units give the surface extent. Sizing it is not 3.2's
-        // concern — 3.2 dresses what is drawn inside it — and the page layout around
-        // it (panel, chrome) belongs to 3.6–3.8.
-        style={{ width: '100%', height: '70vh' }}
+        // The page (3.9): the scene host is fixed to the viewport (`page.css`), so
+        // `100%` by `100%` here — on this wrapper and on the Canvas — fills the
+        // frame edge to edge. R3F's own wrapper is `height: 100%` of this.
+        style={{ width: '100%', height: '100%' }}
         camera={{
           position: [framing.position.x, framing.position.y, framing.position.z],
           rotation: [framing.rotation.x, framing.rotation.y, framing.rotation.z],

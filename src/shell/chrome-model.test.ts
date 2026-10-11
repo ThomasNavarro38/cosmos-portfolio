@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { tokens } from '../tokens/tokens.ts';
 import { IDENTITY_LINE, SLOT_TEXT, chromeSlot, slotStyle, type ChromeSlot } from './chrome-model.ts';
 import { FOCUS_SECONDS, focusEasingCss } from './focus-motion.ts';
+import { contrast } from './contrast.ts';
 import { REDUCED_MOTION_PACE, motionPace } from './motion-preference.ts';
 import { panelStyle, panelWidthCss } from './panel-model.ts';
 
@@ -115,22 +116,7 @@ test('a pace that is not a positive finite number reads as 1 — never a 0s cut 
 
 // --- Contrast ----------------------------------------------------------------------------
 
-/** WCAG 2.x relative luminance of a `#rrggbb` colour. */
-function luminance(hex: string): number {
-  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
-  assert.ok(match !== null, `${hex} is a #rrggbb colour`);
-  const [r, g, b] = match.slice(1).map((pair) => {
-    const c = Number.parseInt(pair, 16) / 255;
-    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  }) as [number, number, number];
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-/** WCAG 2.x contrast ratio, lighter over darker. */
-function contrast(a: string, b: string): number {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
-  return (hi + 0.05) / (lo + 0.05);
-}
+// `contrast` is the shared test support in `contrast.ts` (3.9), one arithmetic for every floor.
 
 test('the contrast arithmetic is WCAG’s', () => {
   assert.ok(Math.abs(contrast('#000000', '#FFFFFF') - 21) < 1e-9, 'black on white is 21:1');

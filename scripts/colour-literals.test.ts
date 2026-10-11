@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { checkColourLiterals, findColourLiterals } from './colour-literals.ts';
+import { checkColourLiterals, checkSiteColourLiterals, findColourLiterals } from './colour-literals.ts';
 
 const SRC_ROOT = fileURLToPath(new URL('../src', import.meta.url));
 
@@ -139,4 +139,196 @@ test('a missing root fails loudly rather than reading as a clean tree', () => {
 
 test('the committed src/ writes no literal colour', () => {
   assert.deepEqual(checkColourLiterals(SRC_ROOT), []);
+});
+
+// --- Story 3.9: the widened scan ---------------------------------------------------
+
+test('3.9: a named colour fails, as a CSS value or as a whole string literal', () => {
+  for (const [source, language, text] of [
+    // The matrix row: `color: 'white'` in a component.
+    ["const style = { color: 'white' };", 'script', 'white'],
+    ['const c = "Black";', 'script', 'Black'],
+    ['<line stroke={`rebeccapurple`} />', 'script', 'rebeccapurple'],
+    ['.a { color: white; }', 'css', 'white'],
+    ['.a {\n  border: 1px solid Gray;\n}', 'css', 'Gray'],
+    ['.a { outline-color: red }', 'css', 'red'],
+    // `color-mix(` is allowed, but its operands are scanned.
+    ['.a { color: color-mix(in srgb, white 50%, var(--x)); }', 'css', 'white'],
+    ['<p style="color: navy">x</p>', 'markup', 'navy'],
+    ['<circle fill="white" />', 'markup', 'white'],
+  ] as const) {
+    assert.deepEqual(
+      findColourLiterals(source, language).map((found) => found.text),
+      [text],
+      `${source} must report ${text}`,
+    );
+  }
+});
+
+test('3.9: transparent, currentColor, prose and lookalike identifiers pass', () => {
+  for (const [source, language] of [
+    ["const c = 'transparent';", 'script'],
+    ["const c = 'currentColor';", 'script'],
+    ["const label = 'a white dwarf';", 'script'],
+    ["const id = 'whitepaper';", 'script'],
+    ['.a { color: transparent; border-color: currentColor; }', 'css'],
+    ['.a { color: var(--color-ink-label-dark); background: var(--white-ish); }', 'css'],
+    // The legal mix `stroke-model.ts` writes: a token and `transparent`.
+    ['.a { background: color-mix(in srgb, var(--color-vignette-dark) 90%, transparent); }', 'css'],
+    ['.a { transition: color 200ms linear, background 200ms; }', 'css'],
+    // A selector with a pseudo-class is not a declaration.
+    ['a:hover { color: inherit; }', 'css'],
+    ['.red { color: inherit; }', 'css'],
+    ['<p>Red sky: tan sand.</p>', 'markup'],
+  ] as const) {
+    assert.deepEqual(findColourLiterals(source, language), [], `${source} must pass`);
+  }
+});
+
+test('3.9: a system colour fails outside a forced-colours block and passes inside one', () => {
+  // The matrix row: `color: CanvasText` at top level.
+  assert.deepEqual(findColourLiterals('.a { color: CanvasText; }', 'css'), [{ line: 1, text: 'CanvasText' }]);
+  // In a script, a system colour counts only in a style context: a colour-shaped key.
+  assert.deepEqual(findColourLiterals("const s = { outlineColor: 'Highlight' };"), [{ line: 1, text: 'Highlight' }]);
+  assert.deepEqual(findColourLiterals("const s = { color: 'CanvasText' };"), [{ line: 1, text: 'CanvasText' }]);
+  // `not (forced-colors: active)` is every other case, so it exempts nothing.
+  assert.deepEqual(
+    findColourLiterals('@media not (forced-colors: active) { .a { color: CanvasText; } }', 'css').map((found) => found.text),
+    ['CanvasText'],
+  );
+  const css = [
+    '.a { color: var(--x); }',
+    '@media (forced-colors: active) {',
+    '  .a { outline: 1px solid CanvasText; }',
+    '  @supports (x: y) { .b { color: LinkText; } }',
+    '}',
+    '@media (prefers-reduced-motion: reduce) {',
+    '  .c { color: ButtonText; }',
+    '}',
+    '.d { color: Canvas; }',
+  ].join('\n');
+  assert.deepEqual(findColourLiterals(css, 'css'), [
+    { line: 7, text: 'ButtonText' },
+    { line: 9, text: 'Canvas' },
+  ]);
+  // A named colour is never exempt, forced colours or not.
+  assert.deepEqual(
+    findColourLiterals('@media (forced-colors: active) { .a { color: white; } }', 'css').map((found) => found.text),
+    ['white'],
+  );
+  // The same exemption holds in a `<style>` block.
+  assert.deepEqual(
+    findColourLiterals('<style>@media (forced-colors: active) { a { color: CanvasText; } }</style>', 'markup'),
+    [],
+  );
+});
+
+test('3.9: a system-colour word as a whole script string is not a colour — an element name, a mark', () => {
+  for (const source of [
+    "const c = document.createElement('canvas');",
+    "const m = document.createElement('mark');",
+    "const kind = 'field';",
+    "const h = 'highlight';",
+    "if (tag === 'Canvas') return;",
+  ]) {
+    assert.deepEqual(findColourLiterals(source), [], `${source} must pass`);
+  }
+});
+
+test('3.9: the CSS Color 4 functions fail; color-mix( does not', () => {
+  for (const [source, text] of [
+    ['.a { color: oklch(0.5 0 0); }', 'oklch('],
+    ['.a { color: oklab(0.5 0 0); }', 'oklab('],
+    ['.a { color: lab(50% 0 0); }', 'lab('],
+    ['.a { color: LCH(50% 0 0); }', 'LCH('],
+    ['.a { color: hwb(0 0% 0%); }', 'hwb('],
+    ['.a { color: color(srgb 1 1 1); }', 'color('],
+  ] as const) {
+    assert.deepEqual(
+      findColourLiterals(source, 'css').map((found) => found.text),
+      [text],
+      `${source} must report ${text}`,
+    );
+  }
+  assert.deepEqual(findColourLiterals('.a { color: color-mix(in oklab, var(--a), transparent); }', 'css'), []);
+  assert.deepEqual(findColourLiterals('const c = `color-mix(in srgb, ${a} 90%, transparent)`;'), []);
+});
+
+test('3.9: a numeric literal handed to a colour fails; the seed passes', () => {
+  for (const [source, text] of [
+    // The matrix row: `new Color(0xffffff)`.
+    ['const c = new Color(0xffffff);', '0xffffff'],
+    ['const c = new THREE.Color(0xFFFFFF);', '0xFFFFFF'],
+    ['material.color.setHex(0x111111);', '0x111111'],
+    // three.js `Color.set` takes a hex number as readily as `setHex`.
+    ['material.color.set(0x222222);', '0x222222'],
+    ['c.setRGB(1, 0x1, 1);', '0x1'],
+    ['const m = { color: 0x808080 };', '0x808080'],
+    ["const m = { 'colour': 0x808080 };", '0x808080'],
+    ['<meshBasicMaterial color={0x808080} />', '0x808080'],
+    ['const strokeColor = 0x808080;', '0x808080'],
+  ] as const) {
+    assert.deepEqual(
+      findColourLiterals(source).map((found) => found.text),
+      [text],
+      `${source} must report ${text}`,
+    );
+  }
+  for (const source of [
+    // The matrix row: the seed.
+    'export const DUST_SEED = 0x2a5d17;',
+    'state = (state + 0x6d2b79f5) >>> 0;',
+    'const mask = 0xff & colorIndex;',
+    'if (color === 0x0) return;',
+  ]) {
+    assert.deepEqual(findColourLiterals(source), [], `${source} must pass`);
+  }
+});
+
+test('3.9: markup comments are prose; a literal in markup is reported at its line', () => {
+  assert.deepEqual(findColourLiterals('<!-- #fff white\n rgb( -->\n<p style="color: #000">x</p>', 'markup'), [
+    { line: 3, text: '#000' },
+  ]);
+});
+
+test('3.9: the scan reaches .html and .svg under src/, and skips *.test.tsx and *.spec.ts', () => {
+  const root = treeOf({
+    'shell/icon.svg': '<svg><path fill="#fff" /></svg>\n',
+    'shell/page.html': '<!-- #000 -->\n<p style="color: white">x</p>\n',
+    'shell/view.test.tsx': "const c = '#fff';\n",
+    'shell/view.spec.ts': "const c = '#fff';\n",
+  });
+  const failures = checkColourLiterals(root);
+  assert.equal(failures.length, 2, failures.join('\n'));
+  assert.match(failures[0] as string, /^src\/shell\/icon\.svg:1 .*#fff/);
+  assert.match(failures[1] as string, /^src\/shell\/page\.html:2 .*white/);
+});
+
+test('3.9: the second root scans index.html and public/, named from the repository root', () => {
+  // The matrix row: `#fff` in `index.html`.
+  const site = treeOf({
+    'index.html': '<!doctype html>\n<!-- #000 -->\n<body style="background: #fff">\n',
+    'public/mark.svg': '<svg><circle stroke="white" /></svg>\n',
+    // Every governed file under public/, as under src/: scripts and stylesheets too.
+    'public/page.html': '<p style="color: #123">x</p>\n',
+    'public/sw.js': "const c = '#abc';\n",
+    'public/print.css': '.a { color: black; }\n',
+    'public/sw.test.js': "const c = '#fff';\n",
+    'public/notes.txt': '#fff\n',
+  });
+  const failures = checkSiteColourLiterals(site);
+  assert.equal(failures.length, 5, failures.join('\n'));
+  assert.match(failures[0] as string, /^index\.html:3 .*#fff/);
+  assert.match(failures[1] as string, /^public\/mark\.svg:1 .*white/);
+  assert.match(failures[2] as string, /^public\/page\.html:1 .*#123/);
+  assert.match(failures[3] as string, /^public\/print\.css:1 .*black/);
+  assert.match(failures[4] as string, /^public\/sw\.js:1 .*#abc/);
+  // A clean page with no public/ is clean.
+  assert.deepEqual(checkSiteColourLiterals(treeOf({ 'index.html': '<title>x</title>\n' })), []);
+  // A missing index.html fails loudly.
+  assert.equal(checkSiteColourLiterals(treeOf({ 'x.txt': '' })).length, 1);
+});
+
+test('3.9: the committed index.html and public/ write no literal colour', () => {
+  assert.deepEqual(checkSiteColourLiterals(fileURLToPath(new URL('..', import.meta.url))), []);
 });

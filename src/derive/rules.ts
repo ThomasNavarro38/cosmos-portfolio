@@ -31,16 +31,22 @@ import type { Duration, Project } from '../data/schema.ts';
  * camera state and are deliberately *not* in this union. A `0..1` float would
  * let a renderer map recency across the whole ladder, and a recent Shallow
  * Project would reach white while unfocused, which UX-DR2 forbids. A closed set
- * of the three resting steps makes that unrepresentable rather than merely
+ * of the resting steps makes that unrepresentable rather than merely
  * discouraged.
+ *
+ * Two steps, not three (Story 3.9, ruling 4b-i). `stroke-dust` was the third: it
+ * is the Rail's and the Dust's step, and an old Planet drawn there sank below its
+ * own `stroke-rest` orbit into the field it is meant to stand out from. The
+ * oldest Planets now equal their orbit (`stroke-rest`), which DESIGN.md §2
+ * permits; recency is read coarser, as two steps.
  */
-export type LuminanceBand = 'stroke-dust' | 'stroke-rest' | 'stroke-near';
+export type LuminanceBand = 'stroke-rest' | 'stroke-near';
 
 /**
  * The resting band, dimmest first. Order is load-bearing: `deriveLuminanceBand`
  * indexes into it, and the tests assert a brighter band by index.
  */
-export const RESTING_BANDS = ['stroke-dust', 'stroke-rest', 'stroke-near'] as const;
+export const RESTING_BANDS = ['stroke-rest', 'stroke-near'] as const;
 
 /** An inclusive numeric range taken across the whole authored set. */
 export interface Range {
@@ -144,7 +150,7 @@ export function deriveLuminanceBand(recency: number, range: Range): LuminanceBan
   );
   // `noUncheckedIndexedAccess`: the clamp above guarantees this, but the type
   // system cannot see it, and a non-null assertion would hide a real bug later.
-  return RESTING_BANDS[index] ?? 'stroke-dust';
+  return RESTING_BANDS[index] ?? 'stroke-rest';
 }
 
 // --- Rule 3 of 3: distance from the Rail ← weight ---------------------------

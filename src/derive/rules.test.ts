@@ -431,6 +431,18 @@ test('the band never exceeds the resting maximum', () => {
   }
 });
 
+test('the resting band is two steps, and the oldest Planet sits at stroke-rest, never stroke-dust (3.9)', () => {
+  // Ruling 4b-i: `stroke-dust` is the Rail's and the Dust's step. A Planet drawn
+  // there sank below its own `stroke-rest` orbit; the oldest now equals it.
+  assert.deepEqual([...RESTING_BANDS], ['stroke-rest', 'stroke-near']);
+  const range = { min: 0, max: 9 };
+  assert.equal(deriveLuminanceBand(0, range), 'stroke-rest', 'the oldest (recency ordinal 0) is stroke-rest');
+  assert.equal(deriveLuminanceBand(9, range), 'stroke-near', 'the most recent is stroke-near');
+  for (let rank = 0; rank <= 9; rank += 1) {
+    assert.notEqual(deriveLuminanceBand(rank, range), 'stroke-dust', `rank ${rank} reached stroke-dust`);
+  }
+});
+
 test('no camera-state step is reachable from the rule or the graph', () => {
   const reserved = ['stroke-active', 'stroke-focus'];
   assert.deepEqual(

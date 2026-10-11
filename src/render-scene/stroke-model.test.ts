@@ -147,7 +147,7 @@ test('the subject Star is stroke-focus at 0.9px, the subject Planet at 1.0px', (
     color: tokens.colors['stroke-focus-dark'],
     widthPx: 0.9,
   });
-  assert.deepEqual(bodyStroke(planet('project:a', 'stroke-dust'), 'project:a'), {
+  assert.deepEqual(bodyStroke(planet('project:a', 'stroke-rest'), 'project:a'), {
     step: 'stroke-focus',
     color: tokens.colors['stroke-focus-dark'],
     widthPx: 1.0,
@@ -177,7 +177,8 @@ test('a recent Shallow Planet at stroke-near stays there — never stroke-focus 
 });
 
 test('a Planet whose band is not a resting step throws naming it', () => {
-  for (const band of ['stroke-active', 'stroke-focus', 'stroke-far', '']) {
+  // `stroke-dust` is the Rail's and the Dust's step, never a Body's (3.9).
+  for (const band of ['stroke-dust', 'stroke-active', 'stroke-focus', 'stroke-far', '']) {
     assert.throws(() => bodyStroke(planet('project:a', band), null), /project:a/, `${band} is not a resting band`);
   }
   const { luminanceBand: _band, ...bandless } = planet('project:a', 'stroke-near');

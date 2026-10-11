@@ -99,6 +99,8 @@ function fixture(markdown = FIXTURE): { design: string; out: string; src: string
   const src = join(root, 'src');
   mkdirSync(join(src, 'shell'), { recursive: true });
   writeFileSync(join(src, 'shell', 'panel-model.ts'), 'export const a = 1;\n');
+  // The site beside the fixture's src: the colour scan's second root (3.9).
+  writeFileSync(join(root, 'index.html'), '<!doctype html>\n<title>x</title>\n');
   return { design, out, src };
 }
 
@@ -273,6 +275,28 @@ test('the gate runs the literal scan: `#fff` in src/shell/panel-model.ts fails i
   const result = run(...checkArgs(paths));
   assert.equal(result.status, 1);
   assert.match(result.stderr, /src\/shell\/panel-model\.ts:2 /);
+});
+
+test('the gate runs the second root: `#fff` in index.html fails it with file:line (3.9)', () => {
+  const paths = fixture();
+  const site = join(paths.src, '..', 'site');
+  mkdirSync(site);
+  writeFileSync(join(site, 'index.html'), '<!doctype html>\n<body style="background: #fff">\n');
+  const result = run(...checkArgs(paths), `--site=${site}`);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /index\.html:2 .*#fff/);
+});
+
+test('a custom src with no site scans the fixture’s own index.html, never the real repo’s (3.9)', () => {
+  const paths = fixture();
+  // The fixture's site is the directory holding its src/: a literal planted there
+  // must be found, which it cannot be while the real repository is scanned instead.
+  writeFileSync(join(paths.src, '..', 'index.html'), '<!doctype html>\n<p style="color: #fff">x</p>\n');
+  const failures = checkTokens(paths);
+  assert.ok(failures.some((line) => /^index\.html:2 .*#fff/.test(line)), failures.join('\n'));
+  const cli = run('--check', `--design=${paths.design}`, `--out=${paths.out}`, `--src=${paths.src}`);
+  assert.equal(cli.status, 1);
+  assert.match(cli.stderr, /index\.html:2 .*#fff/);
 });
 
 test('a broken source does not hide a literal colour: both are reported', () => {

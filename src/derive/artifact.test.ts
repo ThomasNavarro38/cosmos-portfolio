@@ -101,7 +101,7 @@ function allProjects(artifact: Artifact) {
   return artifact.clients.flatMap((client) => client.projects);
 }
 
-const BAND_ORDER = ['stroke-dust', 'stroke-rest', 'stroke-near'];
+const BAND_ORDER = ['stroke-rest', 'stroke-near'];
 
 // --- The binding: timeAxis, luminanceBand, and the Rail ---------------------
 

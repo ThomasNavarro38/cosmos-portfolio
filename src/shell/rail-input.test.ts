@@ -537,7 +537,7 @@ test('the wiring audits reject the real host with any one guarantee removed', ()
           .replace(/(const\s+intent\s*=)/, 'event.preventDefault();\n      $1'),
     ],
     ['scroll selects a Client', (s) => s.replace("if ('inert' in intent) return;", "if ('inert' in intent) return;\n      selectClient('client:sncf');")],
-    ['a React onWheel prop', (s) => s.replace('<div ref={host}>', '<div ref={host} onWheel={() => undefined}>')],
+    ['a React onWheel prop', (s) => s.replace('<div ref={host} className="scene-host">', '<div ref={host} className="scene-host" onWheel={() => undefined}>')],
     ['a listener on window', (s) => s.replace("element.addEventListener('wheel'", "window.addEventListener('wheel'")],
     ['a listener on document', (s) => s.replace('const element = host.current;', 'const element = document.body;')],
     ['a literal current progress', (s) => s.replace('focusedProjectId, scrollProgress, event,', 'focusedProjectId, 0, event,')],
@@ -550,8 +550,8 @@ test('the wiring audits reject the real host with any one guarantee removed', ()
     ],
     ['a raw rail length', (s) => s.replace('railStopCount(artifact.rail)', 'artifact.rail.length')],
     ['a constant page height', (s) => s.replace('stopCount, window.innerHeight)', 'stopCount, 800)')],
-    ['the ref dropped', (s) => s.replace('<div ref={host}>', '<div>')],
-    ['the ref on an empty sibling', (s) => s.replace('<div ref={host}>', '<div ref={host} />\n    <div>')],
+    ['the ref dropped', (s) => s.replace('<div ref={host} className="scene-host">', '<div className="scene-host">')],
+    ['the ref on an empty sibling', (s) => s.replace('<div ref={host} className="scene-host">', '<div ref={host} />\n    <div className="scene-host">')],
     ['the panel scrolled by a constant', (s) => s.replace('{ top: intent.panel }', '{ top: 120 }')],
     ['the page scrolled instead of the panel', (s) => s.replace('document.getElementById(FOCUS_PANEL_ID)?.scrollBy(', 'window.scrollBy(')],
     ['the panel branch falls through to the Rail', (s) => s.replace(/(scrollBy\(\{ top: intent\.panel \}\);)\s*return;/, '$1')],
@@ -601,7 +601,7 @@ test('the wiring audits reject the real host with any one guarantee removed', ()
     ['Focus ignored by the keys', (s) => s.replace('keyAction(event, mode, focusedProjectId,', 'keyAction(event, mode, null,')],
     ['a literal progress for the keys', (s) => s.replace('focusedProjectId, scrollProgress, stopCount)', 'focusedProjectId, 0, stopCount)')],
     ['the key read off the target', (s) => s.replace('keyAction(event,', 'keyAction(event.target as unknown as KeyboardEvent,')],
-    ['a React onKeyDown prop', (s) => s.replace('<div ref={host}>', '<div ref={host} onKeyDown={() => undefined}>')],
+    ['a React onKeyDown prop', (s) => s.replace('<div ref={host} className="scene-host">', '<div ref={host} className="scene-host" onKeyDown={() => undefined}>')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);

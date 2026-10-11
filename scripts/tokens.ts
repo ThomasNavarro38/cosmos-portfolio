@@ -36,9 +36,9 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkColourLiterals } from './colour-literals.ts';
+import { checkColourLiterals, checkSiteColourLiterals } from './colour-literals.ts';
 
 // --- Paths ------------------------------------------------------------------
 
@@ -51,6 +51,8 @@ export const DESIGN_DISPLAY =
 export const DESIGN_PATH = join(REPO_ROOT, ...DESIGN_DISPLAY.split('/'));
 export const TOKENS_DIR = join(REPO_ROOT, 'src', 'tokens');
 export const SRC_DIR = join(REPO_ROOT, 'src');
+/** The repository root, the colour scan's second root: `index.html` and `public/`. */
+export const SITE_DIR = REPO_ROOT;
 
 /** The two outputs, by file name under the tokens directory. */
 export const CSS_FILE = 'tokens.css';
@@ -656,9 +658,22 @@ export interface Paths {
   readonly design: string;
   readonly out: string;
   readonly src: string;
+  /**
+   * The colour scan's second root, holding `index.html` and `public/`. When
+   * absent it follows `src` (`siteOf`): the repository root for the real
+   * `src/`, and the directory holding a fixture's `src` otherwise — a fixture
+   * must never be judged by the real repository's page.
+   */
+  readonly site?: string;
 }
 
-export const DEFAULT_PATHS: Paths = { design: DESIGN_PATH, out: TOKENS_DIR, src: SRC_DIR };
+/** The second root for `paths`: `site` when given, else the directory that holds `src`. */
+export function siteOf(paths: Paths): string {
+  if (paths.site !== undefined) return paths.site;
+  return resolve(paths.src) === resolve(SRC_DIR) ? SITE_DIR : dirname(resolve(paths.src));
+}
+
+export const DEFAULT_PATHS: Paths = { design: DESIGN_PATH, out: TOKENS_DIR, src: SRC_DIR, site: SITE_DIR };
 
 /**
  * The only files `src/tokens/` may hold. The directory is exempt from the
@@ -754,6 +769,7 @@ export function checkTokens(paths: Paths = DEFAULT_PATHS): string[] {
   }
   failures.push(...checkTokensDirectory(paths.out));
   failures.push(...checkColourLiterals(paths.src));
+  failures.push(...checkSiteColourLiterals(siteOf(paths)));
   return failures;
 }
 
@@ -794,8 +810,8 @@ export function writeTokens(paths: Paths = DEFAULT_PATHS): string[] {
 }
 
 /**
- * The command line: `--check`, and three test seams — `--design=<path>`,
- * `--out=<dir>`, `--src=<dir>` — defaulting to the repo's own. Anything else is
+ * The command line: `--check`, and four test seams — `--design=<path>`,
+ * `--out=<dir>`, `--src=<dir>`, `--site=<dir>` — defaulting to the repo's own. Anything else is
  * rejected: a typo such as `--chek` must never fall through to a write.
  */
 export function parseArgs(argv: readonly string[]): { check: boolean; paths: Paths } | string[] {
@@ -807,10 +823,10 @@ export function parseArgs(argv: readonly string[]): { check: boolean; paths: Pat
       check = true;
       continue;
     }
-    const match = /^--(design|out|src)=(.+)$/.exec(arg);
+    const match = /^--(design|out|src|site)=(.+)$/.exec(arg);
     if (match === null) {
       failures.push(
-        `unknown argument ${JSON.stringify(arg)} — scripts/tokens.ts takes --check, --design=, --out= and --src= only.`,
+        `unknown argument ${JSON.stringify(arg)} — scripts/tokens.ts takes --check, --design=, --out=, --src= and --site= only.`,
       );
       continue;
     }
@@ -823,6 +839,8 @@ export function parseArgs(argv: readonly string[]): { check: boolean; paths: Pat
       design: options.get('design') ?? DEFAULT_PATHS.design,
       out: options.get('out') ?? DEFAULT_PATHS.out,
       src: options.get('src') ?? DEFAULT_PATHS.src,
+      // A custom `--src=` with no `--site=` scans the site beside it, not the real repo's.
+      site: options.get('site') ?? siteOf({ design: '', out: '', src: options.get('src') ?? DEFAULT_PATHS.src }),
     },
   };
 }
