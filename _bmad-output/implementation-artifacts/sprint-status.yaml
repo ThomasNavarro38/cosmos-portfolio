@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 2026-10-10
+last_updated: 2026-10-11
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -67,7 +67,7 @@ development_status:
   3-5-mote-tiering-and-label-legibility: done
   3-6-the-information-panel: done
   3-7-the-notable-and-the-editorial-rule-line: done
-  3-8-corner-chrome-and-the-stateful-instruction-slot: review
+  3-8-corner-chrome-and-the-stateful-instruction-slot: done
   3-9-identity-definition-of-done-audit: backlog
   epic-3-retrospective: optional
 

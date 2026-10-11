@@ -12,7 +12,8 @@
  * The strings are set as authored — no `text-transform`. The lines take no
  * pointer; the slot's button does, and mirrors `.panel-release`: no box, no
  * background, no border, the line's type and ink inherited, raised to
- * `ink-prose` on hover and `:focus-visible`.
+ * `ink-prose` on hover and `:focus-visible`, and underlined by a hairline on
+ * `:focus-visible` alone.
  */
 
 .chrome-identity,
@@ -55,6 +56,16 @@
 .chrome-slot-control:focus-visible {
   color: var(--color-ink-prose-dark);
   outline: none;
+}
+
+/*
+ * The ink step alone is about 1.7:1, too slight to find keyboard focus by, so
+ * focus also draws a hairline under the word — no box, in the raised ink.
+ */
+.chrome-slot-control:focus-visible {
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--stroke-hairline);
+  text-underline-offset: var(--space-hair);
 }
 
 /*

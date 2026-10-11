@@ -107,6 +107,18 @@ context:
 - Given `corner-chrome.css`, when audited, then every colour and length is a token custom property, the text is `ink-label` in the `chrome` role, and the inset is `--space-xl`.
 - Given `npm test`, `npm run typecheck`, `npm run gate`, then all pass.
 
+### Review Findings
+
+- [x] [Review][Patch] A double-click's later clicks reach the scene — `activateBody` ignores `nativeEvent.detail > 1` (one click, one layer frame-wide; resolved from decision, option a) [src/render-scene/scene-pick.ts:67]
+- [x] [Review][Patch] Keyboard focus on the slot button is shown by colour alone — add a non-colour `:focus-visible` cue (a hairline underline from tokens), held by the stylesheet audit (resolved from decision, option a) [src/shell/corner-chrome.css:42]
+- [x] [Review][Patch] The repeat guard prevents the default of every held key, not only Enter — scope it to `event.key === 'Enter'` and re-pin the audit and its mutations [src/shell/corner-chrome.tsx:99]
+- [x] [Review][Patch] Renderer-audit mutations are not tied to the check they target — several (`a title`, `an aria-labelledby`, `a second key handler`, `a hover handler`, `focus moved by the click as well`) also break the single slot regex, so the dedicated checks could be dead; assert each mutation's expected failure message [src/shell/chrome-model.test.ts:476]
+- [x] [Review][Patch] `ChromeSlot.text` is typed `string`, so a `release` control carrying the resume text type-checks — type each variant's text as its `SLOT_TEXT` literal [src/shell/chrome-model.ts:47]
+- [x] [Review][Defer] The slot's `right` re-transitions on window resize while Focused (`46vw` recomputes), lagging the panel edge by `FOCUS_SECONDS` [src/shell/chrome-model.ts:84] — deferred, low; page layout pass
+- [x] [Review][Defer] The fixed chrome ignores `env(safe-area-inset-*)`; the bottom-right control can sit under a device's home indicator [src/shell/corner-chrome.css:18] — deferred, low; responsive pass
+- [x] [Review][Defer] The identity line is a bare `<p>` in `<main>`, not a `<header>`/banner landmark [src/shell/corner-chrome.tsx:89] — deferred, low; page structure pass
+- [x] [Review][Defer] Chrome contrast is asserted against the flat ground only; the lines sit over the live scene with no backing [src/shell/chrome-model.test.ts:124] — deferred, low; scene exclusion zone belongs to the scene composition
+
 ## Spec Change Log
 
 - **Loop 1 (2026-10-10).**

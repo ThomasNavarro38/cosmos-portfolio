@@ -43,10 +43,15 @@ export const SLOT_TEXT = {
   release: 'esc — release',
 } as const;
 
-/** What the bottom-right slot holds: an instruction, or one control and the door it opens. */
+/**
+ * What the bottom-right slot holds: an instruction, or one control and the door
+ * it opens. Each variant's text is its own `SLOT_TEXT` literal, so a control
+ * cannot carry another's words.
+ */
 export type ChromeSlot =
-  | { readonly kind: 'instruction'; readonly text: string }
-  | { readonly kind: 'control'; readonly action: 'return' | 'release'; readonly text: string };
+  | { readonly kind: 'instruction'; readonly text: typeof SLOT_TEXT.instruction }
+  | { readonly kind: 'control'; readonly action: 'return'; readonly text: typeof SLOT_TEXT.return }
+  | { readonly kind: 'control'; readonly action: 'release'; readonly text: typeof SLOT_TEXT.release };
 
 /**
  * The slot for a state.
