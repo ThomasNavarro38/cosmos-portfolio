@@ -791,3 +791,10 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-8-corner-chrome-and-the-stateful-instruction-slot.md`
   summary: The Rail instruction `scroll ↓ — time runs backward` reads only `mode`/`focusedProjectId`, so it still shows when the scene chunk fails and the error boundary leaves the DOM index alone.
   evidence: 3.8 review — `chromeSlot` has no input for renderer availability; the Fallback's own chrome (Epic 4, DESIGN.md §7.10) is where the slot's wording for a scene-less surface belongs.
+
+## Deferred from: code review of spec-3-8-corner-chrome-and-the-stateful-instruction-slot.md (2026-10-11)
+
+- The slot's `right` is `calc(min(560px, 46vw) + var(--space-xl))` while Focused; a window resize recomputes it and starts the `FOCUS_SECONDS` transition, so the slot lags the panel edge (which follows at once). Belongs to the page layout pass. (`src/shell/chrome-model.ts` `slotStyle`)
+- The fixed chrome is inset `--space-xl` only, ignoring `env(safe-area-inset-*)`; on notched or rounded devices the bottom-right control can sit under the home indicator. (`src/shell/corner-chrome.css`)
+- The identity line is a bare `<p>` inside `<main>`, after the index; it is in no `<header>`/banner landmark. (`src/shell/corner-chrome.tsx`)
+- The chrome's 4.5:1 contrast is computed against `surface-base-dark` only; both lines sit fixed over the live scene (Stars, Motes, lit Planets) with no backing or exclusion zone. (`src/shell/chrome-model.test.ts`)

@@ -18,7 +18,9 @@
  * Body, on proximity or on scroll. And a click that ends a drag is not a click: when R3F's `delta` — the
  * pointer's travel in pixels between down and up — exceeds `PICK_DRAG_PX`, the
  * click does nothing but stop propagation, so a drag that happens to end on a
- * Planet does not focus it. A `NaN` delta counts as a drag too.
+ * Planet does not focus it. A `NaN` delta counts as a drag too. Nor is the
+ * second or later click of a multi-click (`detail > 1`): one click, one layer,
+ * as the corner slot's control rules for itself.
  *
  * **The click stops at the nearest Body.** R3F delivers a click to every mesh
  * under the pointer, nearest first, until one stops propagation. Without the
@@ -57,18 +59,24 @@ export const PICK_DRAG_PX = 6;
 export interface BodyClick {
   /** The pointer's travel between down and up, in pixels (R3F's `ThreeEvent.delta`). */
   readonly delta: number;
+  /** The DOM click, for its count: `detail` 2 and up are the later clicks of a multi-click. */
+  readonly nativeEvent: { readonly detail: number };
   stopPropagation(): void;
 }
 
 /**
  * A click on `body`: a Star flies to its Client, a Planet focuses its Project;
- * a drag does neither. Either way the click stops here.
+ * a drag does neither, and nor does a multi-click's later click. Either way the
+ * click stops here.
  */
 export function activateBody(body: Body, event: BodyClick): void {
   event.stopPropagation();
   // Written as a negated `<=` so a NaN delta — a travel nobody measured — counts
   // as a drag and activates nothing, rather than slipping through a `>` test.
   if (!(event.delta <= PICK_DRAG_PX)) return;
+  // One click, one layer: the corner slot's control unmounts or slides away on
+  // its first click, so a double-click's second would land on the Body beneath.
+  if (event.nativeEvent.detail > 1) return;
   if (body.kind === 'star') activateClient(body.id);
   // A Planet always carries its Client (`buildScene`); were it ever absent, the
   // door's own guard rejects the empty ID by name rather than flying nowhere.

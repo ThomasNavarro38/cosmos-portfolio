@@ -21,9 +21,13 @@ const planet: Body = { id: 'project:a/1', kind: 'planet', clientId: 'client:a', 
 const other: Body = { id: 'project:a/2', kind: 'planet', clientId: 'client:a', position: { x: -10, y: 0, z: 0 } };
 const planetB: Body = { id: 'project:b/1', kind: 'planet', clientId: 'client:b', position: { x: 50, y: 0, z: 0 } };
 
-function click(delta = 0): { readonly delta: number; stopPropagation(): void; stopped: number } {
+function click(
+  delta = 0,
+  detail = 1,
+): { readonly delta: number; readonly nativeEvent: { readonly detail: number }; stopPropagation(): void; stopped: number } {
   const event = {
     delta,
+    nativeEvent: { detail },
     stopped: 0,
     stopPropagation() {
       event.stopped += 1;
@@ -113,6 +117,33 @@ test('a click that ends a drag does nothing but stop propagation', () => {
   // At the threshold it is still a click.
   activateBody(planet, click(PICK_DRAG_PX));
   assert.equal(navigationStore.getState().focusedProjectId, 'project:a/1');
+});
+
+test('a later click of a multi-click does nothing but stop propagation — one click, one layer', () => {
+  // The corner slot's control unmounts or slides away on its first click, so a
+  // double-click's second lands on whatever Body sits under the corner.
+  for (const body of [star, planet]) {
+    for (const detail of [2, 3]) {
+      resetNavigation();
+      const before = navigationStore.getState();
+      let notified = 0;
+      const unsubscribe = navigationStore.subscribe(() => {
+        notified += 1;
+      });
+      const event = click(0, detail);
+      activateBody(body, event);
+      unsubscribe();
+      assert.equal(notified, 0, `${body.kind}, detail ${detail}: no transition at all`);
+      assert.equal(navigationStore.getState(), before);
+      assert.equal(event.stopped, 1, `${body.kind}, detail ${detail}: the click still stops at the Body`);
+    }
+  }
+  // The first click of a multi-click, and a click with no count, still activate.
+  for (const detail of [1, 0]) {
+    resetNavigation();
+    activateBody(planet, click(0, detail));
+    assert.equal(navigationStore.getState().focusedProjectId, 'project:a/1', `detail ${detail}`);
+  }
 });
 
 test('every click stops at the Body clicked, so a Star in front of a Planet does not focus it', () => {
@@ -265,16 +296,21 @@ function auditPickRule(source: string): string[] {
   if (!/readonly\s+delta\s*:\s*number\s*;/.test(code)) failures.push('the click carries no delta — a drag cannot be told from a click');
   const stop = /^\s*event\.stopPropagation\(\)\s*;/m.exec(code);
   const drag = /if\s*\(\s*!\(\s*event\.delta\s*<=\s*PICK_DRAG_PX\s*\)\s*\)\s*return\s*;/.exec(code);
+  if (!/readonly\s+nativeEvent\s*:\s*\{\s*readonly\s+detail\s*:\s*number\s*;?\s*\}\s*;/.test(code)) {
+    failures.push('the click carries no click count — a multi-click cannot be told from a click');
+  }
+  const multi = /if\s*\(\s*event\.nativeEvent\.detail\s*>\s*1\s*\)\s*return\s*;/.exec(code);
   const starDoor = /if\s*\(\s*body\.kind\s*===\s*'star'\s*\)\s*activateClient\(\s*body\.id\s*\)\s*;/.exec(code);
   const planetDoor = /else\s+activateProject\(\s*body\.id\s*,\s*body\.clientId\s*\?\?\s*''\s*\)\s*;/.exec(code);
   if (stop === null) failures.push('the click is not stopped unconditionally');
   if (drag === null) failures.push('a drag past PICK_DRAG_PX is not returned from');
+  if (multi === null) failures.push('a multi-click’s later clicks are not returned from');
   if (starDoor === null) failures.push('a Star does not activate its own Client');
   if (planetDoor === null) failures.push('a Planet does not activate its own Project with its own Client');
-  if (stop !== null && drag !== null && starDoor !== null && planetDoor !== null) {
-    const order = [stop.index, drag.index, starDoor.index, planetDoor.index];
+  if (stop !== null && drag !== null && multi !== null && starDoor !== null && planetDoor !== null) {
+    const order = [stop.index, drag.index, multi.index, starDoor.index, planetDoor.index];
     if (order.some((index, i) => i > 0 && index <= (order[i - 1] ?? 0))) {
-      failures.push('out of order — stop, return on a drag, then the doors');
+      failures.push('out of order — stop, return on a drag or a later click, then the doors');
     }
   }
   return failures;
@@ -315,6 +351,11 @@ test('the rule calls the two doors and nothing else, drops drags, and reads no D
     ['the event optional', (s) => s.replace('event: BodyClick)', 'event?: BodyClick)')],
     ['the stop behind ?.', (s) => s.replace('event.stopPropagation();', 'event?.stopPropagation();')],
     ['no delta on the click', (s) => s.replace('readonly delta: number;', '')],
+    // One click, one layer: a double-click's second click must not activate a Body.
+    ['the multi-click guard dropped', (s) => s.replace(/\s*if \(event\.nativeEvent\.detail > 1\) return;/, '')],
+    ['the multi-click guard ignoring the first click too', (s) => s.replace('event.nativeEvent.detail > 1', 'event.nativeEvent.detail > 0')],
+    ['the multi-click guard before the stop', (s) => s.replace(/(\s*)event\.stopPropagation\(\);/, '$1if (event.nativeEvent.detail > 1) return;$1event.stopPropagation();').replace(/(PICK_DRAG_PX\)\) return;)\s*if \(event\.nativeEvent\.detail > 1\) return;/, '$1')],
+    ['no click count on the click', (s) => s.replace(/\s*readonly nativeEvent: \{ readonly detail: number \};/, '')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);

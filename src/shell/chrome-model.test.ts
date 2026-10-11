@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { tokens } from '../tokens/tokens.ts';
-import { IDENTITY_LINE, SLOT_TEXT, chromeSlot, slotStyle } from './chrome-model.ts';
+import { IDENTITY_LINE, SLOT_TEXT, chromeSlot, slotStyle, type ChromeSlot } from './chrome-model.ts';
 import { FOCUS_SECONDS, focusEasingCss } from './focus-motion.ts';
 import { REDUCED_MOTION_PACE, motionPace } from './motion-preference.ts';
 import { panelStyle, panelWidthCss } from './panel-model.ts';
@@ -44,6 +44,17 @@ test('the slot follows the table: instruction on the Rail, resume in flight, rel
   assert.deepEqual(chromeSlot('rail', 'project:a/1'), { kind: 'control', action: 'release', text: 'esc — release' });
   assert.deepEqual(chromeSlot('freeflight', 'project:a/1'), { kind: 'control', action: 'release', text: 'esc — release' }, 'release, not resume');
   assert.deepEqual(SLOT_TEXT, { instruction: 'scroll ↓ — time runs backward', return: '↩ resume the journey', release: 'esc — release' });
+});
+
+test('each slot variant carries its own text, so the type checker rejects a control with another’s', () => {
+  // Checked by `npm run typecheck`: each line below must be a type error.
+  // @ts-expect-error — a release control reading resume.
+  const releaseAsResume: ChromeSlot = { kind: 'control', action: 'release', text: SLOT_TEXT.return };
+  // @ts-expect-error — a return control reading the instruction.
+  const returnAsInstruction: ChromeSlot = { kind: 'control', action: 'return', text: SLOT_TEXT.instruction };
+  // @ts-expect-error — the instruction reading release.
+  const instructionAsRelease: ChromeSlot = { kind: 'instruction', text: SLOT_TEXT.release };
+  assert.equal([releaseAsResume, returnAsInstruction, instructionAsRelease].length, 3);
 });
 
 test('the slot reads the Focus as present or absent, never which Project it is', () => {
@@ -231,6 +242,7 @@ const PANEL_LAYER = panelStyle(true).zIndex;
 const LINES = '.chrome-identity, .chrome-slot';
 const CONTROL = '.chrome-slot-control';
 const RAISED = '.chrome-slot-control:hover, .chrome-slot-control:focus-visible';
+const FOCUSED = '.chrome-slot-control:focus-visible';
 const TYPE_PROPERTIES = ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing'] as const;
 
 /**
@@ -261,6 +273,11 @@ const EXPECTED: readonly (readonly [string | null, string, string, string])[] = 
   [null, CONTROL, 'pointer-events', 'auto'],
   [null, RAISED, 'color', 'var(--color-ink-prose-dark)'],
   [null, RAISED, 'outline', 'none'],
+  // Keyboard focus is not the ink step alone (about 1.7:1 between the two inks):
+  // a hairline underline, in the raised ink, a hair below the line.
+  [null, FOCUSED, 'text-decoration-line', 'underline'],
+  [null, FOCUSED, 'text-decoration-thickness', 'var(--stroke-hairline)'],
+  [null, FOCUSED, 'text-underline-offset', 'var(--space-hair)'],
   // Forced colours flatten the ink step, so keyboard focus there is the system outline.
   [FORCED_COLORS, '.chrome-slot-control:focus-visible', 'outline', '1px solid CanvasText'],
 ];
@@ -350,6 +367,10 @@ test('the stylesheet audit rejects the real stylesheet with any one departure', 
     ['the button padded', (s) => s.replace(/(\.chrome-slot-control \{\s*margin: 0;\s*)padding: 0;/, '$1padding: var(--space-xs);')],
     ['the hover not raised', (s) => s.replace('color: var(--color-ink-prose-dark);', 'color: var(--color-ink-label-dark);')],
     ['an outline on focus', (s) => s.replace(/(color: var\(--color-ink-prose-dark\);\s*)outline: none;/, '$1outline: 1px solid var(--color-stroke-focus-dark);')],
+    ['focus shown by colour alone', (s) => s.replace(/\n\.chrome-slot-control:focus-visible \{[^}]*text-decoration-line[^}]*\}\n/, '\n')],
+    ['the focus underline on hover too', (s) => s.replace('.chrome-slot-control:focus-visible {\n  text-decoration-line', '.chrome-slot-control:hover,\n.chrome-slot-control:focus-visible {\n  text-decoration-line')],
+    ['a heavy focus underline', (s) => s.replace('text-decoration-thickness: var(--stroke-hairline);', 'text-decoration-thickness: 2px;')],
+    ['the focus underline flush on the text', (s) => s.replace('text-underline-offset: var(--space-hair);', 'text-underline-offset: 0;')],
     ['no forced-colours focus', (s) => s.replace('outline: 1px solid CanvasText;', 'outline: none;')],
     ['a forced-colours block for something else', (s) => s.replace('(forced-colors: active)', '(prefers-contrast: more)')],
     ['a radius', (s) => s.replace('cursor: pointer;', 'cursor: pointer;\n  border-radius: 2px;')],
@@ -402,9 +423,9 @@ function auditChrome(source: string): string[] {
   // Exactly two chrome elements: the identity line, and one persistent slot.
   if (!/<p\s+className="chrome-identity"\s*>\s*\{\s*IDENTITY_LINE\s*\}\s*<\/p>/.test(code)) failures.push('the identity line is not one <p class="chrome-identity"> of IDENTITY_LINE');
   const slot =
-    /<p\s+className="chrome-slot"\s+style=\{\s*style\s*\}\s*>\s*\{\s*slot\.kind\s*===\s*'control'\s*\?\s*\(\s*<button\s+type="button"\s+ref=\{\s*handBack\s*\}\s+className="chrome-slot-control"\s+data-action=\{\s*slot\.action\s*\}\s+onClick=\{\(\s*(\w+)\s*\)\s*=>\s*\(\s*\1\.detail\s*>\s*1\s*\?\s*undefined\s*:\s*slot\.action\s*===\s*'return'\s*\?\s*returnToRail\(\)\s*:\s*releaseLayer\(\)\s*\)\}\s+onKeyDown=\{\(\s*(\w+)\s*\)\s*=>\s*\{\s*if\s*\(\s*\2\.repeat\s*\)\s*\2\.preventDefault\(\)\s*;?\s*\}\s*\}\s*>\s*\{\s*slot\.text\s*\}\s*<\/button>\s*\)\s*:\s*\(\s*slot\.text\s*\)\s*\}\s*<\/p>/;
+    /<p\s+className="chrome-slot"\s+style=\{\s*style\s*\}\s*>\s*\{\s*slot\.kind\s*===\s*'control'\s*\?\s*\(\s*<button\s+type="button"\s+ref=\{\s*handBack\s*\}\s+className="chrome-slot-control"\s+data-action=\{\s*slot\.action\s*\}\s+onClick=\{\(\s*(\w+)\s*\)\s*=>\s*\(\s*\1\.detail\s*>\s*1\s*\?\s*undefined\s*:\s*slot\.action\s*===\s*'return'\s*\?\s*returnToRail\(\)\s*:\s*releaseLayer\(\)\s*\)\}\s+onKeyDown=\{\(\s*(\w+)\s*\)\s*=>\s*\{\s*if\s*\(\s*\2\.repeat\s*&&\s*\2\.key\s*===\s*'Enter'\s*\)\s*\2\.preventDefault\(\)\s*;?\s*\}\s*\}\s*>\s*\{\s*slot\.text\s*\}\s*<\/button>\s*\)\s*:\s*\(\s*slot\.text\s*\)\s*\}\s*<\/p>/;
   if (!slot.test(code)) {
-    failures.push('the slot is not one persistent <p> carrying the style, holding the control <button> — its action carried, a multi-click’s later clicks and a held key’s repeats ignored, its door by action, its text its name — or the instruction text');
+    failures.push('the slot is not one persistent <p> carrying the style, holding the control <button> — its action carried, a multi-click’s later clicks and a held Enter’s repeats ignored, its door by action, its text its name — or the instruction text');
   }
   if ((code.match(/\bstyle=\{/g) ?? []).length !== 1) failures.push('the style is not on the one persistent slot element');
   if (/\bkey=\{/.test(code)) failures.push('a key — a keyed slot remounts, and jumps');
@@ -474,6 +495,68 @@ const SWAPPED_SLOT = `{slot.kind === 'control' ? (
       )}
 `;
 
+/**
+ * The failure each renderer mutation targets: a mutation that trips some other
+ * check alone would pass while its own check lay dead. Where the slot's one
+ * expression is the only check for a guarantee, the target is that expression.
+ */
+const CHROME_TARGETS: ReadonlyMap<string, string> = new Map([
+  ['a whole-store subscription', 'does not subscribe to mode with a selector'],
+  ['the wrong field selected', 'does not subscribe to focusedProjectId'],
+  ['a third subscription', 'subscribes other than twice'],
+  ['the slot read off the hover', 'the slot is not chromeSlot(mode, focusedProjectId)'],
+  ['the pace ignoring the preference', 'the pace is not motionPace'],
+  ['the style never focused', 'the style is not slotStyle(focused, pace)'],
+  ['the style at full motion always', 'the style is not slotStyle(focused, pace)'],
+  ['a third line', 'elements other than the identity, the slot and its button'],
+  ['a second button', 'more than one <button>'],
+  ['the identity a link', 'a link — the model’s route is 5.1’s'],
+  ['the identity a button', 'the identity line is not one <p class="chrome-identity">'],
+  ['the identity written out', 'the identity line is not one <p class="chrome-identity">'],
+  ['the identity recased', 'a recasing'],
+  ['an aria-label', 'an ARIA or title attribute'],
+  ['an aria-labelledby', 'an ARIA or title attribute'],
+  ['a title', 'an ARIA or title attribute'],
+  ['the button named by something else', 'the slot is not one persistent'],
+  ['every action returns', 'the slot is not one persistent'],
+  ['the doors transposed', 'the slot is not one persistent'],
+  ['the store called directly', 'a store event called directly'],
+  ['the overview door', 'a door other than return and release'],
+  ['the instruction focusable', 'a tabIndex'],
+  ['the instruction a button', 'more than one <button>'],
+  ['the control always shown', 'the slot is not one persistent'],
+  ['two button elements for two actions', 'the slot is not one persistent'],
+  ['the slot swapped between a <p> and a <button>', 'the style is not on the one persistent slot element'],
+  ['the style on the button, not the slot', 'the slot is not one persistent'],
+  ['the slot remounted by kind', 'a key — a keyed slot remounts'],
+  ['the action not carried', 'the slot is not one persistent'],
+  ['the action read off the store', 'reads the store outside its two selectors'],
+  ['a hand-back on a release too', 'the button’s unmount does not hand DOM focus'],
+  ['a hand-back keyed on a release', 'the button’s unmount does not hand DOM focus'],
+  ['the hand-back dropped', 'a ref other than the hand-back'],
+  ['focus left on the unmounted button', 'DOM focus is moved other than once'],
+  ['focus taken whether or not the button held it', 'the button’s unmount does not hand DOM focus'],
+  ['focus moved on mount, not on unmount', 'the button’s unmount does not hand DOM focus'],
+  ['a hand-back with dependencies', 'the button’s unmount does not hand DOM focus'],
+  ['an inline hand-back', 'DOM focus is moved other than once'],
+  ['focus to an id written here', 'the button’s unmount does not hand DOM focus'],
+  ['focus moved by the click as well', 'DOM focus is moved other than once'],
+  ['the multi-click guard dropped', 'the slot is not one persistent'],
+  ['the guard ignoring the first click too', 'the slot is not one persistent'],
+  ['the guard inverted', 'the slot is not one persistent'],
+  ['the repeat guard dropped', 'reacts to hover, pointer, keys or focus'],
+  ['the repeat guard inverted', 'the slot is not one persistent'],
+  ['the repeat guard on every held key', 'the slot is not one persistent'],
+  ['the repeat guard on another key', 'the slot is not one persistent'],
+  ['the repeat guard stops propagation instead', 'the slot is not one persistent'],
+  ['a second key handler', 'reacts to hover, pointer, keys or focus'],
+  ['an inline style literal', 'an inline style literal'],
+  ['the stylesheet not imported', 'the stylesheet is not imported'],
+  ['local state', 'keeps state or effects of its own'],
+  ['a hover handler', 'reacts to hover, pointer, keys or focus'],
+  ['a viewport read', 'reads the viewport'],
+]);
+
 test('the chrome audit rejects the real renderer with any one guarantee broken', () => {
   const real = read(CHROME_TSX);
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
@@ -532,9 +615,11 @@ test('the chrome audit rejects the real renderer with any one guarantee broken',
     ['the guard ignoring the first click too', (s) => s.replace('event.detail > 1 ?', 'event.detail > 0 ?')],
     ['the guard inverted', (s) => s.replace('event.detail > 1 ?', 'event.detail <= 1 ?')],
     // One press, one layer: a held Enter's repeats must not click the reused button again.
-    ['the repeat guard dropped', (s) => s.replace(/\s*onKeyDown=\{\(event\) => \{\s*if \(event\.repeat\) event\.preventDefault\(\);\s*\}\}/, '')],
-    ['the repeat guard inverted', (s) => s.replace('if (event.repeat) event.preventDefault();', 'if (!event.repeat) event.preventDefault();')],
-    ['the repeat guard stops propagation instead', (s) => s.replace('if (event.repeat) event.preventDefault();', 'if (event.repeat) event.stopPropagation();')],
+    ['the repeat guard dropped', (s) => s.replace(/\s*onKeyDown=\{\(event\) => \{\s*if \(event\.repeat && event\.key === 'Enter'\) event\.preventDefault\(\);\s*\}\}/, '')],
+    ['the repeat guard inverted', (s) => s.replace("if (event.repeat && event.key === 'Enter')", "if (!event.repeat && event.key === 'Enter')")],
+    ['the repeat guard on every held key', (s) => s.replace(" && event.key === 'Enter'", '')],
+    ['the repeat guard on another key', (s) => s.replace("event.key === 'Enter'", "event.key === ' '")],
+    ['the repeat guard stops propagation instead', (s) => s.replace("'Enter') event.preventDefault();", "'Enter') event.stopPropagation();")],
     ['a second key handler', (s) => s.replace('type="button"', 'type="button" onKeyUp={() => releaseLayer()}')],
     ['an inline style literal', (s) => s.replace('<p className="chrome-identity">', '<p className="chrome-identity" style={{ textTransform: "uppercase" }}>')],
     ['the stylesheet not imported', (s) => s.replace("import './corner-chrome.css';", '')],
@@ -545,6 +630,10 @@ test('the chrome audit rejects the real renderer with any one guarantee broken',
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);
     assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
-    assert.notDeepEqual(auditChrome(mutated), [], `"${name}" must be rejected`);
+    const target = CHROME_TARGETS.get(name);
+    assert.ok(target !== undefined, `"${name}" names the check it targets`);
+    const failures = auditChrome(mutated);
+    assert.ok(failures.some((failure) => failure.includes(target)), `"${name}" must be rejected by its own check (${target}) — found ${JSON.stringify(failures)}`);
   }
+  assert.deepEqual([...CHROME_TARGETS.keys()].sort(), mutations.map(([name]) => name).sort(), 'every target names a mutation');
 });

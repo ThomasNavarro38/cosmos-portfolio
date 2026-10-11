@@ -50,9 +50,12 @@
  * interval, is ignored too — one click, one layer. A keyboard activation has
  * `detail` 0, so it passes that guard; instead a held Enter, whose auto-repeated
  * keydowns would each synthesize a click (release, then resume on the same
- * button), has the default of every repeated keydown prevented, so one press
- * releases one layer — the rule `keyAction` applies to `Escape`. Space activates
- * on keyup and needs nothing.
+ * button), has the default of its repeated keydowns prevented — Enter's only,
+ * so a held Tab still leaves the button — and one press releases one layer: the
+ * rule `keyAction` applies to `Escape`. Space activates on keyup and needs
+ * nothing. A double-click's second click that misses the button — it unmounted,
+ * or slid away with the panel — falls on the scene, which ignores it by the
+ * same `detail` rule (`activateBody`).
  *
  * **The treatment is `corner-chrome.css`**: the `chrome` type role at
  * `ink-label`, fixed at the `--space-xl` inset, below the panel. Only the slot's
@@ -96,7 +99,7 @@ export function CornerChrome() {
             data-action={slot.action}
             onClick={(event) => (event.detail > 1 ? undefined : slot.action === 'return' ? returnToRail() : releaseLayer())}
             onKeyDown={(event) => {
-              if (event.repeat) event.preventDefault();
+              if (event.repeat && event.key === 'Enter') event.preventDefault();
             }}
           >
             {slot.text}
