@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 2026-10-11
+last_updated: 10-11-2026 23:33
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -69,7 +69,7 @@ development_status:
   3-7-the-notable-and-the-editorial-rule-line: done
   3-8-corner-chrome-and-the-stateful-instruction-slot: done
   3-9-identity-definition-of-done-audit: done
-  epic-3-retrospective: optional
+  epic-3-retrospective: done
 
   epic-4: backlog
   4-1-capability-detection-in-the-thin-entry: backlog
@@ -294,5 +294,59 @@ action_items:
       collapse the 7 directory walkers and parameterise the renderer scans over the
       directory"
     owner: "Thomas"
-    status: open
+    status: in-progress
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
+  - id: "epic-3-retro-item-1-run-identity-protocols"
+    epic: 3
+    action: "Run the 3.9 manual protocols P1-P4 with unprompted viewers and record
+      each result in identity-audit-3-9.md, ruling on the panel default scrollbar
+      under P1"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
+  - id: "epic-3-retro-item-2-scene-colour-management"
+    epic: 3
+    action: "Decide scene colour management (<Canvas flat> or toneMapped={false}):
+      ACES tone mapping draws stroke-focus 242 at 222; re-look at the M1/M2 frames
+      and assert drawn white"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
+  - id: "epic-3-retro-item-3-no-tech-names-in-built"
+    epic: 3
+    action: "Remove technology names from career.json Built values (Ask First) or
+      reconcile FR-10/AC 3.6; add a content check that no field value names a Skill"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
+  - id: "epic-3-retro-item-4-mutants-to-tmpdir"
+    epic: 3
+    action: "Write test mutants to os.tmpdir() instead of beside solve.test.ts so
+      tree scans cannot race them"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
+  - id: "epic-3-retro-item-5-spec-reconciliations"
+    epic: 3
+    action: "Spec reconciliations: UX-DR27/AC 3.8 exception for the revealed index
+      entry; AC 3.2 and DESIGN.md to the two-step band (4b-i); AC 3.5 nine-Skill tested
+      case superseded (7-25 per Project)"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
+  - id: "epic-3-retro-item-6-mote-degradation-ruling"
+    epic: 3
+    action: "Mote degradation ruling above ~12 labels (flicker, overlap with the affordance
+      label, reduced-motion blocked labels); split the label pass out of mote-model.ts
+      first"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
+  - id: "epic-3-retro-item-7-deferrals-into-story-specs"
+    epic: 3
+    action: "Process: on story-spec creation pull in every deferred-work.md entry
+      addressed to that story; schedule open retro items as stories in development_status
+      before Epic 4"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
