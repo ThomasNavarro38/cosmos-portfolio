@@ -28,6 +28,7 @@ import {
   CHECK_PASSED,
   CSS_BANNER,
   CSS_FILE,
+  DEFAULT_PATHS,
   DESIGN_PATH,
   TOKENS_DIR,
   TOKENS_DIR_FILES,
@@ -297,6 +298,13 @@ test('a custom src with no site scans the fixture’s own index.html, never the 
   const cli = run('--check', `--design=${paths.design}`, `--out=${paths.out}`, `--src=${paths.src}`);
   assert.equal(cli.status, 1);
   assert.match(cli.stderr, /index\.html:2 .*#fff/);
+});
+
+test('DEFAULT_PATHS spread over a fixture src scans the fixture’s site, not the real repo’s (3.9)', () => {
+  const paths = fixture();
+  writeFileSync(join(paths.src, '..', 'index.html'), '<!doctype html>\n<p style="color: #fff">x</p>\n');
+  const failures = checkTokens({ ...DEFAULT_PATHS, design: paths.design, out: paths.out, src: paths.src });
+  assert.ok(failures.some((line) => /^index\.html:2 .*#fff/.test(line)), failures.join('\n'));
 });
 
 test('a broken source does not hide a literal colour: both are reported', () => {

@@ -810,3 +810,21 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-9-identity-definition-of-done-audit.md`
   summary: Non-text contrast (WCAG 1.4.11) is unaudited: the chrome's focus underline, the `release` hairline, the affordance's `stroke-focus` outline and resting Body strokes against the ground.
   evidence: `src/identity-audit.test.ts` measures text roles only; `stroke-rest-dark #2C2C33` on `#08080A` is well under 3:1 by design (DESIGN.md's restraint), so this needs a design ruling, not a patch.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-identity-definition-of-done-audit.md` (second review)
+  summary: `parseCss` in the identity audit treats a blockless statement at-rule (`@import …;`, `@layer a, b;`) as the next rule's prelude and handles one at-rule nesting level only.
+  evidence: `src/identity-audit.test.ts` `parseCss`; holds over `page.css` and `index-nav.css` today, breaks the first time either gains such a rule.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-identity-definition-of-done-audit.md` (second review)
+  summary: The contrast table reads `color` only from top-level rules sharing the role's selector; an `@media` override or an inherited ink is not measured.
+  evidence: `src/identity-audit.test.ts` `declared`; no such override ships.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-identity-definition-of-done-audit.md` (second review)
+  summary: `.json`/`.webmanifest` under `public/` are not governed by the colour ban, so a manifest `theme_color`/`background_color` would bypass the tokens.
+  evidence: `scripts/colour-literals.ts` `languageOf`; there is no `public/` yet.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-identity-definition-of-done-audit.md` (second review)
+  summary: Markup's inline `<script>` and `<style>` are scanned as markup, not in their own language — their comments are read as code and the numeric arm never runs.
+  evidence: `scripts/colour-literals.ts` `codeOf`; `index.html` has neither today.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-identity-definition-of-done-audit.md` (second review)
+  summary: A programmatically focused index entry may not match `:focus-visible`, leaving focus on an invisible button; the revealed entry draws no pressed (Focused) state.
+  evidence: `src/shell/index-nav.css`; ruling 8a reveals on keyboard focus only. Check under manual protocol P1.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-identity-definition-of-done-audit.md` (second review)
+  summary: `src/shell/contrast.ts` is test support but named and classified like a shipped module; the Code Map asked for a shared test helper.
+  evidence: imported only by `chrome-model.test.ts` and `identity-audit.test.ts`; both scans count it as shipped.

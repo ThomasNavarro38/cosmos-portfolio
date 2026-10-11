@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { checkColourLiterals, checkSiteColourLiterals, findColourLiterals } from './colour-literals.ts';
+import { checkColourLiterals, checkSiteColourLiterals, findColourLiterals, languageOf } from './colour-literals.ts';
 
 const SRC_ROOT = fileURLToPath(new URL('../src', import.meta.url));
 
@@ -331,4 +331,91 @@ test('3.9: the second root scans index.html and public/, named from the reposito
 
 test('3.9: the committed index.html and public/ write no literal colour', () => {
   assert.deepEqual(checkSiteColourLiterals(fileURLToPath(new URL('..', import.meta.url))), []);
+});
+
+// --- Story 3.9 review: where a colour is paint, and where it is only a word ----------------
+
+test('3.9 review: markup is paint only in style attributes, <style> blocks and paint attributes', () => {
+  for (const source of [
+    // A URL path and body text are not declarations.
+    '<a href="https://x.com/navy">x</a>',
+    '<p>Palette: white; done</p>',
+    // An id, a class or a name is not paint.
+    '<canvas id="canvas"></canvas>',
+    '<span class="mark">x</span>',
+    '<div class="red"></div>',
+    '<input name="field" />',
+    // A fragment link is not a hex colour.
+    '<a href="#add">x</a>',
+    "<use href='#cafe' />",
+    '<rect fill="url(#bed)" />',
+  ]) {
+    assert.deepEqual(findColourLiterals(source, 'markup'), [], `${source} must pass`);
+  }
+  for (const [source, text] of [
+    ['<rect fill="CanvasText" />', 'CanvasText'],
+    ['<stop stop-color="navy" />', 'navy'],
+    ['<rect stroke = \'White\' />', 'White'],
+    ["<p style='color: Highlight'>x</p>", 'Highlight'],
+    ['<style>\n.a { color: tan; }\n</style>', 'tan'],
+    ['<p style="background: url(\'a.png\') white">x</p>', 'white'],
+  ] as const) {
+    assert.deepEqual(
+      findColourLiterals(source, 'markup').map((found) => found.text),
+      [text],
+      `${source} must report ${text}`,
+    );
+  }
+});
+
+test('3.9 review: a url(…) holds a path and a quoted string holds text; a colour after either is still read', () => {
+  for (const [source, language] of [
+    ['.a { background: url(white.png); }', 'css'],
+    ['.a { background: url("tan-grain.svg") no-repeat; }', 'css'],
+    ['.a { filter: url(#bad); }', 'css'],
+    ['.a { content: "white"; }', 'css'],
+    ['<p style="background: url(navy.svg)">x</p>', 'markup'],
+  ] as const) {
+    assert.deepEqual(findColourLiterals(source, language), [], `${source} must pass`);
+  }
+  assert.deepEqual(findColourLiterals('.a { background: url("a.png") white; }', 'css'), [{ line: 1, text: 'white' }]);
+  assert.deepEqual(findColourLiterals(".a { font-family: 'Some Face', sans-serif; color: red; }", 'css'), [{ line: 1, text: 'red' }]);
+});
+
+test('3.9 review: the boolean forced-colors query exempts; forced-colors: none does not', () => {
+  assert.deepEqual(findColourLiterals('@media (forced-colors) { .a { color: CanvasText; } }', 'css'), []);
+  assert.deepEqual(
+    findColourLiterals('@media (forced-colors: none) { .a { color: CanvasText; } }', 'css').map((found) => found.text),
+    ['CanvasText'],
+  );
+});
+
+test('3.9 review: a colour function has no space before its parenthesis — prose is not a call', () => {
+  for (const source of ["const s = 'the lab (Paris)';", "const s = 'a color (any)';", "const s = 'hwb (draft)';"]) {
+    assert.deepEqual(findColourLiterals(source), [], `${source} must pass`);
+  }
+  assert.deepEqual(findColourLiterals("const s = 'lab(50% 0 0)';").map((found) => found.text), ['lab(']);
+});
+
+test('3.9 review: .set( is a colour only on a colour-named receiver', () => {
+  for (const source of ["map.set('k', 0x10);", "params.set('n', 0x1);", 'bits.set(0xff);']) {
+    assert.deepEqual(findColourLiterals(source), [], `${source} must pass`);
+  }
+  for (const [source, text] of [
+    ['material.color.set(0x222222);', '0x222222'],
+    ['strokeColor.set(0xffffff);', '0xffffff'],
+    ['tint.colour.set(0x010101);', '0x010101'],
+  ] as const) {
+    assert.deepEqual(findColourLiterals(source).map((found) => found.text), [text], `${source} must report ${text}`);
+  }
+});
+
+test('3.9 review: a governed extension is matched in any case, .htm included', () => {
+  assert.equal(languageOf('ICON.SVG'), 'markup');
+  assert.equal(languageOf('Page.HTML'), 'markup');
+  assert.equal(languageOf('page.htm'), 'markup');
+  assert.equal(languageOf('Print.CSS'), 'css');
+  assert.equal(languageOf('View.TSX'), 'script');
+  assert.equal(languageOf('View.Test.TSX'), undefined);
+  assert.equal(languageOf('notes.txt'), undefined);
 });
