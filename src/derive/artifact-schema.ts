@@ -27,19 +27,21 @@ import { SHOT_FRAMINGS } from './shots.ts';
  *
  * It started at 1, became **2** when Story 1.6 added `destinations`, **3** when
  * Story 1.7 added `dwell` and `shots`, **4** when Story 2.1 added `rail`, **5**
- * when Story 3.2 added each Project's `orbitNormal`, and is **6** now that Story
- * 3.5 has added the top-level `skills`: each time the contract's shape changed,
- * the number it declares changed with it. An artifact still carrying `5`
- * publishes no Skill tiers, and must fail rather than be read by a scene that
- * seats Motes by them — it would have to count shares itself, which is the
- * classification AD-3 keeps out of the renderer.
+ * when Story 3.2 added each Project's `orbitNormal`, **6** when Story 3.5 added
+ * the top-level `skills`, and is **7** now that Story 3.9 has narrowed
+ * `luminanceBand` to two steps (`stroke-rest`, `stroke-near`): each time the
+ * contract's shape changed, the number it declares changed with it. An artifact
+ * still carrying `5` publishes no Skill tiers, and must fail rather than be read
+ * by a scene that seats Motes by them — it would have to count shares itself,
+ * which is the classification AD-3 keeps out of the renderer. One carrying `6`
+ * may hold a `stroke-dust` Body, which no longer exists as a band.
  *
  * Every new field is **required**, not declared-and-empty. That is only possible
  * once something populates it — a required field nothing emits would have made
  * the artifact fail its own gate, which is precisely what the gate exists to
  * prevent, and is why each was deliberately absent until the story that emits it.
  */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 /** ISO 8601 year-month, matching the authored form exactly. */
 const IsoYearMonth = z

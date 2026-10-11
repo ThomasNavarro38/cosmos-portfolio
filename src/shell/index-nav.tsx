@@ -29,8 +29,12 @@
  * s.focusedProjectId)` re-renders this tree when Focus changes and not when the
  * camera writes `scrollProgress` sixty times a second.
  *
- * **Greybox.** No styling, no design token, no visual identity — Epic 3 dresses
- * this. Semantics only.
+ * **Drawn only under the keyboard** (3.9, ruling 8a). `index-nav.css`, by the
+ * `index-nav` class on the `<nav>`, clips every entry to nothing and reveals only
+ * the one holding `:focus-visible`, bottom-left. The `<nav>` stays real: in the
+ * accessibility tree and the tab order from First Paint, never `display: none`,
+ * `visibility: hidden` or `aria-hidden`. The stylesheet carries the treatment;
+ * this file carries the class and nothing else of it.
  */
 
 import { useStore } from 'zustand/react';
@@ -38,6 +42,7 @@ import { activateClient, activateProject, approachByKeyboard, leaveByKeyboard, p
 import { OVERVIEW_ID, buildDestinationIndex, type IndexArtifact } from './index-model.ts';
 import { indexEntryId } from './panel-model.ts';
 import { navigationStore } from './state.ts';
+import './index-nav.css';
 
 /** What the index needs: the artifact, and nothing else. */
 export interface DestinationNavProps {
@@ -91,7 +96,7 @@ export function DestinationNav({ artifact }: DestinationNavProps) {
   const focusedProjectId = useStore(navigationStore, (state) => state.focusedProjectId);
 
   return (
-    <nav aria-label="Destinations">
+    <nav className="index-nav" aria-label="Destinations">
       <button type="button" id={OVERVIEW_ID} onClick={() => pullBack()}>
         overview
       </button>

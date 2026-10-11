@@ -1,0 +1,63 @@
+/*
+ * The DOM destination index's treatment (3.9, ruling 8a): in the accessibility
+ * tree and the tab order from First Paint, and drawn nowhere until a keyboard
+ * reaches it. Every colour, family, size and inset is a token custom property
+ * from `src/tokens/tokens.css`; the only literal length is the forced-colours
+ * outline's 1px, as in `corner-chrome.css`. `identity-audit.test.ts` holds each
+ * declaration.
+ *
+ * **Hidden by the clip pattern, never removed.** Each entry is clipped to
+ * nothing (`clip-path: inset(50%)`), which hides it from sight and from the
+ * pointer and leaves it in the accessibility tree and the tab order —
+ * `display: none`, `visibility: hidden` and `aria-hidden` would each take it out,
+ * and the index *is* the interface (AD-4). The lists draw no marker and take no
+ * room, so the `<nav>` leaves nothing on the page.
+ *
+ * **Only `:focus-visible` reveals.** The one entry holding keyboard focus is
+ * unclipped, bottom-left at the `--space-xl` (40px) inset — the corner the two
+ * chrome lines leave free — in the `chrome` type role at `ink-label`, with no
+ * box, no background and no border. A mouse never focuses a clipped entry, and
+ * a `:focus` that is not `:focus-visible` reveals nothing. The entry's text is the
+ * index's own (title, then Deep or Shallow), set as authored: no
+ * `text-transform`.
+ */
+
+.index-nav ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.index-nav button {
+  position: fixed;
+  left: var(--space-xl);
+  bottom: var(--space-xl);
+  z-index: 1;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  white-space: nowrap;
+  clip-path: inset(50%);
+  font-family: var(--type-chrome-font-family);
+  font-size: var(--type-chrome-font-size);
+  font-weight: var(--type-chrome-font-weight);
+  line-height: var(--type-chrome-line-height);
+  letter-spacing: var(--type-chrome-letter-spacing);
+  color: var(--color-ink-label-dark);
+}
+
+.index-nav button:focus-visible {
+  clip-path: none;
+  outline: none;
+}
+
+/*
+ * Forced colours replace the ink with one system colour; there, and only there,
+ * the revealed entry gets the system's own outline, in the system's own colour.
+ */
+@media (forced-colors: active) {
+  .index-nav button:focus-visible {
+    outline: 1px solid CanvasText;
+  }
+}

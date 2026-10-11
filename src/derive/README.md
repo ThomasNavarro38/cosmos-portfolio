@@ -73,9 +73,11 @@ Two rules are **relative to the authored set**, not absolute: mass normalizes th
 
 ## `luminanceBand` is resting-band only
 
-`LuminanceBand` is a closed set of UX-DR2's three resting steps — `stroke-dust`, `stroke-rest`, `stroke-near`. The two brighter steps, `stroke-active` and `stroke-focus`, are reserved for camera state and are deliberately **not** in the union.
+`LuminanceBand` is a closed set of two resting steps — `stroke-rest`, `stroke-near` (`RESTING_BANDS`). The two brighter steps, `stroke-active` and `stroke-focus`, are reserved for camera state and are deliberately **not** in the union.
 
-A `0..1` float would let a renderer map recency across the whole five-step ladder, and a recent Shallow Project would reach white while unfocused — the exact failure UX-DR2 forbids. Returning one of three named resting steps makes that *unrepresentable* rather than merely discouraged. Nothing here should ever gain a numeric luminance escape hatch.
+**Two steps, not three** (3.9, ruling 4b-i; `SCHEMA_VERSION` 7). `stroke-dust` was the dimmest band until the identity audit: it is the Rail's and the Dust's step, and an old Planet drawn there sank below its own `stroke-rest` orbit into the field it should stand out from (DESIGN.md §2: `stroke-dust` is used for no Body). The oldest Planets now equal their orbit, which §2 permits; recency reads coarser, as two steps. `rules.test.ts` pins the oldest rank at `stroke-rest`, and `identity-audit.test.ts` asserts no Body in the committed artifact carries `stroke-dust`.
+
+A `0..1` float would let a renderer map recency across the whole five-step ladder, and a recent Shallow Project would reach white while unfocused — the exact failure UX-DR2 forbids. Returning one of two named resting steps makes that *unrepresentable* rather than merely discouraged. Nothing here should ever gain a numeric luminance escape hatch.
 
 Note also that neither brightness nor size may carry the Deep/Shallow signal (UX-DR11): FR-3 has already bound them to recency and duration. `isDeep` is a separate derived property for exactly that reason.
 

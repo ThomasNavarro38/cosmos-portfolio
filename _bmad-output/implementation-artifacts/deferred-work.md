@@ -798,3 +798,15 @@ Still open after 3.5:
 - The fixed chrome is inset `--space-xl` only, ignoring `env(safe-area-inset-*)`; on notched or rounded devices the bottom-right control can sit under the home indicator. (`src/shell/corner-chrome.css`)
 - The identity line is a bare `<p>` inside `<main>`, after the index; it is in no `<header>`/banner landmark. (`src/shell/corner-chrome.tsx`)
 - The chrome's 4.5:1 contrast is computed against `surface-base-dark` only; both lines sit fixed over the live scene (Stars, Motes, lit Planets) with no backing or exclusion zone. (`src/shell/chrome-model.test.ts`)
+
+## Deferred from: code review of spec-3-9-identity-definition-of-done-audit.md (2026-10-11)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-identity-definition-of-done-audit.md`
+  summary: The revealed index entry (`white-space: nowrap`, bottom-left at `--space-xl`) has no max-width, so on a narrow viewport a long title can run into the bottom-right slot (which moves left while Focused) or off-screen.
+  evidence: `src/shell/index-nav.css` `.index-nav button`; the slot's `right` is `calc(min(560px, 46vw) + var(--space-xl))` while Focused (`chrome-model.ts` `slotStyle`). Belongs to the responsive pass with the 3.8 safe-area deferral.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-identity-definition-of-done-audit.md`
+  summary: `html, body { overflow: hidden }` makes anything beyond the viewport unreachable at 200% zoom or 320px width (WCAG 1.4.4 / 1.4.10), and touch has no wheel to advance the Rail.
+  evidence: `src/shell/page.css`; mobile routes to the Fallback (AD-8), but a zoomed desktop does not. Responsive/Epic 4 pass.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-9-identity-definition-of-done-audit.md`
+  summary: Non-text contrast (WCAG 1.4.11) is unaudited: the chrome's focus underline, the `release` hairline, the affordance's `stroke-focus` outline and resting Body strokes against the ground.
+  evidence: `src/identity-audit.test.ts` measures text roles only; `stroke-rest-dark #2C2C33` on `#08080A` is well under 3:1 by design (DESIGN.md's restraint), so this needs a design ruling, not a patch.

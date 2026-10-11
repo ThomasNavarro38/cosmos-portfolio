@@ -23,6 +23,10 @@
  * are walked first; before the scene and the panel. So the document order is
  * index, chrome, scene host, panel.
  *
+ * The page itself (3.9) is `./shell/page.css`: the ground edge to edge, no page
+ * scroll, and the scene host fixed to the viewport. It styles `html`, `body` and
+ * the host's class only, so it is imported once, here, where the page is mounted.
+ *
  * `generated/layout.generated.json` resolves outside `src/`, so importing it
  * crosses no declared boundary — `src/shell/` names it explicitly as a permitted
  * static import, and the entry stub's own rule bans only `src/data/` and
@@ -37,6 +41,7 @@ import { CornerChrome } from './shell/corner-chrome.tsx';
 import { FocusPanel } from './shell/focus-panel.tsx';
 import { DestinationNav } from './shell/index-nav.tsx';
 import { SceneHost } from './shell/scene-host.tsx';
+import './shell/page.css';
 
 export function App() {
   // The artifact is JSON, so its inferred type is structural rather than the

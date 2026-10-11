@@ -1561,8 +1561,8 @@ test('the ARIA checker rejects a false value and a missing attribute, not merely
   for (const form of [
     '<Canvas aria-hidden="true">',
     '<Canvas aria-hidden={true}>',
-    '<Canvas\n  aria-hidden="true"\n  style={{ height: "70vh" }}\n>',
-    '<Canvas style={{ height: "70vh" }} aria-hidden="true" camera={{ fov: 50 }}>',
+    '<Canvas\n  aria-hidden="true"\n  style={{ height: "100%" }}\n>',
+    '<Canvas style={{ height: "100%" }} aria-hidden="true" camera={{ fov: 50 }}>',
   ]) {
     assert.deepEqual(auditCanvasAria(form), [], `${form} hides the subtree and must pass`);
   }
@@ -1957,8 +1957,14 @@ function auditVignette(source: string): string[] {
     return failures;
   }
   if (at < canvasClose) failures.push('the vignette is not a sibling after the <Canvas> — it is inside or under it');
-  const wrapper = /<div\s+style=\{\{\s*position:\s*'relative'\s*\}\}\s*>\s*$/.test(code.slice(0, canvasOpen));
-  if (!wrapper) failures.push('the <Canvas> is not wrapped in a position: relative <div> — the overlay has no frame to fill');
+  // Positioned, so the overlay has a frame to fill, and `100%` by `100%`, so that
+  // frame is the fixed scene host — the viewport (3.9).
+  const wrapper = /<div\s+style=\{\{\s*position:\s*'relative',\s*width:\s*'100%',\s*height:\s*'100%'\s*\}\}\s*>\s*$/.test(
+    code.slice(0, canvasOpen),
+  );
+  if (!wrapper) {
+    failures.push('the <Canvas> is not wrapped in a position: relative, 100% × 100% <div> — the overlay has no frame to fill');
+  }
   const close = code.indexOf('</div>', at + overlay.length);
   if (close < 0 || /<\w/.test(code.slice(at + overlay.length, close))) {
     failures.push('the vignette is not the last child of the wrapper');
@@ -1977,7 +1983,8 @@ test('the vignette audit rejects the real renderer with any one of its guarantee
     ['the overlay deleted', (s) => s.replace(overlay, '')],
     ['the overlay mounted twice', (s) => s.replace(overlay, `${overlay}\n      ${overlay}`)],
     ['the overlay narrated', (s) => s.replace(overlay, '<div style={vignetteStyle()} />')],
-    ['the wrapper unpositioned', (s) => s.replace("<div style={{ position: 'relative' }}>", '<div>')],
+    ['the wrapper unpositioned', (s) => s.replace("<div style={{ position: 'relative', width: '100%', height: '100%' }}>", '<div>')],
+    ['the wrapper unsized', (s) => s.replace("<div style={{ position: 'relative', width: '100%', height: '100%' }}>", "<div style={{ position: 'relative' }}>")],
     ['the overlay inside the Canvas', (s) => s.replace(overlay, '').replace('</Canvas>', `  ${overlay}\n      </Canvas>`)],
     ['the overlay before the Canvas', (s) => s.replace(overlay, '').replace('      <Canvas', `      ${overlay}\n      <Canvas`)],
     ['the overlay as a span', (s) => s.replace(overlay, '<span aria-hidden="true" style={vignetteStyle()} />')],
@@ -2079,6 +2086,12 @@ function auditCanvasSurface(code: string): string[] {
 
   if (!/\bstyle\s*=\s*\{\{[^}]*\bheight\s*:/.test(attributes) && !/\bclassName\s*=/.test(attributes)) {
     failures.push('the <Canvas> is given no height — R3F’s wrapper is height:100% and this repo has no CSS');
+  } else if (
+    !/\bstyle\s*=\s*\{\{[^}]*\bwidth\s*:\s*['"]100%['"][^}]*\bheight\s*:\s*['"]100%['"]/.test(attributes) &&
+    !/\bclassName\s*=/.test(attributes)
+  ) {
+    // The page (3.9): the host is fixed to the viewport, so the canvas fills it.
+    failures.push('the <Canvas> does not fill the scene host — width and height are 100%, the host is the viewport');
   }
   if (!/\bcamera\s*=\s*\{/.test(attributes)) {
     failures.push('the <Canvas> is given no camera — R3F’s default cannot frame the solved extent');
@@ -2108,17 +2121,19 @@ test('the surface audit rejects a canvas with no size, no camera, or no rotation
   for (const form of [
     '<Canvas aria-hidden="true">',
     '<Canvas aria-hidden="true" style={{ width: "100%" }} camera={{ position: [framing.position.x, 0, 0], rotation: [0,0,0] }}>',
-    '<Canvas aria-hidden="true" style={{ height: "70vh" }}>',
-    '<Canvas aria-hidden="true" style={{ height: "70vh" }} camera={{ position: [framing.position.x, 0, 0] }}>',
-    '<Canvas aria-hidden="true" style={{ height: "70vh" }} camera={{ rotation: [0,0,0] }}>',
-    '<Canvas aria-hidden="true" style={{ height: "70vh" }} camera={{ position: [0, 0, 40], rotation: [0, 0, 0] }}>',
+    '<Canvas aria-hidden="true" style={{ height: "100%" }}>',
+    '<Canvas aria-hidden="true" style={{ height: "100%" }} camera={{ position: [framing.position.x, 0, 0] }}>',
+    '<Canvas aria-hidden="true" style={{ height: "100%" }} camera={{ rotation: [0,0,0] }}>',
+    '<Canvas aria-hidden="true" style={{ height: "100%" }} camera={{ position: [0, 0, 40], rotation: [0, 0, 0] }}>',
+    // The greybox's 70vh: a band of canvas, not the frame (3.9).
+    '<Canvas aria-hidden="true" style={{ width: "100%", height: "70vh" }} camera={{ position: [framing.position.x, 0, 0], rotation: [framing.rotation.x, 0, 0] }}>',
   ]) {
     assert.notDeepEqual(auditCanvasSurface(form), [], `${form} must be rejected`);
   }
 
   assert.deepEqual(
     auditCanvasSurface(
-      '<Canvas aria-hidden="true" style={{ height: "70vh" }} camera={{ position: [framing.position.x, 0, 0], rotation: [framing.rotation.x, 0, 0] }}>',
+      '<Canvas aria-hidden="true" style={{ width: "100%", height: "100%" }} camera={{ position: [framing.position.x, 0, 0], rotation: [framing.rotation.x, 0, 0] }}>',
     ),
     [],
     'a sized canvas with a framed, oriented camera must pass',

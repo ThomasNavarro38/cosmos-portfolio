@@ -1,0 +1,41 @@
+/*
+ * The page (3.9): one full-bleed void, edge to edge, that never scrolls. Every
+ * colour is a token custom property from `src/tokens/tokens.css`; there is no
+ * literal length here. `identity-audit.test.ts` holds each declaration.
+ *
+ * The document's own white and its default margin are what the greybox showed
+ * around the scene; the ground is `surface-base`, the same token the canvas
+ * clears to, so the page and the scene are one surface. Nothing on the page
+ * scrolls the document: the Rail reads the wheel over the scene, and the panel
+ * scrolls itself (`overflow-y: auto` on `#focus-panel`).
+ *
+ * The scene host is fixed to the viewport and the canvas fills it (`scene.tsx`,
+ * `100%` by `100%`). The chrome (`z-index` 1) and the panel (`z-index` 2) are
+ * fixed too and stay above it; the host takes no `z-index`, so it is painted
+ * at the root stacking context's positioned layer, in document order, below
+ * both.
+ */
+
+html,
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--color-surface-base-dark);
+}
+
+/*
+ * The document's own text: the `<noscript>` line, the one thing on the page with
+ * no stylesheet of its own. Without an ink it would be the browser's black on the
+ * void; it takes the chrome role's family, size and ink (≥ 4.5:1, held in the
+ * identity audit's contrast table). Every other text element sets its own role.
+ */
+body {
+  color: var(--color-ink-label-dark);
+  font-family: var(--type-chrome-font-family);
+  font-size: var(--type-chrome-font-size);
+}
+
+.scene-host {
+  position: fixed;
+  inset: 0;
+}

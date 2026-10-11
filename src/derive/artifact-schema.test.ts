@@ -114,8 +114,8 @@ test('SCHEMA_VERSION is a literal in the schema, so a mismatch fails', () => {
   }
 });
 
-test('the version is 6 now that Skill tiers landed, and changing the shape means changing it', () => {
-  assert.equal(SCHEMA_VERSION, 6, 'Story 3.5 added `skills`, so the shape version is 6');
+test('the version is 7 now that the band narrowed to two steps, and changing the shape means changing it', () => {
+  assert.equal(SCHEMA_VERSION, 7, 'Story 3.9 narrowed `luminanceBand` to two steps, so the shape version is 7');
   assert.equal(valid().schemaVersion, SCHEMA_VERSION, 'the emitter declares it');
 
   // Read off the source: the literal must be in the schema, not merely compared
@@ -624,6 +624,12 @@ test('a unit orbitNormal whose plane does not contain its Planet is rejected, na
   assert.deepEqual(validateArtifact(artifact), []);
 });
 
+test('an artifact still declaring schemaVersion 6 is rejected', () => {
+  const old = copy(valid());
+  old['schemaVersion'] = 6;
+  assertFails(validateArtifact(old), /schemaVersion/, 'a three-band artifact must not be read on a guess');
+});
+
 test('an artifact still declaring schemaVersion 5 is rejected', () => {
   const old = copy(valid());
   old['schemaVersion'] = 5;
@@ -687,7 +693,7 @@ test('timeAxis is bounded to 0..1', () => {
   }
 });
 
-test('luminanceBand accepts only the three resting steps', () => {
+test('luminanceBand accepts only the two resting steps, stroke-rest and stroke-near', () => {
   // UX-DR2 reserves `stroke-active` and `stroke-focus` for camera state. The
   // derive layer's union already makes them unrepresentable; the schema stops a
   // hand-edited artifact from smuggling one in.
@@ -695,7 +701,8 @@ test('luminanceBand accepts only the three resting steps', () => {
   const project = broken.clients[0]?.projects[0];
   assert.ok(project !== undefined);
 
-  for (const reserved of ['stroke-active', 'stroke-focus', 'white', '']) {
+  // `stroke-dust` is the Rail's and the Dust's step, no longer a band (3.9).
+  for (const reserved of ['stroke-dust', 'stroke-active', 'stroke-focus', 'white', '']) {
     project['luminanceBand'] = reserved;
     assertFails(
       validateArtifact(broken),
@@ -704,7 +711,7 @@ test('luminanceBand accepts only the three resting steps', () => {
     );
   }
 
-  for (const resting of ['stroke-dust', 'stroke-rest', 'stroke-near']) {
+  for (const resting of ['stroke-rest', 'stroke-near']) {
     project['luminanceBand'] = resting;
     assert.deepEqual(validateArtifact(broken), [], `"${resting}" is a resting step`);
   }
