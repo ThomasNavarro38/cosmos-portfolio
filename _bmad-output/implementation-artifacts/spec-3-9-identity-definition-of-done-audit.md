@@ -154,6 +154,34 @@ context:
 - Given each audit test, when its mutation is applied, then it fails with its own message.
 - Given `identity-audit-3-9.md`, then every epic AC for 3.9 has a row, either a test name or a protocol with an empty result.
 
+### Review Findings
+
+- [x] [Review][Patch] F4 `team of`: Thomas ruled (2026-10-11) it is a structural label — it joins `VISIBLE_COPY`, `FORMAT_FRAGMENTS` goes, and the audit record closes F4 [src/identity-audit.test.ts:390]
+- [x] [Review][Patch] The numeric arm's `.set(` matches any receiver — `map.set('k', 0x10)` fails the gate (probed). Thomas ruled (2026-10-11): narrow it to a colour-named receiver (`color.set(`, `material.color.set(`) [scripts/colour-literals.ts:152]
+- [x] [Review][Patch] Markup `DECLARATION` runs over the whole document, not just `style` attributes and `<style>` blocks as the header says — `href="https://x.com/navy"` reports `navy` (probed) [scripts/colour-literals.ts:172]
+- [x] [Review][Patch] Markup whole-string system colours fire on any attribute — `<canvas id="canvas">` fails (probed); limit markup whole-string hits to paint attributes (`fill`, `stroke`, `color`, `stop-color`, `flood-color`, `lighting-color`) [scripts/colour-literals.ts:272]
+- [x] [Review][Patch] Markup hex arm reads fragment links as colours — `href="#add"`, `url(#bed)` fail (probed) [scripts/colour-literals.ts:143]
+- [x] [Review][Patch] A quoted string inside a CSS value ends the declaration — `background: url("a.png") white` passes the ban (probed false negative) [scripts/colour-literals.ts:172]
+- [x] [Review][Patch] Boolean `@media (forced-colors)` is not exempt — a legitimate `CanvasText` under it fails (probed) [scripts/colour-literals.ts:211]
+- [x] [Review][Patch] The function arm allows whitespace before `(`, which CSS never does — the prose string `'the lab (Paris)'` reports `lab(` (probed) [scripts/colour-literals.ts:143]
+- [x] [Review][Patch] The header's "Known blind spots" lists only numeric cases — add the script forms the scan cannot see: CSS-in-JS strings (`cssText`, `setProperty`, a multi-word style string), a system colour through a variable, numeric colours in a ternary/array/default or under a non-`color` key [scripts/colour-literals.ts:44]
+- [x] [Review][Patch] The `url(…)` carve-out has no test — removing it leaves the suite green (proved by mutation); add css and markup rows, plus rows for each patch above [scripts/colour-literals.test.ts]
+- [x] [Review][Patch] `languageOf` is case-sensitive and misses `.htm` — `.SVG`/`.HTML`/`.htm` escape the ban [scripts/colour-literals.ts:335]
+- [x] [Review][Patch] `DEFAULT_PATHS` pins `site: SITE_DIR`, so `{ ...DEFAULT_PATHS, src: fixture }` is judged against the real `index.html`; drop it and let `siteOf` default [scripts/tokens.ts:676]
+- [x] [Review][Patch] `isWordless` admits any letterless text (digits, `?`, an emoji) into the closed copy list; restrict it to whitespace and the ruled separators [src/identity-audit.test.ts:396]
+- [x] [Review][Patch] The copy and voice audits skip markup under `src/` that the colour gate governs; include it, read through `htmlText` [src/identity-audit.test.ts:414]
+- [x] [Review][Patch] Two audit tests have no mutation ("the cool cast is a deliberate neutral", "the copy constants are each in the closed allowlist"), against the AC "each audit test … fails with its own message" [src/identity-audit.test.ts:85]
+- [x] [Review][Patch] `auditBans` misses a literal weight in the `font:` shorthand and `visibility: collapse` [src/identity-audit.test.ts:184]
+- [x] [Review][Patch] The viewport-unit ban misses `vi`/`vb` and their `s`/`l`/`d` variants [src/identity-audit.test.ts:898]
+- [x] [Review][Patch] Audit record row 8 claims "not one shipped colour carries a hue" without citing the ruled forced-colours `Highlight` exception (`focus-panel.css`, ruling 3.6) [_bmad-output/implementation-artifacts/identity-audit-3-9.md:20]
+- [x] [Review][Patch] Audit record row 2 gives the manual register half (P2) no empty result slot [_bmad-output/implementation-artifacts/identity-audit-3-9.md:14]
+- [x] [Review][Defer] `parseCss` treats a blockless statement at-rule (`@import …;`) as the next rule's prelude and handles one nesting level only [src/identity-audit.test.ts:114] — deferred, holds over today's fixed inputs
+- [x] [Review][Defer] The contrast table reads only top-level, same-selector `color`; an `@media` override or an inherited ink is not measured [src/identity-audit.test.ts:256] — deferred, no such rule ships
+- [x] [Review][Defer] `.json`/`.webmanifest` under `public/` are ungoverned — a future `theme_color` would bypass the ban [scripts/colour-literals.ts:335] — deferred, no `public/` exists
+- [x] [Review][Defer] Markup's inline `<script>`/`<style>` are not scanned in their own language (comments, numeric arm) [scripts/colour-literals.ts:194] — deferred, `index.html` has none
+- [x] [Review][Defer] A programmatically focused index entry may not match `:focus-visible`, leaving focus on an invisible button; the revealed entry shows no pressed state [src/shell/index-nav.css:52] — deferred, ruling 8a; P1 manual pass
+- [x] [Review][Defer] `src/shell/contrast.ts` is test support named like a shipped module; the Code Map asked for a shared test helper [src/shell/contrast.ts] — deferred, imported by no shipped module
+
 ## Design Notes
 
 - **Cool cast.** The hue is about 286° at chroma ≤ 0.016, which is below the threshold where people perceive a tint. It is recorded as a deliberate neutral rather than "fixed". Changing it would move every contrast ratio for no visible gain.

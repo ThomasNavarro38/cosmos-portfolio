@@ -82,13 +82,33 @@ test('achromatic: every -dark colour token has OKLCH chroma < 0.02', () => {
   assert.ok(Object.keys(tokens.colors).filter((key) => key.endsWith('-dark')).length >= 14, 'every surface, stroke and ink step is inspected');
 });
 
-test('achromatic: the cool cast is a deliberate neutral — hue near 286°, chroma at most 0.016', () => {
-  // Recorded, not fixed (Design Notes): below the threshold where a tint is seen.
-  for (const [key, value] of Object.entries(tokens.colors).filter(([name]) => name.endsWith('-dark'))) {
+/**
+ * The cool cast as recorded (ruling 1b, Design Notes): every `-dark` token at
+ * chroma ≤ 0.016, and every one with a perceptible lean (chroma > 0.004) leaning
+ * the same way, within 20° of hue 286°. A token drifting toward the threshold, or
+ * warming, is a second cast — not the deliberate neutral the record names.
+ */
+function auditCast(colors: Readonly<Record<string, string>>): string[] {
+  const failures: string[] = [];
+  for (const [key, value] of Object.entries(colors).filter(([name]) => name.endsWith('-dark'))) {
     const { chroma, hue } = oklch(value);
-    assert.ok(chroma <= 0.016, `${key} chroma ${chroma.toFixed(4)}`);
-    if (chroma > 0.004) assert.ok(Math.abs(hue - 286) < 20, `${key} hue ${hue.toFixed(1)}° — the cast is one cool neutral`);
+    if (chroma > 0.016) failures.push(`cast: ${key} (${value}) has chroma ${chroma.toFixed(4)} > 0.016 — beyond the recorded neutral`);
+    else if (chroma > 0.004 && Math.abs(hue - 286) >= 20) failures.push(`cast: ${key} (${value}) leans to hue ${hue.toFixed(1)}° — the cast is one cool neutral, near 286°`);
   }
+  return failures;
+}
+
+test('achromatic: the cool cast is a deliberate neutral — hue near 286°, chroma at most 0.016', () => {
+  assert.deepEqual(auditCast(tokens.colors), []);
+});
+
+test('achromatic: a token drifting toward the threshold, or warming, fails the cast with its own line', () => {
+  // #7F7F8B is OKLCH chroma ≈ 0.018 at hue 286°: achromatic by ruling 1b, yet past the recorded cast.
+  const drifted = { ...tokens.colors, 'ink-label-dark': '#7F7F8B' };
+  assert.deepEqual(auditAchromatic(drifted), [], 'the drift is still under the achromatic threshold');
+  assert.match(auditCast(drifted).join('\n'), /^cast: ink-label-dark \(#7F7F8B\) has chroma 0\.01\d+ > 0\.016/);
+  // #857F7A is chroma ≈ 0.010 at hue ≈ 60°: a warm grey beside cool ones.
+  assert.match(auditCast({ ...tokens.colors, 'ink-label-dark': '#857F7A' }).join('\n'), /^cast: ink-label-dark \(#857F7A\) leans to hue \d+\.\d°/);
 });
 
 test('achromatic: a hue in any -dark token fails, naming it', () => {
@@ -186,8 +206,9 @@ function auditBans(label: string, source: string): string[] {
   const failures: string[] = [];
   if (/\btext-transform\s*:/.test(code)) failures.push(`${label}: text-transform — strings are set as authored`);
   if (/\bfont-weight\s*:(?!\s*var\()/.test(code)) failures.push(`${label}: a literal font-weight — weight is the token's, and never above 400`);
+  if (/(?<![\w-])font\s*:/.test(code)) failures.push(`${label}: the font shorthand — it sets a weight of its own; the type role's properties are set one by one`);
   if (/\bdisplay\s*:\s*none\b/.test(code)) failures.push(`${label}: display: none — it removes the element from the accessibility tree`);
-  if (/\bvisibility\s*:\s*hidden\b/.test(code)) failures.push(`${label}: visibility: hidden — it removes the element from the accessibility tree`);
+  if (/\bvisibility\s*:\s*(?:hidden|collapse)\b/.test(code)) failures.push(`${label}: visibility: hidden — it removes the element from the accessibility tree`);
   return failures;
 }
 
@@ -373,6 +394,10 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
   'Built',
   'Deep',
   'Shallow',
+  // The static words of the affordance's secondary line,
+  // `{role} · team of {team_size} · {Deep|Shallow}` (3.4), ruled a structural
+  // label on 2026-10-11 (finding F4 in `identity-audit-3-9.md`).
+  'team of',
   'overview',
   'Cosmos Portfolio',
   'This portfolio needs JavaScript.',
@@ -381,32 +406,28 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
 /** Accessible names — announced, never drawn — listed separately. */
 const ACCESSIBLE_NAMES: ReadonlySet<string> = new Set(['Destinations', 'Skills']);
 
-/**
- * The words of a ruled *format* rather than a string: the affordance's secondary
- * line, `{role} · team of {team_size} · {Deep|Shallow}`, ruled in 3.4. Its
- * literal is a template around data, so it is held as its static fragments.
- * Finding F4 in `identity-audit-3-9.md`: the 3.9 allowlist did not name it.
- */
-const FORMAT_FRAGMENTS: ReadonlySet<string> = new Set(['team of']);
-
 /** The constants the renderers draw copy from; any other upper-case constant drawn as text fails. */
 const COPY_CONSTANTS: ReadonlySet<string> = new Set(['IDENTITY_LINE', 'SLOT_TEXT', 'EDITORIAL_RULE', 'RELEASE_LABEL', 'FIELD_LABELS', 'DEPTH_LABELS']);
 
-/** Punctuation and separators carry no copy: ` · `, `—`, an arrow. */
-const isWordless = (text: string): boolean => !/\p{L}/u.test(text);
+/**
+ * The separators a template sets between data, and nothing else: whitespace and
+ * the ` · ` of the ruled formats. A digit, a `?` or an emoji is drawn text, and
+ * must be in the list like any other.
+ */
+const SEPARATOR_EDGES = /^[\s·]+|[\s·]+$/gu;
 
-/** A visible piece of text in the allowlist, the format fragments, or wordless. */
+/** A visible piece of text, separators trimmed: nothing left, or in the allowlist. */
 const isAllowed = (text: string): boolean => {
-  const trimmed = text.trim();
-  return isWordless(trimmed) || VISIBLE_COPY.has(trimmed) || FORMAT_FRAGMENTS.has(trimmed.replace(/^[^\p{L}]+|[^\p{L}]+$/gu, ''));
+  const core = text.replace(SEPARATOR_EDGES, '');
+  return core === '' || VISIBLE_COPY.has(core);
 };
 
 /** The static parts of a string or template literal's body. */
 const staticParts = (body: string): string[] => body.split(/\$\{[^}]*\}/);
 
 /**
- * Every shipped script and stylesheet under `src/`, as path → text. "Shipped"
- * is the colour gate's own classification (`languageOf` in
+ * Every shipped script, stylesheet and markup file under `src/`, as path → text.
+ * "Shipped" is the colour gate's own classification (`languageOf` in
  * `scripts/colour-literals.ts`), so the two scans cannot disagree about what a
  * test is (`.test.mts`, `.spec.tsx`…); the generated tokens and dot-paths are
  * skipped as the gate skips them.
@@ -414,8 +435,7 @@ const staticParts = (body: string): string[] => body.split(/\$\{[^}]*\}/);
 function shippedFiles(): Record<string, string> {
   const found: Record<string, string> = {};
   for (const entry of readdirSync(SRC, { recursive: true, withFileTypes: true })) {
-    const language = entry.isFile() ? languageOf(entry.name) : undefined;
-    if (language !== 'script' && language !== 'css') continue;
+    if (!entry.isFile() || languageOf(entry.name) === undefined) continue;
     const path = relative(SRC, join(entry.parentPath, entry.name)).split(sep).join('/');
     if (path.startsWith('tokens/') || path.split('/').some((part) => part.startsWith('.'))) continue;
     found[path] = readFileSync(join(entry.parentPath, entry.name), 'utf8').replace(/\r\n/g, '\n');
@@ -624,7 +644,7 @@ function htmlText(source: string): string[] {
  *   `secondary:`, `kicker:`, `caption:`, `tooltip:`, `heading:`), template
  *   fragments included;
  * - an upper-case constant drawn as a JSX child, which must be a copy constant;
- * - `index.html`'s text nodes.
+ * - the text nodes of `index.html` and of any `.html`/`.svg` shipped under `src/`.
  */
 function auditCopy(files: Readonly<Record<string, string>>, html: string): string[] {
   const failures: string[] = [];
@@ -633,6 +653,10 @@ function auditCopy(files: Readonly<Record<string, string>>, html: string): strin
   };
   for (const [path, source] of Object.entries(files)) {
     const where = `src/${path}`;
+    if (languageOf(path) === 'markup') {
+      for (const text of htmlText(source)) if (!isAllowed(text)) flag(where, text);
+      continue;
+    }
     if (languageOf(path) === 'css') {
       // Generated content is drawn text, in a stylesheet as much as in markup.
       for (const [, , text] of codeOf(source, 'css').matchAll(/\bcontent\s*:\s*(['"])((?:(?!\1)[^\\\n])*)\1/g)) {
@@ -670,10 +694,33 @@ function auditCopy(files: Readonly<Record<string, string>>, html: string): strin
   return failures;
 }
 
+/** Each copy constant's value, by name, against the closed allowlist. */
+function auditCopyConstants(constants: Readonly<Record<string, string>>): string[] {
+  return Object.entries(constants)
+    .filter(([, value]) => !VISIBLE_COPY.has(value))
+    .map(([name, value]) => `copy: the constant ${name} is ${JSON.stringify(value)}, which is not in the closed allowlist`);
+}
+
+function copyConstants(): Record<string, string> {
+  const entries = (name: string, record: Readonly<Record<string, string>>) => Object.entries(record).map(([key, value]) => [`${name}.${key}`, value] as const);
+  return Object.fromEntries([
+    ['IDENTITY_LINE', IDENTITY_LINE],
+    ['EDITORIAL_RULE', EDITORIAL_RULE],
+    ['RELEASE_LABEL', RELEASE_LABEL],
+    ...entries('SLOT_TEXT', SLOT_TEXT),
+    ...entries('FIELD_LABELS', FIELD_LABELS),
+    ...entries('DEPTH_LABELS', DEPTH_LABELS),
+  ]);
+}
+
 test('copy: the copy constants are each in the closed allowlist', () => {
-  for (const value of [IDENTITY_LINE, ...Object.values(SLOT_TEXT), EDITORIAL_RULE, RELEASE_LABEL, ...Object.values(FIELD_LABELS), ...Object.values(DEPTH_LABELS)]) {
-    assert.ok(VISIBLE_COPY.has(value), `${JSON.stringify(value)} is shipped copy outside the allowlist`);
-  }
+  const constants = copyConstants();
+  assert.ok(Object.keys(constants).length >= 9, 'every copy constant is inspected');
+  assert.deepEqual(auditCopyConstants(constants), []);
+  assert.deepEqual(
+    auditCopyConstants({ ...constants, RELEASE_LABEL: 'Close panel' }),
+    ['copy: the constant RELEASE_LABEL is "Close panel", which is not in the closed allowlist'],
+  );
   assert.deepEqual(htmlText(read('../index.html')), ['Cosmos Portfolio', 'This portfolio needs JavaScript.'], 'index.html draws its title and its noscript line, and nothing else');
 });
 
@@ -749,6 +796,18 @@ test('copy: a tooltip, a caption, help text or a narrated noscript fails with it
     failing('render-scene/affordance-model.ts', (s) => s.replace('} · team of ${', '} · a team of ${')),
     /^copy: src\/render-scene\/affordance-model\.ts draws the model copy "· a team of"/,
   );
+  // A digit, a `?` or an emoji is drawn text, not a separator.
+  for (const drawn of ['?', '42', '✨']) {
+    assert.match(
+      failing('shell/corner-chrome.tsx', (s) => s.replace('<p className="chrome-identity">{IDENTITY_LINE}</p>', `<p className="chrome-identity">{IDENTITY_LINE}</p>\n      <p>${drawn}</p>`)),
+      new RegExp(`^copy: src/shell/corner-chrome\\.tsx draws the visible text "${drawn.replace('?', '\\?')}"`),
+    );
+  }
+  // Markup shipped under `src/` is read as markup.
+  assert.match(
+    auditCopy({ ...scripts, 'shell/mark.svg': '<svg><!-- a note --><title>Loading the cosmos</title></svg>\n' }, html).join('\n'),
+    /^copy: src\/shell\/mark\.svg draws the visible text "Loading the cosmos"/,
+  );
   assert.match(
     failing('render-scene/affordance-model.ts', (s) => s.replace('title.textContent = draw.title;', "title.textContent = 'Loading…';")),
     /^copy: src\/render-scene\/affordance-model\.ts draws the DOM text "Loading…"/,
@@ -792,8 +851,8 @@ function jsonStrings(value: unknown): string[] {
 /**
  * The register scan over every string shipped: each string and template literal
  * (multi-line templates included) in the shipped scripts and stylesheets —
- * comments are not shipped — the JSX text runs, every string in
- * `career.json`, and the whole of `index.html`.
+ * comments are not shipped — the JSX text runs, the whole of any shipped
+ * `.html`/`.svg`, every string in `career.json`, and the whole of `index.html`.
  */
 function auditVoice(files: Readonly<Record<string, string>>, career: string, html: string): string[] {
   const failures: string[] = [];
@@ -802,8 +861,12 @@ function auditVoice(files: Readonly<Record<string, string>>, career: string, htm
     if (hit !== null) failures.push(`voice: ${where} says ${JSON.stringify(hit[0])} — ${JSON.stringify(text.trim().slice(0, 80))}`);
   };
   for (const [path, source] of Object.entries(files)) {
-    const css = languageOf(path) === 'css';
-    const code = codeOf(source, css ? 'css' : 'script');
+    const language = languageOf(path) ?? 'script';
+    if (language === 'markup') {
+      check(`src/${path}`, codeOf(source, 'markup'));
+      continue;
+    }
+    const code = codeOf(source, language);
     for (const [, , quoted, template] of code.matchAll(LITERAL)) check(`src/${path}`, (quoted ?? template) as string);
     if (path.endsWith('.tsx')) for (const drawn of jsxDrawn(code)) if (drawn.kind === 'text') check(`src/${path}`, drawn.text);
   }
@@ -840,6 +903,9 @@ test('voice: a beta tag, an apology or a placeholder fails with its own line', (
   );
   // A comment is prose for the next reader, not shipped copy.
   assert.deepEqual(auditVoice({ 'x.ts': '// TODO: none\nexport const a = 1;\n' }, career, html), []);
+  // Markup shipped under `src/` is scanned, its comments aside.
+  assert.match(auditVoice({ 'x.svg': '<svg><text>beta</text></svg>\n' }, career, html).join('\n'), /^voice: src\/x\.svg says "beta"/);
+  assert.deepEqual(auditVoice({ 'x.svg': '<svg><!-- draft --></svg>\n' }, career, html), []);
 });
 
 // --- Bands (ruling 4b-i) -----------------------------------------------------------------------------
@@ -895,7 +961,7 @@ function auditPage(files: { readonly css: string; readonly app: string; readonly
   const scene = codeOf(files.scene, 'script');
   if (!/<div style=\{\{ position: 'relative', width: '100%', height: '100%' \}\}>\s*<Canvas\b/.test(scene)) failures.push('page: the scene wrapper is not 100% by 100%');
   if (!/<Canvas\b[^>]*?style=\{\{ width: '100%', height: '100%' \}\}/.test(scene)) failures.push('page: the Canvas is not 100% by 100%');
-  if (/\d(?:[dsl]?v[hw]|vmin|vmax)\b/.test(scene)) failures.push('page: the scene is sized in viewport units — the host is the viewport');
+  if (/\d[dsl]?v(?:[hwib]|min|max)\b/.test(scene)) failures.push('page: the scene is sized in viewport units — the host is the viewport');
   return failures;
 }
 
@@ -925,6 +991,8 @@ test('page: each guarantee removed fails with its own line', () => {
     // Every viewport unit, not only `vh`.
     ['scene', (s) => s.replace("<RailCamera rail={rail}", "<RailCamera data-h=\"100dvh\" rail={rail}"), /^page: the scene is sized in viewport units/],
     ['scene', (s) => s.replace("<RailCamera rail={rail}", "<RailCamera data-w=\"80vmin\" rail={rail}"), /^page: the scene is sized in viewport units/],
+    ['scene', (s) => s.replace("<RailCamera rail={rail}", "<RailCamera data-w=\"100svi\" rail={rail}"), /^page: the scene is sized in viewport units/],
+    ['scene', (s) => s.replace("<RailCamera rail={rail}", "<RailCamera data-h=\"100vb\" rail={rail}"), /^page: the scene is sized in viewport units/],
     ['scene', (s) => s.replace("<div style={{ position: 'relative', width: '100%', height: '100%' }}>", "<div style={{ position: 'relative' }}>"), /^page: the scene wrapper is not 100% by 100%$/],
   ];
   for (const [file, mutate, message] of cases) {
@@ -999,6 +1067,8 @@ test('index: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('  left: var(--space-xl);\n', '  right: var(--space-xl);\n'), /`\.index-nav button` lacks `left: var\(--space-xl\)`/],
     [(s) => s.replace('  border: 0;\n', '  border: 0;\n  text-transform: lowercase;\n'), /^index: text-transform/],
     [(s) => s.replace('font-weight: var(--type-chrome-font-weight)', 'font-weight: 500'), /^index: a literal font-weight/],
+    [(s) => s.replace('  white-space: nowrap;\n', '  white-space: nowrap;\n  font: 700 1rem serif;\n'), /^index: the font shorthand/],
+    [(s) => s.replace('  clip-path: inset(50%);\n', '  visibility: collapse;\n'), /^index: visibility: hidden/],
     [(s) => s.replace('  background: none;\n', '  background: var(--color-surface-raised-dark);\n'), /`\.index-nav button` lacks `background: none`/],
     [(s) => s.replace('    outline: 1px solid CanvasText;\n', ''), /`@media \(forced-colors: active\) \.index-nav button:focus-visible` lacks `outline: 1px solid CanvasText`/],
     // A second `.index-nav button` that unclips every entry at rest.

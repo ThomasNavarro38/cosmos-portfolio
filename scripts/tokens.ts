@@ -673,7 +673,7 @@ export function siteOf(paths: Paths): string {
   return resolve(paths.src) === resolve(SRC_DIR) ? SITE_DIR : dirname(resolve(paths.src));
 }
 
-export const DEFAULT_PATHS: Paths = { design: DESIGN_PATH, out: TOKENS_DIR, src: SRC_DIR, site: SITE_DIR };
+export const DEFAULT_PATHS: Paths = { design: DESIGN_PATH, out: TOKENS_DIR, src: SRC_DIR };
 
 /**
  * The only files `src/tokens/` may hold. The directory is exempt from the
