@@ -68,6 +68,23 @@ context:
 - Given a clean copy of the tree, excluding `node_modules`, inside a `node:24` Linux container, when `npm ci && npm test && npm run typecheck && npm run gate` runs, then it exits 0. This is CI's environment, checked before a remote exists.
 - Given `npm run build`, when `dist/` is inspected, then no emitted chunk contains zod's code, and `zod` resolves as `dev` in the lockfile.
 
+### Review Findings
+
+- [x] [Review][Patch] No ratchet ties the action SHAs to the approved releases — resolved: `ci-workflow.test.ts` asserts the exact approved `uses:` lines (checkout v7.0.1 `3d3c42e5…`, setup-node v7.0.0 `82076278…`) [scripts/ci-workflow.test.ts:1]
+- [x] [Review][Patch] The gate's check-pins step is not pinned by any test — dropping `&& node scripts/check-pins.ts` from `scripts.gate` leaves `npm test` green; add the sibling of `tokens.test.ts:172` [package.json:13]
+- [x] [Review][Patch] A missing `.github/workflows/` passes silently and prints the "every workflow action is pinned" line [scripts/check-pins.ts:133]
+- [x] [Review][Patch] An `overrides` key with a range selector (`"foo@^1.0.0": "1.0.1"`) passes the exact-pin ratchet [scripts/check-pins.ts:87]
+- [x] [Review][Patch] The ci.yml ratchet does not pin the exact `run:` commands (`run: npm test; exit 0` passes), does not read a `run: |` block, and a second job's lines merge into the last step [scripts/ci-workflow.test.ts:18]
+- [x] [Review][Patch] A workflow with no `steps:` line throws a TypeError on `LINES[-1]` instead of a clear assertion [scripts/ci-workflow.test.ts:75]
+- [x] [Review][Patch] The ci.yml ratchet accepts a job-level `permissions:` that widens the token and a floating `runs-on` image [scripts/ci-workflow.test.ts:44]
+- [x] [Review][Patch] `--root=` given twice silently keeps the last one, while every other unexpected argument is rejected [scripts/check-pins.ts:179]
+- [x] [Review][Patch] Valid JSON that is not an object is reported as "could not be read" [scripts/check-pins.ts:75]
+- [x] [Review][Patch] The missing-package.json test uses a clean workflow, so it never shows the workflow check still ran [scripts/check-pins.test.ts:188]
+- [x] [Review][Patch] `.npmrc` lacks `save-exact=true`, so `npm install` still writes a caret that only the gate catches afterwards [.npmrc:1]
+- [x] [Review][Defer] `packageManager` and the Node version are declared but not enforced; `.nvmrc` holds the floating major `24` [.github/workflows/ci.yml:24] — deferred, needs a ruling (already logged by the implementer)
+- [x] [Review][Defer] `package-lock.json` is not checked: `resolved` URLs off the npm registry would pass [scripts/check-pins.ts:170] — deferred, pre-existing
+- [x] [Review][Defer] `isEntryPoint` is copied from `scripts/tokens.ts` rather than shared [scripts/check-pins.ts:208] — deferred, pre-existing
+
 ## Spec Change Log
 
 ## Design Notes

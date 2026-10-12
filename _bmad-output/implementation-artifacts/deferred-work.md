@@ -834,3 +834,9 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-10-ci-pipeline-and-packaging-enforcement.md`
   summary: Story 3.11's bundle assertion should also ban `zod` from the entry chunk, and CI should run `npm run build` once that assertion lives in `vite build`.
   evidence: `zod` moved to `devDependencies` (3.10), but Vite bundles a devDependency if runtime code imports it; `ci.yml` runs test, typecheck and gate only, so a `generateBundle` check would never run in CI.
+
+## Deferred from: code review of spec-3-10-ci-pipeline-and-packaging-enforcement.md (2026-10-12)
+
+- `packageManager` and the Node version are declared but not enforced, and `.nvmrc` holds the floating major `24`. See the 3.10 implementer's entry above; enforcing either needs a ruling (corepack, a pinned global npm install, or an exact `.nvmrc`).
+- `scripts/check-pins.ts` does not read `package-lock.json`, so a lockfile entry whose `resolved` URL points at git or a tarball rather than the npm registry passes the pin ratchet.
+- `isEntryPoint` in `scripts/check-pins.ts:208` is a copy of the one in `scripts/tokens.ts`; a shared script helper would keep the two from drifting (a candidate for 3.14 test infrastructure).
