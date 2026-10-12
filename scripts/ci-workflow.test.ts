@@ -1,8 +1,9 @@
 /**
  * A text-level ratchet on `.github/workflows/ci.yml`. The repo carries no YAML
  * parser and must not gain one for a test, so this pins the authored shape: a
- * push trigger on every branch, Node from `.nvmrc`, `npm ci`, a job timeout,
- * and the three checks each guarded to run even when an earlier one failed.
+ * push trigger on every branch, one job on a fixed runner, the approved action
+ * SHAs, Node from `.nvmrc`, `npm ci`, a job timeout, and the three checks each
+ * run as a bare command and guarded to run even when an earlier one failed.
  */
 
 import { strict as assert } from 'node:assert';
@@ -13,14 +14,38 @@ const WORKFLOW = readFileSync(new URL('../.github/workflows/ci.yml', import.meta
 const LINES = WORKFLOW.split('\n');
 const GUARD = "if: ${{ !cancelled() && steps.install.outcome == 'success' }}";
 const CHECKS = ['npm test', 'npm run typecheck', 'npm run gate'];
+/** Every command the job may run, each the whole of its `run:` line. */
+const RUNS = ['npm ci', ...CHECKS];
+/** The approved pins; moving either is an Ask First change, so it has to edit this list on purpose. */
+const APPROVED_ACTIONS = [
+  'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1',
+  'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0',
+];
 
-/** Every step, as its trimmed lines with the leading `- ` dropped, from its `-` to the next step. */
+/** The value of every line keyed `key:`, whether or not it opens a step. */
+function valuesOf(key: string): string[] {
+  const pattern = new RegExp(`^\\s*(?:-\\s+)?${key}\\s*:\\s*(.*)$`);
+  return LINES.flatMap((line) => {
+    const match = pattern.exec(line);
+    return match === null ? [] : [(match[1] as string).trim()];
+  });
+}
+
+/** The index of the one `steps:` line; a second job would escape every per-step check below. */
+function stepsLine(): number {
+  const at = LINES.flatMap((line, index) => (/^\s*steps:\s*$/.test(line) ? [index] : []));
+  assert.equal(at.length, 1, `the workflow must hold exactly one steps: list, found ${at.length}`);
+  return at[0] as number;
+}
+
+/** Every step, as its trimmed lines with the leading `- ` dropped, from its `-` to the next step or the list's end. */
 function steps(): string[][] {
-  const at = LINES.findIndex((line) => /^\s*steps:\s*$/.test(line));
-  assert.notEqual(at, -1, 'the workflow has no steps');
+  const at = stepsLine();
+  const indent = (LINES[at] as string).search(/\S/);
   const all: string[][] = [];
   for (const line of LINES.slice(at + 1)) {
     if (line.trim() === '') continue;
+    if (line.search(/\S/) <= indent) break;
     const item = /^\s*-\s+(.*)$/.exec(line);
     if (item !== null) all.push([(item[1] as string).trim()]);
     else all.at(-1)?.push(line.trim());
@@ -28,20 +53,22 @@ function steps(): string[][] {
   return all;
 }
 
-/** The commands a step's `run:` line names, if any of the three checks. */
-function checksIn(step: readonly string[]): string[] {
-  const run = step.find((line) => line.startsWith('run:'));
-  if (run === undefined) return [];
-  return CHECKS.filter((command) => new RegExp(`(^|[\\s;&|])${command.replace(/ /g, '\\s+')}($|[\\s;&|])`).test(run.slice(4)));
-}
-
 test('the workflow triggers on push with no branch filter, and on nothing else', () => {
   assert.match(WORKFLOW, /^on: push$/m);
   assert.doesNotMatch(WORKFLOW, /^\s*(branches|branches-ignore|tags|paths|paths-ignore)\s*:/m);
 });
 
-test('the token is read-only', () => {
+test('the token is read-only, and no job widens it', () => {
   assert.match(WORKFLOW, /^permissions:\n {2}contents: read$/m);
+  assert.equal(valuesOf('permissions').length, 1, 'only the workflow-level permissions: may exist');
+});
+
+test('the one job runs on a fixed runner image', () => {
+  assert.deepEqual(valuesOf('runs-on'), ['ubuntu-24.04']);
+});
+
+test('every action is one of the approved SHA pins', () => {
+  assert.deepEqual(valuesOf('uses'), APPROVED_ACTIONS);
 });
 
 test('the job carries a timeout', () => {
@@ -61,17 +88,21 @@ test('checkout does not persist credentials', () => {
   assert.match(WORKFLOW, /^\s+persist-credentials: false$/m);
 });
 
-test('every step running test, typecheck or gate carries the !cancelled() guard', () => {
+test('every run: is one bare command on its own line, never a block or a chain', () => {
+  assert.deepEqual(valuesOf('run'), RUNS);
+});
+
+test('each of test, typecheck and gate runs in exactly one step, carrying the !cancelled() guard', () => {
   const all = steps();
   for (const command of CHECKS) {
-    const running = all.filter((step) => checksIn(step).includes(command));
-    assert.ok(running.length > 0, `no step runs ${command}`);
-    for (const step of running) assert.ok(step.includes(GUARD), `${command} lacks the guard:\n${step.join('\n')}`);
+    const running = all.filter((step) => step.includes(`run: ${command}`));
+    assert.equal(running.length, 1, `exactly one step must run ${command}`);
+    assert.ok((running[0] as string[]).includes(GUARD), `${command} lacks the guard:\n${(running[0] as string[]).join('\n')}`);
   }
 });
 
 test('no job-level or workflow-level if: can skip the job', () => {
-  const stepsAt = LINES.findIndex((line) => /^\s*steps:\s*$/.test(line));
+  const stepsAt = stepsLine();
   const stepsIndent = (LINES[stepsAt] as string).search(/\S/);
   for (const [index, line] of LINES.entries()) {
     if (!/^\s*(-\s+)?if\s*:/.test(line)) continue;

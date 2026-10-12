@@ -4,9 +4,11 @@
  * `checkPins(root)` fails on
  * - any value in `dependencies`, `devDependencies`, `optionalDependencies`,
  *   `peerDependencies` or `overrides` (nested overrides included) that is not
- *   an exact registry version `X.Y.Z` — no range, tag, prerelease, URL, path or alias;
+ *   an exact registry version `X.Y.Z` — no range, tag, prerelease, URL, path or alias —
+ *   and any override key whose `name@selector` is not exact either;
  * - a `packageManager` other than `npm@X.Y.Z`;
  * - an `.npmrc` whose last live `engine-strict` setting is not `true`;
+ * - a missing `.github/workflows/`, or one with no `*.yml|*.yaml` in it;
  * - any `uses:` in `.github/workflows/*.yml|*.yaml` not pinned to a full 40-hex
  *   commit SHA with a `# vX.Y.Z` comment (a local `./` action has nothing to
  *   pin; a `docker://` image must carry an `@sha256:` digest).
@@ -54,9 +56,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** An override key may narrow its target as `name@selector`; that selector is a pin too. */
+function checkSelector(path: string, key: string, failures: string[]): void {
+  const at = key.lastIndexOf('@');
+  if (at <= 0) return;
+  const selector = key.slice(at + 1);
+  if (!EXACT_VERSION.test(selector)) {
+    failures.push(`package.json ${path} has the selector ${JSON.stringify(selector)} — pin it to an exact version X.Y.Z.`);
+  }
+}
+
 function checkSpecs(path: string, value: unknown, failures: string[]): void {
   if (isRecord(value)) {
-    for (const [name, spec] of Object.entries(value)) checkSpecs(`${path}.${name}`, spec, failures);
+    for (const [name, spec] of Object.entries(value)) {
+      checkSelector(`${path}.${name}`, name, failures);
+      checkSpecs(`${path}.${name}`, spec, failures);
+    }
     return;
   }
   if (typeof value === 'string' && EXACT_VERSION.test(value)) return;
@@ -72,7 +87,7 @@ function checkPackage(root: string, failures: string[]): void {
     return;
   }
   if (!isRecord(manifest)) {
-    failures.push('package.json could not be read: it is not a JSON object.');
+    failures.push('package.json is not a JSON object.');
     return;
   }
   for (const field of DEPENDENCY_FIELDS) {
@@ -84,7 +99,10 @@ function checkPackage(root: string, failures: string[]): void {
     }
     for (const [name, spec] of Object.entries(value)) {
       // An override keyed by a package can nest further overrides beneath it.
-      if (field === 'overrides') checkSpecs(`${field}.${name}`, spec, failures);
+      if (field === 'overrides') {
+        checkSelector(`${field}.${name}`, name, failures);
+        checkSpecs(`${field}.${name}`, spec, failures);
+      }
       else if (typeof spec === 'string' && EXACT_VERSION.test(spec)) continue;
       else failures.push(`package.json ${field}.${name} is ${JSON.stringify(spec)} — pin it to an exact version X.Y.Z.`);
     }
@@ -130,7 +148,10 @@ function refAndComment(rest: string): { ref: string; comment: string } {
 
 function checkWorkflows(root: string, failures: string[]): void {
   const dir = join(root, '.github', 'workflows');
-  if (!existsSync(dir)) return;
+  if (!existsSync(dir)) {
+    failures.push('.github/workflows is missing — CI must exist, and its actions be pinned.');
+    return;
+  }
   let names: string[];
   try {
     names = readdirSync(dir).filter((name) => /\.ya?ml$/.test(name)).sort();
@@ -138,6 +159,7 @@ function checkWorkflows(root: string, failures: string[]): void {
     failures.push(`.github/workflows could not be read: ${messageOf(error)}`);
     return;
   }
+  if (names.length === 0) failures.push('.github/workflows holds no *.yml or *.yaml — CI must exist, and its actions be pinned.');
   for (const name of names) {
     const display = `.github/workflows/${name}`;
     let text: string;
@@ -178,16 +200,20 @@ export function checkPins(root: string): string[] {
 /** The command line: one test seam, `--root=<dir>`. Anything else is rejected. */
 export function parseArgs(argv: readonly string[]): { root: string } | string[] {
   const failures: string[] = [];
-  let root = DEFAULT_ROOT;
+  let root: string | undefined;
   for (const arg of argv) {
     const match = /^--root=(.+)$/.exec(arg);
     if (match === null) {
       failures.push(`unknown argument ${JSON.stringify(arg)} — scripts/check-pins.ts takes --root= only.`);
       continue;
     }
+    if (root !== undefined) {
+      failures.push(`${JSON.stringify(arg)} repeats --root= — scripts/check-pins.ts takes one root.`);
+      continue;
+    }
     root = match[1] as string;
   }
-  return failures.length > 0 ? failures : { root };
+  return failures.length > 0 ? failures : { root: root ?? DEFAULT_ROOT };
 }
 
 function main(): void {

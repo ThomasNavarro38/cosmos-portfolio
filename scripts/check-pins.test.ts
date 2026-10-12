@@ -7,7 +7,7 @@
 
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -16,6 +16,7 @@ import { CHECK_PASSED, checkPins, parseArgs } from './check-pins.ts';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SCRIPT = fileURLToPath(new URL('./check-pins.ts', import.meta.url));
+const PACKAGE_JSON = fileURLToPath(new URL('../package.json', import.meta.url));
 
 const CHECKOUT = 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1';
 const SETUP_NODE = 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0';
@@ -93,6 +94,19 @@ test('a nested override is read too', () => {
   const failures = checkPins(treeOf({ 'package.json': packageWith({ overrides: { foo: { bar: '~1.0.0' } } }) }));
   assert.equal(failures.length, 1, failures.join('\n'));
   assert.match(failures[0] as string, /overrides\.foo\.bar/);
+});
+
+test('an override selector must be an exact version too', () => {
+  for (const key of ['foo@^1.0.0', '@scope/foo@~1.0.0', 'foo@latest']) {
+    const failures = checkPins(treeOf({ 'package.json': packageWith({ overrides: { [key]: '1.0.1' } }) }));
+    assert.equal(failures.length, 1, `${key}: ${failures.join('\n')}`);
+    assert.match(failures[0] as string, /selector/);
+  }
+  const nested = checkPins(treeOf({ 'package.json': packageWith({ overrides: { foo: { 'bar@^2.0.0': '2.0.1' } } }) }));
+  assert.equal(nested.length, 1, nested.join('\n'));
+  for (const key of ['foo@1.0.0', '@scope/foo', '@scope/foo@1.0.0', 'foo']) {
+    assert.deepEqual(checkPins(treeOf({ 'package.json': packageWith({ overrides: { [key]: '1.0.1' } }) })), [], key);
+  }
 });
 
 test('an npm $name override reference fails: every value must be a literal exact version', () => {
@@ -186,10 +200,30 @@ test('a docker action must be pinned by digest', () => {
 });
 
 test('a missing package.json is one failure, and the other checks still run', () => {
-  const failures = checkPins(treeOf({ 'package.json': null, '.npmrc': null }));
-  assert.equal(failures.length, 2, failures.join('\n'));
+  const failures = checkPins(treeOf({ 'package.json': null, '.npmrc': null, '.github/workflows/ci.yml': workflowWith('actions/checkout@v7') }));
+  assert.equal(failures.length, 3, failures.join('\n'));
   assert.match(failures[0] as string, /package\.json/);
   assert.match(failures[1] as string, /\.npmrc/);
+  assert.match(failures[2] as string, /ci\.yml:6/);
+});
+
+test('valid JSON that is not an object is named as such, not as unreadable', () => {
+  const failures = checkPins(treeOf({ 'package.json': '[]' }));
+  assert.equal(failures.length, 1, failures.join('\n'));
+  assert.match(failures[0] as string, /package\.json is not a JSON object/);
+  assert.doesNotMatch(failures[0] as string, /could not be read/);
+});
+
+test('a missing workflows directory fails: CI must exist', () => {
+  const failures = checkPins(treeOf({ '.github/workflows/ci.yml': null }));
+  assert.equal(failures.length, 1, failures.join('\n'));
+  assert.match(failures[0] as string, /\.github\/workflows/);
+});
+
+test('a workflows directory with no workflow file fails too', () => {
+  const failures = checkPins(treeOf({ '.github/workflows/ci.yml': null, '.github/workflows/README.md': 'notes\n' }));
+  assert.equal(failures.length, 1, failures.join('\n'));
+  assert.match(failures[0] as string, /\.github\/workflows/);
 });
 
 test('invalid JSON is one failure, no crash, and the other checks still run', () => {
@@ -219,6 +253,15 @@ test('parseArgs takes --root= only and rejects anything else', () => {
   assert.ok(Array.isArray(rejected));
   assert.equal(rejected.length, 1);
   assert.ok(Array.isArray(parseArgs(['--root='])));
+  const twice = parseArgs(['--root=/x', '--root=/y']);
+  assert.ok(Array.isArray(twice), 'a second --root= must be rejected, not silently win');
+  assert.equal(twice.length, 1);
+});
+
+test('`npm run gate` runs the pin check, and `check:pins` runs it alone', () => {
+  const pkg = JSON.parse(readFileSync(PACKAGE_JSON, 'utf8')) as { scripts: Record<string, string> };
+  assert.match(pkg.scripts['gate'] ?? '', /&& node scripts\/check-pins\.ts$/);
+  assert.equal(pkg.scripts['check:pins'], 'node scripts/check-pins.ts');
 });
 
 test('the CLI prints the pass line on a clean tree and exits 1 on a dirty one', () => {
