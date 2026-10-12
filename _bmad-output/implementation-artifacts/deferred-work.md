@@ -828,3 +828,9 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-9-identity-definition-of-done-audit.md` (second review)
   summary: `src/shell/contrast.ts` is test support but named and classified like a shipped module; the Code Map asked for a shared test helper.
   evidence: imported only by `chrome-model.test.ts` and `identity-audit.test.ts`; both scans count it as shipped.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-10-ci-pipeline-and-packaging-enforcement.md`
+  summary: `packageManager: npm@11.6.2` is declared and format-checked but not enforced; CI runs the npm bundled with whichever Node 24 `setup-node` resolves from `.nvmrc` (`24`), which was npm 11.19.0 in the `node:24` container.
+  evidence: `.github/workflows/ci.yml` has no corepack or `npm install -g npm@…` step; `scripts/check-pins.ts` checks only the field's shape. Enforcing it needs a ruling (corepack, a pinned global install, or an exact `.nvmrc`).
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-10-ci-pipeline-and-packaging-enforcement.md`
+  summary: Story 3.11's bundle assertion should also ban `zod` from the entry chunk, and CI should run `npm run build` once that assertion lives in `vite build`.
+  evidence: `zod` moved to `devDependencies` (3.10), but Vite bundles a devDependency if runtime code imports it; `ci.yml` runs test, typecheck and gate only, so a `generateBundle` check would never run in CI.

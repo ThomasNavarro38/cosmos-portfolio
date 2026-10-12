@@ -120,6 +120,7 @@ Technical requirements extracted from ARCHITECTURE-SPINE.md that impact epic and
 - TypeScript 7.0.x · Vite 8.2.x · React 19.x
 - @react-three/fiber 9.7.x (stable — **not** v10 alpha)
 - three 0.185.x · @react-three/drei 10.7.x (stable — **not** v11 alpha)
+- zod 4.5.x (build-time only — devDependencies; schema gate in src/data/ and src/derive/)
 - d3-force-3d 3.0.6 · zustand 5.0.x · Node 24 LTS (build only)
 - drei 10 is the only stable major whose peers accept R3F 9 + React 19. drei 9 declares react ^18 / R3F ^8 and will not install. three >= 0.159 is drei 10's binding constraint.
 
