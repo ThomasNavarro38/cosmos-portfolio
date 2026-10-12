@@ -2,8 +2,9 @@
  * A text-level ratchet on `.github/workflows/ci.yml`. The repo carries no YAML
  * parser and must not gain one for a test, so this pins the authored shape: a
  * push trigger on every branch, one job on a fixed runner, the approved action
- * SHAs, Node from `.nvmrc`, `npm ci`, a job timeout, and the three checks each
- * run as a bare command and guarded to run even when an earlier one failed.
+ * SHAs, Node from `.nvmrc`, `npm ci`, a job timeout, and the four checks each
+ * run as a bare command and guarded to run even when an earlier one failed —
+ * the build last, because the AD-7 bundle assertion lives in `vite build`.
  */
 
 import { strict as assert } from 'node:assert';
@@ -13,7 +14,7 @@ import { test } from 'node:test';
 const WORKFLOW = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const LINES = WORKFLOW.split('\n');
 const GUARD = "if: ${{ !cancelled() && steps.install.outcome == 'success' }}";
-const CHECKS = ['npm test', 'npm run typecheck', 'npm run gate'];
+const CHECKS = ['npm test', 'npm run typecheck', 'npm run gate', 'npm run build'];
 /** Every command the job may run, each the whole of its `run:` line. */
 const RUNS = ['npm ci', ...CHECKS];
 /** The approved pins; moving either is an Ask First change, so it has to edit this list on purpose. */
@@ -92,7 +93,7 @@ test('every run: is one bare command on its own line, never a block or a chain',
   assert.deepEqual(valuesOf('run'), RUNS);
 });
 
-test('each of test, typecheck and gate runs in exactly one step, carrying the !cancelled() guard', () => {
+test('each of test, typecheck, gate and build runs in exactly one step, carrying the !cancelled() guard', () => {
   const all = steps();
   for (const command of CHECKS) {
     const running = all.filter((step) => step.includes(`run: ${command}`));
