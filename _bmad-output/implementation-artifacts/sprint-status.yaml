@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 10-12-2026 10:50
+last_updated: 10-12-2026 11:38
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -70,7 +70,7 @@ development_status:
   3-8-corner-chrome-and-the-stateful-instruction-slot: done
   3-9-identity-definition-of-done-audit: done
   3-10-ci-pipeline-and-packaging-enforcement: done
-  3-11-the-bundle-assertion-over-bundler-output: backlog
+  3-11-the-bundle-assertion-over-bundler-output: review
   3-12-data-validation-on-the-build-path-and-the-gate-s-content-che: backlog
   3-13-boundary-table-and-boundary-parser-hardening: backlog
   3-14-test-infrastructure: backlog
@@ -141,7 +141,10 @@ action_items:
     action: "Complete story 1.8 AC group 2: the CI bundle assertion over bundler output,
       before Epic 2 chunk split"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-12: story 3.11 — scripts/bundle-assertion.ts, a generateBundle
+      plugin in vite.config.ts, fails the build on a banned module in the entry graph
+      or an entry over 240,000 B; CI runs npm run build"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-6-boundary-table-gaps"
     epic: 1

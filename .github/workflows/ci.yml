@@ -28,3 +28,6 @@ jobs:
       - name: Gate
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run gate
+      - name: Build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run build
