@@ -195,11 +195,53 @@ export const ProjectSchema = z.strictObject({
  *
  * Required rather than optional: a default would be a second place the reference
  * month is written down, and the two would drift.
+ *
+ * `asOf` must not precede any entry's `duration.start` (Story 3.12). An
+ * engagement starting after the reference month has a negative span to `asOf`,
+ * and ongoing and closed engagements then clamp to the same recency — two
+ * mapping rules collapsing on data that is well formed field by field. The
+ * failure names the latest-starting entry, since that is the one the bump has to
+ * reach.
+ *
+ * `projects` must list at least one Project. An empty list derives no Body at
+ * all, and every downstream count — the Rail, the destination set, the Skill
+ * ranks — would certify an empty scene as correct.
  */
-export const CareerSchema = z.strictObject({
-  asOf: IsoYearMonth,
-  projects: z.array(ProjectSchema),
-});
+export const CareerSchema = z
+  .strictObject({
+    asOf: IsoYearMonth,
+    projects: z.array(ProjectSchema).min(1, 'must list at least one Project — an empty career derives no Body'),
+  })
+  .superRefine((career, ctx) => {
+    // A refinement may run on a document whose other fields already failed, so
+    // every value is re-checked through `IsoYearMonth` itself before it is
+    // compared: a malformed `asOf` has its own format issue and needs no second
+    // one, and a malformed start ("zz" sorts after every digit) must never be
+    // named as the latest.
+    const isMonth = (value: unknown): value is string => IsoYearMonth.safeParse(value).success;
+    if (!isMonth(career.asOf)) return;
+    let latest: { readonly start: string; readonly label: string } | undefined;
+    for (const [index, project] of career.projects.entries()) {
+      const entry = project as Partial<Project> | undefined;
+      const start = entry?.duration?.start;
+      if (!isMonth(start)) continue;
+      if (latest !== undefined && start <= latest.start) continue;
+      const client = typeof entry?.client === 'string' ? entry.client : undefined;
+      const name = typeof entry?.project === 'string' ? entry.project : undefined;
+      const label =
+        client !== undefined && name !== undefined ? `${client} — ${name}` : client !== undefined ? `${client} — entry #${index}` : `entry #${index}`;
+      latest = { start, label };
+    }
+    if (latest !== undefined && career.asOf < latest.start) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['asOf'],
+        message:
+          `"${career.asOf}" precedes the latest duration.start, "${latest.start}" on ` +
+          `${latest.label}; asOf must not precede any engagement's start`,
+      });
+    }
+  });
 
 /** A validated Project, with `weight` resolved to its default where omitted. */
 export type Project = z.infer<typeof ProjectSchema>;

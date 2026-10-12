@@ -175,9 +175,46 @@ export function projectIdOf(client: string, project: string): string {
  * `""`. So `(notable ?? '') !== ''` is exact and total over all four inputs.
  * Re-trimming here would duplicate a guarantee `src/data/schema.ts` already
  * makes, and a second trim is a second place for the contract to drift.
+ *
+ * Exported so the build gate checks an artifact's `isDeep` against its
+ * `content.notable` through this one predicate (Story 3.12) — a restated one
+ * there would be a second classifier, which AD-3 forbids.
  */
-function isDeepProject(project: Project): boolean {
+export function isDeepProject(project: Project): boolean {
   return (project.notable ?? '') !== '';
+}
+
+/**
+ * One warning per Client ID that two or more differing authored spellings fold
+ * into, naming every spelling and the ID (Story 3.12).
+ *
+ * The fold itself stays deliberate — `Acme Corp` and `Acme-Corp` are one
+ * organisation written two ways, and the first spelling is the one emitted (see
+ * `deriveEntities`). What it must not be is *silent*: a typo that happens to
+ * fold into another Client's name would merge two Stars with nothing said. So
+ * the solve prints these and still succeeds.
+ *
+ * Pure, and in authored order: spellings are listed in first-appearance order,
+ * and IDs in the order their first spelling appears.
+ */
+export function clientFoldWarnings(projects: readonly Pick<Project, 'client'>[]): string[] {
+  const spellings = new Map<string, string[]>();
+  for (const { client } of projects) {
+    const id = clientIdOf(client);
+    const seen = spellings.get(id);
+    if (seen === undefined) spellings.set(id, [client]);
+    else if (!seen.includes(client)) seen.push(client);
+  }
+  const warnings: string[] = [];
+  for (const [id, names] of spellings) {
+    if (names.length < 2) continue;
+    warnings.push(
+      `the Client spellings ${names.map((name) => `"${name}"`).join(', ')} all fold to the ID "${id}"; ` +
+        `one Client is emitted, named "${names[0] ?? ''}" (the first spelling). ` +
+        'If they are different clients, give them names that differ by more than case or punctuation.',
+    );
+  }
+  return warnings;
 }
 
 /**

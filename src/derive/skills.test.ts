@@ -22,6 +22,8 @@ import { buildSkills, rankSkills, shareCounts } from './skills.ts';
 import { solveLayout } from './solve.ts';
 
 const AS_OF = '2026-09';
+/** A well-formed sourceDigest for fixtures built in memory, with no career.json behind them. */
+const FIXTURE_DIGEST = 'f'.repeat(64);
 const INDEX_TS = fileURLToPath(new URL('./index.ts', import.meta.url));
 
 function entry(client: string, project: string, skills: string[]): Record<string, unknown> {
@@ -59,7 +61,7 @@ function graphOf(list: Record<string, unknown>[]) {
 
 function artifactOf(list: Record<string, unknown>[]): Artifact {
   const graph = graphOf(list);
-  return buildArtifact(graph, solveLayout(graph, { randomSource: seededRandom() }), AS_OF);
+  return buildArtifact(graph, solveLayout(graph, { randomSource: seededRandom() }), AS_OF, FIXTURE_DIGEST);
 }
 
 test('rank order: shares descending, then name ascending by codepoint', () => {

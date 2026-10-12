@@ -844,3 +844,10 @@ Still open after 3.5:
 ## Deferred from: code review of spec-3-11-the-bundle-assertion-over-bundler-output.md (2026-10-12)
 
 - `scripts/bundle-assertion.test.ts:223` asserts the shipped app's entry measures over 100,000 bytes, to prove the app rather than a fixture was measured. Story 4.1 takes React off the entry and will break that floor for the wrong reason; retune it with the budget in 4.1.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-12-data-validation-on-the-build-path-and-the-gate-s-content-checks.md`
+  summary: Bound a closed engagement's `duration.end` against `asOf` in `CareerSchema`, as story 3.12 bound `duration.start`.
+  evidence: Two 3.12 reviewers found an `end` later than `asOf` still validates; only `AUTHORING_HORIZON` caps it, so a closed engagement can read as more recent than the reference month. This was pre-existing, and epic-1 retro item 3 asked only for the `start` bound.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-12-data-validation-on-the-build-path-and-the-gate-s-content-checks.md`
+  summary: Have the gate re-assert each entity ID from its content: a Project's `id` against `projectIdOf(content.client, content.project)`, and a Client's `id` against `clientIdOf` of its Projects' `content.client`.
+  evidence: Story 3.12's `checkContent` checks the `clientId` back-reference but not the IDs themselves, so a hand-edited `content.client`/`content.project` passes the gate. The digest catches career-side drift, not artifact-side hand edits, and this case was not in the story's listed cases.

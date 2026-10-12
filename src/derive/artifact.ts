@@ -95,8 +95,8 @@ function clientOf(client: ClientEntity, layout: SolvedLayout): ArtifactClient {
 }
 
 /**
- * Builds the artifact from the graph, the solve, and the authored reference
- * month.
+ * Builds the artifact from the graph, the solve, the authored reference month,
+ * and the digest of the `career.json` text they came from.
  *
  * Clients are emitted in **`timeAxis` order, oldest first, ties broken by ID** —
  * the ordering the Fallback reproduces. Deliberately *not* the Rail's order:
@@ -127,6 +127,7 @@ export function buildArtifact(
   graph: EntityGraph,
   layout: SolvedLayout,
   asOf: string,
+  sourceDigest: string,
 ): Artifact {
   const clients = [...graph.clients]
     .sort((a, b) => {
@@ -138,6 +139,9 @@ export function buildArtifact(
   return {
     schemaVersion: SCHEMA_VERSION,
     asOf,
+    // Computed by `index.ts`, which owns the read — this module does no I/O. The
+    // build gate compares it against the `career.json` beside the artifact.
+    sourceDigest,
     clients,
     destinations: [...buildDestinations(graph)],
     dwell: [...buildDwell(graph)],
@@ -160,7 +164,8 @@ export function buildArtifact(
 export const BANNER =
   'GENERATED FILE — do not edit by hand. ' +
   'Produced by src/derive/index.ts from src/data/career.json; run `npm run solve` to regenerate. ' +
-  'Hand edits are overwritten by the next solve and are not validated by the build gate.';
+  'Hand edits are overwritten by the next solve, and the build gate rejects an artifact that breaks its invariants ' +
+  'or no longer matches the sourceDigest of career.json.';
 
 /**
  * Serializes the artifact to the exact bytes written to disk.

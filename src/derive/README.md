@@ -117,6 +117,8 @@ Every entity ID derives from authored content and survives a re-order of `career
 
 **Client names fold by slug, and the first spelling wins.** `slugify` lowercases and collapses every run of non-alphanumerics to a hyphen, so `SNCF`/`sncf` and `Acme Corp`/`Acme-Corp` all resolve to one Client. This is deliberate: divergent spellings of one client are a data-entry reality, and emitting two Stars for one organisation would be the worse failure. The `ClientEntity.name` is the spelling that appeared first in the file, so the authored order decides the label — the one place order is allowed to matter, and it reaches no ID. The collision *throw* is scoped to Projects, where a shared `client` + `project` pair means two distinct engagements would occupy one destination; two spellings of one client are the opposite case, one organisation reached two ways. To keep two genuinely distinct clients apart, give them names that differ by more than case or punctuation.
 
+**The fold is never silent** (Story 3.12). `clientFoldWarnings` names every Client ID that two or more differing spellings fold into, with each spelling and the one emitted; `npm run solve` prints them as `warning:` lines and still exits 0. A typo that happens to fold into another Client's name would otherwise merge two Stars with nothing said.
+
 ## The solve
 
 `solveLayout(graph, { randomSource })` turns the entity graph into positions: one per Client Star, one per Project. Client Stars sit along the Rail in time order, oldest first — the Rail runs backward through time — and each Client's Projects orbit their own Star. Nothing else positions anything: no renderer computes a coordinate, and the running site never solves for placement — it reads the committed artifact. (The Colophon re-runs the solver in the browser as a demonstration, per AD-17; that re-solve informs nothing the scene draws.)
@@ -138,10 +140,15 @@ A non-finite coordinate throws, naming the entity. Unguarded it would serialize 
 
 ```sh
 npm run solve    # runs the pipeline and writes the artifact
-npm run build    # gates on the committed artifact, and never solves
+npm run build    # gates on the committed artifact and on career.json, and never solves
 ```
 
-**The build never solves** (AD-1). `build` runs `gate`, which is `node src/derive/index.ts --check`: it reads the committed artifact, validates it, and exits non-zero if it is missing or fails its schema, naming the failing path and the script that produces it. Deliberateness is a property of the scripts, not of anyone's memory — so `artifact.test.ts` walks the script graph transitively, following `npm run` indirection and npm's implicit `pre`/`post` hooks, and fails if `build` can reach `solve` by any path at any depth.
+**The build never solves** (AD-1). `build` runs `gate`, which is `node src/derive/index.ts --check`. The gate has two halves, run in order over one read of the artifact (`checkGate`):
+
+1. **The artifact alone** (`checkArtifact`): it reads the committed artifact, validates it, and exits non-zero if it is missing, fails its schema, or fails a structural or content check, naming the failing path, ID or field and the script that produces it.
+2. **The artifact against its source** (`checkSource`, Story 3.12): `src/data/career.json` must pass the same validation `npm run validate` runs, printing the same lines — so `build` cannot succeed on data `validate` rejects. Its digest must equal the artifact's `sourceDigest` — sha256 hex of the UTF-8 text with CRLF normalised to LF, so a checkout's line endings cannot fail it — or the gate names both hashes and `npm run solve`: a `career.json` edited without a re-solve fails the build rather than shipping a stale site. And its `asOf` must equal the artifact's, which names the one hand-edit of the artifact a digest over the source cannot see.
+
+The artifact half runs first, so an artifact failure still reports first and the source half never weakens AD-1's guarantee. The shipped CLI always holds the artifact against the real `career.json`; `--check <artifact> <career>` is a test seam, and there is no flag that skips the source half. Deliberateness is a property of the scripts, not of anyone's memory — so `artifact.test.ts` walks the script graph transitively, following `npm run` indirection and npm's implicit `pre`/`post` hooks, and fails if `build` can reach `solve` by any path at any depth.
 
 The gate and the emitter live in **one file** rather than two scripts, so the artifact's path and its schema are named in exactly one place. A gate validating a different path from the one the emitter writes would pass while gating nothing. It also keeps the gate under `tsconfig.json`'s `include: ["src"]` — a `scripts/` directory would escape typecheck entirely.
 
@@ -155,7 +162,7 @@ Bytes are LF and end with a newline. `.gitattributes` normalizes the repository 
 
 `SCHEMA_VERSION` is `z.literal` in the schema, not a range: an artifact declaring any other version fails validation rather than being read on a guess. Every level is a `strictObject`, so a consumer writing an undeclared field fails the gate.
 
-The version is **6**. It started at 1; Story 1.6 added `destinations`, Story 1.7 added `dwell` and `shots`, Story 2.1 added `rail`, Story 3.2 added each Project's `orbitNormal`, and Story 3.5 added the top-level `skills`. Each time the contract's shape changed, the number it declares changed with it. An artifact still carrying `5` publishes no Skill tiers, and fails the gate rather than being read by a scene that seats Motes by them — it would have to count shares itself.
+The version is **8**. It started at 1; Story 1.6 added `destinations`, Story 1.7 added `dwell` and `shots`, Story 2.1 added `rail`, Story 3.2 added each Project's `orbitNormal`, Story 3.5 added the top-level `skills`, Story 3.9 narrowed `luminanceBand` to two steps, and Story 3.12 added `sourceDigest` and made `clients`, `destinations`, `dwell` and `shots` non-empty (each Client's `projects` already was; 3.12 gave it a message naming the empty Client). Each time the contract's shape changed, the number it declares changed with it. An artifact still carrying `5` publishes no Skill tiers, and fails the gate rather than being read by a scene that seats Motes by them — it would have to count shares itself. One carrying `7` names no source, so the gate could not tell whether it was solved from the `career.json` beside it.
 
 ### Mote tiers (3.5)
 
@@ -211,7 +218,7 @@ One entry per Client and per Project, exactly once each. Each carries an `id` an
 
 `checkArtifact` asserts the set against the artifact's own entity tree, and `npm run build` fails naming the offending ID: a destination naming no entity, an ID listed twice, an entity no destination names, or a `kind` contradicting what the ID resolves to. The list is also asserted before the bytes are written, so the *first* divergent emission fails rather than being committed and rejected afterwards.
 
-It counts from the artifact's `clients` tree, **never from a fresh derive** — the gate never solves (AD-1). So a destination set agreeing with a *stale* entity tree still passes: that is the pre-existing content-drift limitation this file already documents, and `npm test` is what catches it. The gate's job here is the divergence the story names — the list disagreeing with the entities it addresses.
+It counts from the artifact's `clients` tree, **never from a fresh derive** — the gate never solves (AD-1). A stale entity tree is not this check's concern: the gate's source half fails any artifact whose `sourceDigest` disagrees with the `career.json` beside it (Story 3.12). The gate's job here is the divergence the story names — the list disagreeing with the entities it addresses.
 
 The assertion sits **after** schema validation and **before** the byte checks. A malformed artifact must report its real failure rather than a cardinality one derived from a half-parsed tree, and a structural fault must not be reported as a formatting one. That ordering is itself pinned by a test, because it is invisible on a passing document.
 
@@ -272,6 +279,12 @@ No Shot is authored in `career.json` today and this story authors none. What it 
 `checkStops` asserts all three lists against the artifact's own Client set, and `npm run build` fails naming the offending ID: an entry naming no Client, an entry naming a **Project** (the granularity error), a subject listed twice, a Client with no entry, or a Client ID the tree carries twice. It also asserts the one Shot property none of those cardinality checks can see: that a Shot's `distance` is **strictly greater** than the widest `railDistance` among its own subject's Projects. A Shot naming the right Client with a distance that frames its widest Project out of view satisfies every check above, and that Project is then unreachable from the Rail. The widest orbit is read off the artifact's own tree, never re-derived. All three lists are also asserted before the bytes are written, so the *first* divergent emission fails rather than being committed and rejected afterwards.
 
 It counts from the artifact's `clients` tree, **never from a fresh derive** — the gate never solves (AD-1). The assertion sits after schema validation and before the byte checks, for the same reasons the destination check does, and that ordering is pinned by a test because it is invisible on a passing document.
+
+**The Rail's sequence is gated, not only its membership** (Story 3.12). Once `rail` is exactly the Client set, `checkStops` sorts the Clients by `rail.ts`'s own `earliestStart` and `compareRailKeys`, read off each Project's `content.duration.start`, and fails naming the expected and the actual order. Only then: on a missing, invented or repeated stop the membership checks have already spoken.
+
+### Each Body against its own content (3.12)
+
+`checkContent` (pre-write and at the gate) asserts what the schema cannot see because it spans two fields or two entities, naming the offending ID: a Project whose `clientId` is not the Client carrying it (both IDs named), an `isDeep` that disagrees with `content.notable` — judged by `entities.ts`'s own `isDeepProject`, never a restated predicate — and two Bodies, Star or Planet, at one position (both IDs and the point named). The schema's `min(1)`s close the empty cases: an empty `clients`, `destinations`, `dwell` or `shots` — and a Client with no Projects, already guarded and now named as an empty Client — fails naming the field path rather than certifying an empty scene as correct.
 
 ## The import boundaries are enforced by the gate
 

@@ -25,6 +25,10 @@ Node 24 strips TypeScript types natively, so both run straight from source with 
 
 Both commands matter. `npm run validate` gates the committed data; `npm test` gates the schema itself. Without the second, the schema's load-bearing line could be deleted with `validate`, `typecheck`, and `build` all still reporting success — the tests that catch it would simply never run.
 
+**Validation is on the build path** (Story 3.12). `npm run build`'s gate runs the same `validateCareer` over `career.json`, printing the same lines, before `vite build` — so the build cannot succeed on data `npm run validate` rejects. It also fails if the committed artifact was solved from different `career.json` text (its `sourceDigest`) or a different `asOf`.
+
+**Two whole-file bounds.** `asOf` must not precede any entry's `duration.start`: a reference month before an engagement began gives it a negative span, and the mapping rules then collapse; the failure is `career.json [asOf]: …`, naming the latest-starting entry. And `projects` must list at least one Project — an empty career would certify an empty scene as correct.
+
 **Why validation is strict.** Entities are classified by which fields they *lack* (FR-5): a Project with a populated `notable` is Deep, one without is Shallow. That makes a misspelled field name dangerous in a way it normally is not — `notabel` instead of `notable` does not error, it silently turns a Deep Project into a Shallow one, and every downstream derivation, position, and rendered panel inherits the mistake without a warning.
 
 So the schema uses `z.strictObject`, not `z.object`. Zod's default `object` *strips* unknown keys silently, which is precisely the failure this guards against; `strictObject` raises `unrecognized_keys` instead. That is the single most load-bearing line in the schema. Failure is loud: a non-zero exit naming both the offending field and the entry it appeared on, resolved back from Zod's array index to the entry's `client — project` names.
@@ -95,8 +99,8 @@ They are equivalent in *meaning*, but not identical in *parsed shape*: an absent
 
 1. Add one object to the `projects` array in `career.json`, filling all ten fields — or nine, omitting `weight` to accept the default of `1`.
 2. Leave `notable` out (or empty) if the decision behind the work is not yet articulated. The entry ships Shallow and can be promoted later at no cost.
-3. Run `npm run validate`. A typo, a repeated key, a missing `duration`, an inverted span, or a non-ISO date fails here rather than silently downstream.
-4. Run `npm run solve` and **commit `generated/layout.generated.json`** alongside the data change. The solve is deliberate and out-of-band: `npm run build` gates on the committed artifact and never invokes the solve, so a data change without a re-solve fails the build rather than shipping a stale layout.
+3. Run `npm run validate`. A typo, a repeated key, a missing `duration`, an inverted span, a non-ISO date, or an `asOf` older than the new entry's start fails here rather than silently downstream.
+4. Run `npm run solve` and **commit `generated/layout.generated.json`** alongside the data change. The solve is deliberate and out-of-band: `npm run build` never invokes it, and its gate compares the artifact's `sourceDigest` with this file's digest, so a data change without a re-solve fails the build — naming both hashes — rather than shipping a stale layout. If the solve prints a `warning:` that two Client spellings fold to one ID, they are emitted as one Client under the first spelling; rename one if they are different clients.
 
 Run `npm test` too if you touched the schema rather than only the data.
 

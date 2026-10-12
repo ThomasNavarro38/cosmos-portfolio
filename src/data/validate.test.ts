@@ -625,3 +625,51 @@ function writeTemp(contents: string): string {
 after(() => {
   if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
 });
+
+// --- Story 3.12: the asOf bound, the empty career, and the read's text --------
+
+test('an `asOf` before some `duration.start` fails, naming the field and the latest-starting entry', () => {
+  const failures = validateCareer({
+    asOf: '2018-06',
+    projects: [
+      { ...baseEntry(), project: 'Early', duration: { start: '2017-01', end: '2018-01' } },
+      { ...baseEntry(), project: 'Late', duration: { start: '2019-03', end: null } },
+    ],
+  });
+  assertFails(failures, /^career\.json \[asOf\]: .*2018-06.*2019-03.*SNCF — Late/, 'the latest-starting entry must be named');
+});
+
+test('an `asOf` equal to the latest start is accepted', () => {
+  assert.deepEqual(validateCareer({ asOf: '2019-01', projects: [baseEntry()] }), []);
+});
+
+test('an empty `projects` list fails, naming the field', () => {
+  assertFails(validateCareer({ asOf: AS_OF, projects: [] }), /^career\.json \[projects\]: /, 'an empty career must fail');
+});
+
+test('the read result carries the raw text the digest is taken over', () => {
+  const read = readCareerFile(CAREER_JSON);
+  assert.ok(read.ok);
+  assert.equal(read.text, readFileSync(CAREER_JSON, 'utf8'));
+});
+
+test('a malformed `asOf` reports exactly one asOf issue, not a spurious precedes one', () => {
+  const failures = validateCareer({ asOf: '2019-13', projects: [baseEntry()] });
+  const asOfLines = failures.filter((line) => line.startsWith('career.json [asOf]:'));
+  assert.equal(asOfLines.length, 1, `exactly one asOf issue: ${failures.join('\n')}`);
+  assert.match(asOfLines[0] ?? '', /ISO 8601/);
+});
+
+test('a malformed `duration.start` is never named as the latest start', () => {
+  const failures = validateCareer(fileWith({ ...baseEntry(), duration: { start: 'zz', end: null } }));
+  assertFails(failures, /duration\.start/, 'the malformed start is reported on its own field');
+  assert.equal(failures.some((line) => /precedes/.test(line)), false, `no asOf-precedes issue: ${failures.join('\n')}`);
+});
+
+test('an early `asOf` and an unknown key are both reported in one run', () => {
+  // Pins the Zod behaviour the refinement relies on: an unrecognized key does
+  // not stop the whole-file refinement from running.
+  const failures = validateCareer({ asOf: '2018-06', projects: [{ ...baseEntry(), notabel: 'x' }] });
+  assertFails(failures, /notabel/, 'the unknown key is reported');
+  assertFails(failures, /^career\.json \[asOf\]: .*precedes/, 'and the early asOf too');
+});

@@ -23,7 +23,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema, type Career } from '../data/schema.ts';
 import { clientIdOf, deriveEntities, type EntityGraph } from './entities.ts';
-import { buildRail, inRailOrder, startsAt } from './rail.ts';
+import { buildRail, compareRailKeys, earliestStart, inRailOrder, startsAt } from './rail.ts';
 
 const AS_OF = '2026-09';
 const RAIL_TS = fileURLToPath(new URL('./rail.ts', import.meta.url));
@@ -359,4 +359,27 @@ test('a Client owning no Projects is named rather than sorted to the head of the
       return true;
     },
   );
+});
+
+// --- Story 3.12: the rule split out for the gate -----------------------------
+
+test('earliestStart is the minimum start month, and startsAt reads through it', () => {
+  assert.equal(earliestStart('client:x', ['2019-03', '2017-09', '2018-01']), '2017-09');
+  const graph = graphOf(entry('Alpha', 'A', { duration: { start: '2012-01', end: '2013-01' } }), entry('Alpha', 'B', { duration: { start: '2010-05', end: '2011-01' } }));
+  const client = graph.clients[0];
+  assert.ok(client !== undefined);
+  assert.equal(startsAt(client), '2010-05');
+});
+
+test('earliestStart throws on no starts, naming the Client', () => {
+  assert.throws(() => earliestStart('client:empty', []), /"client:empty".*no place on the Rail/);
+});
+
+test('compareRailKeys orders by start, then by ID, by codepoint', () => {
+  const keys = [
+    { id: 'client:b', start: '2019-01' },
+    { id: 'client:a', start: '2019-01' },
+    { id: 'client:z', start: '2010-01' },
+  ];
+  assert.deepEqual([...keys].sort(compareRailKeys).map((key) => key.id), ['client:z', 'client:a', 'client:b']);
 });
