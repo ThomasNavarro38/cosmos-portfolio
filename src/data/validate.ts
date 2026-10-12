@@ -184,9 +184,9 @@ function findDuplicateKeys(text: string): string[] {
  * a stack trace. Duplicate keys are rejected here, before validation, because
  * parsing destroys the evidence.
  *
- * The ok result carries the raw `text` as well as the parsed `data`: the build
- * gate digests the exact bytes the solve read (Story 3.12), and a re-read would
- * be a second chance for the two to disagree.
+ * The ok result carries the decoded UTF-8 `text` as well as the parsed `data`:
+ * the solve and the build gate both digest that text through `sourceDigestOf`
+ * (Story 3.12), and a re-read would be a second chance for the two to disagree.
  */
 export function readCareerFile(
   path: string,

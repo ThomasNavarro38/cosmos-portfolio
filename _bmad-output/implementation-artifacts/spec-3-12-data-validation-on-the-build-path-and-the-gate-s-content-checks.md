@@ -106,6 +106,24 @@ Run `npm run solve` and commit the result.
 - [x] [Review][Defer] A closed engagement's `duration.end` is not bounded by `asOf` — deferred to deferred-work.md; this was pre-existing, and the retro asked only for the `start` bound
 - [x] [Review][Defer] The gate does not re-check a Project's or Client's `id` against its content slugs — deferred to deferred-work.md; this is outside the story's listed cases
 
+#### Second review (2026-10-12)
+
+- [x] [Review][Patch] Artifact-side hand edits that keep the invariants pass the gate, but the banner and READMEs read broader — narrow the wording to say the gate catches source drift and broken invariants, not invariant-preserving hand edits, then re-solve (decision: narrow the wording, 2026-10-12) [src/derive/artifact.ts:167]
+- [x] [Review][Patch] Fold warning on a failing solve is untested — no test asserts `runPipeline` returns `warnings` with `ok: false`, or that the failing CLI prints `warning:` before the failure lines [src/derive/artifact.test.ts]
+- [x] [Review][Patch] The solve CLI refuses no arguments — a flag becomes the career path, or in slot two the write target (`npm run solve -- career.json --dry-run` writes a file named `--dry-run`); a third positional is ignored [src/derive/index.ts:933]
+- [x] [Review][Patch] The solve CLI will overwrite `career.json` with the artifact when `[out]` resolves to the career path [src/derive/index.ts:933]
+- [x] [Review][Patch] The exact-equality comment in `checkContent` is duplicated back to back [src/derive/index.ts:555]
+- [x] [Review][Patch] `checkStops` throws through `earliestStart` on a Client with no Projects instead of returning failure lines [src/derive/index.ts:418]
+- [x] [Review][Patch] `checkSource`'s validation header says `career.json` rather than `careerPath` [src/derive/index.ts:845]
+- [x] [Review][Patch] `--check` treats single-dash and empty-string arguments as paths; a repeated `--check` is reported without the full rejected list [src/derive/index.ts:916]
+- [x] [Review][Patch] `readCareerFile`'s docblock says the gate digests "the exact bytes"; it digests decoded text with CRLF normalised [src/data/validate.ts:188]
+- [x] [Review][Patch] The `sourceDigest` schema comment implies the schema normalises line endings; `sourceDigestOf` does [src/derive/artifact-schema.ts:286]
+- [x] [Review][Patch] The "`asOf` equal to the latest start" test relies on `baseEntry()`'s start without stating it [src/data/validate.test.ts:642]
+- [x] [Review][Patch] No coincidence case for a Planet placed on another Client's Star [src/derive/artifact.test.ts]
+- [x] [Review][Patch] The root README lists the gate's source checks but not its content checks or the non-empty lists [README.md:41]
+- [x] [Review][Defer] The "checkSource never solves, derives or writes" test scans source text and misses aliased or helper calls [src/derive/artifact.test.ts] — deferred, a behavioural fs stub belongs with the 3.14 test infrastructure
+- [x] [Review][Defer] `FIXTURE_DIGEST` is defined in three test files [src/derive/artifact.test.ts, artifact-schema.test.ts, skills.test.ts] — deferred to the 3.14 shared test helpers
+
 ## Suggested Review Order
 
 **The gate: the artifact alone, then its source**

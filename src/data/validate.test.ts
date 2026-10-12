@@ -640,7 +640,10 @@ test('an `asOf` before some `duration.start` fails, naming the field and the lat
 });
 
 test('an `asOf` equal to the latest start is accepted', () => {
-  assert.deepEqual(validateCareer({ asOf: '2019-01', projects: [baseEntry()] }), []);
+  assert.deepEqual(
+    validateCareer({ asOf: '2019-01', projects: [{ ...baseEntry(), duration: { start: '2019-01', end: null } }] }),
+    [],
+  );
 });
 
 test('an empty `projects` list fails, naming the field', () => {

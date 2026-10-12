@@ -23,7 +23,7 @@
 
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { readCareerFile, validateCareer } from '../data/validate.ts';
@@ -339,6 +339,12 @@ export function checkStops(artifact: Artifact): string[] {
       failures.push(`"${client.id}" is carried by two Clients in the artifact, so one of them has no stop of its own.`);
     }
     clients.add(client.id);
+    if (client.projects.length === 0) {
+      // The schema refuses this before any caller here, but `checkStops` is
+      // exported and documented as returning failures, never as throwing — and
+      // the Rail key below has no start to read off an empty Client.
+      failures.push(`the Client "${client.id}" carries no Projects, so it has no place on the Rail.`);
+    }
     let widest = 0;
     for (const project of client.projects) {
       projects.add(project.id);
@@ -408,14 +414,16 @@ export function checkStops(artifact: Artifact): string[] {
   // whole payload (Story 3.12). Checked only once `rail` is already the correct
   // set: on a missing, invented or repeated stop the walk above has said so, and
   // an order complaint on top would describe a list that cannot be put in order.
+  // Likewise a Client with no Projects, reported above, has no start to sort by.
   // The expected order comes from `rail.ts`'s own key and comparator, read off
   // the document's `content.duration.start` — never a re-derive (AD-1).
-  const railIsTheClientSet =
+  const railCanBeOrdered =
     clients.size === artifact.clients.length &&
     artifact.rail.length === artifact.clients.length &&
     new Set(artifact.rail).size === artifact.rail.length &&
-    artifact.rail.every((id) => clients.has(id));
-  if (railIsTheClientSet) {
+    artifact.rail.every((id) => clients.has(id)) &&
+    artifact.clients.every((client) => client.projects.length > 0);
+  if (railCanBeOrdered) {
     const expected = artifact.clients
       .map((client) => ({
         id: client.id,
@@ -552,9 +560,6 @@ export function checkSkills(artifact: Artifact): string[] {
  */
 export function checkContent(artifact: Artifact): string[] {
   const failures: string[] = [];
-  // Exact equality is deliberate: positions are rounded to the solve's four
-  // places, so equal-at-rounding *is* the coincidence, and the solve's own orbit
-  // guards keep near-misses apart.
   const holders = new Map<string, string>();
   // Exact equality, deliberately: the solve rounds every coordinate to four
   // places, so two Bodies equal at that rounding are the coincidence, and the
@@ -838,7 +843,7 @@ export function checkSource(artifact: Artifact, careerPath: string = CAREER_JSON
 
   const careerFailures = validateCareer(read.data);
   if (careerFailures.length > 0) {
-    return ['career.json failed validation:', ...careerFailures, 'Fix the data, then run `npm run solve` and commit the result.'];
+    return [`${careerPath} failed validation:`, ...careerFailures, 'Fix the data, then run `npm run solve` and commit the result.'];
   }
 
   const failures: string[] = [];
@@ -882,6 +887,22 @@ export function checkGate(
   return checkSource(inspected.artifact, careerPath);
 }
 
+/**
+ * The CLI's path arguments, or exit 1 naming every argument it refuses: any
+ * flag, an empty string, and any path past `max`. A path never starts with `-`
+ * here, so a mistyped flag cannot be read as a file to read or write.
+ */
+function positionalsOrExit(args: readonly string[], max: number, usage: string): (string | undefined)[] {
+  const paths = args.filter((arg) => arg !== '' && !arg.startsWith('-'));
+  const unexpected = [...args.filter((arg) => arg === '' || arg.startsWith('-')).map((arg) => (arg === '' ? '""' : arg)), ...paths.slice(max)];
+  if (unexpected.length > 0) {
+    console.error(`unexpected arguments: ${unexpected.join(' ')}`);
+    console.error(`usage: ${usage}`);
+    process.exit(1);
+  }
+  return paths;
+}
+
 function main(): void {
   // `engines` is advisory: npm does not enforce it without `engine-strict`. On
   // an older Node this file fails as a TypeScript syntax error, which names the
@@ -910,14 +931,9 @@ function main(): void {
     // Anything else is refused rather than ignored: a third positional or an
     // unknown flag (`--skip-source`, say) silently dropped would read as a gate
     // that honoured it — the story 3.10 precedent of rejecting a second `--root=`.
-    const rest = argv.filter((arg) => arg !== '--check');
-    const unexpected = [...rest.filter((arg) => arg.startsWith('--')), ...rest.filter((arg) => !arg.startsWith('--')).slice(2)];
-    if (unexpected.length > 0 || argv.filter((arg) => arg === '--check').length > 1) {
-      console.error(`unexpected arguments: ${unexpected.length > 0 ? unexpected.join(' ') : '--check'}`);
-      console.error('usage: node src/derive/index.ts --check [artifact] [career.json]');
-      process.exit(1);
-    }
-    const [artifactPath, careerPath] = rest;
+    const rest = [...argv];
+    rest.splice(argv.indexOf('--check'), 1);
+    const [artifactPath, careerPath] = positionalsOrExit(rest, 2, 'node src/derive/index.ts --check [artifact] [career.json]');
     const failures = checkGate(artifactPath ?? ARTIFACT_PATH, careerPath ?? CAREER_JSON);
     if (failures.length > 0) {
       for (const line of failures) console.error(line);
@@ -932,8 +948,17 @@ function main(): void {
   // suites in parallel, so a test that wrote into `src/` or `generated/` would
   // break a sibling suite for a reason unrelated to what it tests. The output
   // seam lets a test drive the real solve CLI without touching the artifact.
-  const outPath = argv[1] ?? ARTIFACT_PATH;
-  const result = runPipeline(argv[0] ?? CAREER_JSON);
+  //
+  // Refused like `--check`'s: here a stray flag in the second slot would not be
+  // ignored but *written to*, as a file named after it.
+  const [careerArg, outArg] = positionalsOrExit(argv, 2, 'node src/derive/index.ts [career.json] [out]');
+  const careerPath = careerArg ?? CAREER_JSON;
+  const outPath = outArg ?? ARTIFACT_PATH;
+  if (resolve(outPath) === resolve(careerPath)) {
+    console.error(`refusing to write the artifact over its own source, ${careerPath}`);
+    process.exit(1);
+  }
+  const result = runPipeline(careerPath);
   // Warnings first, and on failure too: a fold computed before a later stage
   // failed is still worth knowing when the failure is fixed.
   for (const line of result.warnings) console.warn(`warning: ${line}`);

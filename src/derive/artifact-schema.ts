@@ -286,7 +286,8 @@ export const ArtifactSchema = z.strictObject({
   // The sha256, lowercase hex, of the `career.json` text this document was solved
   // from, CRLF normalised to LF (Story 3.12). The gate digests the file beside it
   // and fails on a mismatch, so an authored change without a re-solve cannot
-  // ship a stale site — and a checkout's line endings cannot fail it.
+  // ship a stale site. The CRLF normalisation lives in `sourceDigestOf`
+  // (`index.ts`); this field only declares the shape.
   sourceDigest: z.string().regex(/^[0-9a-f]{64}$/, 'must be a sha256 digest, 64 lowercase hex characters'),
   // `min(1)` on the four lists every Body is reached through. An empty document
   // passes every cardinality check vacuously — no Client, so no missing entry —

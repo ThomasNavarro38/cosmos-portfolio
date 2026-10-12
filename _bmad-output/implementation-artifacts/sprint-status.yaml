@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 10-12-2026 13:46
+last_updated: 10-12-2026 14:37
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -71,7 +71,7 @@ development_status:
   3-9-identity-definition-of-done-audit: done
   3-10-ci-pipeline-and-packaging-enforcement: done
   3-11-the-bundle-assertion-over-bundler-output: done
-  3-12-data-validation-on-the-build-path-and-the-gate-s-content-che: review
+  3-12-data-validation-on-the-build-path-and-the-gate-s-content-che: done
   3-13-boundary-table-and-boundary-parser-hardening: backlog
   3-14-test-infrastructure: backlog
   3-15-navigation-and-panel-correctness-fixes: backlog
