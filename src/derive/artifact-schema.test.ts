@@ -24,6 +24,8 @@ import { deriveEntities } from './entities.ts';
 import { solveLayout } from './solve.ts';
 
 const AS_OF = '2026-09';
+/** A well-formed sourceDigest for fixtures built in memory, with no career.json behind them. */
+const FIXTURE_DIGEST = 'f'.repeat(64);
 const SCHEMA_TS = fileURLToPath(new URL('./artifact-schema.ts', import.meta.url));
 
 function seededRandom(seed = 1): () => number {
@@ -52,7 +54,7 @@ function valid(...entries: Record<string, unknown>[]): Artifact {
     projects: entries.length > 0 ? entries : [baseEntry()],
   });
   const graph = deriveEntities(career, { asOf: AS_OF });
-  return buildArtifact(graph, solveLayout(graph, { randomSource: seededRandom() }), AS_OF);
+  return buildArtifact(graph, solveLayout(graph, { randomSource: seededRandom() }), AS_OF, FIXTURE_DIGEST);
 }
 
 /** A mutable deep copy, so a test can break exactly one thing. */
@@ -114,8 +116,8 @@ test('SCHEMA_VERSION is a literal in the schema, so a mismatch fails', () => {
   }
 });
 
-test('the version is 7 now that the band narrowed to two steps, and changing the shape means changing it', () => {
-  assert.equal(SCHEMA_VERSION, 7, 'Story 3.9 narrowed `luminanceBand` to two steps, so the shape version is 7');
+test('the version is 8 now that the artifact names its source, and changing the shape means changing it', () => {
+  assert.equal(SCHEMA_VERSION, 8, 'Story 3.12 added `sourceDigest` and the non-empty lists, so the shape version is 8');
   assert.equal(valid().schemaVersion, SCHEMA_VERSION, 'the emitter declares it');
 
   // Read off the source: the literal must be in the schema, not merely compared
@@ -488,7 +490,7 @@ test('every declared field is required, so a truncated document fails', () => {
   const topLevel = Object.keys(artifact);
   assert.deepEqual(
     topLevel.sort(),
-    ['asOf', 'clients', 'destinations', 'dwell', 'rail', 'schemaVersion', 'shots', 'skills'],
+    ['asOf', 'clients', 'destinations', 'dwell', 'rail', 'schemaVersion', 'shots', 'skills', 'sourceDigest'],
     'the declared top-level shape',
   );
 
@@ -496,6 +498,16 @@ test('every declared field is required, so a truncated document fails', () => {
     const broken = copy(artifact);
     delete broken[field];
     assertFails(validateArtifact(broken), new RegExp(field), `a missing "${field}" must be named`);
+  }
+});
+
+test('a malformed sourceDigest fails, naming the field', () => {
+  // The gate compares digests too, but a malformed one should read as a shape
+  // fault on its own field, not as drift.
+  for (const digest of ['F'.repeat(64), 'f'.repeat(63), 'f'.repeat(65), '', 'g'.repeat(64)]) {
+    const broken = copy(valid());
+    broken['sourceDigest'] = digest;
+    assertFails(validateArtifact(broken), /sourceDigest/, `"${digest}" must be rejected naming sourceDigest`);
   }
 });
 

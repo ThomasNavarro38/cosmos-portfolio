@@ -18,7 +18,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { RESTING_BANDS } from './rules.ts';
-import { clientIdOf, deriveEntities, projectIdOf } from './entities.ts';
+import { clientFoldWarnings, clientIdOf, deriveEntities, isDeepProject, projectIdOf } from './entities.ts';
 
 /** The real authored file, resolved the way `src/data/validate.test.ts` does. */
 const CAREER_JSON = fileURLToPath(new URL('../data/career.json', import.meta.url));
@@ -356,5 +356,34 @@ test('the committed career.json derives without throwing', () => {
         `luminanceBand stays in the resting set for "${entity.id}"`,
       );
     }
+  }
+});
+
+// --- Story 3.12: the fold warning and the exported depth predicate -----------
+
+test('two spellings folding to one Client ID warn, naming both spellings and the ID', () => {
+  const warnings = clientFoldWarnings([{ client: 'Acme Corp' }, { client: 'Acme-Corp' }, { client: 'Acme Corp' }]);
+  assert.equal(warnings.length, 1, 'one warning per folded ID');
+  const [line] = warnings;
+  assert.ok(line !== undefined);
+  assert.match(line, /"Acme Corp", "Acme-Corp"/, 'every spelling, in first-appearance order');
+  assert.ok(line.includes(clientIdOf('Acme Corp')), 'and the ID they fold to');
+  assert.match(line, /named "Acme Corp" \(the first spelling\)/, 'and which spelling is emitted');
+});
+
+test('one spelling repeated, or distinct Clients, raise no fold warning', () => {
+  assert.deepEqual(clientFoldWarnings([{ client: 'SNCF' }, { client: 'SNCF' }, { client: 'Decathlon' }]), []);
+});
+
+test('the fold still emits one Client under the first spelling', () => {
+  const graph = derive({ ...baseEntry(), client: 'Acme Corp', project: 'One' }, { ...baseEntry(), client: 'Acme-Corp', project: 'Two' });
+  assert.equal(graph.clients.length, 1);
+  assert.equal(graph.clients[0]?.name, 'Acme Corp');
+});
+
+test('isDeepProject is the one predicate, and deriveEntities classifies through it', () => {
+  const graph = derive(baseEntry(), { ...baseEntry(), project: 'Shallow', notable: null });
+  for (const entity of allProjects(graph)) {
+    assert.equal(entity.isDeep, isDeepProject(entity.project), `"${entity.id}" must be classified by isDeepProject`);
   }
 });

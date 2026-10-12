@@ -22,22 +22,36 @@
  */
 
 import { strict as assert } from 'node:assert';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema, type Career } from '../data/schema.ts';
+import { validateCareer } from '../data/validate.ts';
 import { BANNER, buildArtifact, serializeArtifact, stripBanner } from './artifact.ts';
 import { SCHEMA_VERSION, validateArtifact, type Artifact } from './artifact-schema.ts';
 import { DWELL_TEMPOS } from './dwell.ts';
 import { deriveEntities, type EntityGraph } from './entities.ts';
 import { BOUNDARY_RULES, SRC_ROOT } from './boundaries.ts';
-import { ARTIFACT_PATH, checkArtifact, checkDestinations, checkEmittedArtifact, checkStops, runPipeline } from './index.ts';
+import {
+  ARTIFACT_PATH,
+  CAREER_JSON as SHIPPED_CAREER_JSON,
+  checkArtifact,
+  checkContent,
+  checkDestinations,
+  checkEmittedArtifact,
+  checkGate,
+  checkStops,
+  runPipeline,
+  sourceDigestOf,
+} from './index.ts';
 import { solveLayout, type SolvedLayout } from './solve.ts';
 
 const AS_OF = '2026-09';
+/** A well-formed sourceDigest for fixtures built in memory, with no career.json behind them. */
+const FIXTURE_DIGEST = 'f'.repeat(64);
 const INDEX_TS = fileURLToPath(new URL('./index.ts', import.meta.url));
 const ARTIFACT_TS = fileURLToPath(new URL('./artifact.ts', import.meta.url));
 const CAREER_JSON = fileURLToPath(new URL('../data/career.json', import.meta.url));
@@ -93,7 +107,7 @@ function solve(graph: EntityGraph): SolvedLayout {
 
 function artifactOf(...entries: Record<string, unknown>[]): Artifact {
   const graph = graphOf(...entries);
-  return buildArtifact(graph, solve(graph), AS_OF);
+  return buildArtifact(graph, solve(graph), AS_OF, FIXTURE_DIGEST);
 }
 
 /** Every Project in the artifact, flattened, in document order. */
@@ -217,7 +231,7 @@ test('the emitted ordering is not the Rail ordering, and neither claims to be', 
   // re-sorting the document into Rail order would make `timeAxis` decorative.
   const entries = opposedEntries();
   const graph = graphOf(...entries);
-  const artifact = buildArtifact(graph, solve(graph), AS_OF);
+  const artifact = buildArtifact(graph, solve(graph), AS_OF, FIXTURE_DIGEST);
 
   // `YYYY-MM` strings compare lexicographically in chronological order, so the
   // earliest start is the string sort's first element — the same key `solve.ts`
@@ -531,7 +545,7 @@ test('an artifact that fails its own schema is not written, and the path is name
       ...graph.clients.slice(1),
     ],
   };
-  const failures = validateArtifact(buildArtifact(poisoned, solve(graph), AS_OF));
+  const failures = validateArtifact(buildArtifact(poisoned, solve(graph), AS_OF, FIXTURE_DIGEST));
   assert.notDeepEqual(failures, [], 'a bad shape must be caught');
   assert.ok(
     failures.some((line) => /clients\.\d+\.projects\.\d+\.mass/.test(line)),
@@ -547,7 +561,7 @@ test('a solve missing a position throws naming the entity rather than emitting i
 
   const { [target.id]: _dropped, ...rest } = full.positions;
   assert.throws(
-    () => buildArtifact(graph, { ...full, positions: rest }, AS_OF),
+    () => buildArtifact(graph, { ...full, positions: rest }, AS_OF, FIXTURE_DIGEST),
     (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.match(error.message, /no position/, 'the failure names the problem');
@@ -565,7 +579,7 @@ test('a solve missing an orbit normal throws naming the Project rather than emit
 
   const { [target.id]: _dropped, ...rest } = full.orbitNormals;
   assert.throws(
-    () => buildArtifact(graph, { ...full, orbitNormals: rest }, AS_OF),
+    () => buildArtifact(graph, { ...full, orbitNormals: rest }, AS_OF, FIXTURE_DIGEST),
     (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.match(error.message, /no orbit normal/, 'the failure names the problem');
@@ -773,7 +787,9 @@ test('the CLI exits 1 on an artifact whose destination set drifted', () => {
   // the artifact next. `--check` takes the same optional path the solve branch
   // does, for exactly this reason.
   const doc = stripBanner(JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8'))) as Artifact;
-  const drifted = { ...doc, destinations: [] } as unknown as Artifact;
+  // One entry dropped rather than the list emptied: an empty list is now a schema
+  // failure (Story 3.12), which would report before the cardinality check.
+  const drifted = { ...doc, destinations: doc.destinations.filter((d) => d.id !== 'client:sncf') } as unknown as Artifact;
 
   const result = runIndex('--check', writeTemp(serializeArtifact(drifted)));
   assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
@@ -1038,7 +1054,7 @@ test('the CLI exits 1 on an artifact whose Dwell list drifted', () => {
   // The AC is about `npm run build`, whose only observable behaviour is the exit
   // code — and `checkStops` in-process never shows it.
   const doc = stripBanner(JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8'))) as Artifact;
-  const drifted = { ...doc, dwell: [] } as unknown as Artifact;
+  const drifted = { ...doc, dwell: doc.dwell.filter((d) => d.subject !== 'client:sncf') } as unknown as Artifact;
 
   const result = runIndex('--check', writeTemp(serializeArtifact(drifted)));
   assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
@@ -1048,7 +1064,7 @@ test('the CLI exits 1 on an artifact whose Dwell list drifted', () => {
 
 test('the CLI exits 1 on an artifact whose Shot list drifted', () => {
   const doc = stripBanner(JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8'))) as Artifact;
-  const drifted = { ...doc, shots: [] } as unknown as Artifact;
+  const drifted = { ...doc, shots: doc.shots.filter((d) => d.subject !== 'client:sncf') } as unknown as Artifact;
 
   const result = runIndex('--check', writeTemp(serializeArtifact(drifted)));
   assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
@@ -1882,6 +1898,473 @@ test('the gate asserts the import boundaries after the stop lists and before the
   assert.ok(stopsAt >= 0 && boundariesAt >= 0 && bytesAt >= 0, 'all three must be present');
   assert.ok(stopsAt < boundariesAt, 'a wrong-shaped artifact reports that, not a boundary violation');
   assert.ok(boundariesAt < bytesAt, 'and a boundary violation is not a formatting fault');
+});
+
+// --- Story 3.12: the gate's source checks and content checks ------------------
+
+interface LoosePosition { x: number; y: number; z: number }
+interface LooseDoc {
+  asOf: string;
+  sourceDigest: string;
+  rail: string[];
+  destinations: unknown[];
+  dwell: unknown[];
+  shots: unknown[];
+  clients: {
+    id: string;
+    position: LoosePosition;
+    projects: {
+      id: string;
+      clientId: string;
+      isDeep: boolean;
+      position: LoosePosition;
+      orbitNormal: LoosePosition;
+      content: Record<string, unknown>;
+    }[];
+  }[];
+}
+
+/**
+ * The entries the source pair is solved from: the opposing fixture plus a second
+ * Alpha Project, so one Client carries two Planets (the Planet-coincidence row
+ * needs a pair sharing a Star) and the Rail order differs from `clients[]`.
+ */
+function pairEntries(): Record<string, unknown>[] {
+  return [
+    ...opposedEntries(),
+    { ...baseEntry(), client: 'Alpha', project: 'Second', duration: { start: '2015-01', end: '2016-01' }, notable: null },
+  ];
+}
+
+/**
+ * A `career.json` temp file and the artifact solved from it by the real
+ * pipeline, as a mutable document plus a writer. The pair `checkGate` reads —
+ * never the committed files, which no mutation here may touch.
+ */
+function sourcePair(entries: Record<string, unknown>[] = pairEntries()): {
+  careerPath: string;
+  doc: LooseDoc;
+  write: () => string;
+} {
+  const careerPath = writeTemp(`${JSON.stringify({ asOf: AS_OF, projects: entries }, null, 2)}\n`);
+  const result = runPipeline(careerPath);
+  assert.ok(result.ok, `the pair must solve: ${result.ok ? '' : result.failures.join('\n')}`);
+  const doc = stripBanner(JSON.parse(result.contents)) as LooseDoc;
+  return { careerPath, doc, write: () => writeTemp(serializeArtifact(doc as unknown as Artifact)) };
+}
+
+test('the source pair passes the whole gate before it is broken, or every mutation below is vacuous', () => {
+  const { careerPath, write } = sourcePair();
+  assert.deepEqual(checkGate(write(), careerPath), [], 'the unbroken pair must pass both halves of the gate');
+});
+
+test('sourceDigest is the sha256 of career.json with CRLF normalised to LF', () => {
+  const lf = '{\n  "asOf": "2026-09"\n}\n';
+  assert.match(sourceDigestOf(lf), /^[0-9a-f]{64}$/, 'lowercase hex, 64 characters');
+  assert.equal(sourceDigestOf(lf.replace(/\n/g, '\r\n')), sourceDigestOf(lf), "a checkout's line endings cannot change it");
+  assert.notEqual(sourceDigestOf(lf.replace('09', '10')), sourceDigestOf(lf), 'every other byte counts');
+});
+
+test('the solve records the digest of the career.json it read', () => {
+  const { careerPath, doc } = sourcePair();
+  assert.equal(doc.sourceDigest, sourceDigestOf(readFileSync(careerPath, 'utf8')));
+});
+
+test('the gate fails on a career.json that validate rejects, with validate\'s own lines', () => {
+  const { write } = sourcePair();
+  const bad = pairEntries();
+  bad[0] = { ...bad[0], notabel: 'x' };
+  const badCareer = writeTemp(JSON.stringify({ asOf: AS_OF, projects: bad }));
+
+  const failures = checkGate(write(), badCareer);
+  assert.ok(failures.some((line) => /failed validation/.test(line)), `the validation failure must be named: ${failures.join('\n')}`);
+  assert.ok(
+    failures.some((line) => line.includes('Alpha — A') && /notabel/.test(line)),
+    `with the entry and the key, as validate prints them: ${failures.join('\n')}`,
+  );
+});
+
+test('the CLI exits 1 on --check <artifact> <bad career>, so build stops before vite build', () => {
+  const { write } = sourcePair();
+  const bad = pairEntries();
+  bad[0] = { ...bad[0], notabel: 'x' };
+  const badCareer = writeTemp(JSON.stringify({ asOf: AS_OF, projects: bad }));
+
+  const result = runIndex('--check', write(), badCareer);
+  assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
+  assert.match(result.stderr, /notabel/, 'the unknown key must reach stderr');
+});
+
+test('the shipped --check holds the artifact against the real career.json', () => {
+  // No career argument: the gate must read `src/data/career.json`. An artifact
+  // identical to the committed one but for its digest fails, naming that path —
+  // which only happens if the source half ran against the real file.
+  const doc = stripBanner(JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8'))) as LooseDoc;
+  doc.sourceDigest = '0'.repeat(64);
+
+  const result = runIndex('--check', writeTemp(serializeArtifact(doc as unknown as Artifact)));
+  assert.equal(result.status, 1, `expected exit 1, got ${result.status}\n${result.stderr}`);
+  assert.match(result.stderr, /sourceDigest 0{64} in the artifact/, 'the stale digest must be named');
+  assert.ok(result.stderr.includes(SHIPPED_CAREER_JSON), `and the real career.json: ${result.stderr}`);
+  assert.ok(
+    result.stderr.includes(sourceDigestOf(readFileSync(SHIPPED_CAREER_JSON, 'utf8'))),
+    'with the digest of the committed source',
+  );
+});
+
+test('the CLI refuses any argument it does not know, so no flag can skip the source half', () => {
+  // Behavioural, not a scan of `main`'s text: whatever a bypass flag were
+  // called, the CLI must refuse it rather than run a gate that seems to honour it.
+  const { careerPath, write } = sourcePair();
+  const artifact = write();
+  assert.equal(runIndex('--check', artifact, careerPath).status, 0, 'the sound pair passes, or the refusals below are vacuous');
+
+  const refused: string[][] = [
+    ['--check', '--skip-source', artifact, careerPath],
+    ['--check', artifact, '--artifact-only'],
+    ['--check', '--fast'],
+    ['--check', artifact, careerPath, writeTemp('{}')],
+    ['--check', '--check'],
+  ];
+  for (const args of refused) {
+    const result = runIndex(...args);
+    assert.equal(result.status, 1, `${args.join(' ')} must exit 1, got ${result.status}`);
+    assert.match(result.stderr, /unexpected arguments/, `and say why: ${result.stderr}`);
+  }
+});
+
+test('the gate fails on a career.json it cannot read or parse, naming the path', () => {
+  const { write } = sourcePair();
+  const artifact = write();
+  const missing = join(tempDir(), 'absent-career.json');
+  const unparseable = writeTemp('{ not json');
+
+  for (const careerPath of [missing, unparseable]) {
+    const failures = checkGate(artifact, careerPath);
+    assert.ok(failures.some((line) => line.includes(careerPath)), `the path must be named: ${failures.join('\n')}`);
+  }
+
+  const result = runIndex('--check', artifact, missing);
+  assert.equal(result.status, 1, `a missing career.json must fail the CLI gate, got ${result.status}`);
+  assert.ok(result.stderr.includes(missing), result.stderr);
+});
+
+test('an asOf before some duration.start fails validate, the solve and the gate, naming the latest start', () => {
+  const entries = pairEntries();
+  const raw = { asOf: '2011-06', projects: entries };
+
+  const lines = validateCareer(raw);
+  assert.ok(
+    lines.some((line) => line.startsWith('career.json [asOf]:') && line.includes('2015-01') && line.includes('Alpha — Second')),
+    `validate must name the field and the latest-starting entry: ${lines.join('\n')}`,
+  );
+
+  const careerPath = writeTemp(JSON.stringify(raw));
+  const solved = runPipeline(careerPath);
+  assert.equal(solved.ok, false, 'the solve must refuse it');
+  if (!solved.ok) assert.ok(solved.failures.some((line) => /\[asOf\]/.test(line)), solved.failures.join('\n'));
+
+  const { write } = sourcePair();
+  const failures = checkGate(write(), careerPath);
+  assert.ok(failures.some((line) => /\[asOf\]/.test(line)), `the gate must refuse it: ${failures.join('\n')}`);
+});
+
+test('the gate fails on each empty case, naming the field path', () => {
+  const cases: [string, (doc: LooseDoc) => void, RegExp][] = [
+    ['clients', (doc) => { doc.clients = []; }, /^clients: /],
+    ['destinations', (doc) => { doc.destinations = []; }, /^destinations: /],
+    ['dwell', (doc) => { doc.dwell = []; }, /^dwell: /],
+    ['shots', (doc) => { doc.shots = []; }, /^shots: /],
+    ['a Client with no Projects', (doc) => { doc.clients[0]!.projects = []; }, /^clients\.0\.projects: an empty Client/],
+  ];
+  for (const [label, mutate, named] of cases) {
+    const { careerPath, doc, write } = sourcePair();
+    mutate(doc);
+    const failures = checkGate(write(), careerPath);
+    assert.ok(failures.some((line) => named.test(line)), `${label} must fail naming its path: ${failures.join('\n')}`);
+  }
+
+  const careerPath = writeTemp(JSON.stringify({ asOf: AS_OF, projects: [] }));
+  const { write } = sourcePair();
+  const failures = checkGate(write(), careerPath);
+  assert.ok(
+    failures.some((line) => line.startsWith('career.json [projects]:')),
+    `an empty projects list must fail naming the field: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate fails on source drift, naming sourceDigest, both hashes and the solve', () => {
+  const { careerPath, write } = sourcePair();
+  const artifactPath = write();
+  const before = sourceDigestOf(readFileSync(careerPath, 'utf8'));
+  const edited = pairEntries();
+  edited[1] = { ...edited[1], built: 'Something else was built.' };
+  writeFileSync(careerPath, JSON.stringify({ asOf: AS_OF, projects: edited }));
+  const after = sourceDigestOf(readFileSync(careerPath, 'utf8'));
+
+  const failures = checkGate(artifactPath, careerPath);
+  assert.ok(failures.some((line) => /solved from a different career\.json/.test(line)), failures.join('\n'));
+  assert.ok(
+    failures.some((line) => line.includes('sourceDigest') && line.includes(before) && line.includes(after)),
+    `both hashes must be named: ${failures.join('\n')}`,
+  );
+  assert.ok(failures.some((line) => /npm run solve/.test(line)), 'and the fix');
+});
+
+test('a CRLF checkout of the same career.json passes the gate', () => {
+  const { careerPath, write } = sourcePair();
+  writeFileSync(careerPath, readFileSync(careerPath, 'utf8').replace(/\n/g, '\r\n'));
+  assert.deepEqual(checkGate(write(), careerPath), []);
+});
+
+test('the gate fails on a hand-edited asOf whose digest still matches, naming both values', () => {
+  const { careerPath, doc, write } = sourcePair();
+  doc.asOf = '2026-08';
+  const failures = checkGate(write(), careerPath);
+  assert.equal(failures.some((line) => /sourceDigest/.test(line)), false, 'the digest still matches');
+  assert.ok(
+    failures.some((line) => line.includes('"2026-08"') && line.includes(`"${AS_OF}"`)),
+    `both asOf values must be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate fails on a Project whose clientId is not its carrying Client, naming both IDs', () => {
+  const { careerPath, doc, write } = sourcePair();
+  const [first, second] = doc.clients;
+  const project = first?.projects[0];
+  assert.ok(first !== undefined && second !== undefined && project !== undefined);
+  project.clientId = second.id;
+
+  const failures = checkGate(write(), careerPath);
+  assert.ok(
+    failures.some((line) => line.includes(project.id) && line.includes(first.id) && line.includes(second.id)),
+    `the Project and both IDs must be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate fails on an isDeep that disagrees with content.notable, naming the Project', () => {
+  for (const flip of [true, false]) {
+    const { careerPath, doc, write } = sourcePair();
+    const project = doc.clients.flatMap((client) => client.projects).find((candidate) => candidate.isDeep === flip);
+    assert.ok(project !== undefined, `the pair must carry a ${flip ? 'Deep' : 'Shallow'} Project to flip`);
+    project.isDeep = !flip;
+
+    const failures = checkGate(write(), careerPath);
+    assert.ok(
+      failures.some((line) => line.includes(project.id) && /isDeep/.test(line)),
+      `the Project must be named: ${failures.join('\n')}`,
+    );
+  }
+});
+
+test('the gate fails on two Stars at one point, naming both IDs and the point', () => {
+  // Beta's whole system is translated onto Alpha's Star, so every orbit plane
+  // still holds and only the coincidence is wrong.
+  const { careerPath, doc, write } = sourcePair();
+  const [a, b] = doc.clients;
+  assert.ok(a !== undefined && b !== undefined);
+  const shift = { x: a.position.x - b.position.x, y: a.position.y - b.position.y, z: a.position.z - b.position.z };
+  const move = (p: LoosePosition): LoosePosition => ({ x: p.x + shift.x, y: p.y + shift.y, z: p.z + shift.z });
+  b.position = { ...a.position };
+  for (const project of b.projects) project.position = move(project.position);
+
+  const failures = checkGate(write(), careerPath);
+  assert.ok(
+    failures.some(
+      (line) =>
+        line.includes(a.id) &&
+        line.includes(b.id) &&
+        line.includes(`(${String(a.position.x)}, ${String(a.position.y)}, ${String(a.position.z)})`),
+    ),
+    `both Stars and the point must be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate fails on two Planets at one point, naming both IDs', () => {
+  const { careerPath, doc, write } = sourcePair();
+  const alpha = doc.clients.find((client) => client.projects.length > 1);
+  assert.ok(alpha !== undefined, 'the pair must carry a Client with two Planets');
+  const [first, second] = alpha.projects;
+  assert.ok(first !== undefined && second !== undefined);
+  second.position = { ...first.position };
+  second.orbitNormal = { ...first.orbitNormal };
+
+  const failures = checkGate(write(), careerPath);
+  assert.ok(
+    failures.some((line) => line.includes(first.id) && line.includes(second.id) && /one point/.test(line)),
+    `both Planets must be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate fails on a Rail that is the right set in the wrong order, naming both orders', () => {
+  const { careerPath, doc, write } = sourcePair();
+  const expected = [...doc.rail];
+  assert.ok(expected.length > 1, 'the pair must carry more than one stop');
+  doc.rail = [...expected].reverse();
+
+  const failures = checkGate(write(), careerPath);
+  assert.ok(
+    failures.some(
+      (line) => /out of order/.test(line) && line.includes(`[${expected.join(', ')}]`) && line.includes(`[${doc.rail.join(', ')}]`),
+    ),
+    `the expected and actual orders must be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the gate holds the Rail to its ID tie-break when two Clients start in the same month', () => {
+  // Distinct start months never exercise the tie-break; here only the ID can
+  // order the two stops.
+  const entries = [
+    { ...baseEntry(), client: 'Beta', project: 'B', duration: { start: '2014-01', end: '2015-01' } },
+    { ...baseEntry(), client: 'Alpha', project: 'A', duration: { start: '2014-01', end: '2020-01' } },
+  ];
+  const { careerPath, doc, write } = sourcePair(entries);
+  assert.deepEqual(doc.rail, ['client:alpha', 'client:beta'], 'equal starts order by ID');
+  doc.rail = ['client:beta', 'client:alpha'];
+
+  const failures = checkGate(write(), careerPath);
+  assert.ok(
+    failures.some((line) => /out of order/.test(line) && line.includes('[client:alpha, client:beta]')),
+    `the tie-break order must be named: ${failures.join('\n')}`,
+  );
+});
+
+test('the Rail order is checked only once the Rail is the correct set', () => {
+  // A dropped stop is a membership failure; an order complaint on top would
+  // describe a list that cannot be put in order.
+  const base = JSON.parse(JSON.stringify(artifactOf(...opposedEntries()))) as Artifact;
+  const failures = checkStops({ ...base, rail: base.rail.slice(1) });
+  assert.ok(failures.length > 0);
+  assert.equal(failures.some((line) => /out of order/.test(line)), false, failures.join('\n'));
+});
+
+test('the content and Rail-order checks would catch each mutation, applied one at a time', () => {
+  const base = JSON.parse(JSON.stringify(artifactOf(...pairEntries()))) as Artifact;
+  assert.deepEqual(checkContent(base), [], 'the unmutated artifact must pass checkContent');
+  assert.deepEqual(checkStops(base), [], 'and checkStops');
+
+  const clone = (): LooseDoc => JSON.parse(JSON.stringify(base)) as LooseDoc;
+  const mutations: [string, () => string[]][] = [
+    ['a wrong clientId', () => {
+      const d = clone();
+      d.clients[0]!.projects[0]!.clientId = d.clients[1]!.id;
+      return checkContent(d as unknown as Artifact);
+    }],
+    ['a flipped isDeep', () => {
+      const d = clone();
+      d.clients[0]!.projects[0]!.isDeep = !d.clients[0]!.projects[0]!.isDeep;
+      return checkContent(d as unknown as Artifact);
+    }],
+    ['a Planet on its Star', () => {
+      const d = clone();
+      d.clients[0]!.projects[0]!.position = { ...d.clients[0]!.position };
+      return checkContent(d as unknown as Artifact);
+    }],
+    ['a Planet on another Client’s Planet', () => {
+      const d = clone();
+      d.clients[1]!.projects[0]!.position = { ...d.clients[0]!.projects[0]!.position };
+      return checkContent(d as unknown as Artifact);
+    }],
+    ['a reversed Rail', () => {
+      const d = clone();
+      d.rail = [...d.rail].reverse();
+      return checkStops(d as unknown as Artifact);
+    }],
+  ];
+  for (const [label, run] of mutations) {
+    assert.notDeepEqual(run(), [], `${label} must be rejected — an assertion that accepts it is asserting nothing`);
+  }
+});
+
+test('the pre-write guard runs the content check', () => {
+  const sound = artifactOf(...pairEntries());
+  const d = JSON.parse(JSON.stringify(sound)) as LooseDoc;
+  d.clients[0]!.projects[0]!.isDeep = !d.clients[0]!.projects[0]!.isDeep;
+  const failures = checkEmittedArtifact(d as unknown as Artifact);
+  assert.ok(failures.some((line) => /disagree with their own content/.test(line)), failures.join('\n'));
+});
+
+test('an artifact failure reports before any source failure', () => {
+  // The source half never weakens the artifact-alone half: a document broken in
+  // both ways reports the artifact fault.
+  const { careerPath, doc, write } = sourcePair();
+  writeFileSync(careerPath, '{ "not": "valid" }');
+  assert.ok(
+    checkGate(write(), careerPath).some((line) => /failed validation/.test(line)),
+    'with a sound artifact this career fails the source half, so its absence below is the ordering, not a vacuous pass',
+  );
+
+  doc.dwell = doc.dwell.slice(1);
+  const failures = checkGate(write(), careerPath);
+  assert.ok(failures.some((line) => /disagrees with its Clients/.test(line)), failures.join('\n'));
+  assert.equal(failures.some((line) => /failed validation|sourceDigest/.test(line)), false, failures.join('\n'));
+});
+
+test('checkSource never solves, derives or writes', () => {
+  const source = readFileSync(INDEX_TS, 'utf8');
+  const start = source.indexOf('export function checkSource');
+  const gate = source.indexOf('export function checkGate');
+  const end = source.indexOf('function main(');
+  assert.ok(start >= 0 && gate > start && end > gate, 'the scan must find checkSource, then checkGate, then main');
+  const body = source.slice(start, end);
+  assert.doesNotMatch(
+    body,
+    /runPipeline|writeFileSync|solveLayout|buildArtifact|deriveEntities|buildRail|inRailOrder/,
+    'the gate may not solve, derive, or write',
+  );
+});
+
+test('two Client spellings that fold warn naming both and the ID, and emit one Client', () => {
+  const careerPath = writeTemp(
+    JSON.stringify({
+      asOf: AS_OF,
+      projects: [
+        { ...baseEntry(), client: 'Acme Corp', project: 'One' },
+        { ...baseEntry(), client: 'Acme-Corp', project: 'Two' },
+      ],
+    }),
+  );
+  const result = runPipeline(careerPath);
+  assert.ok(result.ok, result.ok ? '' : result.failures.join('\n'));
+  assert.ok(
+    result.warnings.some((line) => line.includes('"Acme Corp"') && line.includes('"Acme-Corp"') && line.includes('client:acme-corp')),
+    `the fold must be named: ${result.warnings.join('\n')}`,
+  );
+  const doc = stripBanner(JSON.parse(result.contents)) as Artifact;
+  assert.equal(doc.clients.length, 1, 'one Client is emitted');
+  assert.equal(doc.clients[0]?.name, 'Acme Corp', 'under the first spelling');
+});
+
+test('the solve CLI prints the fold warning on stderr, exits 0, and writes one Client', () => {
+  // Through the real entry point, into a temp output: `runIndex` keeps stderr
+  // only on failure, and a warning lives on a run that succeeds.
+  const careerPath = writeTemp(
+    JSON.stringify({
+      asOf: AS_OF,
+      projects: [
+        { ...baseEntry(), client: 'Acme Corp', project: 'One' },
+        { ...baseEntry(), client: 'Acme-Corp', project: 'Two' },
+      ],
+    }),
+  );
+  const outPath = join(tempDir(), 'layout.json');
+  const run = spawnSync(process.execPath, [INDEX_TS, careerPath, outPath], { encoding: 'utf8', timeout: 60_000 });
+
+  assert.equal(run.status, 0, `a fold is a warning, not a failure: ${run.stderr}`);
+  assert.ok(
+    run.stderr
+      .split('\n')
+      .some((line) => line.startsWith('warning: ') && line.includes('"Acme Corp"') && line.includes('"Acme-Corp"') && line.includes('client:acme-corp')),
+    `a warning line must name both spellings and the ID: ${run.stderr}`,
+  );
+  const doc = stripBanner(JSON.parse(readFileSync(outPath, 'utf8'))) as Artifact;
+  assert.equal(doc.clients.length, 1, 'the fold still applies');
+});
+
+test('the committed career.json solves with no fold warning', () => {
+  const result = runPipeline();
+  assert.ok(result.ok);
+  assert.deepEqual(result.warnings, []);
 });
 
 after(() => {

@@ -6,7 +6,9 @@
  * - `node src/derive/index.ts` (`npm run solve`) runs the whole pipeline and
  *   writes `generated/layout.generated.json`.
  * - `node src/derive/index.ts --check` (the `build` gate) reads the *committed*
- *   artifact and validates it. It never solves and never writes.
+ *   artifact and validates it, then holds it against the `career.json` beside
+ *   it: the data must validate, and the artifact must have been solved from
+ *   exactly that text (Story 3.12). It never solves and never writes.
  *
  * They live in one file rather than two scripts so the artifact path and its
  * schema are named in exactly one place — a gate validating a different path
@@ -19,6 +21,7 @@
  * seeded generator constructed below. Identical input, byte-identical output.
  */
 
+import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,11 +30,13 @@ import { readCareerFile, validateCareer } from '../data/validate.ts';
 import { BANNER, buildArtifact, serializeArtifact, stripBanner } from './artifact.ts';
 import { parseArtifact, validateArtifact, type Artifact } from './artifact-schema.ts';
 import { SRC_ROOT, checkImportBoundaries } from './boundaries.ts';
-import { deriveEntities } from './entities.ts';
+import { clientFoldWarnings, deriveEntities, isDeepProject } from './entities.ts';
+import { compareRailKeys, earliestStart } from './rail.ts';
 import { rankSkills, shareCounts } from './skills.ts';
 import { solveLayout } from './solve.ts';
 
-const CAREER_JSON = fileURLToPath(new URL('../data/career.json', import.meta.url));
+/** The one authored source, read by the solve and held against the artifact by the gate. */
+export const CAREER_JSON = fileURLToPath(new URL('../data/career.json', import.meta.url));
 
 /** The one path the artifact lives at, named once and used by both modes. */
 export const ARTIFACT_PATH = fileURLToPath(
@@ -61,19 +66,37 @@ function seededRandom(seed: number): () => number {
   return () => (state = (1664525 * state + 1013904223) % 4294967296) / 4294967296;
 }
 
-/** A pipeline outcome: the bytes to write, or the lines to print. */
+/**
+ * The digest an artifact records of the `career.json` text it was solved from:
+ * sha256, lowercase hex, over the UTF-8 text with every CRLF normalised to LF.
+ *
+ * Normalised so a checkout's line endings cannot fail the gate — a Windows
+ * clone with `core.autocrlf` carries the same authored content in different
+ * bytes, and the build must not tell the two apart. Every other byte counts:
+ * the digest is what catches an authored change shipped without a re-solve.
+ */
+export function sourceDigestOf(text: string): string {
+  return createHash('sha256').update(text.replace(/\r\n/g, '\n'), 'utf8').digest('hex');
+}
+
+/**
+ * A pipeline outcome: the bytes to write and the warnings to print, or the
+ * failure lines. A warning never fails the solve — the Client slug fold is
+ * deliberate — but it is never silent either.
+ */
 export type PipelineResult =
-  | { readonly ok: true; readonly contents: string }
-  | { readonly ok: false; readonly failures: readonly string[] };
+  | { readonly ok: true; readonly contents: string; readonly warnings: readonly string[] }
+  | { readonly ok: false; readonly failures: readonly string[]; readonly warnings: readonly string[] };
 
 /**
  * Every check an assembled artifact must pass **before its bytes are written**.
  * Returns the failure lines, empty on success.
  *
- * Four of them: the document against its own declared schema, the destination
+ * Five of them: the document against its own declared schema, the destination
  * set against the entities it addresses, the Dwell, Shot and Rail lists
- * against the Client set they pace, frame and order, and the Skill list against
- * the Projects whose Skills it ranks. None is redundant with the
+ * against the Client set they pace, frame and order, the Skill list against
+ * the Projects whose Skills it ranks, and each Body against its own content
+ * (`checkContent`). None is redundant with the
  * gate — without them the *first* bad emission would be the one committed, and
  * the gate would only ever reject it afterwards, when the artifact on disk is
  * already wrong.
@@ -109,6 +132,11 @@ export function checkEmittedArtifact(artifact: Artifact): string[] {
     return ['the emitted Skill list disagrees with its Projects:', ...skillFailures];
   }
 
+  const contentFailures = checkContent(artifact);
+  if (contentFailures.length > 0) {
+    return ['the emitted Bodies disagree with their own content:', ...contentFailures];
+  }
+
   return [];
 }
 
@@ -124,17 +152,20 @@ export function checkEmittedArtifact(artifact: Artifact): string[] {
  */
 export function runPipeline(careerPath: string = CAREER_JSON): PipelineResult {
   const read = readCareerFile(careerPath);
-  if (!read.ok) return { ok: false, failures: [read.message] };
+  if (!read.ok) return { ok: false, failures: [read.message], warnings: [] };
 
   // The same lines `npm run validate` prints, from the same function. A second
   // validation path here would be a second place the authored contract is
   // written down, and the two would disagree the first time either changed.
   const careerFailures = validateCareer(read.data);
   if (careerFailures.length > 0) {
-    return { ok: false, failures: ['career.json failed validation:', ...careerFailures] };
+    return { ok: false, failures: ['career.json failed validation:', ...careerFailures], warnings: [] };
   }
 
   const career = CareerSchema.parse(read.data);
+  // Two differing spellings of one Client fold to one Star, by design — but
+  // never silently (Story 3.12). Printed by `main`; the solve still succeeds.
+  const warnings = clientFoldWarnings(career.projects);
 
   let contents: string;
   try {
@@ -142,13 +173,15 @@ export function runPipeline(careerPath: string = CAREER_JSON): PipelineResult {
     // never an argument. This is the whole reason `asOf` is authored.
     const graph = deriveEntities(career, { asOf: career.asOf });
     const layout = solveLayout(graph, { randomSource: seededRandom(SOLVE_SEED) });
-    const artifact = buildArtifact(graph, layout, career.asOf);
+    // The digest of the exact text read above, so the gate can tell whether the
+    // committed artifact was solved from the `career.json` beside it.
+    const artifact = buildArtifact(graph, layout, career.asOf, sourceDigestOf(read.text));
 
     // Every pre-write check, in one place, so the test suite can drive the exact
     // code this path runs. See `checkEmittedArtifact`.
     const emissionFailures = checkEmittedArtifact(artifact);
     if (emissionFailures.length > 0) {
-      return { ok: false, failures: emissionFailures };
+      return { ok: false, failures: emissionFailures, warnings };
     }
 
     contents = serializeArtifact(artifact);
@@ -157,10 +190,10 @@ export function runPipeline(careerPath: string = CAREER_JSON): PipelineResult {
     // emit plausible-but-wrong data for — an ID collision, a non-finite
     // coordinate, a Project adopted by the wrong Star. Each message already
     // names the entity, so it is reported rather than re-wrapped.
-    return { ok: false, failures: [error instanceof Error ? error.message : String(error)] };
+    return { ok: false, failures: [error instanceof Error ? error.message : String(error)], warnings };
   }
 
-  return { ok: true, contents };
+  return { ok: true, contents, warnings };
 }
 
 /**
@@ -371,6 +404,33 @@ export function checkStops(artifact: Artifact): string[] {
     }
   }
 
+  // The Rail's *sequence*, not only its membership — the ordering is the field's
+  // whole payload (Story 3.12). Checked only once `rail` is already the correct
+  // set: on a missing, invented or repeated stop the walk above has said so, and
+  // an order complaint on top would describe a list that cannot be put in order.
+  // The expected order comes from `rail.ts`'s own key and comparator, read off
+  // the document's `content.duration.start` — never a re-derive (AD-1).
+  const railIsTheClientSet =
+    clients.size === artifact.clients.length &&
+    artifact.rail.length === artifact.clients.length &&
+    new Set(artifact.rail).size === artifact.rail.length &&
+    artifact.rail.every((id) => clients.has(id));
+  if (railIsTheClientSet) {
+    const expected = artifact.clients
+      .map((client) => ({
+        id: client.id,
+        start: earliestStart(client.id, client.projects.map((project) => project.content.duration.start)),
+      }))
+      .sort(compareRailKeys)
+      .map((key) => key.id);
+    if (expected.some((id, index) => artifact.rail[index] !== id)) {
+      failures.push(
+        `rail is out of order: expected [${expected.join(', ')}] but the artifact carries ` +
+          `[${artifact.rail.join(', ')}] — the Rail runs earliest engagement first, ties by ID.`,
+      );
+    }
+  }
+
   // Containment is a `shots`-only property, so it sits outside the shared walk
   // rather than being smuggled into it behind a label test. Only a subject that
   // resolved to a Client is checked: an invented or Project subject was already
@@ -472,6 +532,65 @@ export function checkSkills(artifact: Artifact): string[] {
 }
 
 /**
+ * Asserts each Body in a validated artifact against the document's own tree
+ * (Story 3.12). Returns the failure lines, empty on success.
+ *
+ * Three properties the schema cannot see, because each spans two fields or two
+ * entities, and each line names the offending ID:
+ *
+ * - **Back-reference.** A Project's `clientId` must be the ID of the Client
+ *   carrying it. A consumer resolving a Project's Star by `clientId` would
+ *   otherwise land on the wrong one, or on none.
+ * - **Depth.** `isDeep` must agree with `content.notable`, through
+ *   `entities.ts`'s own `isDeepProject` — never a restated predicate. A
+ *   hand-edited flag would draw a Ring on a Project with no Notable to open.
+ * - **Coincidence.** No two Bodies — Star or Planet — may share a position. Two
+ *   Bodies drawn at one point read as one, and one of them is unreachable by
+ *   pointer.
+ *
+ * It walks the artifact only — no derive, no solve (AD-1).
+ */
+export function checkContent(artifact: Artifact): string[] {
+  const failures: string[] = [];
+  // Exact equality is deliberate: positions are rounded to the solve's four
+  // places, so equal-at-rounding *is* the coincidence, and the solve's own orbit
+  // guards keep near-misses apart.
+  const holders = new Map<string, string>();
+  // Exact equality, deliberately: the solve rounds every coordinate to four
+  // places, so two Bodies equal at that rounding are the coincidence, and the
+  // solve's own orbit guards keep a near miss apart before it is emitted.
+  const place = (id: string, position: { readonly x: number; readonly y: number; readonly z: number }): void => {
+    const point = `(${String(position.x)}, ${String(position.y)}, ${String(position.z)})`;
+    const held = holders.get(point);
+    if (held !== undefined) {
+      failures.push(`"${held}" and "${id}" are both at ${point} — two Bodies drawn at one point read as one.`);
+      return;
+    }
+    holders.set(point, id);
+  };
+
+  for (const client of artifact.clients) {
+    place(client.id, client.position);
+    for (const project of client.projects) {
+      place(project.id, project.position);
+      if (project.clientId !== client.id) {
+        failures.push(
+          `"${project.id}" is carried by the Client "${client.id}" but its clientId is "${project.clientId}".`,
+        );
+      }
+      const deep = isDeepProject(project.content);
+      if (project.isDeep !== deep) {
+        failures.push(
+          `"${project.id}" has isDeep ${String(project.isDeep)} but its content.notable makes it ` +
+            `${deep ? 'Deep' : 'Shallow'}.`,
+        );
+      }
+    }
+  }
+  return failures;
+}
+
+/**
  * The indices of one longest strictly increasing subsequence of `values` — the
  * entries that already stand in order. O(n log n), deterministic: among equally
  * long runs it keeps the one ending earliest at each length.
@@ -510,6 +629,19 @@ function longestInOrder(values: readonly number[]): Set<number> {
  * whose whole failure mode is being forgotten.
  */
 export function checkArtifact(path: string = ARTIFACT_PATH, sourceRoot: string = SRC_ROOT): string[] {
+  return inspectArtifact(path, sourceRoot).failures;
+}
+
+/**
+ * The artifact-alone checks `checkArtifact` names, returning the typed document
+ * alongside the failure lines so `checkGate` can run the source checks over the
+ * same read rather than a second one. `artifact` is present only on success.
+ */
+function inspectArtifact(
+  path: string,
+  sourceRoot: string,
+): { readonly failures: string[]; readonly artifact?: Artifact } {
+  const fail = (failures: string[]): { failures: string[] } => ({ failures });
   let text: string;
   try {
     text = readFileSync(path, 'utf8');
@@ -518,24 +650,24 @@ export function checkArtifact(path: string = ARTIFACT_PATH, sourceRoot: string =
     // a directory standing where the file should be, is a different problem —
     // and `npm run solve` is a fix that cannot resolve either one.
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-      return [
+      return fail([
         `the layout artifact at ${path} could not be read: ${error instanceof Error ? error.message : String(error)}`,
-      ];
+      ]);
     }
-    return [
+    return fail([
       `the layout artifact is missing at ${path}.`,
       'The build reads the committed artifact and never produces one — run `npm run solve` and commit the result.',
-    ];
+    ]);
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(text) as unknown;
   } catch (error) {
-    return [
+    return fail([
       `the layout artifact is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
       'Do not hand-edit it — run `npm run solve` to regenerate.',
-    ];
+    ]);
   }
 
   // One parse, and the typed document comes back with it. Validating here and
@@ -545,11 +677,11 @@ export function checkArtifact(path: string = ARTIFACT_PATH, sourceRoot: string =
   // failure lines.
   const schema = parseArtifact(stripBanner(parsed));
   if (!schema.ok) {
-    return [
+    return fail([
       'the committed layout artifact failed its schema:',
       ...schema.failures,
       'Run `npm run solve` and commit the result.',
-    ];
+    ]);
   }
 
   // The destination set against the entity tree in the *same document*. The
@@ -560,18 +692,18 @@ export function checkArtifact(path: string = ARTIFACT_PATH, sourceRoot: string =
   //
   // Counted from the artifact's own `clients` tree, never from a fresh derive —
   // the gate never solves (AD-1). A destination set agreeing with a *stale*
-  // entity tree still passes here; that is the pre-existing content-drift
-  // limitation, and `npm test` is what catches it.
+  // entity tree passes this check; the source half of the gate (`checkSource`)
+  // is what fails an artifact solved from a different `career.json`.
   //
   // After the schema, so a malformed artifact reports its real failure; before
   // the byte checks, so a structural fault is not reported as a formatting one.
   const cardinality = checkDestinations(schema.artifact);
   if (cardinality.length > 0) {
-    return [
+    return fail([
       'the committed layout artifact has a destination set that disagrees with its entities:',
       ...cardinality,
       'Run `npm run solve` and commit the result.',
-    ];
+    ]);
   }
 
   // The Dwell, Shot and Rail lists against the Client set in the *same document*.
@@ -590,11 +722,11 @@ export function checkArtifact(path: string = ARTIFACT_PATH, sourceRoot: string =
   // is not reported as a formatting one.
   const stops = checkStops(schema.artifact);
   if (stops.length > 0) {
-    return [
+    return fail([
       'the committed layout artifact has a Dwell, Shot or Rail list that disagrees with its Clients:',
       ...stops,
       'Run `npm run solve` and commit the result.',
-    ];
+    ]);
   }
 
   // The Skill list against the Projects' own Skill lists in the *same document*
@@ -603,11 +735,25 @@ export function checkArtifact(path: string = ARTIFACT_PATH, sourceRoot: string =
   // is. Counted from the artifact's own tree, never from a fresh derive (AD-1).
   const skills = checkSkills(schema.artifact);
   if (skills.length > 0) {
-    return [
+    return fail([
       'the committed layout artifact has a Skill list that disagrees with its Projects:',
       ...skills,
       'Run `npm run solve` and commit the result.',
-    ];
+    ]);
+  }
+
+  // Each Body against its own content in the *same document* (Story 3.12): a
+  // Project's `clientId` against the Client carrying it, `isDeep` against
+  // `content.notable` through `entities.ts`'s own predicate, and no two Bodies at
+  // one point. The schema sees one field at a time and cannot tell. Read off the
+  // artifact's own tree, never from a fresh derive (AD-1).
+  const content = checkContent(schema.artifact);
+  if (content.length > 0) {
+    return fail([
+      'the committed layout artifact has Bodies that disagree with their own content:',
+      ...content,
+      'Run `npm run solve` and commit the result.',
+    ]);
   }
 
   // The import boundaries the five directory READMEs declare, over `src/` — the
@@ -634,11 +780,11 @@ export function checkArtifact(path: string = ARTIFACT_PATH, sourceRoot: string =
   // problem, and there would be no way to test this wiring at all.
   const boundaries = checkImportBoundaries(sourceRoot);
   if (boundaries.length > 0) {
-    return [
+    return fail([
       'the source tree violates the import boundaries its READMEs declare:',
       ...boundaries,
       'Each directory README states its own constraints; the rule table is in src/derive/boundaries.ts.',
-    ];
+    ]);
   }
 
   // Two properties of the *bytes*, which the parse above discards: the banner
@@ -648,18 +794,92 @@ export function checkArtifact(path: string = ARTIFACT_PATH, sourceRoot: string =
   // suite, which `build` never runs. They come last because a malformed or
   // wrong-shaped artifact should report that, not its formatting.
   if (!text.startsWith(`{ ${JSON.stringify('$banner')}: ${JSON.stringify(BANNER)},`)) {
-    return [
+    return fail([
       `the layout artifact at ${path} does not carry its generated-file banner on line one.`,
       'Do not hand-edit it — run `npm run solve` to regenerate.',
-    ];
+    ]);
   }
   if (text.includes('\r')) {
-    return [
+    return fail([
       `the layout artifact at ${path} carries CRLF newlines; it is committed with LF.`,
       'Do not hand-edit it — run `npm run solve` to regenerate.',
+    ]);
+  }
+  return { failures: [], artifact: schema.artifact };
+}
+
+/**
+ * Holds a validated artifact against the authored source it claims to be solved
+ * from (Story 3.12). Returns the failure lines, empty on success.
+ *
+ * Three checks, in order, all reporting:
+ *
+ * - `career.json` must validate, with the same lines `npm run validate` prints
+ *   from the same function — so `npm run build` cannot succeed on data
+ *   `validate` rejects.
+ * - Its digest must equal the artifact's `sourceDigest`. This catches every
+ *   authored change shipped without a re-solve, whatever field it touched.
+ * - Its `asOf` must equal the artifact's. The digest already covers the
+ *   authored side; this names the one hand-edit of the artifact a digest over
+ *   the source cannot see.
+ *
+ * **It never solves, derives or writes** (AD-1): it reads one file, validates,
+ * hashes and compares.
+ */
+export function checkSource(artifact: Artifact, careerPath: string = CAREER_JSON): string[] {
+  const read = readCareerFile(careerPath);
+  if (!read.ok) {
+    return [
+      `the gate holds the layout artifact against ${careerPath}, and it could not be read:`,
+      read.message,
+      `Restore a readable, valid ${careerPath}, then run \`npm run solve\` and commit the result.`,
     ];
   }
-  return [];
+
+  const careerFailures = validateCareer(read.data);
+  if (careerFailures.length > 0) {
+    return ['career.json failed validation:', ...careerFailures, 'Fix the data, then run `npm run solve` and commit the result.'];
+  }
+
+  const failures: string[] = [];
+  const digest = sourceDigestOf(read.text);
+  if (artifact.sourceDigest !== digest) {
+    failures.push(
+      `the layout artifact was solved from a different career.json:`,
+      `  sourceDigest ${artifact.sourceDigest} in the artifact, ${digest} for ${careerPath}`,
+    );
+  }
+  const asOf = CareerSchema.parse(read.data).asOf;
+  if (artifact.asOf !== asOf) {
+    failures.push(`the layout artifact's asOf is "${artifact.asOf}" but ${careerPath} says "${asOf}".`);
+  }
+  if (failures.length > 0) failures.push('Run `npm run solve` and commit the result.');
+  return failures;
+}
+
+/**
+ * The build gate: the artifact alone, then the artifact against its source.
+ * Returns the failure lines, empty on success.
+ *
+ * The artifact-alone checks come first and are exactly `checkArtifact`'s, so an
+ * existing artifact failure still reports first and the source checks never
+ * weaken AD-1's guarantee. Both halves share one read of the artifact. The
+ * shipped CLI always calls this with the real `career.json` — there is no flag
+ * that skips the source half.
+ */
+export function checkGate(
+  artifactPath: string = ARTIFACT_PATH,
+  careerPath: string = CAREER_JSON,
+  sourceRoot: string = SRC_ROOT,
+): string[] {
+  const inspected = inspectArtifact(artifactPath, sourceRoot);
+  if (inspected.failures.length > 0) return inspected.failures;
+  // Unreachable today — `inspectArtifact` returns the document whenever it
+  // returns no failure — but a passing gate must never rest on that silently.
+  if (inspected.artifact === undefined) {
+    return [`the layout artifact at ${artifactPath} passed its checks but no document came back to hold against ${careerPath}.`];
+  }
+  return checkSource(inspected.artifact, careerPath);
 }
 
 function main(): void {
@@ -682,20 +902,41 @@ function main(): void {
     // would have to corrupt it and restore it, and an interrupt inside that
     // window leaves the working tree dirty and every later run red — failing in
     // whichever sibling reads the file next, not in the test that broke it.
-    const failures = checkArtifact(argv.find((arg) => arg !== '--check') ?? ARTIFACT_PATH);
+    //
+    // Two positional seams, `[artifact, career]`, for the same reason. Without
+    // either the gate holds the committed artifact against the committed
+    // `career.json`; there is no flag that skips the source half.
+    //
+    // Anything else is refused rather than ignored: a third positional or an
+    // unknown flag (`--skip-source`, say) silently dropped would read as a gate
+    // that honoured it — the story 3.10 precedent of rejecting a second `--root=`.
+    const rest = argv.filter((arg) => arg !== '--check');
+    const unexpected = [...rest.filter((arg) => arg.startsWith('--')), ...rest.filter((arg) => !arg.startsWith('--')).slice(2)];
+    if (unexpected.length > 0 || argv.filter((arg) => arg === '--check').length > 1) {
+      console.error(`unexpected arguments: ${unexpected.length > 0 ? unexpected.join(' ') : '--check'}`);
+      console.error('usage: node src/derive/index.ts --check [artifact] [career.json]');
+      process.exit(1);
+    }
+    const [artifactPath, careerPath] = rest;
+    const failures = checkGate(artifactPath ?? ARTIFACT_PATH, careerPath ?? CAREER_JSON);
     if (failures.length > 0) {
       for (const line of failures) console.error(line);
       process.exit(1);
     }
-    console.log('the layout artifact is present and valid.');
+    console.log('the layout artifact is present, valid, and solved from the current career.json.');
     return;
   }
 
-  // An optional path argument, defaulting to the committed file — the same test
-  // seam `validate.ts` carries, and for the same reason: `node --test` runs
-  // suites in parallel, so a test that wrote into `src/` would break a sibling
-  // suite for a reason unrelated to what it tests.
+  // Optional `[career] [out]` paths, defaulting to the committed files — the same
+  // test seam `validate.ts` carries, and for the same reason: `node --test` runs
+  // suites in parallel, so a test that wrote into `src/` or `generated/` would
+  // break a sibling suite for a reason unrelated to what it tests. The output
+  // seam lets a test drive the real solve CLI without touching the artifact.
+  const outPath = argv[1] ?? ARTIFACT_PATH;
   const result = runPipeline(argv[0] ?? CAREER_JSON);
+  // Warnings first, and on failure too: a fold computed before a later stage
+  // failed is still worth knowing when the failure is fixed.
+  for (const line of result.warnings) console.warn(`warning: ${line}`);
   if (!result.ok) {
     for (const line of result.failures) console.error(line);
     process.exit(1);
@@ -705,15 +946,15 @@ function main(): void {
   // trace, and a partial write would leave an artifact the gate then rejects
   // for a reason unrelated to the data.
   try {
-    mkdirSync(dirname(ARTIFACT_PATH), { recursive: true });
-    writeFileSync(ARTIFACT_PATH, result.contents);
+    mkdirSync(dirname(outPath), { recursive: true });
+    writeFileSync(outPath, result.contents);
   } catch (error) {
     console.error(
-      `could not write ${ARTIFACT_PATH}: ${error instanceof Error ? error.message : String(error)}`,
+      `could not write ${outPath}: ${error instanceof Error ? error.message : String(error)}`,
     );
     process.exit(1);
   }
-  console.log(`wrote ${ARTIFACT_PATH}`);
+  console.log(`wrote ${outPath}`);
 }
 
 // Guarded so importing this module never exits the importing process — the

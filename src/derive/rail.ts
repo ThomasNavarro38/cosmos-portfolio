@@ -63,15 +63,49 @@ export function compareCodepoints(a: string, b: string): number {
  * Client to the head of the Rail rather than announce itself.
  */
 export function startsAt(client: ClientEntity): string {
+  return earliestStart(
+    client.id,
+    client.projects.map((project) => project.project.duration.start),
+  );
+}
+
+/**
+ * The earliest of a Client's Project start months — the Rail's sort key, over
+ * whichever tree the starts were read from.
+ *
+ * Split out of `startsAt` so the build gate can read the *artifact's*
+ * `content.duration.start` through the same rule the emitter reads the graph's
+ * through (Story 3.12). The gate may not derive, and a second minimum written
+ * there would be a second copy of the Rail's key.
+ *
+ * @throws if `starts` is empty, naming the Client — see `startsAt`.
+ */
+export function earliestStart(id: string, starts: Iterable<string>): string {
   let earliest: string | undefined;
-  for (const project of client.projects) {
-    const start = project.project.duration.start;
+  for (const start of starts) {
     if (earliest === undefined || start < earliest) earliest = start;
   }
   if (earliest === undefined) {
-    throw new Error(`Client "${client.id}" owns no Projects, so it has no place on the Rail.`);
+    throw new Error(`Client "${id}" owns no Projects, so it has no place on the Rail.`);
   }
   return earliest;
+}
+
+/** One Rail stop as the ordering rule sees it: an ID and its earliest start. */
+export interface RailKey {
+  readonly id: string;
+  readonly start: string;
+}
+
+/**
+ * The Rail's one ordering rule: earliest engagement first, ties broken by ID.
+ *
+ * The emitter sorts by it in `inRailOrder` and the build gate checks the emitted
+ * `rail` against it (`checkStops`), so exactly one comparator exists.
+ */
+export function compareRailKeys(a: RailKey, b: RailKey): number {
+  const byStart = compareCodepoints(a.start, b.start);
+  return byStart !== 0 ? byStart : compareCodepoints(a.id, b.id);
 }
 
 /**
@@ -88,10 +122,9 @@ export function startsAt(client: ClientEntity): string {
  * Client ordering is `timeAxis` — reads the same graph.
  */
 export function inRailOrder(clients: readonly ClientEntity[]): ClientEntity[] {
-  return [...clients].sort((a, b) => {
-    const byStart = compareCodepoints(startsAt(a), startsAt(b));
-    return byStart !== 0 ? byStart : compareCodepoints(a.id, b.id);
-  });
+  return [...clients].sort((a, b) =>
+    compareRailKeys({ id: a.id, start: startsAt(a) }, { id: b.id, start: startsAt(b) }),
+  );
 }
 
 /**

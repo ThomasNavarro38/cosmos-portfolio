@@ -28,9 +28,12 @@ import { SHOT_FRAMINGS } from './shots.ts';
  * It started at 1, became **2** when Story 1.6 added `destinations`, **3** when
  * Story 1.7 added `dwell` and `shots`, **4** when Story 2.1 added `rail`, **5**
  * when Story 3.2 added each Project's `orbitNormal`, **6** when Story 3.5 added
- * the top-level `skills`, and is **7** now that Story 3.9 has narrowed
- * `luminanceBand` to two steps (`stroke-rest`, `stroke-near`): each time the
- * contract's shape changed, the number it declares changed with it. An artifact
+ * the top-level `skills`, **7** when Story 3.9 narrowed `luminanceBand` to two
+ * steps (`stroke-rest`, `stroke-near`), and is **8** now that Story 3.12 has
+ * added `sourceDigest` and made `clients`, `destinations`, `dwell` and `shots`
+ * non-empty: each time the contract's shape changed, the number it declares
+ * changed with it. An artifact carrying `7` names no source, so the gate could
+ * not tell whether it was solved from the `career.json` beside it. An artifact
  * still carrying `5` publishes no Skill tiers, and must fail rather than be read
  * by a scene that seats Motes by them — it would have to count shares itself,
  * which is the classification AD-3 keeps out of the renderer. One carrying `6`
@@ -41,7 +44,7 @@ import { SHOT_FRAMINGS } from './shots.ts';
  * the artifact fail its own gate, which is precisely what the gate exists to
  * prevent, and is why each was deliberately absent until the story that emits it.
  */
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 /** ISO 8601 year-month, matching the authored form exactly. */
 const IsoYearMonth = z
@@ -231,7 +234,12 @@ const ArtifactClientSchema = z
     name: z.string().min(1),
     timeAxis: TimeAxisSchema,
     position: PositionSchema,
-    projects: z.array(ArtifactProjectSchema).min(1),
+    // An empty Client is a Star with no Planet: no orbit to frame, no start month
+    // to place it on the Rail. Named, because "too small" against a document
+    // holding fifteen Bodies is not a diagnosis.
+    projects: z
+      .array(ArtifactProjectSchema)
+      .min(1, 'an empty Client — every Client must carry at least one Project'),
   })
   .superRefine((client, ctx) => {
     client.projects.forEach((project, index) => {
@@ -275,24 +283,34 @@ const ArtifactClientSchema = z
 export const ArtifactSchema = z.strictObject({
   schemaVersion: z.literal(SCHEMA_VERSION),
   asOf: IsoYearMonth,
-  clients: z.array(ArtifactClientSchema),
+  // The sha256, lowercase hex, of the `career.json` text this document was solved
+  // from, CRLF normalised to LF (Story 3.12). The gate digests the file beside it
+  // and fails on a mismatch, so an authored change without a re-solve cannot
+  // ship a stale site — and a checkout's line endings cannot fail it.
+  sourceDigest: z.string().regex(/^[0-9a-f]{64}$/, 'must be a sha256 digest, 64 lowercase hex characters'),
+  // `min(1)` on the four lists every Body is reached through. An empty document
+  // passes every cardinality check vacuously — no Client, so no missing entry —
+  // and would certify an empty scene as correct. `rail` and `skills` are not
+  // constrained here: `rail` is held to the Client count by `checkStops`, and a
+  // career whose Projects list no Skill is legitimate.
+  clients: z.array(ArtifactClientSchema).min(1, 'must carry at least one Client — an empty document draws nothing'),
   // The **one** list both future input paths build from — the DOM index the
   // keyboard walks and the pointer raycast target set (AD-15). Declared here
   // because the schema is closed: an undeclared field is not emitted at all, and
   // each consumer would then infer its own reachable set. Its cardinality
   // against the `clients` tree is asserted by the build gate, not by this
   // schema, which can only see one entry's shape at a time.
-  destinations: z.array(DestinationSchema),
+  destinations: z.array(DestinationSchema).min(1, 'must carry at least one destination'),
   // How long the journey rests at each Rail stop, as a tempo class — one entry
   // per Client and none for a Project, because the Rail stops at Clients
   // (AD-4a). Declared here because the schema is closed: an undeclared field is
   // not emitted at all, and Epic 2 would then pick a pacing of its own.
-  dwell: z.array(DwellSchema),
+  dwell: z.array(DwellSchema).min(1, 'must carry at least one Dwell entry'),
   // The default composition for each Rail stop: an entity ID plus angle,
   // distance, and framing, with no world coordinate anywhere (FR-17). Its
   // cardinality against the `clients` tree is asserted by the build gate, not by
   // this schema, which can only see one entry's shape at a time.
-  shots: z.array(ShotSchema),
+  shots: z.array(ShotSchema).min(1, 'must carry at least one Shot'),
   // The order the journey reaches the Rail's stops in — Client IDs, earliest
   // engagement first, ties by ID. **A bare list of IDs, in order**: the ordering
   // *is* the payload, so an entry carries nothing else and a consumer resolves

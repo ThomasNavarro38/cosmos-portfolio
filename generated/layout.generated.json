@@ -1,6 +1,7 @@
-{ "$banner": "GENERATED FILE — do not edit by hand. Produced by src/derive/index.ts from src/data/career.json; run `npm run solve` to regenerate. Hand edits are overwritten by the next solve and are not validated by the build gate.",
-  "schemaVersion": 7,
+{ "$banner": "GENERATED FILE — do not edit by hand. Produced by src/derive/index.ts from src/data/career.json; run `npm run solve` to regenerate. Hand edits are overwritten by the next solve, and the build gate rejects an artifact that breaks its invariants or no longer matches the sourceDigest of career.json.",
+  "schemaVersion": 8,
   "asOf": "2026-09",
+  "sourceDigest": "c5251cc8101bf93c0fd70e0619f76403bc8c6c2045f3c4beb5aba4db5c4a7f0f",
   "clients": [
     {
       "id": "client:simsu",

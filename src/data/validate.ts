@@ -183,8 +183,14 @@ function findDuplicateKeys(text: string): string[] {
  * Reads and parses the file. A malformed JSON file reports the parse error, not
  * a stack trace. Duplicate keys are rejected here, before validation, because
  * parsing destroys the evidence.
+ *
+ * The ok result carries the raw `text` as well as the parsed `data`: the build
+ * gate digests the exact bytes the solve read (Story 3.12), and a re-read would
+ * be a second chance for the two to disagree.
  */
-export function readCareerFile(path: string): { ok: true; data: unknown } | { ok: false; message: string } {
+export function readCareerFile(
+  path: string,
+): { ok: true; data: unknown; text: string } | { ok: false; message: string } {
   let text: string;
   try {
     text = readFileSync(path, 'utf8');
@@ -210,7 +216,7 @@ export function readCareerFile(path: string): { ok: true; data: unknown } | { ok
     };
   }
 
-  return { ok: true, data };
+  return { ok: true, data, text };
 }
 
 /** Names a duplicate by its entry, matching the style of validation failures. */

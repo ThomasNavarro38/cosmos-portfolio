@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 10-12-2026 11:50
+last_updated: 10-12-2026 13:46
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -71,7 +71,7 @@ development_status:
   3-9-identity-definition-of-done-audit: done
   3-10-ci-pipeline-and-packaging-enforcement: done
   3-11-the-bundle-assertion-over-bundler-output: done
-  3-12-data-validation-on-the-build-path-and-the-gate-s-content-che: backlog
+  3-12-data-validation-on-the-build-path-and-the-gate-s-content-che: review
   3-13-boundary-table-and-boundary-parser-hardening: backlog
   3-14-test-infrastructure: backlog
   3-15-navigation-and-panel-correctness-fixes: backlog
@@ -120,21 +120,31 @@ action_items:
     action: "Validate career.json on the build path so npm run build cannot succeed
       on data npm run validate rejects"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-12: story 3.12 — the gate's source half runs validateCareer
+      over src/data/career.json with validate's own lines, so npm run build stops
+      before vite build on data npm run validate rejects"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-3-bound-asof-and-source-digest"
     epic: 1
     action: "Bound asOf against duration.start in CareerSchema, and emit a sourceDigest
       so the gate detects artifact/source drift"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-12: story 3.12 — CareerSchema refines asOf against the latest
+      duration.start; the artifact (v8) carries sourceDigest, and the gate fails naming
+      both hashes when career.json changed without a re-solve, and both values on an
+      asOf mismatch"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-4-gate-content-checks"
     epic: 1
     action: "Add gate content checks: clientId back-reference, isDeep vs content.notable,
       empty Client, coincident Bodies"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-12: story 3.12 — checkContent (pre-write and at the gate) names a
+      wrong clientId, an isDeep disagreeing with content.notable via isDeepProject, and
+      coincident Bodies; an empty Client fails the schema naming its path"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-5-bundle-assertion"
     epic: 1
@@ -165,14 +175,20 @@ action_items:
     action: "Constrain the empty cases: min(1) on CareerSchema.projects and on artifact
       clients, destinations, dwell, shots"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-12: story 3.12 — min(1) on CareerSchema.projects and on artifact
+      clients, destinations, dwell, shots, each with a message; each Client's projects already
+      carried min(1) and now names the empty Client"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-9-client-slug-collision-warning"
     epic: 1
     action: "Warn on a Client slug collision between differing spellings, keeping
       the deliberate fold"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-12: story 3.12 — clientFoldWarnings names every folded spelling
+      and the ID; npm run solve prints them and still emits one Client under the first
+      spelling"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-10-verification-gap-pass"
     epic: 1
@@ -221,7 +237,10 @@ action_items:
       payload. A pure read of the artifact's own tree (monotonic duration.start minima
       across rail) would close it without re-deriving"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-12: story 3.12 — checkStops checks rail's order through rail.ts's
+      earliestStart and compareRailKeys once rail is the correct set, naming expected vs
+      actual order"
     ref: "_bmad-output/implementation-artifacts/spec-2-1-the-dom-destination-index.md"
   - id: "story-2-1-review-item-2-root-rule-renderer-ban"
     epic: 2
