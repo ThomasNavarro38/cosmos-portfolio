@@ -4,7 +4,7 @@
 
 ## Goal
 
-Turn the greybox into a deliberate, monochrome, line-art design system ("Deep Field") and build the information layer, so that a visitor reads the site as intentionally designed and, above all, can tell which Projects carry a written argument (Deep) before opening any of them. The Deep/Shallow signal must be visible at rest on every Project at once and survive compressed screenshots and low-DPI corporate laptops. This epic closes both clauses of the M2 launch gate: a stranger can say what Thomas does and which entries are worth reading. The visual identity is the author's weakest discipline and the highest-variance launch blocker, so it is treated as a first-class deliverable with an explicit definition-of-done audit, not a styling pass at the end.
+Turn the greybox into a deliberate, monochrome, line-art design system ("Deep Field") and build the information layer, so a visitor reads the site as intentionally designed and can tell which Projects carry a written argument (Deep) before opening any of them. The Deep/Shallow signal is visible at rest on every Project and survives compressed screenshots and low-DPI laptops. This closes both clauses of the M2 launch gate. Identity has its own definition-of-done audit. Stories 3.10–3.19, from the retrospectives, make enforcement automatic (CI, pins, bundle assertion, build-path validation, boundaries, test infrastructure), fix navigation defects, and close what the Epic 3 re-judgement needs.
 
 ## Stories
 
@@ -17,43 +17,53 @@ Turn the greybox into a deliberate, monochrome, line-art design system ("Deep Fi
 - Story 3.7: The Notable and the editorial rule line
 - Story 3.8: Corner chrome and the stateful instruction slot
 - Story 3.9: Identity definition-of-done audit
+- Story 3.10: CI pipeline and packaging enforcement
+- Story 3.11: The bundle assertion over bundler output
+- Story 3.12: Data validation on the build path and the gate's content checks
+- Story 3.13: Boundary table and boundary parser hardening
+- Story 3.14: Test infrastructure
+- Story 3.15: Navigation and panel correctness fixes
+- Story 3.16: Scene colour management
+- Story 3.17: No technology names in field values
+- Story 3.18: The Mote label pass and the degradation ruling
+- Story 3.19: Spec and doc reconciliation, and housekeeping
 
 ## Requirements & Constraints
 
-- **Legibility wins every conflict.** Where identity, Dwell, or Condensation treatment hurts a reader's ability to read a Notable, the treatment yields.
-- **Deep/Shallow signal:** distinguishable in the scene (not only the panel), present at rest, requires no type flag. It must **never** be carried by brightness (already bound to recency) or size (bound to duration).
-- **Notable:** 100–150 words of connected prose (problem → constraint → decision with rejected alternative). No lists, bullets, or technology roll-calls; a technology may be named only as the thing chosen or rejected. The full stack is shown only geometrically (Dust/Motes), never in prose or the field table.
-- **Real client names ship**, unanonymised. No published criticism of a named Client.
-- **Palette is achromatic:** no hue anywhere — no accent, status colour, syntax highlight, or hover tint.
-- **No weight above 400** on any glyph; weight is not an emphasis channel.
-- **Contrast floor:** Notable prose, panel title, field values ≥ 7:1; field labels, editorial rule, all Mote label tiers, corner chrome, scene labels ≥ 4.5:1. `ink-quiet-dark` fails the floor and must appear on no glyph.
-- **Confident voice:** no WIP disclaimer, beta tag, or apologetic copy. Copy lives in exactly five places (Notables + field values, Shallow rule line, two chrome lines, Colophon annotations, contact route) — no tooltips, onboarding, empty states, help text, or captions explaining marks.
-- **Opening 15 seconds:** an unprompted viewer registers a real work history, organised rather than listed, deliberately designed.
+- **Legibility wins every conflict.** Identity, Dwell or Condensation treatment yields wherever it hurts reading.
+- **Deep/Shallow signal:** in the scene, at rest, no type flag; **never** carried by brightness (recency) or size (duration).
+- **Notable:** 100–150 words of connected prose. A technology appears only as the thing chosen or rejected; the stack is shown only geometrically. **Field values describe what was built and never name a Skill/technology**; a content check enforces this.
+- **Achromatic:** no hue anywhere. **No weight above 400.**
+- **Contrast:** Notable prose, panel title, field values ≥ 7:1; labels, rule line, Mote labels, chrome ≥ 4.5:1. `ink-quiet-dark` on no glyph. Drawn scene whites must match their token values (tone mapping must not shift them).
+- **Copy lives in five places only** (Notables + field values, Shallow rule line, two chrome lines, Colophon, contact route); no tooltips, captions or apologetic copy.
+- **Enforcement is by tooling, not recall:** every failure mode named is caught by a test or gate step, and each check is proven to bite with a mutation test. Rulings (field values, Mote degradation, `railPosition`) are Ask First.
 
 ## Technical Decisions
 
-- **Tokens from one source:** DESIGN.md's YAML frontmatter is the token source of truth. A build step transforms it once into CSS custom properties (DOM) and a typed JS object (scene materials) under `src/tokens/`; neither is hand-transcribed. Frontmatter uses `{group.key}` alias references (e.g. `{colors.stroke-rest-dark}`) that the generator must resolve.
-- **Generated files** carry a header banner naming the generator and forbidding hand-editing; committed and diffable.
-- **Colour pairs:** bare key = future light theme, `-dark` key = shipped M2 value; emit both so light is a later token swap.
-- **Lint ban:** literal hex/rgb/hsl in any component (CSS and scene materials) fails the build.
-- **Import boundaries (tooling-enforced):** `tokens/` imports nothing from `src/data/`; renderers read only the layout artifact.
-- **Single derivation point:** `isDeep`, `luminanceBand`, and mote tier are computed in `src/derive/` and emitted in `layout.generated.json`. Renderers perform no classification, no mapping computation, no conditional on raw content fields. A missing value means a schema + derivation change, never a local computation. Use derived names (`isDeep`, not `hasNotable`).
-- **Token inventory:** surfaces, five stroke steps, five ink steps, `vignette` (= `surface-base` by rule), eleven type roles, spacing 4/8/12/20/28/40/52/56 (no 16, no 24), stroke weights 0.6–1.0px, no radius except true circles.
-- **Ladder semantics:** stroke step encodes distance and state, never category. `luminanceBand` modulates only within `stroke-dust`…`stroke-near`; `stroke-active`/`stroke-focus` are camera-state overlays. At most one element per frame carries `stroke-focus`. Strokes and inks never borrow each other's tokens.
-- **Vocabulary:** use the glossary terms exactly (Body, Mote, Notable, Deep/Shallow, Moon, Ring, Dust, Focus, Condensation); `satellite` is superseded by `Moon`.
+- **Stack, exact pins:** TypeScript 7.0.x, Vite 8.2.x, React 19.x, @react-three/fiber 9.7.x and drei 10.7.x (stable — not the v10/v11 alphas; the pairing is load-bearing), three 0.185.x, d3-force-3d 3.0.6, zustand 5.0.x, Node 24 LTS (build only). Every dependency pinned to an exact version; `zod` is build-time only (devDependency).
+- **Build path:** `validate → derive+solve → vite build`. `solve` is a separate script `build` never invokes; `build` fails if the committed artifact is missing or off-schema. Validation rejects unknown fields.
+- **Artifact:** `layout.generated.json` is the versioned contract every surface reads. Committed, never hand-edited; the solve is byte-deterministic. The gate re-asserts invariants from the artifact alone.
+- **Single derivation point:** all classification lives in `src/derive/`. No module outside `src/derive/` imports `src/data/`; renderers read only the artifact, with no conditional on raw content fields.
+- **Thin entry:** `src/shell/entry` has no React, no Three; scene, Fallback, Colophon and solver are separate lazy chunks. This is a property of bundler output, so the build asserts the entry chunk's graph never reaches Three, R3F, the solver, `src/derive/` or `src/data/` and stays under a byte budget. Epic 4 depends on this.
+- **Boundaries:** import bans are gate rows (ESLint or equivalent); an import the parser cannot resolve fails rather than passes.
+- **Tokens from one source:** DESIGN.md frontmatter (with `{group.key}` aliases) generates CSS custom properties and a typed JS object under `src/tokens/`. Literal colours in any component fail the build.
+- **Ladders:** stroke step encodes distance and state, never category; at most one `stroke-focus` per frame.
+- **Vocabulary:** glossary terms exactly; `Moon`, never `satellite`.
 
 ## UX & Interaction Patterns
 
-- **Geometry:** Bodies/Motes are `fill: none` circles; Client Stars have a ~15% filled core dot; ellipses only for orbits; straight single-segment leader lines; Rail drawn at `stroke-dust`. No shadows, glow, bloom, blur, scale-on-hover, or opacity fades on Bodies. Radial vignette 0 at 42% radius → 0.9 at edge.
-- **Moon + Ring (Deep only):** Moon = filled dot at `stroke-active`, radius ≈ 0.27× body (min 2.4px), offset ≈ 2× body radius. Ring = continuous concentric circle at `stroke-near`, 0.7px, ≈ 2.2× body radius. The Ring carries the signal when the Moon can't resolve. The Ring means "carries a Notable," never "it opens."
-- **Collision rule:** hover/focus draws no ring or new geometry around a Body. It shows a leader line (`stroke-rest`, 0.6px) plus title (`scene-label-project`, `ink-lift`) and one secondary line (role, team size, class); the Body steps to `stroke-active`. Keyboard `:focus-visible` is identical, plus a 1px `stroke-focus` square outline at 3px offset around the **label block**, never the Body. Labels in the outer 12% of the frame re-anchor inward.
-- **Motes:** three tiers (2.6/2.1/1.8px) on distinct off-axis orbits at `stroke-dust`; all labels ≥ `ink-label`. Skills are also a DOM list in the panel (no canvas texture, no live region). Nine labels (SNCF) is the tested maximum; structure the angular quota so a degradation rule can be added later.
-- **Panel:** `surface-raised`, 1px `surface-edge` left border only, padding 56/56/60, fixed order: kicker (Client), title, reading position, field table (`Role`, `Team`, `Built` — no Skills row), then `release` affordance (word + hairline at the bottom, never a floating X). Prose measure fixed at 56ch; below ~1200px panel width becomes a percentage. Exact vertical rhythm is specified per story.
-- **Reading position:** Deep → Notable at `notable-prose` in `ink-prose`, the constraint sentence in `ink-lift` only (inline, not bold/boxed/separated). Shallow → identical editorial rule line on every entry, at `editorial-rule` in `ink-label`, same slot; no skeleton or gap. Promotion to Deep is a data change only.
-- **Chrome:** exactly two lines, opposite corners, 40px inset, `chrome` in `ink-label`. Top-left: `THOMAS NAVARRO · the model` (+ Colophon route). Bottom-right stateful slot: `scroll ↓ — time runs backward` (Rail) / `↩ resume the journey` (free flight) / `esc — release` (Focused); a real focusable control when off-Rail or Focused.
+- **Geometry:** `fill: none` circles; no shadow, glow, blur, scale-on-hover or opacity fades on Bodies.
+- **Moon + Ring (Deep only):** Moon = filled dot at `stroke-active`; Ring = concentric circle at `stroke-near`. The Ring means "carries a Notable", never "it opens".
+- **Hover/focus:** no new geometry around a Body — a leader line plus title and one secondary line; Body steps to `stroke-active`. `:focus-visible` adds a 1px `stroke-focus` outline around the **label block**.
+- **Motes:** three tiers on off-axis orbits at `stroke-dust`; labels ≥ `ink-label`; Skills also listed in the panel DOM. Projects carry 7–25 Skills; labels must stay legible and still as orbits turn, including under reduced motion.
+- **Panel:** `surface-raised`, left `surface-edge` border; field table `Role`, `Team`, `Built`; `release` at the bottom. Deep → Notable with the constraint sentence in `ink-lift`; Shallow → the identical editorial rule line in the same slot.
+- **Chrome:** two lines, opposite corners, 40px inset. Bottom-right is a stateful slot (Rail / free flight / Focused).
+- **Navigation:** the camera never cuts on refocus mid-release; panel close follows the actual slide duration; no Rail input binds when the scene is absent.
 
 ## Cross-Story Dependencies
 
-- Depends on Epic 1 (derive pipeline emitting `isDeep`, `luminanceBand`, mote tier, content payload; ESLint import-boundary rules) and Epic 2 (greybox scene, Focus, Condensation, state machine modes consumed by the chrome slot and affordances; DOM index focus model).
-- Story 3.1 (tokens + lint ban) precedes every other story. 3.2's ladders underpin 3.3–3.5. 3.6 hosts 3.7's reading position and 3.5's DOM Skill list. 3.9 audits everything and runs last.
-- Epic 4's Fallback reuses these tokens and carries the Deep/Shallow signal by Ring alone.
+- Depends on Epic 1 (derive pipeline, artifact schema, gate, boundary rules) and Epic 2 (scene, Focus, Condensation, state machine, DOM index).
+- 3.1 precedes the identity stories; 3.9 audits them.
+- 3.10 puts the gate in CI, which the checks from 3.11–3.14 and 3.17 then run under. 3.14's shared walker/stripper and out-of-tree mutants serve every later scan test. 3.18 splits the label pass out of `mote-model.ts` before changing behaviour.
+- 3.16, 3.17 and 3.19's Epic 3 reconciliation are required before Epic 3 is re-judged.
+- Epic 4 needs 3.11's bundle assertion and reuses these tokens, carrying the Deep/Shallow signal by Ring alone.
