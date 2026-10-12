@@ -856,7 +856,7 @@ test('a runtime module under src/types/ fails, wherever it sits and whatever it 
   for (const file of ['types/probe.ts', 'types/probe.tsx', 'types/probe.mjs', 'types/nested/probe.ts']) {
     const failures = assertRejects(
       { [file]: "import c from '../data/career.json';\n" },
-      new RegExp(`src/${escapeRegExp(file)} .*declaration`),
+      new RegExp(`src/${escapeRegExp(file)}:1 .*declaration`),
       `${file} would be the one module the src/data/ ban does not reach`,
     );
     assert.match(failures[failures.length - 1] ?? '', /^1 import-boundary violation across/, failures.join('\n'));
@@ -1039,6 +1039,74 @@ test('a shipped module may not import a test module, which would ship what tests
 test('a declaration file under src/types/ is not judged, even when it names src/data/', () => {
   // Ambient declarations are type-level and never loaded: what the exemption is for.
   assertAccepts({ 'types/career.d.ts': "declare module 'career' { export type C = import('../data/schema.ts').Career; }\n" }, 'type-level only');
+});
+
+test('require as a ternary branch is a reference, while require as a key, optional or not, is a name', () => {
+  for (const source of ['const r = flag ? require : null;\n', 'const r = flag\n  ? require\n  : null;\n']) {
+    assert.deepEqual(findImports(source).map((f) => f.kind), ['unresolvable'], `${JSON.stringify(source)} loads through require`);
+  }
+  for (const source of [
+    'interface O { require?: boolean }\n',
+    'interface O { a: number; require: boolean }\n',
+    'const o = { a: 1, require: 2 };\n',
+    'type O = {\n  require?: boolean;\n};\n',
+  ]) {
+    assert.deepEqual(findImports(source), [], `${JSON.stringify(source)} names a key`);
+  }
+});
+
+test('a brace inside a string in a template interpolation does not end the interpolation', () => {
+  for (const source of [
+    "const s = `${'}' + require('../data/x.ts')}`;\n",
+    'const s = `${"}" + require(\'../data/x.ts\')}`;\n',
+    "const s = `${/* } */ require('../data/x.ts')}`;\n",
+  ]) {
+    assert.deepEqual(findImports(source).map((f) => f.kind), ['unresolvable'], `${JSON.stringify(source)} hides no require`);
+  }
+  const colour = "const c = `${'}'} #fff ${x}`;\n";
+  assert.equal(stripComments(colour), colour, 'the comments-only mode keeps the same template verbatim');
+});
+
+test('a method named import is a definition, not a load, while a call written beside a brace still is', () => {
+  for (const source of [
+    'class A {\n  import(p: string) {\n    return p;\n  }\n}\n',
+    'class A {\n  async import(p: string): Promise<void> {}\n}\n',
+    'class A { x = 1; static import(p) { return p; } }\n',
+    'const o = { a: 1, import(p) { return p; } };\n',
+  ]) {
+    assert.deepEqual(findImports(source), [], `${JSON.stringify(source)} defines a method`);
+  }
+  for (const source of [
+    'const m = flag ? import(p) : null;\n',
+    'f(a, import(p));\n',
+    '{ import(p); }\n',
+    'if (x) { await import(p) }\n',
+  ]) {
+    assert.deepEqual(findImports(source).map((f) => f.kind), ['unresolvable'], `${JSON.stringify(source)} calls import`);
+  }
+});
+
+test('the excerpt is marked cut only when something was cut', () => {
+  const exact = `require('${'a'.repeat(109)}')`;
+  assert.equal(exact.length, 120);
+  assert.equal(findImports(`const m = ${exact};\n`)[0]?.specifier, exact, 'a construct ending at the cap is whole');
+  const over = `require('${'a'.repeat(110)}')`;
+  assert.ok(findImports(`const m = ${over};\n`)[0]!.specifier.endsWith('…'), 'one character more is cut');
+});
+
+test('a runtime module under src/types/ names file and line like every other failure', () => {
+  assertRejects({ 'types/probe.ts': 'export {};\n' }, /^src\/types\/probe\.ts:1 is a runtime module/, 'file:line');
+});
+
+test('a test module is refused however the shipped module names it', () => {
+  for (const specifier of ['./x.test.ts?raw', '/src/shell/x.test.ts', '@/shell/x.test', './x.test.tsx?url']) {
+    assertRejects(
+      { 'shell/entry.ts': `import x from '${specifier}';\n` },
+      new RegExp(`shell/entry\\.ts:1 .*${escapeRegExp(specifier)}.*test module`),
+      `${specifier} from a shipped module`,
+    );
+  }
+  assertAccepts({ 'shell/entry.ts': "import { x } from './contest.ts';\nimport { y } from './x.testing.ts';\n" }, 'only a .test suffix names a test module');
 });
 
 // --- Purity ------------------------------------------------------------------

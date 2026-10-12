@@ -3,7 +3,7 @@ title: 'Boundary table and boundary parser hardening'
 type: 'feature'
 created: '2026-10-12'
 status: 'done'
-review_loop_iteration: 0
+review_loop_iteration: 1
 baseline_commit: 'bf381999162c49682f36d22d0519c54821bc31a0'
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-3-context.md'
@@ -71,9 +71,39 @@ context:
 - Given the committed tree, when `npm run gate` runs, then it exits 0. Given any matrix violation in a fixture, then `checkImportBoundaries` fails naming `file:line`.
 - Given a rule row from this story is deleted, when the suite runs, then a test goes red (verified by reverting each row once).
 
+### Review Findings
+
+- [x] [Review][Decision] Test-module import ban added without Ask First sign-off — resolved: kept, approved by Thomas (2026-10-12); matcher to be widened (patch below).
+- [x] [Review][Patch] `TEST_SPECIFIER` is relative-only (`^\.`), so an aliased, root-absolute or `?raw`-suffixed test specifier is not caught — match any specifier whose path ends `.test` (extension optional), query stripped [src/derive/boundaries.ts:232]
+- [x] [Review][Patch] `require` scan's object-key exclusion `(?!\s*:)` misfires: `flag ? require : null` passes silently (verified `[]`), and an optional key `require?: boolean` fails the gate. Exclude only a key position (preceded by `{`/`,`, followed by `\??\s*:`) [src/derive/boundaries.ts:688]
+- [x] [Review][Patch] Template interpolation brace counting ignores strings: `` `${'}' + require('../data/x.ts')}` `` closes the span early and the `require` is blanked (verified `[]`) [src/derive/boundaries.ts:529]
+- [x] [Review][Patch] A class/object method named `import` (`class A { import(p) {} }`) is reported unresolvable and would fail the gate (verified) [src/derive/boundaries.ts:657]
+- [x] [Review][Patch] Excerpt appends `…` when the construct ends exactly at the 120-char cap, though nothing was cut [src/derive/boundaries.ts:649]
+- [x] [Review][Patch] `src/types/` runtime-module failure line names no `file:line`, against "Failure lines name `file:line`" [src/derive/boundaries.ts:869]
+- [x] [Review][Patch] Unread load forms undocumented: member forms (`System.import`, `module.require`, `globalThis.require`, `{ require: r } = globalThis` — all verified `[]`; `System.import` was reported before this change), `eval`/`new Function`, `new Worker('…')`, `import.meta.resolve`, `?url`/`?worker` queries. Name them in the caveat and the deferred entry; root README omits the caveat entirely [src/data/README.md:6]
+- [x] [Review][Patch] Design Notes describe regexes the code does not use (`require` is any reference, not only a call; `import(` excludes members) [spec-3-13 Design Notes]
+- [x] [Review][Patch] Struck deferred-work entries keep stale present-tense bodies and anchors ("nothing stops `render-scene/`…", `src/derive/README.md:24`) [_bmad-output/implementation-artifacts/deferred-work.md:45]
+- [x] [Review][Patch] AC 2's per-row revert proof is unrecorded — revert each new row once and record which test goes red [spec-3-13 Tasks & Acceptance]
+- [x] [Review][Defer] Test-file excuse is `*.test.*` only — `*.spec.*`, `__tests__/` and the planned 3.14 shared test helpers would be governed shipped files [src/derive/boundaries.ts:229] — deferred, pre-existing
+
+**AC 2 revert proof (2026-10-12, code review):** each row reverted once alone, `node --test src/derive/boundaries.test.ts` red every time:
+
+| Row reverted | Goes red |
+|---|---|
+| `derive` `neverPackages` | every package ban the READMEs declare is rejected… |
+| `shell` bans `d3-force-3d` | same |
+| `ROOT_RULE` bans `d3-force-3d` | same |
+| `render-fallback` bans R3F and drei | same |
+| `render-scene` never `render-fallback` | every never edge…; the cross-renderer edge is refused…; the rule table declares no fewer never edges… |
+| `render-fallback` never `render-scene` | same three |
+| `src/types/` declaration-only | a runtime module under src/types/ fails…; …names file and line… |
+| unresolvable fails in shipped files | an unresolvable import fails the gate…; a test file may load a module it cannot name… |
+| test-module import ban | a shipped module may not import a test module…; a test module is refused however… |
+
+
 ## Design Notes
 
-A dynamic import is `dynamic` only when the stripped code after `import(` holds exactly one string literal, followed by `)` or `,`. For a template, the original text must hold no `${`. Anything else is `unresolvable`. `require` matches `(?<![\w$.])require\s*\(`. `createRequire` matches `\bcreateRequire\b`, so an aliased import is still caught.
+A dynamic import matches `(?<![\w$.])import\s*\(`, so a member call (`loader.import(x)`, `System.import(x)`) or a `$`-prefixed name is not one. It is `dynamic` only when the stripped code after `import(` holds exactly one string literal, followed by `)` or `,`. For a template, the original text must hold no `${`. A method *definition* named `import` is skipped: it sits at a member position and its parameters are followed by a body on the same line. Anything else is `unresolvable`. `require` matches any reference, `(?<![\w$.])require(?![\w$])`, not only a call, because `require?.(x)` and `const r = require` load too. A key is excluded (`require:` or `require?:` not preceded by `?`), so a ternary branch still counts. `createRequire` matches `\bcreateRequire\b`, so an aliased import is still caught. Template interpolations are closed by brace depth, skipping strings and comments. The member and string-built forms that are left are listed in `src/data/README.md:6` and in `deferred-work.md`.
 
 ## Verification
 
