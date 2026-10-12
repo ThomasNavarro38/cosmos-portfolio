@@ -2,7 +2,7 @@
 
 Pure pipeline: validate → derive → solve. No DOM, no React, no Three. The single derivation point — `isDeep`, mass, luminance band, Dwell tempo, mote tier, Shot framing, the destination set and the Rail's ordering are computed here exactly once and resolved into the artifact. No renderer re-classifies or re-computes; when a consumer needs a value the artifact lacks, the fix is a schema-plus-derivation change here, never a local computation downstream.
 
-**Imports:** may import from `src/data/`. This is the only directory permitted to. Never `src/tokens/` — derivation is pure and knows nothing of appearance — and never `src/shell/`, `src/render-scene/`, `src/render-fallback/` or `src/colophon/`: derivation runs ahead of the build and must not know what renders its output.
+**Imports:** may import from `src/data/`. This is the only directory permitted to. Never `src/tokens/` — derivation is pure and knows nothing of appearance — and never `src/shell/`, `src/render-scene/`, `src/render-fallback/` or `src/colophon/`: derivation runs ahead of the build and must not know what renders its output. Never `three`, `@react-three/fiber`, `@react-three/drei`, `react` or `react-dom` either, banned by package name — the pipeline's own packages are `d3-force-3d` and `zod`.
 **Imported by:** nothing at runtime — emits `generated/layout.generated.json` ahead of the build, via a separate npm script the build never invokes (AD-1). The artifact is committed; `npm run build` consumes it and the runtime never solves.
 
 ## Files

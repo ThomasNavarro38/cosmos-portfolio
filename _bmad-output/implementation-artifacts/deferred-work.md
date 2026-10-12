@@ -42,21 +42,21 @@ than in the walker.
   `boundaries.test.ts` proves each rejects by mutation. The bans are Three and
   not React: the shell renders the DOM index, so a directory-wide React ban
   would reject `index-nav.tsx`.
-- **No `neverPackages` on the `derive` row** — `src/derive/README.md:24`
+- ~~**No `neverPackages` on the `derive` row**~~ — **closed by story 3.13** (three, R3F, drei, react, react-dom). — `src/derive/README.md:24`
   declares the pipeline carries no DOM, no React and no Three. The row
   [boundaries.ts:127] carries a `never` list of sibling directories and no
   package ban. One line plus a mutation test.
-- **`render-fallback` bans `three` but not `@react-three/fiber`**
+- ~~**`render-fallback` bans `three` but not `@react-three/fiber`**~~ — **closed by story 3.13** (R3F and drei added).
   [boundaries.ts:158] — that package is in `dependencies` and pulls Three in
   transitively, so "never Three on the no-WebGL surface"
   (`src/render-fallback/README.md:5`) is reachable through a package the ban
   does not name. Table content, not a parser gap: `packageOf` handles the
   scoped form correctly.
-- **No rule forbids the cross-renderer edge** — nothing stops `render-scene/`
+- ~~**No rule forbids the cross-renderer edge**~~ — **closed by story 3.13**, both directions, dynamic form included. — nothing stops `render-scene/`
   from statically importing `../render-fallback/`, or the reverse. Verified
   clean today. An edge here would defeat the surface split the two directories
   exist to maintain.
-- **The `UNGOVERNED` exemption for `src/types/` is unasserted**
+- ~~**The `UNGOVERNED` exemption for `src/types/` is unasserted**~~ — **closed by story 3.13**: only `.d.ts`/`.d.mts`/`.d.cts` may live there.
   [boundaries.ts:161] — the directory is exempted wholesale on the stated
   grounds that it holds only ambient declarations. Nothing fails if a runtime
   module is added there, which would make `src/types/` the one place under
@@ -65,8 +65,8 @@ than in the walker.
 
 ## Import boundaries: coverage and scope
 
-- **Computed dynamic specifiers escape when the literal prefix resolves nowhere
-  governed.** Verified live today: both `` import(`../data/${n}.ts`) `` and
+- ~~**Computed dynamic specifiers escape when the literal prefix resolves nowhere
+  governed.**~~ — **closed by story 3.13**: any non-literal `import(...)`, `require` or `createRequire` is unresolvable and fails, outside test files. Verified live today: both `` import(`../data/${n}.ts`) `` and
   `import('../data/' + n)` **are** caught, because their literal prefix still
   resolves into `data`. The residual gap is only `import(base + '/data/x.ts')`,
   which yields no usable specifier at all. The honest fix is to *reject*
@@ -437,7 +437,7 @@ entries below are real but not caused by this story.
   evidence: Story 2.3 added `neverPackages: ['three','@react-three/fiber','@react-three/drei']` to `ROOT_RULE` and the `shell` row, and `render-fallback` already banned `three`. `colophon` appears in both `dynamicOnly` lists but its own row (`src/derive/boundaries.ts`) still carries only `never: ['data']` and `dynamicOnly: ['derive']`. The row predates this story, but the inconsistency is new: every sibling it is listed beside now carries the ban.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
-  summary: `d3-force-3d` is banned in `src/render-scene/` but not on the entry path, though the AD-7 hoist argument is identical.
+  summary: ~~`d3-force-3d` is banned in `src/render-scene/` but not on the entry path, though the AD-7 hoist argument is identical.~~ Closed by story 3.13: `ROOT_RULE` and `shell` ban it.
   evidence: This story's own reasoning for banning Three by package name on `ROOT_RULE` and the `shell` row — that a `dynamicOnly` row stops a reach into a directory and stops nothing about a bare package specifier — applies unchanged to the solver's dependency, which the same diff banned one row below. An `import { forceSimulation } from 'd3-force-3d'` in `App.tsx` passes the gate today.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
@@ -856,3 +856,19 @@ Still open after 3.5:
 
 - `src/derive/artifact.test.ts`: the "checkSource never solves, derives or writes" test scans the source text between `checkSource` and `main`, so an aliased import (`writeFileSync as w`) or a call through an unlisted helper passes. A behavioural check (stubbed `node:fs` writes, or an unchanged mtime) belongs with the 3.14 test infrastructure.
 - `FIXTURE_DIGEST = 'f'.repeat(64)` and its doc comment are copied into `artifact.test.ts`, `artifact-schema.test.ts` and `skills.test.ts`; move it to the 3.14 shared test helpers.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-13-boundary-table-and-boundary-parser-hardening.md`
+  summary: `import.meta.glob(...)` and `new URL(…, import.meta.url)` / `new Worker(new URL(…))` load modules the boundary parser does not read at all.
+  evidence: Story 3.13 made `require`, `createRequire` and computed `import(...)` unresolvable, but these Vite/web forms are neither an import statement nor an `import(` call, so `import.meta.glob('../data/*.json', { eager: true })` in a shipped module passes the gate with no finding (verified by the edge-case review). `src/data/README.md` now says so. A literal glob could be resolved by its prefix; a computed one should be unresolvable.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-13-boundary-table-and-boundary-parser-hardening.md`
+  summary: The gate's entry-path package bans are narrower than the bundle assertion's: `zod` and the `@react-three/*` family beyond fiber/drei are not banned on `ROOT_RULE` or `shell`.
+  evidence: `scripts/bundle-assertion.ts` (story 3.11) bans `@react-three/*` and `zod` on the entry graph, so the build still catches them — but only at bundle time, not at the gate with a `file:line`. `packageOf` cannot express a scope wildcard today; banning `zod` by name is one row entry.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-13-boundary-table-and-boundary-parser-hardening.md`
+  summary: `render-fallback` bans Three by name but not packages that depend on it (`three-stdlib`, `three-mesh-bvh`, `troika-three-text`, installed transitively via drei) or the solver `d3-force-3d`.
+  evidence: The edge-case review noted these are hoisted into `node_modules` and importable. A ban by dependency rather than by name would need the gate to read `package.json` graphs — a design decision, not a row.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-13-boundary-table-and-boundary-parser-hardening.md`
+  summary: A `.tsx` under `src/derive/` using JSX with the automatic runtime would pull in `react/jsx-runtime` with no specifier written, bypassing the derive row's React ban.
+  evidence: No `.tsx` exists under `src/derive/` today. Rejecting `.tsx`/`.jsx` files in a directory whose `neverPackages` include `react` would close it.

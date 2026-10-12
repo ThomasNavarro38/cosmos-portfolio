@@ -77,6 +77,11 @@ function assertRejects(files: Record<string, string>, expected: RegExp, why: str
   return failures;
 }
 
+/** `value` as a pattern matching itself, for failure lines built from fixture names. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+}
+
 /** Asserts the check accepts `files` outright. */
 function assertAccepts(files: Record<string, string>, why: string): void {
   const failures = checkImportBoundaries(treeOf(files));
@@ -169,6 +174,10 @@ const DECLARED_NEVER_EDGES: ReadonlyArray<readonly [string, string]> = [
   ['render-fallback', 'data'],
   ['render-fallback', 'derive'],
   ['colophon', 'data'],
+  // The two surfaces are alternatives, chosen at runtime by capability: an edge
+  // between them would load one inside the other and defeat the split.
+  ['render-scene', 'render-fallback'],
+  ['render-fallback', 'render-scene'],
 ];
 
 test('every never edge the architecture declares is rejected', () => {
@@ -781,6 +790,255 @@ test('the count summary is appended last and only when something failed', () => 
   assert.match(last, /violations across/, 'the summary comes last');
   assert.equal(failures.length, 3, 'two violations plus one summary');
   assert.deepEqual(checkImportBoundaries(treeOf({ 'derive/x.ts': 'export const x = 1;\n' })), []);
+});
+
+// --- Package bans declared by name --------------------------------------------
+
+/**
+ * Every package ban the READMEs declare, written out independently of the table
+ * for the reason `DECLARED_NEVER_EDGES` gives: a loop over the rows can only
+ * prove the rows agree with themselves.
+ */
+const DECLARED_PACKAGE_BANS: ReadonlyArray<readonly [string, string]> = [
+  // `src/derive/README.md:3` — no React, no Three.
+  ['derive/probe.ts', 'three'],
+  ['derive/probe.ts', '@react-three/fiber'],
+  ['derive/probe.ts', '@react-three/drei'],
+  ['derive/probe.ts', 'react'],
+  ['derive/probe.ts', 'react-dom'],
+  // The entry path: the 3D packages and the solver hoist onto the entry chunk alike.
+  ['App.tsx', 'three'],
+  ['App.tsx', '@react-three/fiber'],
+  ['App.tsx', '@react-three/drei'],
+  ['App.tsx', 'd3-force-3d'],
+  ['shell/probe.ts', 'three'],
+  ['shell/probe.ts', '@react-three/fiber'],
+  ['shell/probe.ts', '@react-three/drei'],
+  ['shell/probe.ts', 'd3-force-3d'],
+  // The no-WebGL surface: the React bindings pull Three in transitively.
+  ['render-fallback/probe.ts', 'three'],
+  ['render-fallback/probe.ts', '@react-three/fiber'],
+  ['render-fallback/probe.ts', '@react-three/drei'],
+  ['render-scene/probe.ts', 'd3-force-3d'],
+];
+
+test('every package ban the READMEs declare is rejected, and a subpath does not escape it', () => {
+  for (const [file, pkg] of DECLARED_PACKAGE_BANS) {
+    const where = new RegExp(`${escapeRegExp(file)}:1 .*must never import ${escapeRegExp(pkg)}\\.`);
+    assertRejects({ [file]: `import { x } from '${pkg}';\n` }, where, `${file} must not import ${pkg}`);
+    assertRejects({ [file]: `import { x } from '${pkg}/sub';\n` }, where, `${file} must not import ${pkg}/sub`);
+  }
+});
+
+test('the derive row bans no package the pipeline itself needs', () => {
+  assertAccepts(
+    { 'derive/solve.ts': "import { forceSimulation } from 'd3-force-3d';\nimport { z } from 'zod';\nimport { readFileSync } from 'node:fs';\n" },
+    'the solver and the schema library are the pipeline’s own dependencies',
+  );
+});
+
+test('the cross-renderer edge is refused in either direction, dynamic form included', () => {
+  for (const [from, to] of [
+    ['render-scene', 'render-fallback'],
+    ['render-fallback', 'render-scene'],
+  ] as const) {
+    assertRejects(
+      { [`${from}/x.ts`]: `const m = await import('../${to}/y.ts');\n` },
+      new RegExp(`${from}/x\\.ts:1 .*must never import src/${to}/`),
+      `a dynamic import does not license src/${from}/ → src/${to}/`,
+    );
+  }
+});
+
+// --- src/types/ holds ambient declarations only ------------------------------
+
+test('a runtime module under src/types/ fails, wherever it sits and whatever it imports', () => {
+  for (const file of ['types/probe.ts', 'types/probe.tsx', 'types/probe.mjs', 'types/nested/probe.ts']) {
+    const failures = assertRejects(
+      { [file]: "import c from '../data/career.json';\n" },
+      new RegExp(`src/${escapeRegExp(file)} .*declaration`),
+      `${file} would be the one module the src/data/ ban does not reach`,
+    );
+    assert.match(failures[failures.length - 1] ?? '', /^1 import-boundary violation across/, failures.join('\n'));
+  }
+  assertRejects({ 'types/empty.ts': 'export {};\n' }, /src\/types\/empty\.ts/, 'an import-free runtime module still does not belong');
+});
+
+test('an ambient declaration file under src/types/ is accepted', () => {
+  assertAccepts(
+    {
+      'types/css.d.ts': "declare module '*.css';\n",
+      'types/pkg.d.mts': "declare module 'pkg' { export const x: number; }\n",
+      'types/pkg.d.cts': 'export {};\n',
+    },
+    'src/types/ exists for ambient declarations',
+  );
+});
+
+// --- What the parser cannot resolve ------------------------------------------
+
+test('require, createRequire and a computed import() are found as unresolvable', () => {
+  const cases: ReadonlyArray<readonly [string, string]> = [
+    ["const s = require('../data/schema.ts');\n", 'require('],
+    ["import s = require('../data/schema.ts');\n", 'require('],
+    ["const r = createRequire(import.meta.url);\n", 'createRequire'],
+    ["import { createRequire as cr } from 'node:module';\n", 'createRequire'],
+    ["const p = '../data/schema.ts';\nconst m = await import(p);\n", 'import(p)'],
+    ["const m = await import('../data/' + n);\n", "import('../data/' + n)"],
+    ['const m = await import(`../${dir}/x.ts`);\n', 'import(`../${dir}/x.ts`)'],
+    ['const m = await import(`${base}`);\n', 'import(`${base}`)'],
+  ];
+  for (const [source, excerpt] of cases) {
+    const unresolvable = findImports(source).filter((f) => f.kind === 'unresolvable');
+    assert.equal(unresolvable.length, 1, `${JSON.stringify(source)} must yield one unresolvable finding: ${JSON.stringify(findImports(source))}`);
+    assert.ok(unresolvable[0]!.specifier.includes(excerpt), `the excerpt names what was written: ${unresolvable[0]!.specifier}`);
+    assert.equal(unresolvable[0]!.line, source.split('\n').length - 1, 'on the line it was written');
+  }
+});
+
+test('a literal import() stays dynamic, in every form it is written', () => {
+  const cases = [
+    "const m = await import('../render-scene/y.ts');\n",
+    'const m = await import("../render-scene/y.ts");\n',
+    'const m = await import(`../render-scene/y.ts`);\n',
+    "const m = await import('../render-scene/y.ts', { with: { type: 'json' } });\n",
+    "const m = await import(\n  '../render-scene/y.ts'\n);\n",
+    "const m = await import( '../render-scene/y.ts' );\n",
+  ];
+  for (const source of cases) {
+    const found = findImports(source);
+    assert.deepEqual(
+      found.map((f) => [f.specifier, f.kind]),
+      [['../render-scene/y.ts', 'dynamic']],
+      `${JSON.stringify(source)} is a literal dynamic import`,
+    );
+  }
+});
+
+test('require, createRequire and import(p) mentioned rather than written are not findings', () => {
+  const source = [
+    "// const s = require('../data/schema.ts'); createRequire; import(p)",
+    "/* require('x') createRequire(import.meta.url) import(p) */",
+    "const a = \"require('x') createRequire import(p)\";",
+    'const b = `require("x") import(p)`;',
+    "const c = loader.require('x');",
+    "const d = myrequire('x');",
+    'const e = requireAll;',
+    "const f = loader.import('x' + y);",
+    "const g = $import(p);",
+    "const h = { require: 1 };",
+    "const i = `${'require(x)'} ${\"import(p)\"}`;",
+    "const j = `${/* require(x) */ 1}`;",
+    '',
+  ].join('\n');
+  assert.deepEqual(findImports(source), [], JSON.stringify(findImports(source)));
+});
+
+test('an unresolvable import fails the gate in every governed file, naming file, line and what was written', () => {
+  for (const file of ['shell/entry.ts', 'derive/x.ts', 'tokens/x.ts', 'App.tsx', 'render-scene/x.ts']) {
+    const failures = assertRejects(
+      { [file]: "export const x = 1;\nconst m = require('./y.ts');\n" },
+      new RegExp(`${escapeRegExp(file)}:2 .*require\\('\\./y\\.ts'\\).*cannot resolve`),
+      `${file} must not hide an import behind require`,
+    );
+    assert.match(failures[failures.length - 1] ?? '', /^1 import-boundary violation across/, failures.join('\n'));
+  }
+  assertRejects(
+    { 'colophon/panel.ts': "const which = 'index';\nconst p = await import(`../derive/${which}.ts`);\n" },
+    /colophon\/panel\.ts:2 .*cannot resolve/,
+    'even an edge the README permits dynamically must be written as a literal',
+  );
+});
+
+test('a test file may load a module it cannot name, but is still held to every literal rule', () => {
+  // `solve.test.ts` loads mutants generated at run time. A test file never ships,
+  // so its unresolvable loads are excused — and only those: the same content in a
+  // shipped module fails, and a literal forbidden edge in a test still fails.
+  const computed = "const m = await import(pathToFileURL(path).href);\nconst r = require('./y.ts');\n";
+  for (const name of ['derive/solve.test.ts', 'shell/x.test.tsx', 'App.test.ts']) {
+    assertAccepts({ [name]: computed }, `${name} is not shipped`);
+  }
+  assertRejects({ 'derive/solve.ts': computed }, /derive\/solve\.ts:1 .*cannot resolve/, 'a shipped module is not excused');
+  assertRejects({ 'derive/solve.test.tsx.ts': computed }, /cannot resolve/, 'only a real test suffix is excused');
+  assertRejects(
+    { 'shell/x.test.ts': "import { s } from '../data/schema.ts';\n" },
+    /shell\/x\.test\.ts:1 .*must never import src\/data\//,
+    'a test is still held to the literal rules',
+  );
+});
+
+test('require referenced rather than called is still unresolvable', () => {
+  for (const source of ["const m = require?.('../data/x.ts');\n", 'const r = require;\n']) {
+    assert.deepEqual(
+      findImports(source).map((f) => f.kind),
+      ['unresolvable'],
+      `${JSON.stringify(source)} loads through require`,
+    );
+  }
+});
+
+test('a comment inside import(...) neither hides a computed specifier nor spoils a literal one', () => {
+  assert.deepEqual(
+    findImports('const m = await import(/* @vite-ignore */ p);\n').map((f) => f.kind),
+    ['unresolvable'],
+    '@vite-ignore is what a computed import usually carries',
+  );
+  assert.deepEqual(
+    findImports("const m = await import(/* webpackChunkName: \"x\" */ '../render-scene/y.ts');\n").map((f) => [f.specifier, f.kind]),
+    [['../render-scene/y.ts', 'dynamic']],
+  );
+});
+
+test('findings come back in the file’s order, by line and then by column', () => {
+  const source = [
+    "import { a } from '../data/a.ts';",
+    "const b = require('./b.ts'); const c = await import(p);",
+    "const d = await import('../render-scene/d.ts');",
+    "import { e } from './e.ts';",
+    '',
+  ].join('\n');
+  assert.deepEqual(
+    findImports(source).map((f) => [f.line, f.kind]),
+    [
+      [1, 'static'],
+      [2, 'unresolvable'],
+      [2, 'unresolvable'],
+      [3, 'dynamic'],
+      [4, 'static'],
+    ],
+  );
+  assert.match(findImports(source)[1]!.specifier, /^require/, 'the require precedes the import(p) on its line');
+});
+
+test('the unresolvable excerpt is one line, bounded, and quotes only the construct', () => {
+  const multiline = findImports("const m = require(\n  './x.ts'\n);\n");
+  assert.equal(multiline[0]?.specifier, "require( './x.ts' )", 'whitespace is collapsed onto one line');
+
+  const long = findImports(`const m = require('${'a'.repeat(300)}');\n`);
+  assert.ok(long[0]!.specifier.length <= 121, `the excerpt is capped: ${long[0]!.specifier.length}`);
+  assert.ok(long[0]!.specifier.endsWith('…'), 'and says it was cut');
+
+  assert.equal(findImports("const m = require(')' + x);\n")[0]?.specifier, "require(')' + x)", 'a parenthesis in a string does not end it');
+  assert.equal(findImports('use(createRequire);\nconst after = 1;\n')[0]?.specifier, 'createRequire', 'an enclosing parenthesis ends it');
+
+  const failures = checkImportBoundaries(treeOf({ 'shell/x.ts': "const m = require(\n  './x.ts'\n);\n" }));
+  assert.ok(failures.every((line) => !line.includes('\n')), `every failure is one line\n${failures.join('\n')}`);
+});
+
+test('a shipped module may not import a test module, which would ship what tests are excused for', () => {
+  for (const specifier of ['./x.test.ts', './x.test', '../derive/solve.test.ts']) {
+    assertRejects(
+      { 'shell/entry.ts': `import { x } from '${specifier}';\n` },
+      new RegExp(`shell/entry\\.ts:1 .*${escapeRegExp(specifier)}.*test module`),
+      `${specifier} from a shipped module`,
+    );
+  }
+  assertAccepts({ 'shell/a.test.ts': "import { x } from './b.test.ts';\n" }, 'a test may share a fixture with another test');
+});
+
+test('a declaration file under src/types/ is not judged, even when it names src/data/', () => {
+  // Ambient declarations are type-level and never loaded: what the exemption is for.
+  assertAccepts({ 'types/career.d.ts': "declare module 'career' { export type C = import('../data/schema.ts').Career; }\n" }, 'type-level only');
 });
 
 // --- Purity ------------------------------------------------------------------
