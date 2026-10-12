@@ -46,12 +46,22 @@ export const SRC_ROOT = fileURLToPath(new URL('..', import.meta.url));
  * (AD-7), which is the failure the rule exists to prevent. A checker that saw
  * only "shell imports render-scene" could not tell the permitted edge from the
  * forbidden one.
+ *
+ * `unresolvable` is a module load the scan can see but cannot read a specifier
+ * from: `require(...)`, any `createRequire`, and an `import(...)` whose argument
+ * is not one string literal. Each could reach `src/data/` with no rule able to
+ * say so, and silence is the one failure this module treats as worse than no
+ * gate — so it is reported, and every governed file fails on it.
  */
-export type ImportKind = 'static' | 'dynamic';
+export type ImportKind = 'static' | 'dynamic' | 'unresolvable';
 
 /** One import found in one file: what was written, where, and how. */
 export interface FoundImport {
-  /** The specifier exactly as authored — `'../data/schema.ts'`, `'three'`. */
+  /**
+   * The specifier exactly as authored — `'../data/schema.ts'`, `'three'`. For an
+   * `unresolvable` import there is no specifier to read, so this holds the
+   * construct as written instead — `import(p)`, `require('./x.ts')`.
+   */
   readonly specifier: string;
   /** 1-based, so a failure line names something an editor can jump to. */
   readonly line: number;
@@ -135,6 +145,11 @@ export const BOUNDARY_RULES: readonly BoundaryRule[] = [
     // consumer directory: derivation runs ahead of the build and must not know
     // what renders its output.
     never: ['tokens', 'shell', 'render-scene', 'render-fallback', 'colophon'],
+    // `src/derive/README.md:3` declares "No DOM, no React, no Three". The `never`
+    // list stops the module edges and nothing about a bare specifier, so the
+    // packages are banned by name. `d3-force-3d` and `zod` are absent on purpose:
+    // they are the solver and the schema, the pipeline's own dependencies.
+    neverPackages: ['three', '@react-three/fiber', '@react-three/drei', 'react', 'react-dom'],
   },
   {
     directory: 'shell',
@@ -151,7 +166,11 @@ export const BOUNDARY_RULES: readonly BoundaryRule[] = [
     // directory-wide React ban would reject `index-nav.tsx`. The README's sentence
     // is about `entry.ts`; what is enforceable per directory is the half that
     // holds for every file in it.
-    neverPackages: ['three', '@react-three/fiber', '@react-three/drei'],
+    //
+    // `d3-force-3d` for the same reason, one package over: the README's AD-7
+    // sentence keeps the solver off the entry path, and a bare import of the
+    // solver's own dependency is that hoist without touching `src/derive/`.
+    neverPackages: ['three', '@react-three/fiber', '@react-three/drei', 'd3-force-3d'],
   },
   {
     directory: 'colophon',
@@ -162,7 +181,11 @@ export const BOUNDARY_RULES: readonly BoundaryRule[] = [
   {
     directory: 'render-scene',
     source: 'src/render-scene/README.md:5',
-    never: ['data', 'derive'],
+    // `render-fallback` because the two surfaces are alternatives the shell
+    // chooses between at runtime: an edge would load one inside the other and
+    // defeat the split both READMEs exist to maintain. Banned in both kinds — a
+    // dynamic import still pulls the other surface's chunk in.
+    never: ['data', 'derive', 'render-fallback'],
     // `src/render-scene/README.md:3` declares the directory "contains no
     // classification test and no data-to-visual mapping — those live in
     // `src/derive/`". The `never: ['derive']` row stops the module edge; this stops
@@ -183,8 +206,11 @@ export const BOUNDARY_RULES: readonly BoundaryRule[] = [
   {
     directory: 'render-fallback',
     source: 'src/render-fallback/README.md:5',
-    never: ['data', 'derive'],
-    neverPackages: ['three'],
+    never: ['data', 'derive', 'render-scene'],
+    // The React bindings are banned beside `three` itself: both are in
+    // `dependencies` and pull Three in transitively, so "never Three" reachable
+    // through a package the ban does not name would be no ban.
+    neverPackages: ['three', '@react-three/fiber', '@react-three/drei'],
   },
 ];
 
@@ -192,9 +218,21 @@ export const BOUNDARY_RULES: readonly BoundaryRule[] = [
  * Directories under `src/` that carry no boundary rule and are not expected to.
  *
  * `types/` holds ambient declarations for an untyped dependency — no runtime
- * import reaches it and no README declares it a layer.
+ * import reaches it and no README declares it a layer. The exemption holds for
+ * declaration files only (`AMBIENT_DECLARATION`): a runtime module placed there
+ * would otherwise be the one file under `src/` the `src/data/` ban does not
+ * reach, so `checkImportBoundaries` fails it instead of skipping it.
  */
 const UNGOVERNED = new Set(['types']);
+
+/** A test module, which `npm test` runs and no bundle contains. */
+const TEST_FILE = /\.test\.(?:[mc]?[jt]s|[jt]sx)$/;
+
+/** A relative specifier naming a test module, extension written or not. */
+const TEST_SPECIFIER = /^\..*\.test(?:\.(?:[mc]?[jt]s|[jt]sx))?$/;
+
+/** A declaration file — the only thing an `UNGOVERNED` directory may hold. */
+const AMBIENT_DECLARATION = /\.d\.[mc]?ts$/;
 
 /**
  * Characters after which a `/` opens a regex literal rather than dividing.
@@ -261,8 +299,9 @@ export const ROOT_RULE: BoundaryRule = {
   dynamicOnly: ['render-scene', 'render-fallback', 'colophon'],
   // And by package name, for the reason the `shell` row states: a `dynamicOnly` row
   // stops a reach into a directory and stops nothing about a bare specifier. Three
-  // in `App.tsx` is the same hoist reached by the other door.
-  neverPackages: ['three', '@react-three/fiber', '@react-three/drei'],
+  // in `App.tsx` is the same hoist reached by the other door. `d3-force-3d` is
+  // the solver's dependency, which the same sentence keeps off the entry path.
+  neverPackages: ['three', '@react-three/fiber', '@react-three/drei', 'd3-force-3d'],
 };
 
 /**
@@ -474,6 +513,8 @@ function strip(source: string, keepLiterals: boolean): string {
  * `export ... from 's'` (a re-export is an import for boundary purposes — it puts
  * the module on the graph exactly the same way), `import('s')`, and
  * `import.meta` — which is *not* an import and must not be matched as one.
+ * Beyond those, `require(...)`, `createRequire` and an `import(...)` of anything
+ * but one string literal are reported as `unresolvable` rather than dropped.
  *
  * The scan runs over stripped source, so a specifier found here was authored as
  * an import rather than mentioned in a comment or a string.
@@ -505,8 +546,10 @@ function maskTemplateText(contents: string): string {
       else if (char === '}') depth -= 1;
       scan += 1;
     }
-    // `${` and the closing `}` are punctuation, not code: keep the span between.
-    out += '  ' + contents.slice(at + 2, depth === 0 ? scan - 1 : scan) + (depth === 0 ? ' ' : '');
+    // `${` and the closing `}` are punctuation, not code: keep the span between —
+    // stripped in turn, so a string or comment inside it (`${'require(x)'}`) is
+    // blanked like any other rather than read as code.
+    out += '  ' + strip(contents.slice(at + 2, depth === 0 ? scan - 1 : scan), false) + (depth === 0 ? ' ' : '');
     index = scan;
   }
   return out;
@@ -550,6 +593,13 @@ export function findImports(source: string): FoundImport[] {
   // actually says from the source, which the stripping has blanked.
   const code = stripCommentsAndStrings(source);
   const found: FoundImport[] = [];
+  // Where each finding starts, so the result can be put in the file's order —
+  // line *and* column — after three scans have appended in their own.
+  const offsets = new Map<FoundImport, number>();
+  const add = (offset: number, finding: FoundImport): void => {
+    found.push(finding);
+    offsets.set(finding, offset);
+  };
 
   /** The 1-based line the given offset falls on. */
   const lineAt = (offset: number): number => {
@@ -566,14 +616,86 @@ export function findImports(source: string): FoundImport[] {
     return source.slice(open, close);
   };
 
+  /**
+   * The construct as authored from `start`, for a failure line to quote: up to
+   * the parenthesis that closes the first one opened, or the bare identifier
+   * when none follows. Whitespace is collapsed and the result capped, because a
+   * multi-line call quoted verbatim would break the one-line failure convention.
+   *
+   * The structure is read from the stripped `code`, so a parenthesis inside a
+   * string argument (`require(')')`) does not move the end; only the quoted text
+   * comes from `source`.
+   */
+  const EXCERPT_CAP = 120;
+  const excerptAt = (start: number): string => {
+    let depth = 0;
+    let end = start;
+    while (end < code.length && end - start < EXCERPT_CAP) {
+      const char = code[end] as string;
+      if (char === '(') depth += 1;
+      else if (char === ')') {
+        // A `)` closing something opened before the construct — `use(createRequire)`
+        // — ends it rather than running on to the cap.
+        if (depth === 0) break;
+        depth -= 1;
+      } else if (depth === 0 && !/[\w$]/.test(char)) {
+        // `import (p)` spaces its parenthesis; any other break ends the name.
+        if (!/\s/.test(char) || !/^\s*\(/.test(code.slice(end))) break;
+      }
+      end += 1;
+      if (depth === 0 && char === ')') break;
+    }
+    const excerpt = source.slice(start, end).replace(/\s+/g, ' ').trim();
+    return end - start >= EXCERPT_CAP ? `${excerpt}…` : excerpt;
+  };
+
   // `import(` / `import (`, but never `import.meta` and never a bare `import x`.
-  const dynamic = /\bimport\s*\(\s*(['"`])[^'"`]*\1/g;
+  // Dynamic only when the argument is exactly one string literal followed by `)`
+  // or the options `,` — anything else names a module the rules cannot judge.
+  // Not a member call (`loader.import(x)`) or an identifier ending in `import`,
+  // the same exclusion the `require` scan makes.
+  const dynamic = /(?<![\w$.])import\s*\(\s*/g;
   for (let match = dynamic.exec(code); match !== null; match = dynamic.exec(code)) {
-    found.push({
-      specifier: specifierAt(match.index, match[0]),
-      line: lineAt(match.index),
-      kind: 'dynamic',
-    });
+    const open = match.index + match[0].length;
+    const quote = code[open];
+    let literal = false;
+    let specifier = '';
+    if (quote === "'" || quote === '"' || quote === '`') {
+      // Stripping blanked the literal's body, so the next same quote in `code`
+      // closes it — except in a template, where an interpolation's code survives
+      // and may hold quotes of its own. A `${` in the authored text rules the
+      // template out before that can matter, and a template without one has a
+      // fully blanked body like any other string.
+      const close = code.indexOf(quote, open + 1);
+      if (close !== -1) {
+        specifier = source.slice(open + 1, close);
+        const after = /^\s*([),])/.exec(code.slice(close + 1));
+        literal = after !== null && !(quote === '`' && specifier.includes('${'));
+      }
+    }
+    add(
+      match.index,
+      literal
+        ? { specifier, line: lineAt(match.index), kind: 'dynamic' }
+        : { specifier: excerptAt(match.index), line: lineAt(match.index), kind: 'unresolvable' },
+    );
+  }
+
+  // `require` — CommonJS, and TypeScript's `import x = require(...)`. Any
+  // reference, not only a direct call: `require?.('x')` and `const r = require`
+  // load through it just the same. Not a member (`loader.require`), not an
+  // identifier merely containing it, and not an object key (`{ require: x }`).
+  const required = /(?<![\w$.])require(?![\w$])(?!\s*:)/g;
+  for (let match = required.exec(code); match !== null; match = required.exec(code)) {
+    add(match.index, { specifier: excerptAt(match.index), line: lineAt(match.index), kind: 'unresolvable' });
+  }
+
+  // Any `createRequire` at all, not only a call: an aliased import
+  // (`import { createRequire as cr }`) makes the call site unrecognisable, so the
+  // name is caught where it is still spelled out.
+  const created = /\bcreateRequire\b/g;
+  for (let match = created.exec(code); match !== null; match = created.exec(code)) {
+    add(match.index, { specifier: excerptAt(match.index), line: lineAt(match.index), kind: 'unresolvable' });
   }
 
   // A static `import`/`export` with a `from`, plus the side-effect `import 's'`.
@@ -585,14 +707,15 @@ export function findImports(source: string): FoundImport[] {
     // `import(` was already claimed above; matching it again would report one
     // dynamic import as both kinds and fail a dynamic-only edge that is legal.
     if (/\bimport\s*\(/.test(match[0])) continue;
-    found.push({
+    add(match.index, {
       specifier: specifierAt(match.index, match[0]),
       line: lineAt(match.index),
       kind: 'static',
     });
   }
 
-  return found;
+  // Four scans append in their own order; a reader wants the file's.
+  return found.sort((a, b) => (offsets.get(a) ?? 0) - (offsets.get(b) ?? 0));
 }
 
 /**
@@ -727,6 +850,21 @@ export function checkImportBoundaries(root: string = SRC_ROOT): string[] {
     const atRoot = !rel.includes(sep);
     const directory = atRoot ? '' : segment;
     if (directory === undefined) continue;
+
+    // An ungoverned directory is exempt for declaration files only. Anything
+    // else there is a module no rule reads — so it fails here, whatever it
+    // imports, rather than being skipped as the exemption once allowed.
+    if (UNGOVERNED.has(directory)) {
+      if (AMBIENT_DECLARATION.test(file)) continue;
+      scanned += 1;
+      violations += 1;
+      failures.push(
+        `${displayPath(root, file)} is a runtime module, but src/${directory}/ is exempt from the import ` +
+          `boundaries only for ambient declarations (.d.ts, .d.mts, .d.cts) — move it into a governed directory.`,
+      );
+      continue;
+    }
+
     const rule = atRoot ? ROOT_RULE : byDirectory.get(directory);
     if (rule === undefined) continue;
 
@@ -739,6 +877,34 @@ export function checkImportBoundaries(root: string = SRC_ROOT): string[] {
 
     for (const found of findImports(readFileSync(file, 'utf8'))) {
       const { specifier, line, kind } = found;
+
+      if (kind === 'unresolvable') {
+        // A test file is excused: no bundle contains it, so a load the scan
+        // cannot read reaches neither the entry chunk nor a shipped `src/data/`
+        // edge — and a mutation test must load a module generated at run time,
+        // which no literal can name. Its literal imports are still judged below.
+        if (TEST_FILE.test(file)) continue;
+        // No rule can be evaluated against a specifier the scan cannot read, so
+        // the import is refused outright — in every governed shipped file,
+        // including one that may legitimately reach the module it names.
+        violations += 1;
+        failures.push(
+          `${where}:${line} loads a module through "${specifier}", whose specifier the gate cannot resolve — ` +
+            `write it as an import or import(...) with a string-literal specifier so the boundary rules can judge it.`,
+        );
+        continue;
+      }
+
+      // The test-file excuse above holds only while no bundle contains a test
+      // file — which a shipped module importing one would quietly end.
+      if (!TEST_FILE.test(file) && TEST_SPECIFIER.test(specifier)) {
+        violations += 1;
+        failures.push(
+          `${where}:${line} imports "${specifier}", a test module — a shipped module may not import one, ` +
+            `or a load the gate excuses in tests would ship with it.`,
+        );
+        continue;
+      }
 
       const target = targetDirectoryOf(file, specifier, root);
 

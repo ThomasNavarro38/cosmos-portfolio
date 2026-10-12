@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 10-12-2026 14:37
+last_updated: 10-12-2026 16:05
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -72,7 +72,7 @@ development_status:
   3-10-ci-pipeline-and-packaging-enforcement: done
   3-11-the-bundle-assertion-over-bundler-output: done
   3-12-data-validation-on-the-build-path-and-the-gate-s-content-che: done
-  3-13-boundary-table-and-boundary-parser-hardening: backlog
+  3-13-boundary-table-and-boundary-parser-hardening: review
   3-14-test-infrastructure: backlog
   3-15-navigation-and-panel-correctness-fixes: backlog
   3-16-scene-colour-management: backlog
@@ -161,14 +161,21 @@ action_items:
     action: "Close the boundary-table gaps: neverPackages on shell/ROOT_RULE/derive,
       R3F on render-fallback, cross-renderer edge, narrow src/types exemption to .d.ts"
     owner: "Thomas"
-    status: in-progress
+    status: done
+    resolution: "2026-10-12: story 3.13 — derive bans three/R3F/drei/react/react-dom, ROOT_RULE
+      and shell add d3-force-3d, render-fallback adds R3F and drei, render-scene and
+      render-fallback never import each other, a non-declaration file under src/types/
+      fails; each pinned by a mutation test"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-7-boundary-parser-loud"
     epic: 1
     action: "Make the boundary parser fail loudly on require/createRequire and non-literal
       dynamic import specifiers"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-12: story 3.13 — findImports reports require, createRequire and a
+      non-literal import() as unresolvable; every governed non-test file fails on one;
+      src/data/README.md narrowed to literal specifiers"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-8-constrain-empty-cases"
     epic: 1
