@@ -1529,6 +1529,233 @@ So that the highest-variance launch blocker is verified rather than assumed fini
 **When** every shipped colour value is inspected
 **Then** not one carries a hue — no accent, no status colour, no syntax highlight, no hover tint
 
+**Remediation note (added 2026-10-12).** Stories 3.10–3.19 schedule the open action items of the Epic 1, 2 and 3 retrospectives (`sprint-status.yaml` `action_items`), per `epic-2-retro-item-6` and `epic-3-retro-item-7`. Epic 3's retrospective verdict is **rejected**; the epic is not counted as passing until these land and it is re-judged. All of them precede Story 4.1. Three items stay as action items rather than stories because they are not code: `epic-2-retro-item-5` (review story 2.10), `epic-3-retro-item-1` (the P1–P4 protocols, run by Thomas), and the two process items this scheduling closes.
+
+### Story 3.10: CI pipeline and packaging enforcement
+
+As Thomas the maintainer,
+I want the test suite, typecheck and gate to run on every push, and the pinned stack enforced rather than declared,
+So that the drift guard, determinism test and ratchets stop depending on my recall.
+
+Closes `epic-1-retro-item-1`, `-12`, `-13`.
+
+**Acceptance Criteria:**
+
+**Given** a push to any branch
+**When** CI runs
+**Then** `npm test`, `npm run typecheck` and `npm run gate` all run, and any failure fails the run
+
+**Given** the pinned stack (AC 1.1)
+**When** `npm run gate` runs
+**Then** a `check:pins` step fails on any dependency not pinned to an exact version
+**And** `.npmrc` carries `engine-strict=true` and `package.json` carries a `packageManager` field
+
+**Given** `zod` is build-time only
+**When** the dependency list is inspected
+**Then** `zod` sits in `devDependencies`, the entry chunk does not reach it, and the epic spec's pinned-stack list records it
+
+### Story 3.11: The bundle assertion over bundler output
+
+As Thomas the maintainer,
+I want the build to fail when the entry chunk reaches Three, the solver or `src/data/`, or exceeds its byte budget,
+So that the thin entry Story 4.1 depends on is enforced by the bundler, not only by the import gate.
+
+Closes `epic-1-retro-item-5` (Story 1.8 AC group 2). Prerequisite for AC 4.1 #2.
+
+**Acceptance Criteria:**
+
+**Given** `vite build` emits its chunks
+**When** a `generateBundle` plugin walks the entry chunk's module graph
+**Then** the build fails if the graph reaches `three`, `@react-three/*`, `d3-force-3d`, `src/derive/` or `src/data/`
+**And** the failure names the offending module and the import chain to it
+
+**Given** a declared byte budget for the entry chunk
+**When** the entry chunk exceeds it
+**Then** the build fails naming the measured size and the budget
+
+**Given** the assertion must be shown to bite
+**When** a test injects a static import of `three` into the entry
+**Then** the assertion fails, and removing the import makes it pass
+
+### Story 3.12: Data validation on the build path and the gate's content checks
+
+As Thomas the maintainer,
+I want `npm run build` to refuse data that `npm run validate` rejects, and the gate to re-assert the artifact's content invariants,
+So that no hand-edit or drift between `career.json` and the artifact ships silently.
+
+Closes `epic-1-retro-item-2`, `-3`, `-4`, `-8`, `-9`, `story-2-1-review-item-1-rail-sequence-ungated`.
+
+**Acceptance Criteria:**
+
+**Given** `career.json` fails `npm run validate`
+**When** `npm run build` runs
+**Then** the build fails before `vite build`
+
+**Given** the schema bounds `asOf` and the empty cases
+**When** `asOf` precedes any `duration.start`, or `projects`, `clients`, `destinations`, `dwell` or `shots` is empty
+**Then** validation fails naming the field
+
+**Given** the artifact carries a `sourceDigest` (sha256 of `career.json`)
+**When** `career.json` changes without a re-solve
+**Then** the gate fails naming the digest mismatch
+
+**Given** the gate re-asserts the artifact alone (AD-1)
+**When** a Project's `clientId` disagrees with its carrying Client, `isDeep` disagrees with `content.notable`, a Client owns no Projects, two Bodies share coordinates, or `rail` is the correct set in the wrong order
+**Then** the gate fails naming the case, and each case has a mutation test
+
+**Given** two differently spelled Clients fold to one slug
+**When** the pipeline runs
+**Then** it warns naming both spellings, and the deliberate fold still applies
+
+### Story 3.13: Boundary table and boundary parser hardening
+
+As Thomas the maintainer,
+I want every boundary the READMEs declare to be a gate row, and the parser to refuse what it cannot resolve,
+So that an unenforced boundary or an unreadable import cannot pass as clean.
+
+Closes `epic-1-retro-item-6` (in progress), `-7`.
+
+**Acceptance Criteria:**
+
+**Given** the remaining boundary-table gaps
+**When** the gate runs
+**Then** `ROOT_RULE` and the `derive` row ban the renderer and solver packages, `render-fallback` bans `@react-three/fiber` and `@react-three/drei`, the cross-renderer edge is forbidden, and the `src/types/` exemption covers only `.d.ts`
+**And** each row has a mutation test
+
+**Given** a `require`, a `createRequire`, or a non-literal dynamic-import specifier
+**When** the boundary parser reads it
+**Then** the gate reports it as unresolvable and fails, rather than passing silently
+**And** `src/data/README.md` narrows its absolute claim to literal specifiers
+
+### Story 3.14: Test infrastructure
+
+As Thomas the maintainer,
+I want one sanctioned home for test utilities, mutants written outside the tree, and the derive tests' verification gaps closed,
+So that test scans stop racing each other and the multi-Client path is exercised for real.
+
+Closes `epic-2-retro-item-9` (in progress), `epic-3-retro-item-4`, `epic-1-retro-item-10`, `-11`.
+
+**Acceptance Criteria:**
+
+**Given** test utilities have a sanctioned home
+**When** the suite is inspected
+**Then** one directory walker and one single-pass comment/string stripper exist, the seven walkers are collapsed onto them, and the renderer scans are parameterised over the directory
+
+**Given** a test writes a mutant source file
+**When** it runs
+**Then** the mutant is written under `os.tmpdir()`, never beside `solve.test.ts` or anywhere a tree scan reads
+
+**Given** a verification-gap pass over `src/derive/*.test.ts`
+**When** it completes
+**Then** its findings are recorded, and the multi-Client cross-process comparison lead is either closed by a test or recorded as accepted
+
+**Given** a new Client is appended (not a Project to an existing one)
+**When** the maintenance test re-solves
+**Then** `dwell` and `shots` each grow by one, `destinations` by two, the new Shot contains its own widest orbit, and no existing Client's tempo or framing moves
+
+### Story 3.15: Navigation and panel correctness fixes
+
+As a visitor,
+I want refocusing, closing the panel and the keyboard to behave the same whatever I did a moment before,
+So that the camera never cuts and keys never act on a scene that is not there.
+
+Closes `epic-2-retro-item-2`, `-3`, `-4`.
+
+**Acceptance Criteria:**
+
+**Given** a release slide-out from Project A is in progress
+**When** a different Project B is focused
+**Then** the camera does not cut, and the shortened slide applies only when reopening A
+**And** a `stepFocus` test covers B far from A
+
+**Given** the panel closes on a reversed slide
+**When** the slide finishes
+**Then** the panel's `visibility` delay follows the reversed slide's duration, not the full one
+**And** a test pairs `panelStyle` with `flipSlide`
+
+**Given** the scene is not mounted
+**When** a Rail key or wheel input arrives
+**Then** no Rail input is bound, and `auditKeyWiring` / `keyAction` cover the scene-absent case
+
+### Story 3.16: Scene colour management
+
+As a visitor,
+I want the scene's whites drawn at the values the design tokens name,
+So that the identity I see is the one that was designed.
+
+Closes `epic-3-retro-item-2`. Needed for the Epic 3 re-judgement.
+
+**Acceptance Criteria:**
+
+**Given** ACES tone mapping draws `stroke-focus` 242 at 222
+**When** colour management is decided (`<Canvas flat>` or per-material `toneMapped={false}`) and applied
+**Then** a drawn white matches `stroke-focus` within one level, asserted by a test or a recorded pixel read
+**And** the M1/M2 frames are looked at again and the result is recorded
+
+### Story 3.17: No technology names in field values
+
+As a visitor reading a Project,
+I want field values that describe what was built, not which tools were used,
+So that the field table honours FR-10.
+
+Closes `epic-3-retro-item-3`. Needed for the Epic 3 re-judgement.
+
+**Acceptance Criteria:**
+
+**Given** `Built` values in `career.json` name technologies (AV-3a)
+**When** Thomas rules (Ask First) to rewrite them or to reconcile FR-10 / AC 3.6
+**Then** the ruling is applied, and the content or the spec is changed to match
+
+**Given** a content check over every field value
+**When** any value names a Skill
+**Then** validation fails naming the Project, field and Skill
+**And** the check has a mutation test
+
+### Story 3.18: The Mote label pass and the degradation ruling
+
+As a visitor on a Project with many Skills,
+I want Mote labels that stay legible and still,
+So that dense Projects read as deliberate rather than noisy.
+
+Closes `epic-3-retro-item-6`.
+
+**Acceptance Criteria:**
+
+**Given** the label pass lives inside `mote-model.ts`
+**When** it is split into its own module
+**Then** behaviour is unchanged and existing tests pass unmodified
+
+**Given** a Project carrying more than ~12 labels
+**When** Thomas makes the degradation ruling
+**Then** it covers label flicker as orbits turn, overlap with the affordance label, and the reduced-motion case (Epic 2 F-6)
+**And** the ruling is recorded, implemented in the label module, and tested at 7, 12 and 25 Skills
+
+### Story 3.19: Spec and doc reconciliation, and housekeeping
+
+As Thomas the maintainer,
+I want the specs, READMEs and comments to say what the code does,
+So that the next reader is not misled by drift the retrospectives already found.
+
+Closes `epic-1-retro-item-14`, `epic-2-retro-item-7`, `-8`, `epic-3-retro-item-5`. Item 5 is needed for the Epic 3 re-judgement.
+
+**Acceptance Criteria:**
+
+**Given** `railPosition` is undecided (AC 2.2 / AD-4a)
+**When** Thomas rules
+**Then** either the Rail follows a Client flown to, or the field is dropped from AC 2.2 and AD-4a, and the code matches
+
+**Given** the Epic 3 reconciliations
+**When** the specs are edited
+**Then** UX-DR27 / AC 3.8 carry the revealed-index-entry exception, AC 3.2 and DESIGN.md name the two-step band (ruling 4b-i), and AC 3.5 records the nine-Skill case as superseded (7–25 per Project)
+
+**Given** the Epic 2 doc drift
+**When** the docs are edited
+**Then** the release goal reads "the pose beneath Focus", Home is the `goHome` door, and `render-scene/README.md` lists the five `shell/` modules it imports
+
+**Given** the Epic 1 housekeeping
+**When** it lands
+**Then** the `byId` comparator and the derive test fixture each exist once, `checkEmittedArtifact`'s header matches what it runs, the gate's success message names the path it checked, and the `Story 1.7+` comments are corrected
+
 ---
 
 ## Epic 4: The Fallback and Capability Routing
