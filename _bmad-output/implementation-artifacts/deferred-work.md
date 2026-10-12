@@ -42,38 +42,38 @@ than in the walker.
   `boundaries.test.ts` proves each rejects by mutation. The bans are Three and
   not React: the shell renders the DOM index, so a directory-wide React ban
   would reject `index-nav.tsx`.
-- ~~**No `neverPackages` on the `derive` row**~~ — **closed by story 3.13** (three, R3F, drei, react, react-dom). — `src/derive/README.md:24`
+- ~~**No `neverPackages` on the `derive` row**~~ — **closed by story 3.13** (three, R3F, drei, react, react-dom). As it read before the fix, anchors pre-3.13: ~~`src/derive/README.md:24`
   declares the pipeline carries no DOM, no React and no Three. The row
   [boundaries.ts:127] carries a `never` list of sibling directories and no
-  package ban. One line plus a mutation test.
-- ~~**`render-fallback` bans `three` but not `@react-three/fiber`**~~ — **closed by story 3.13** (R3F and drei added).
-  [boundaries.ts:158] — that package is in `dependencies` and pulls Three in
+  package ban. One line plus a mutation test.~~
+- ~~**`render-fallback` bans `three` but not `@react-three/fiber`**~~ — **closed by story 3.13** (R3F and drei added). As it read before the fix, anchors pre-3.13:
+  ~~[boundaries.ts:158] — that package is in `dependencies` and pulls Three in
   transitively, so "never Three on the no-WebGL surface"
   (`src/render-fallback/README.md:5`) is reachable through a package the ban
   does not name. Table content, not a parser gap: `packageOf` handles the
-  scoped form correctly.
-- ~~**No rule forbids the cross-renderer edge**~~ — **closed by story 3.13**, both directions, dynamic form included. — nothing stops `render-scene/`
+  scoped form correctly.~~
+- ~~**No rule forbids the cross-renderer edge**~~ — **closed by story 3.13**, both directions, dynamic form included. As it read before the fix: ~~nothing stops `render-scene/`
   from statically importing `../render-fallback/`, or the reverse. Verified
   clean today. An edge here would defeat the surface split the two directories
-  exist to maintain.
-- ~~**The `UNGOVERNED` exemption for `src/types/` is unasserted**~~ — **closed by story 3.13**: only `.d.ts`/`.d.mts`/`.d.cts` may live there.
-  [boundaries.ts:161] — the directory is exempted wholesale on the stated
+  exist to maintain.~~
+- ~~**The `UNGOVERNED` exemption for `src/types/` is unasserted**~~ — **closed by story 3.13**: only `.d.ts`/`.d.mts`/`.d.cts` may live there. As it read before the fix, anchors pre-3.13:
+  ~~[boundaries.ts:161] — the directory is exempted wholesale on the stated
   grounds that it holds only ambient declarations. Nothing fails if a runtime
   module is added there, which would make `src/types/` the one place under
   `src/` the `src/data/` ban does not reach. Narrowing the exemption to `.d.ts`
-  files is a few lines.
+  files is a few lines.~~
 
 ## Import boundaries: coverage and scope
 
 - ~~**Computed dynamic specifiers escape when the literal prefix resolves nowhere
-  governed.**~~ — **closed by story 3.13**: any non-literal `import(...)`, `require` or `createRequire` is unresolvable and fails, outside test files. Verified live today: both `` import(`../data/${n}.ts`) `` and
+  governed.**~~ — **closed by story 3.13**: any non-literal `import(...)`, `require` or `createRequire` is unresolvable and fails, outside test files. As it read before the fix: ~~Verified live today: both `` import(`../data/${n}.ts`) `` and
   `import('../data/' + n)` **are** caught, because their literal prefix still
   resolves into `data`. The residual gap is only `import(base + '/data/x.ts')`,
   which yields no usable specifier at all. The honest fix is to *reject*
   computed specifiers rather than resolve them — a new failure class with its
   own wording and mutation test. `src/data/README.md:6` states "A dynamic
   `import(...)` does not escape it" absolutely; narrow it to literal specifiers
-  when this lands.
+  when this lands.~~ (`src/data/README.md:6` now names literal specifiers and the load forms the gate does not read.)
 - **`boundaries.test.ts:654` proves only that `treeOf` ran.** The test titled
   "every rule row names a directory that exists in the committed tree" builds
   its fixture via `treeOf`, which creates every `BOUNDARY_RULES` directory
@@ -858,7 +858,7 @@ Still open after 3.5:
 - `FIXTURE_DIGEST = 'f'.repeat(64)` and its doc comment are copied into `artifact.test.ts`, `artifact-schema.test.ts` and `skills.test.ts`; move it to the 3.14 shared test helpers.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-13-boundary-table-and-boundary-parser-hardening.md`
-  summary: `import.meta.glob(...)` and `new URL(…, import.meta.url)` / `new Worker(new URL(…))` load modules the boundary parser does not read at all.
+  summary: `import.meta.glob(...)`, `import.meta.resolve`, `new URL(…, import.meta.url)` / `new Worker(…)`, string-built loads (`eval`, `new Function`) and member forms (`module.require`, `globalThis.require`, `System.import`) load modules the boundary parser does not read at all.
   evidence: Story 3.13 made `require`, `createRequire` and computed `import(...)` unresolvable, but these Vite/web forms are neither an import statement nor an `import(` call, so `import.meta.glob('../data/*.json', { eager: true })` in a shipped module passes the gate with no finding (verified by the edge-case review). `src/data/README.md` now says so. A literal glob could be resolved by its prefix; a computed one should be unresolvable.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-13-boundary-table-and-boundary-parser-hardening.md`
@@ -872,3 +872,7 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-13-boundary-table-and-boundary-parser-hardening.md`
   summary: A `.tsx` under `src/derive/` using JSX with the automatic runtime would pull in `react/jsx-runtime` with no specifier written, bypassing the derive row's React ban.
   evidence: No `.tsx` exists under `src/derive/` today. Rejecting `.tsx`/`.jsx` files in a directory whose `neverPackages` include `react` would close it.
+
+## Deferred from: code review of spec-3-13-boundary-table-and-boundary-parser-hardening.md (2026-10-12)
+
+- `TEST_FILE` (`src/derive/boundaries.ts`) excuses only `*.test.*`. A `*.spec.*` file, a `__tests__/` directory, or a non-suffixed shared test helper (the 3.14 helpers) is a governed shipped file, so a computed `import()` or `createRequire` there — the mutant loader's pattern — fails the gate. Decide the helper naming convention with 3.14 and widen the excuse to match.

@@ -228,8 +228,12 @@ const UNGOVERNED = new Set(['types']);
 /** A test module, which `npm test` runs and no bundle contains. */
 const TEST_FILE = /\.test\.(?:[mc]?[jt]s|[jt]sx)$/;
 
-/** A relative specifier naming a test module, extension written or not. */
-const TEST_SPECIFIER = /^\..*\.test(?:\.(?:[mc]?[jt]s|[jt]sx))?$/;
+/**
+ * A specifier naming a test module, extension written or not — relative,
+ * root-absolute or aliased, and with any Vite query (`?raw`, `?url`) after it,
+ * since each of those still puts the module on the graph.
+ */
+const TEST_SPECIFIER = /\.test(?:\.(?:[mc]?[jt]s|[jt]sx))?(?:\?.*)?$/;
 
 /** A declaration file — the only thing an `UNGOVERNED` directory may hold. */
 const AMBIENT_DECLARATION = /\.d\.[mc]?ts$/;
@@ -520,11 +524,45 @@ function strip(source: string, keepLiterals: boolean): string {
  * an import rather than mentioned in a comment or a string.
  */
 /**
- * Replaces a template literal's *text* with spaces while leaving each `${...}`
- * span intact, so interpolated code still reaches the import scan.
+ * The index of the `}` closing the interpolation whose code starts at `from`,
+ * or -1 when it never closes.
  *
  * Nesting is tracked by brace depth rather than by a regex, because an
- * interpolation may itself contain an object literal or a nested template.
+ * interpolation may itself contain an object literal. A brace inside a string
+ * or a comment is not structure, so those are skipped: counted, `${'}' + x}`
+ * would close early and turn the rest of the code into text.
+ */
+function interpolationClose(contents: string, from: number): number {
+  let depth = 0;
+  let scan = from;
+  while (scan < contents.length) {
+    const char = contents[scan];
+    if (char === "'" || char === '"') {
+      scan += 1;
+      while (scan < contents.length && contents[scan] !== char && contents[scan] !== '\n') {
+        scan += contents[scan] === '\\' ? 2 : 1;
+      }
+    } else if (char === '/' && contents[scan + 1] === '/') {
+      const end = contents.indexOf('\n', scan);
+      scan = end === -1 ? contents.length : end;
+      continue;
+    } else if (char === '/' && contents[scan + 1] === '*') {
+      const end = contents.indexOf('*/', scan + 2);
+      scan = end === -1 ? contents.length : end + 1;
+    } else if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      if (depth === 0) return scan;
+      depth -= 1;
+    }
+    scan += 1;
+  }
+  return -1;
+}
+
+/**
+ * Replaces a template literal's *text* with spaces while leaving each `${...}`
+ * span intact, so interpolated code still reaches the import scan.
  */
 function maskTemplateText(contents: string): string {
   let out = '';
@@ -538,19 +576,13 @@ function maskTemplateText(contents: string): string {
     // Newlines in the blanked text must survive, or every line number below a
     // multi-line template shifts.
     for (const char of contents.slice(index, at)) out += char === '\n' ? '\n' : ' ';
-    let depth = 1;
-    let scan = at + 2;
-    while (scan < contents.length && depth > 0) {
-      const char = contents[scan];
-      if (char === '{') depth += 1;
-      else if (char === '}') depth -= 1;
-      scan += 1;
-    }
+    const close = interpolationClose(contents, at + 2);
+    const end = close === -1 ? contents.length : close;
     // `${` and the closing `}` are punctuation, not code: keep the span between —
     // stripped in turn, so a string or comment inside it (`${'require(x)'}`) is
     // blanked like any other rather than read as code.
-    out += '  ' + strip(contents.slice(at + 2, depth === 0 ? scan - 1 : scan), false) + (depth === 0 ? ' ' : '');
-    index = scan;
+    out += '  ' + strip(contents.slice(at + 2, end), false) + (close === -1 ? '' : ' ');
+    index = close === -1 ? contents.length : close + 1;
   }
   return out;
 }
@@ -570,17 +602,10 @@ function keepTemplateText(contents: string): string {
       break;
     }
     out += contents.slice(index, at + 2);
-    let depth = 1;
-    let scan = at + 2;
-    while (scan < contents.length && depth > 0) {
-      const char = contents[scan];
-      if (char === '{') depth += 1;
-      else if (char === '}') depth -= 1;
-      scan += 1;
-    }
-    const end = depth === 0 ? scan - 1 : scan;
-    out += strip(contents.slice(at + 2, end), true) + (depth === 0 ? '}' : '');
-    index = scan;
+    const close = interpolationClose(contents, at + 2);
+    const end = close === -1 ? contents.length : close;
+    out += strip(contents.slice(at + 2, end), true) + (close === -1 ? '' : '}');
+    index = close === -1 ? contents.length : close + 1;
   }
   return out;
 }
@@ -630,7 +655,12 @@ export function findImports(source: string): FoundImport[] {
   const excerptAt = (start: number): string => {
     let depth = 0;
     let end = start;
-    while (end < code.length && end - start < EXCERPT_CAP) {
+    let cut = false;
+    while (end < code.length) {
+      if (end - start >= EXCERPT_CAP) {
+        cut = true;
+        break;
+      }
       const char = code[end] as string;
       if (char === '(') depth += 1;
       else if (char === ')') {
@@ -646,7 +676,38 @@ export function findImports(source: string): FoundImport[] {
       if (depth === 0 && char === ')') break;
     }
     const excerpt = source.slice(start, end).replace(/\s+/g, ' ').trim();
-    return end - start >= EXCERPT_CAP ? `${excerpt}…` : excerpt;
+    return cut ? `${excerpt}…` : excerpt;
+  };
+
+  /** The last non-whitespace character of the stripped code before `offset`. */
+  const previousCharAt = (offset: number): string => {
+    let scan = offset - 1;
+    while (scan >= 0 && /\s/.test(code[scan] as string)) scan -= 1;
+    return scan >= 0 ? (code[scan] as string) : '';
+  };
+
+  /**
+   * Whether the `import(` at `match` opens a method *definition* — `import(p) {`
+   * in a class body or an object literal — which declares a name and loads
+   * nothing. It sits where a member begins (after `{`, `}`, `;` or `,`, or after
+   * a modifier) and its parameter list is followed, on the same line, by a body,
+   * possibly after a return type. A call never is: `cond ? import(p) : x`
+   * follows a `?`, and `f(a, import(p))` is followed by `)`.
+   */
+  const MEMBER_MODIFIERS = /(?:^|[^\w$])(?:async|static|public|private|protected|override|get|set)\s*$/;
+  const isMethodDefinition = (matchIndex: number, open: number): boolean => {
+    const before = previousCharAt(matchIndex);
+    const atMember =
+      before === '' || '{};,*'.includes(before) || MEMBER_MODIFIERS.test(code.slice(Math.max(0, matchIndex - 20), matchIndex));
+    if (!atMember) return false;
+    let depth = 0;
+    for (let scan = open; scan < code.length; scan += 1) {
+      if (code[scan] === '(') depth += 1;
+      else if (code[scan] === ')' && --depth === 0) {
+        return /^[ \t]*(?::[^{};\n]*)?\{/.test(code.slice(scan + 1));
+      }
+    }
+    return false;
   };
 
   // `import(` / `import (`, but never `import.meta` and never a bare `import x`.
@@ -673,6 +734,7 @@ export function findImports(source: string): FoundImport[] {
         literal = after !== null && !(quote === '`' && specifier.includes('${'));
       }
     }
+    if (!literal && isMethodDefinition(match.index, match.index + match[0].indexOf('('))) continue;
     add(
       match.index,
       literal
@@ -684,9 +746,13 @@ export function findImports(source: string): FoundImport[] {
   // `require` — CommonJS, and TypeScript's `import x = require(...)`. Any
   // reference, not only a direct call: `require?.('x')` and `const r = require`
   // load through it just the same. Not a member (`loader.require`), not an
-  // identifier merely containing it, and not an object key (`{ require: x }`).
-  const required = /(?<![\w$.])require(?![\w$])(?!\s*:)/g;
+  // identifier merely containing it, and not a key (`{ require: x }`,
+  // `{ require?: boolean }`) — but a ternary branch (`flag ? require : null`) is
+  // followed by a `:` too, and is a reference, so a `?` before it rules the key out.
+  const required = /(?<![\w$.])require(?![\w$])/g;
   for (let match = required.exec(code); match !== null; match = required.exec(code)) {
+    const isKey = /^\s*\??\s*:/.test(code.slice(match.index + match[0].length)) && previousCharAt(match.index) !== '?';
+    if (isKey) continue;
     add(match.index, { specifier: excerptAt(match.index), line: lineAt(match.index), kind: 'unresolvable' });
   }
 
@@ -859,7 +925,7 @@ export function checkImportBoundaries(root: string = SRC_ROOT): string[] {
       scanned += 1;
       violations += 1;
       failures.push(
-        `${displayPath(root, file)} is a runtime module, but src/${directory}/ is exempt from the import ` +
+        `${displayPath(root, file)}:1 is a runtime module, but src/${directory}/ is exempt from the import ` +
           `boundaries only for ambient declarations (.d.ts, .d.mts, .d.cts) — move it into a governed directory.`,
       );
       continue;
