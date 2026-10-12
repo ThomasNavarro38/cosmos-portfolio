@@ -164,8 +164,8 @@ export function buildArtifact(
 export const BANNER =
   'GENERATED FILE — do not edit by hand. ' +
   'Produced by src/derive/index.ts from src/data/career.json; run `npm run solve` to regenerate. ' +
-  'Hand edits are overwritten by the next solve, and the build gate rejects an artifact that breaks its invariants ' +
-  'or no longer matches the sourceDigest of career.json.';
+  'Hand edits are overwritten by the next solve. The build gate rejects an artifact that breaks its invariants ' +
+  'or was solved from a different career.json, but not a hand edit that keeps both.';
 
 /**
  * Serializes the artifact to the exact bytes written to disk.

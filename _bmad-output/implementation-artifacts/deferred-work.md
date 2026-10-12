@@ -851,3 +851,8 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-12-data-validation-on-the-build-path-and-the-gate-s-content-checks.md`
   summary: Have the gate re-assert each entity ID from its content: a Project's `id` against `projectIdOf(content.client, content.project)`, and a Client's `id` against `clientIdOf` of its Projects' `content.client`.
   evidence: Story 3.12's `checkContent` checks the `clientId` back-reference but not the IDs themselves, so a hand-edited `content.client`/`content.project` passes the gate. The digest catches career-side drift, not artifact-side hand edits, and this case was not in the story's listed cases.
+
+## Deferred from: code review of spec-3-12-data-validation-on-the-build-path-and-the-gate-s-content-checks.md (2026-10-12)
+
+- `src/derive/artifact.test.ts`: the "checkSource never solves, derives or writes" test scans the source text between `checkSource` and `main`, so an aliased import (`writeFileSync as w`) or a call through an unlisted helper passes. A behavioural check (stubbed `node:fs` writes, or an unchanged mtime) belongs with the 3.14 test infrastructure.
+- `FIXTURE_DIGEST = 'f'.repeat(64)` and its doc comment are copied into `artifact.test.ts`, `artifact-schema.test.ts` and `skills.test.ts`; move it to the 3.14 shared test helpers.

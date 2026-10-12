@@ -1977,7 +1977,10 @@ test('the gate fails on a career.json that validate rejects, with validate\'s ow
   const badCareer = writeTemp(JSON.stringify({ asOf: AS_OF, projects: bad }));
 
   const failures = checkGate(write(), badCareer);
-  assert.ok(failures.some((line) => /failed validation/.test(line)), `the validation failure must be named: ${failures.join('\n')}`);
+  assert.ok(
+    failures.some((line) => /failed validation/.test(line) && line.includes(badCareer)),
+    `the validation failure must be named, with the file that failed: ${failures.join('\n')}`,
+  );
   assert.ok(
     failures.some((line) => line.includes('Alpha — A') && /notabel/.test(line)),
     `with the entry and the key, as validate prints them: ${failures.join('\n')}`,
@@ -2025,12 +2028,15 @@ test('the CLI refuses any argument it does not know, so no flag can skip the sou
     ['--check', '--fast'],
     ['--check', artifact, careerPath, writeTemp('{}')],
     ['--check', '--check'],
+    ['--check', '-a', careerPath],
+    ['--check', '', careerPath],
   ];
   for (const args of refused) {
     const result = runIndex(...args);
-    assert.equal(result.status, 1, `${args.join(' ')} must exit 1, got ${result.status}`);
+    assert.equal(result.status, 1, `${JSON.stringify(args)} must exit 1, got ${result.status}`);
     assert.match(result.stderr, /unexpected arguments/, `and say why: ${result.stderr}`);
   }
+  assert.match(runIndex('--check', '--check', '--fast').stderr, /unexpected arguments: .*--check.*--fast/, 'every rejected argument is named');
 });
 
 test('the gate fails on a career.json it cannot read or parse, naming the path', () => {
@@ -2260,6 +2266,11 @@ test('the content and Rail-order checks would catch each mutation, applied one a
       d.clients[0]!.projects[0]!.position = { ...d.clients[0]!.position };
       return checkContent(d as unknown as Artifact);
     }],
+    ['a Planet on another Client’s Star', () => {
+      const d = clone();
+      d.clients[1]!.projects[0]!.position = { ...d.clients[0]!.position };
+      return checkContent(d as unknown as Artifact);
+    }],
     ['a Planet on another Client’s Planet', () => {
       const d = clone();
       d.clients[1]!.projects[0]!.position = { ...d.clients[0]!.projects[0]!.position };
@@ -2359,6 +2370,81 @@ test('the solve CLI prints the fold warning on stderr, exits 0, and writes one C
   );
   const doc = stripBanner(JSON.parse(readFileSync(outPath, 'utf8'))) as Artifact;
   assert.equal(doc.clients.length, 1, 'the fold still applies');
+});
+
+test('a fold that causes a Project ID collision fails the solve and still warns, before the failure', () => {
+  // The fold is the only line that explains the collision, so it must survive
+  // the failing outcome — through `runPipeline` and through the real CLI.
+  const careerPath = writeTemp(
+    JSON.stringify({
+      asOf: AS_OF,
+      projects: [
+        { ...baseEntry(), client: 'Acme Corp', project: 'One' },
+        { ...baseEntry(), client: 'Acme-Corp', project: 'One' },
+      ],
+    }),
+  );
+  const result = runPipeline(careerPath);
+  assert.equal(result.ok, false, 'the folded spellings collide on one Project ID');
+  assert.ok(
+    result.warnings.some((line) => line.includes('"Acme Corp"') && line.includes('"Acme-Corp"')),
+    `the failing result must still carry the fold: ${result.warnings.join('\n')}`,
+  );
+
+  const outPath = join(tempDir(), 'collision-layout.json');
+  const run = spawnSync(process.execPath, [INDEX_TS, careerPath, outPath], { encoding: 'utf8', timeout: 60_000 });
+  assert.equal(run.status, 1, `the collision must fail the solve: ${run.stderr}`);
+  const lines = run.stderr.split('\n').filter((line) => line !== '');
+  const warningAt = lines.findIndex((line) => line.startsWith('warning: ') && line.includes('"Acme-Corp"'));
+  assert.ok(warningAt >= 0, `a warning line must name the fold: ${run.stderr}`);
+  assert.ok(
+    lines.slice(warningAt + 1).some((line) => !line.startsWith('warning: ')),
+    `and come before the failure lines: ${run.stderr}`,
+  );
+  assert.equal(existsSync(outPath), false, 'and nothing is written');
+});
+
+test('the solve CLI refuses any argument it does not know, rather than writing to it', () => {
+  const careerPath = writeTemp(`${JSON.stringify({ asOf: AS_OF, projects: pairEntries() }, null, 2)}\n`);
+  const dir = mkdtempSync(join(tempDir(), 'solve-'));
+  const outPath = join(dir, 'layout.json');
+  const sound = spawnSync(process.execPath, [INDEX_TS, careerPath, outPath], { encoding: 'utf8', timeout: 60_000 });
+  assert.equal(sound.status, 0, `the sound run passes, or the refusals below are vacuous: ${sound.stderr}`);
+
+  const refused: string[][] = [
+    [careerPath, '--dry-run'],
+    ['--chek'],
+    ['-f', careerPath],
+    ['', outPath],
+    [careerPath, outPath, join(dir, 'extra.json')],
+  ];
+  for (const args of refused) {
+    // Run inside the temp directory: a CLI that took `--dry-run` for its output
+    // path would otherwise write it into the working tree.
+    const result = spawnSync(process.execPath, [INDEX_TS, ...args], { cwd: dir, encoding: 'utf8', timeout: 60_000 });
+    assert.equal(result.status, 1, `${JSON.stringify(args)} must exit 1, got ${result.status}`);
+    assert.match(result.stderr, /unexpected arguments/, `and say why: ${result.stderr}`);
+  }
+  assert.equal(existsSync(join(dir, '--dry-run')), false, 'no artifact is written under a flag’s name');
+});
+
+test('the solve CLI refuses to write the artifact over its own career.json', () => {
+  const text = `${JSON.stringify({ asOf: AS_OF, projects: pairEntries() }, null, 2)}\n`;
+  const careerPath = writeTemp(text);
+  const result = runIndex(careerPath, careerPath);
+  assert.equal(result.status, 1, `expected exit 1, got ${result.status}`);
+  assert.match(result.stderr, /career\.json|its own source/, result.stderr);
+  assert.equal(readFileSync(careerPath, 'utf8'), text, 'the authored source is untouched');
+});
+
+test('checkStops reports a Client with no Projects rather than throwing', () => {
+  const base = JSON.parse(JSON.stringify(artifactOf(...opposedEntries()))) as LooseDoc;
+  base.clients[0]!.projects = [];
+  let failures: string[] = [];
+  assert.doesNotThrow(() => {
+    failures = checkStops(base as unknown as Artifact);
+  });
+  assert.ok(failures.some((line) => line.includes(base.clients[0]!.id)), failures.join('\n'));
 });
 
 test('the committed career.json solves with no fold warning', () => {
