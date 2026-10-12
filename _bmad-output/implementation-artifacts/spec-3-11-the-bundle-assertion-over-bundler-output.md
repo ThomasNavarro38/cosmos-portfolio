@@ -84,7 +84,7 @@ CI's Build step runs `npm run build`, which is `gate && vite build`. A red Gate 
 - `npm test` -- expected: all pass, including `bundle-assertion.test.ts`.
 - `npm run typecheck` -- expected: exit 0.
 - `npm run build` -- expected: exit 0, with the pass line showing about 219,157 / 240,000 B.
-- Mutation: temporarily add `import 'three';` to `src/main.tsx` and run `npx vite build`. Expected: exit 1 naming `three`. Revert.
+- Mutation, never through shipped source: `bundle-assertion.test.ts` builds the `three-entry.ts` fixture through the shipped config. Expected: rejected, naming `three` and its import chain.
 
 ### Review Findings
 
@@ -96,6 +96,16 @@ CI's Build step runs `npm run build`, which is `gate && vite build`. A red Gate 
 - [x] [Review][Patch] The header claimed the budget counted everything that loads; it is now narrowed to the entry graph's JavaScript [scripts/bundle-assertion.ts:9]
 - [x] [Review][Patch] Nothing pinned that `npm run build` runs `vite build` [scripts/bundle-assertion.test.ts:226]
 - [x] [Review][Patch] The Windows-normalisation test asserted only a count [scripts/bundle-assertion.test.ts:58]
+
+Second review (2026-10-12):
+
+- [x] [Review][Patch] The shared-chunk real-build test only asserts rejection; it would pass if `three` were inlined into each entry. Pin that the offender sits in a non-entry chunk (`(in assets/three.core-…)` today) [scripts/bundle-assertion.test.ts:196]
+- [x] [Review][Patch] The dynamic-only real-build test only bounds the entry size; it never proves a dynamic chunk holding `three` was emitted, so a tree-shaken import passes trivially. Assert on `build()`'s returned output [scripts/bundle-assertion.test.ts:200]
+- [x] [Review][Patch] Bytes are read in a normal-order `generateBundle`, before Vite's own late rewrites: the entry measures 219,157 there but 219,143 as emitted. Register the hook `order: 'post'` so the budget counts the shipped code [scripts/bundle-assertion.ts:186]
+- [x] [Review][Patch] Client-only gating reads the raw `config.build?.ssr`; Vite 8's environment builder would still run the plugin in an SSR environment. Gate with `applyToEnvironment` on `consumer === 'client'`, and add a test that an SSR build is not asserted [scripts/bundle-assertion.ts:181]
+- [x] [Review][Patch] The `vite.config.ts` header names only part of the ban list (no `zod`, `@react-three/*`, `src/derive/`); point at the list instead of paraphrasing it [vite.config.ts:8]
+- [x] [Review][Patch] Verification's manual mutation step edits `src/main.tsx`, contradicting the Never rule; restate it through the `three-entry.ts` fixture [spec-3-11-the-bundle-assertion-over-bundler-output.md:87]
+- [x] [Review][Defer] The shipped-app test's `bytes > 100_000` floor will fail when story 4.1 takes React off the entry [scripts/bundle-assertion.test.ts:223] — deferred to story 4.1, which retunes the budget and this bound together
 
 ## Suggested Review Order
 

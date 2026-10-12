@@ -177,28 +177,36 @@ export function bundleAssertion({ budget = ENTRY_BUDGET_BYTES }: BundleAssertion
   let info: (message: string) => void = () => undefined;
   return {
     name: 'bundle-assertion',
-    apply: (config, env) => env.command === 'build' && !config.build?.ssr,
+    apply: 'build',
+    // Per environment, not per config: Vite's builder runs an SSR environment
+    // beside the client under one config, with no top-level `build.ssr` to see.
+    applyToEnvironment: (environment) => environment.config.consumer === 'client',
     configResolved(config) {
       root = config.root;
       info = (message) => config.logger.info(message);
     },
-    generateBundle(_options, bundle) {
-      const chunks: ChunkView[] = Object.values(bundle).flatMap((output) =>
-        output.type === 'chunk'
-          ? [{
-              fileName: output.fileName,
-              isEntry: output.isEntry,
-              facadeModuleId: output.facadeModuleId,
-              imports: output.imports,
-              moduleIds: Object.keys(output.modules),
-              bytes: Buffer.byteLength(output.code),
-            }]
-          : [],
-      );
-      const view: BundleView = { chunks, importedIds: (id) => this.getModuleInfo(id)?.importedIds ?? [] };
-      const failures = checkBundle(view, root, budget);
-      if (failures.length > 0) this.error(failures.join('\n'));
-      info(passLine(entryBytes(view), budget));
+    generateBundle: {
+      // Last, so the bytes are the code as emitted: Vite still rewrites chunks
+      // in its own `generateBundle`.
+      order: 'post',
+      handler(_options, bundle) {
+        const chunks: ChunkView[] = Object.values(bundle).flatMap((output) =>
+          output.type === 'chunk'
+            ? [{
+                fileName: output.fileName,
+                isEntry: output.isEntry,
+                facadeModuleId: output.facadeModuleId,
+                imports: output.imports,
+                moduleIds: Object.keys(output.modules),
+                bytes: Buffer.byteLength(output.code),
+              }]
+            : [],
+        );
+        const view: BundleView = { chunks, importedIds: (id) => this.getModuleInfo(id)?.importedIds ?? [] };
+        const failures = checkBundle(view, root, budget);
+        if (failures.length > 0) this.error(failures.join('\n'));
+        info(passLine(entryBytes(view), budget));
+      },
     },
   };
 }

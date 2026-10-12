@@ -840,3 +840,7 @@ Still open after 3.5:
 - `packageManager` and the Node version are declared but not enforced, and `.nvmrc` holds the floating major `24`. See the 3.10 implementer's entry above; enforcing either needs a ruling (corepack, a pinned global npm install, or an exact `.nvmrc`).
 - `scripts/check-pins.ts` does not read `package-lock.json`, so a lockfile entry whose `resolved` URL points at git or a tarball rather than the npm registry passes the pin ratchet.
 - `isEntryPoint` in `scripts/check-pins.ts:208` is a copy of the one in `scripts/tokens.ts`; a shared script helper would keep the two from drifting (a candidate for 3.14 test infrastructure).
+
+## Deferred from: code review of spec-3-11-the-bundle-assertion-over-bundler-output.md (2026-10-12)
+
+- `scripts/bundle-assertion.test.ts:223` asserts the shipped app's entry measures over 100,000 bytes, to prove the app rather than a fixture was measured. Story 4.1 takes React off the entry and will break that floor for the wrong reason; retune it with the budget in 4.1.

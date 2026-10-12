@@ -7,7 +7,8 @@ import { bundleAssertion } from './scripts/bundle-assertion.ts';
 //
 // The one plugin beside React is the AD-7 bundle assertion: the thin entry is a
 // property of bundler output, so the build itself refuses an entry graph that
-// reaches Three, the solver, the scene or `src/data/`, or outgrows its budget.
+// reaches a banned package or directory (listed in the plugin), or outgrows its
+// budget.
 //
 // Note: Vite copies `public/` verbatim into `dist/`, so `public/.gitkeep`
 // ships as a harmless empty file. Pruning it would mean a custom hook that
