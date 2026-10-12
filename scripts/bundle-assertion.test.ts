@@ -10,7 +10,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { build, createLogger, type Logger } from 'vite';
+import { build, createBuilder, createLogger, type Logger, type Rolldown } from 'vite';
 import { ENTRY_BUDGET_BYTES, bundleAssertion, checkBundle, entryBytes, passLine, type BundleView, type ChunkView } from './bundle-assertion.ts';
 
 const ROOT = 'E:/repo';
@@ -167,15 +167,21 @@ function passedBytes(lines: readonly string[]): number {
   return Number(/is ([\d,]+) of/.exec(passes[0] as string)?.[1]?.replace(/,/g, ''));
 }
 
+/** The chunks a `write: false` build returned. */
+function chunksOf(result: Awaited<ReturnType<typeof build>>): Rolldown.OutputChunk[] {
+  const outputs = (Array.isArray(result) ? result : [result]) as Rolldown.RolldownOutput[];
+  return outputs.flatMap(({ output }) => output.filter((item): item is Rolldown.OutputChunk => item.type === 'chunk'));
+}
+
 /** The shipped config, with the input swapped for fixtures: proves the plugin is wired in. */
-async function buildFixtures(names: readonly string[], logger?: Logger): Promise<void> {
-  await build({
+async function buildFixtures(names: readonly string[], logger?: Logger): Promise<Rolldown.OutputChunk[]> {
+  return chunksOf(await build({
     configFile: CONFIG,
     root: REPO,
     logLevel: 'silent',
     ...(logger === undefined ? {} : { customLogger: logger }),
     build: { write: false, rolldownOptions: { input: names.map(FIXTURE) } },
-  });
+  }));
 }
 
 test('the shipped config fails a build whose entry statically imports three, naming it and the chain', async () => {
@@ -194,13 +200,19 @@ test('the same entry without the import builds, and the assertion reports a fixt
 });
 
 test('three hoisted into a shared chunk the entries import statically fails the real build', async () => {
-  await assert.rejects(buildFixtures(['shared-a.ts', 'shared-b.ts']), /reaches three: node_modules\/three\//);
+  await assert.rejects(buildFixtures(['shared-a.ts', 'shared-b.ts']), (error: Error) => {
+    assert.match(error.message, /reaches three: node_modules\/three\/[^\n]* \(in assets\/(?!shared-[ab]-)[^)]+\)/, 'found in the shared chunk, not an entry');
+    return true;
+  });
 });
 
 test('three reached only through a dynamic import passes the real build', async () => {
   const { logger, lines } = capturing();
-  await buildFixtures(['dynamic-entry.ts'], logger);
+  const chunks = await buildFixtures(['dynamic-entry.ts'], logger);
   assert.ok(passedBytes(lines) < 10_000, 'three stayed off the entry graph');
+  const [entry] = chunks.filter((chunk) => chunk.isEntry);
+  const lazy = chunks.filter((chunk) => entry?.dynamicImports.includes(chunk.fileName));
+  assert.ok(lazy.some((chunk) => Object.keys(chunk.modules).some((id) => id.includes('/node_modules/three/'))), 'three was emitted, behind the dynamic import');
 });
 
 test('the plugin measures real chunk bytes against its budget', async () => {
@@ -218,9 +230,33 @@ test('the plugin measures real chunk bytes against its budget', async () => {
 
 test('the shipped app builds under the assertion, measured within its budget', async () => {
   const { logger, lines } = capturing();
-  await build({ configFile: CONFIG, root: REPO, logLevel: 'silent', customLogger: logger, build: { write: false } });
+  const chunks = chunksOf(await build({ configFile: CONFIG, root: REPO, logLevel: 'silent', customLogger: logger, build: { write: false } }));
   const bytes = passedBytes(lines);
   assert.ok(bytes > 100_000 && bytes <= ENTRY_BUDGET_BYTES, `the app's entry measured ${bytes}`);
+  const view: BundleView = {
+    chunks: chunks.map((out) => chunk(out.fileName, [], { isEntry: out.isEntry, imports: out.imports, bytes: Buffer.byteLength(out.code) })),
+    importedIds: () => [],
+  };
+  assert.equal(bytes, entryBytes(view), 'the budget counts the code as emitted, after every rewrite');
+});
+
+test('an SSR environment beside the client is not asserted on', async () => {
+  const builder = await createBuilder({
+    configFile: CONFIG,
+    root: REPO,
+    logLevel: 'silent',
+    ssr: { noExternal: true },
+    build: { write: false },
+    environments: {
+      client: { build: { rolldownOptions: { input: FIXTURE('thin-entry.ts') } } },
+      ssr: { build: { ssr: true, rolldownOptions: { input: FIXTURE('three-entry.ts') } } },
+    },
+  });
+  await builder.buildApp();
+});
+
+test('a single SSR build is not asserted on', async () => {
+  await build({ configFile: CONFIG, root: REPO, logLevel: 'silent', ssr: { noExternal: true }, build: { write: false, ssr: FIXTURE('three-entry.ts') } });
 });
 
 test('`npm run build` ends in `vite build`, so CI\'s Build step runs the assertion', () => {
