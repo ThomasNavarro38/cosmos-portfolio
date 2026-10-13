@@ -48,6 +48,7 @@ import {
   sourceDigestOf,
 } from './index.ts';
 import { solveLayout, type SolvedLayout } from './solve.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const AS_OF = '2026-09';
 /** A well-formed sourceDigest for fixtures built in memory, with no career.json behind them. */
@@ -1554,9 +1555,7 @@ test('neither index.ts nor artifact.ts reads a clock, a random, or the environme
   // Read off the source, because a `new Date()` on a branch the fixtures do not
   // reach would leave every assertion above green.
   for (const path of [INDEX_TS, ARTIFACT_TS]) {
-    const code = readFileSync(path, 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/^\s*\/\/.*$/gm, '');
+    const code = stripComments(readFileSync(path, 'utf8'));
     assert.doesNotMatch(code, /new\s+Date\b/, `no clock read in ${path}`);
     assert.doesNotMatch(code, /Date\s*\.\s*now/, `no clock read in ${path}`);
     assert.doesNotMatch(code, /Math\s*\.\s*random/, `no Math.random in ${path}`);
@@ -1577,7 +1576,7 @@ test('the assembler computes nothing a rule could own', () => {
   // `deriveEntities` or `solveLayout`; the assembler looks them up. A mapping
   // computed here would be a fourth rule in a file nobody is watching for one.
   const source = readFileSync(ARTIFACT_TS, 'utf8');
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(source);
   assert.doesNotMatch(code, /\bderive[A-Z]/, 'the assembler must not call a rule');
   assert.doesNotMatch(code, /recencyOf|durationInMonths/, 'nor re-derive from a duration');
   assert.doesNotMatch(code, /duration/, 'nor read an authored duration at all');
@@ -2370,6 +2369,47 @@ test('the solve CLI prints the fold warning on stderr, exits 0, and writes one C
   );
   const doc = stripBanner(JSON.parse(readFileSync(outPath, 'utf8'))) as Artifact;
   assert.equal(doc.clients.length, 1, 'the fold still applies');
+});
+
+test('a multi-Client career solves to the same bytes in separate processes, whatever its authored order', () => {
+  // The in-process determinism tests share one module instance, one heap and one
+  // d3-force-3d import, so they cannot see state that differs between runs of the
+  // real CLI. Each solve here is its own `node src/derive/index.ts`, writing to a
+  // temp path. The fixture has several Clients, several Projects per Client and
+  // weights, so the Rail sort, the orbit order and the forces all have work to do.
+  const entries = [
+    { ...baseEntry(), client: 'SNCF', project: 'MDM replacement', weight: 1 },
+    { ...baseEntry(), client: 'SNCF', project: 'Referential API', weight: 2, duration: { start: '2020-01', end: '2021-06' } },
+    { ...baseEntry(), client: 'SNCF', project: 'Batch reconciliation', weight: 0.5, duration: { start: '2020-03', end: '2021-01' } },
+    { ...baseEntry(), client: 'Orange', project: 'Billing migration', duration: { start: '2022-01', end: null } },
+    { ...baseEntry(), client: 'Acme', project: 'Alpha', weight: 3, duration: { start: '2015-01', end: '2016-01' } },
+    { ...baseEntry(), client: 'Acme', project: 'Beta', duration: { start: '2016-02', end: '2017-01' } },
+  ];
+  const solveIn = (projects: Record<string, unknown>[]): string => {
+    const careerPath = writeTemp(JSON.stringify({ asOf: AS_OF, projects }, null, 2));
+    const outPath = join(tempDir(), `cross-process-${scratchCount}.json`);
+    const run = spawnSync(process.execPath, [INDEX_TS, careerPath, outPath], { encoding: 'utf8', timeout: 60_000 });
+    assert.equal(run.status, 0, `the solve must succeed: ${run.stderr}`);
+    return readFileSync(outPath, 'utf8');
+  };
+
+  const forward = solveIn(entries);
+  const again = solveIn(entries);
+  const reversed = solveIn([...entries].reverse());
+
+  assert.equal(again, forward, 'two processes solving one file write identical bytes');
+  // `sourceDigest` is the digest of the authored text, which reversing the entries
+  // changes by construction — it is the one field that must differ. Everything
+  // else is a property of the content and must not.
+  const digestOf = (text: string): string | undefined => (stripBanner(JSON.parse(text)) as Artifact).sourceDigest;
+  assert.notEqual(digestOf(reversed), digestOf(forward), 'the reversed file is a different source text');
+  const withoutDigest = (text: string): string => text.replace(/"sourceDigest": "[0-9a-f]{64}"/, '"sourceDigest": ""');
+  assert.equal(withoutDigest(reversed), withoutDigest(forward), 'and a reversed career solves, in another process, to the same bytes');
+  assert.equal(
+    (stripBanner(JSON.parse(forward)) as Artifact).clients.length,
+    3,
+    'the fixture is multi-Client, or the Rail sort had nothing to order',
+  );
 });
 
 test('a fold that causes a Project ID collision fails the solve and still warns, before the failure', () => {

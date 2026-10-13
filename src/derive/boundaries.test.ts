@@ -26,10 +26,9 @@ import {
   SRC_ROOT,
   checkImportBoundaries,
   findImports,
-  stripComments,
-  stripCommentsAndStrings,
   targetDirectoryOf,
 } from './boundaries.ts';
+import { stripComments, stripCommentsAndStrings } from '../../scripts/source-scan.ts';
 
 const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -524,15 +523,6 @@ test('a template-literal dynamic specifier is read as written', () => {
   assert.deepEqual(found, [{ specifier: '../render-scene/y.ts', line: 1, kind: 'dynamic' }]);
 });
 
-test('stripping blanks comments and string bodies without moving anything', () => {
-  const source = "const a = 'xy'; // z\nconst b = 1;\n";
-  const stripped = stripCommentsAndStrings(source);
-  assert.equal(stripped.length, source.length, 'offsets must survive stripping');
-  assert.equal(stripped.split('\n').length, source.split('\n').length, 'and so must line count');
-  assert.match(stripped, /const a = ' {2}';/, 'the quotes stay, the body goes');
-  assert.doesNotMatch(stripped, /z/, 'the comment is gone');
-});
-
 test('a nested comment marker inside a string, and a quote inside a comment, both survive', () => {
   // The two cases a regex-per-construct pipeline gets wrong in opposite
   // directions. Written as source that would violate a boundary if mis-stripped.
@@ -951,8 +941,9 @@ test('an unresolvable import fails the gate in every governed file, naming file,
 });
 
 test('a test file may load a module it cannot name, but is still held to every literal rule', () => {
-  // `solve.test.ts` loads mutants generated at run time. A test file never ships,
-  // so its unresolvable loads are excused — and only those: the same content in a
+  // A suite may load a module by computed URL — `solve.test.ts`'s mutants, written
+  // under `os.tmpdir()` by `scripts/mutant.ts`. A test file never ships, so its
+  // unresolvable loads are excused — and only those: the same content in a
   // shipped module fails, and a literal forbidden edge in a test still fails.
   const computed = "const m = await import(pathToFileURL(path).href);\nconst r = require('./y.ts');\n";
   for (const name of ['derive/solve.test.ts', 'shell/x.test.tsx', 'App.test.ts']) {
@@ -1112,9 +1103,8 @@ test('a test module is refused however the shipped module names it', () => {
 // --- Purity ------------------------------------------------------------------
 
 test('boundaries.ts reads no clock, no random, no environment, and writes nothing', () => {
-  // Read through the module's own stripper, which is the thing under test
-  // elsewhere in this file — so a purity violation hidden in a comment is not
-  // reported as one.
+  // Read through the shared stripper (`scripts/source-scan.ts`, pinned in its own
+  // suite) — so a purity violation hidden in a comment is not reported as one.
   const code = stripCommentsAndStrings(
     readFileSync(fileURLToPath(new URL('./boundaries.ts', import.meta.url)), 'utf8'),
   );
@@ -1125,36 +1115,3 @@ test('boundaries.ts reads no clock, no random, no environment, and writes nothin
   assert.doesNotMatch(code, /\bfetch\b|XMLHttpRequest|WebSocket/, 'and reaches no network');
 });
 
-// --- The comments-only mode -------------------------------------------------
-
-test('stripComments blanks comments, keeps every literal verbatim, and preserves layout', () => {
-  // The same pass as `stripCommentsAndStrings`, in its other mode: a string that
-  // looks like a comment stays a string, and a comment that holds a quote stays a
-  // comment. Layout survives so a reported line and column are the authored ones.
-  const source = [
-    "const a = '#fff'; // '#000'",
-    '/* rgb(0, 0, 0)',
-    '   still a comment */ const b = "a // b";',
-    'const c = `x ${"/* not a comment */"} y`;',
-    'const d = /[/*]/.test(e); // tail',
-  ].join('\n');
-  const kept = stripComments(source);
-  assert.equal(kept.length, source.length);
-  assert.equal(kept.split('\n').length, source.split('\n').length);
-  assert.match(kept, /'#fff'/);
-  assert.doesNotMatch(kept, /#000/);
-  assert.doesNotMatch(kept, /rgb\(/);
-  assert.match(kept, /"a \/\/ b"/);
-  assert.match(kept, /\/\* not a comment \*\//);
-  assert.match(kept, /\/\[\/\*\]\//);
-  assert.doesNotMatch(kept, /tail/);
-  // A comment inside a template interpolation is code's comment, not the
-  // template's text: stripped, while the surrounding literal text is kept.
-  const interpolated = 'const t = `${x /* #fff */} #000`;';
-  const keptInterpolated = stripComments(interpolated);
-  assert.equal(keptInterpolated.length, interpolated.length);
-  assert.doesNotMatch(keptInterpolated, /#fff/);
-  assert.match(keptInterpolated, /\$\{x\s+\} #000`/);
-  // The other mode is unchanged by the refactor: strings are blanked there.
-  assert.doesNotMatch(stripCommentsAndStrings(source), /#fff/);
-});

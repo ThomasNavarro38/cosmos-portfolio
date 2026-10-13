@@ -10,6 +10,9 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+// Comments blanked in place by the shared stripper, so a scan reads code and a
+// line keeps its number.
+import { stripComments } from '../../scripts/source-scan.ts';
 import { FOCUS_SECONDS, focusEasingCss } from './focus-motion.ts';
 import { motionPace } from './motion-preference.ts';
 import {
@@ -40,6 +43,7 @@ import {
   type PanelArtifact,
   type PanelArtifactProject,
 } from './panel-model.ts';
+import { stripCssComments } from '../../scripts/colour-literals.ts';
 
 const MODEL_TS = fileURLToPath(new URL('./panel-model.ts', import.meta.url));
 const PANEL_TSX = fileURLToPath(new URL('./focus-panel.tsx', import.meta.url));
@@ -518,14 +522,8 @@ test('an index entry’s id is unique per Project, whitespace-free, and not the 
 
 // --- Purity of the model -----------------------------------------------------------
 
-function blank(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-    .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
-}
-
 function auditModel(source: string): string[] {
-  const code = blank(source);
+  const code = stripComments(source);
   const failures: string[] = [];
   for (const [, specifier] of code.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {
     if (specifier !== './focus-motion.ts') failures.push(`imports ${specifier} — the panel model imports the timing module only`);
@@ -575,7 +573,7 @@ interface CssDeclaration {
  * value is collapsed so a reformat is not a failure.
  */
 function declarationsOf(css: string): CssDeclaration[] {
-  const code = css.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  const code = stripCssComments(css);
   const out: CssDeclaration[] = [];
   const squash = (text: string) => text.trim().replace(/\s+/g, ' ');
   const rules = (body: string, media: string | null) => {
@@ -773,7 +771,7 @@ const MAIN_TSX = fileURLToPath(new URL('../main.tsx', import.meta.url));
  * padding — while every other test here stays green.
  */
 function auditTokensImport(source: string): string[] {
-  const code = blank(source);
+  const code = stripComments(source);
   const imports = [...code.matchAll(/^import\s+'\.\/tokens\/tokens\.css'\s*;/gm)];
   if (imports.length !== 1) return ['src/main.tsx does not import ./tokens/tokens.css exactly once'];
   const app = code.search(/^import\s*\{\s*App\s*\}/m);
@@ -870,7 +868,7 @@ test('the stylesheet audit rejects the real stylesheet with any one departure', 
  * an effect applying `focusMove` — each pinned positively.
  */
 function auditPanel(source: string): string[] {
-  const code = blank(source);
+  const code = stripComments(source);
   const failures: string[] = [];
   if (!/const\s+focusedProjectId\s*=\s*useStore\(\s*navigationStore\s*,\s*\(\s*(\w+)\s*\)\s*=>\s*\1\.focusedProjectId\s*\)/.test(code)) {
     failures.push('does not subscribe to focusedProjectId with a selector');
@@ -1249,7 +1247,7 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
 // --- Index entries carry their ID; App mounts the panel -------------------------------
 
 function auditEntryIds(source: string): string[] {
-  const code = blank(source);
+  const code = stripComments(source);
   const failures: string[] = [];
   const projectButton = /<button\b([^>]*\bonClick=\{\s*\(\)\s*=>\s*activateProject\(\s*project\.id\s*,\s*client\.id\s*\)\s*\}[^>]*)>/.exec(code);
   if (projectButton === null) return ['no Project button'];
@@ -1283,7 +1281,7 @@ test('each Project entry in the index carries the id focus returns to', () => {
 });
 
 function auditMount(source: string): string[] {
-  const code = blank(source);
+  const code = stripComments(source);
   const failures: string[] = [];
   if (!/import\s*\{\s*FocusPanel\s*\}\s*from\s*'\.\/shell\/focus-panel\.tsx'/.test(code)) failures.push('FocusPanel is not imported from the shell');
   const mounts = code.match(/<FocusPanel\b[^>]*>/g) ?? [];

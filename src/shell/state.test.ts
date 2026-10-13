@@ -18,10 +18,11 @@
  */
 
 import { strict as assert } from 'node:assert';
-import { readFileSync, readdirSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { relative, sep } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { isTestFile, sourceFilesUnder, stripComments, stripCommentsAndStrings } from '../../scripts/source-scan.ts';
 import {
   advanceScroll,
   enterFreeFlight,
@@ -41,11 +42,9 @@ const README_MD = fileURLToPath(new URL('./README.md', import.meta.url));
 /** `src/`, so the `setState` audit walks the whole tree rather than one named file. */
 const SRC_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
-/** The source with comments stripped, so a rule named in prose cannot satisfy a scan. */
+/** The source with comments blanked (the shared stripper), so a rule named in prose cannot satisfy a scan. */
 function sourceOf(path: string): string {
-  return readFileSync(path, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  return stripComments(readFileSync(path, 'utf8'));
 }
 
 // --- Arrival ----------------------------------------------------------------
@@ -842,35 +841,16 @@ test('every transition is reachable as a named export', () => {
 });
 
 /**
- * Every shipped `.ts`/`.tsx` file under `src/`, sorted — `*.test.ts` excluded.
+ * Every shipped source module under `src/`, by the shared walk
+ * (`scripts/source-scan.ts`) — test files excluded.
  *
- * The same walker `maintenance.test.ts:447` uses for the network ratchet, and it
- * skips the same two directory shapes for the same reason: a vendored dependency
- * under `src/` is not this repo's authorship, and neither is a tool's dot-cache.
- *
- * It is reproduced here rather than imported because it cannot be imported.
- * `shippedFilesUnder` is a file-local helper in a `derive/` test, and
- * `src/shell/` may never import `src/derive/` — the boundary gate walks
- * `*.test.ts` too, so even a helper import from this file would fail it
- * (verified by probe). Test files are excluded from the scan below for the same
- * reason the network audit excludes them: this file must be able to *name*
- * `setState` in prose and in its own mutation fixtures, and an audit that flagged
- * its own fixtures would be switched off within a week.
+ * The same walk the network ratchet in `maintenance.test.ts` uses. Test files are
+ * excluded for the same reason the network audit excludes them: this file must be
+ * able to *name* `setState` in prose and in its own mutation fixtures, and an
+ * audit that flagged its own fixtures would be switched off within a week.
  */
 function shippedFilesUnder(dir: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
-    a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
-  )) {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-      found.push(...shippedFilesUnder(path));
-      continue;
-    }
-    if (/\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) found.push(path);
-  }
-  return found;
+  return sourceFilesUnder(dir).filter((path) => !isTestFile(path));
 }
 
 /**
@@ -900,21 +880,17 @@ function auditSetState(files: readonly { readonly path: string; readonly source:
     //     finding under the previous stripper.
     //
     // The decoy test below covered only the first-column comment, so it certified a
-    // property this checker did not have. `src/derive/boundaries.ts:241` exports a
-    // proper single-pass `stripCommentsAndStrings`, but `src/shell/` may not import
-    // `src/derive/` — the same boundary that forces `shippedFilesUnder` to be
-    // duplicated here — so the blanking below plus a call-shaped match carry it.
+    // property this checker did not have. The shared single-pass stripper
+    // (`scripts/source-scan.ts`) blanks all three, plus a call-shaped match.
     //
     // Order matters, and it is the opposite of the obvious one. A bracket access
     // writes the member name *as a string literal* — `store['setState']` — so
     // blanking strings first erases the very token the audit is looking for. The
     // property-access form is therefore normalised to a dot access before any
     // blanking, which both preserves it and folds two shapes into one match.
-    const code = file.source
-      .replace(/\[\s*(['"`])setState\1\s*(?:as\s+[^\]]+)?\]/g, (m) => '.setState'.padEnd(m.length, ' '))
-      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-      .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length))
-      .replace(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g, (m) => m.replace(/[^\n]/g, ' '));
+    const code = stripCommentsAndStrings(
+      file.source.replace(/\[\s*(['"`])setState\1\s*(?:as\s+[^\]]+)?\]/g, (m) => '.setState'.padEnd(m.length, ' ')),
+    );
     for (const [index, line] of code.split('\n').entries()) {
       // A call, or a binding of one to call later — not the bare word. What the
       // contract forbids is *reaching* the function: `.setState(`, `['setState']`,

@@ -56,6 +56,7 @@ import {
 } from './notable-model.ts';
 import { buildScene, type Body, type SceneArtifact } from './scene-model.ts';
 import { PLANET_RADIUS } from './stroke-model.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const MODEL_TS = fileURLToPath(new URL('./affordance-model.ts', import.meta.url));
 const ARTIFACT_JSON = fileURLToPath(new URL('../../generated/layout.generated.json', import.meta.url));
@@ -569,7 +570,7 @@ test('a frame is written onto the handles, text only when it changes, and a hidd
 
 /** The model's imports, globals and reads, as a pure function over its source. */
 function auditAffordanceModel(source: string): string[] {
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+  const code = stripComments(source);
   const failures: string[] = [];
   const allowed = new Set([
     '../shell/index-model.ts',

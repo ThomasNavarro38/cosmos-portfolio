@@ -9,6 +9,9 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+// Comments blanked in place by the shared stripper, so a scan reads code and a
+// line keeps its number.
+import { stripComments } from '../../scripts/source-scan.ts';
 import {
   activateClient,
   activateProject,
@@ -373,12 +376,6 @@ test('the keyboard doors activate nothing: no Focus, no flight, no Rail move', (
 
 // --- Purity -------------------------------------------------------------------
 
-function blank(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-    .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
-}
-
 /**
  * The doors import only the store, reach no DOM, and call no `setState`.
  *
@@ -390,7 +387,7 @@ function blank(source: string): string {
  * home) releases first. `selectClient` in none.
  */
 function auditActivatePurity(source: string): string[] {
-  const code = blank(source);
+  const code = stripComments(source);
   const failures: string[] = [];
   const imports = [...code.matchAll(/\bfrom\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
   if (imports.length !== 1 || imports[0] !== './state.ts') failures.push(`imports ${imports.join(', ') || 'nothing'} — only ./state.ts`);

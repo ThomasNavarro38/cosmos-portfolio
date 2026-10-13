@@ -28,6 +28,7 @@ import {
   type IndexArtifact,
   type IndexArtifactClient,
 } from './index-model.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const MODEL_TS = fileURLToPath(new URL('./index-model.ts', import.meta.url));
 const NAV_TSX = fileURLToPath(new URL('./index-nav.tsx', import.meta.url));
@@ -381,9 +382,7 @@ test('the model reads no camera, viewport, canvas, clock, or DOM', () => {
   // state. Behavioural tests cannot show the absence of a branch they do not
   // reach, so it is read off the source — the same idiom the derive layer's
   // purity tests use.
-  const code = readFileSync(MODEL_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(MODEL_TS, 'utf8'));
   assert.doesNotMatch(code, /\bwindow\b|\bdocument\b|\bnavigator\b/, 'no DOM global');
   assert.doesNotMatch(code, /innerWidth|innerHeight|getBoundingClientRect|matchMedia/, 'no viewport read');
   assert.doesNotMatch(code, /\bcamera\b|raycast|\bcanvas\b|WebGL/i, 'no camera or canvas state');
@@ -397,9 +396,7 @@ test('the model derives no ordering of its own', () => {
   // here would be an ordering rule living in the one directory forbidden to hold
   // any — and it would keep passing every assertion above for as long as it
   // happened to agree with the artifact's.
-  const code = readFileSync(MODEL_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(MODEL_TS, 'utf8'));
   assert.doesNotMatch(code, /\.sort\s*\(/, 'the shell must not sort — the derive layer owns every ordering');
   assert.doesNotMatch(code, /\bduration\b|\btimeAxis\b|\bnotable\b/, 'nor re-derive from an authored field');
   assert.doesNotMatch(code, /\bposition\b|\bmass\b|railDistance/, 'nor read a coordinate or a solved value');
@@ -414,7 +411,7 @@ test('the renderer holds no logic the model could own', () => {
   // it fails the moment the renderer grows a rule of its own rather than when
   // someone notices.
   const source = readFileSync(NAV_TSX, 'utf8');
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(source);
 
   assert.doesNotMatch(code, /\.sort\s*\(|\.filter\s*\(|\.reverse\s*\(/, 'no ordering or selection in the renderer');
   // *Local* state, specifically. Subscribing to the navigation store is this
@@ -636,7 +633,7 @@ test('each handler is tied to its own element, so a transposition cannot pass', 
  * — left with it.
  */
 function auditDoors(source: string): string[] {
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(source);
   const failures: string[] = [];
   const button = (handler: string, text: string): RegExp =>
     new RegExp(`<button\\s+type="button"\\s+onClick=\\{\\(\\)\\s*=>\\s*${handler}\\}\\s*>\\s*${text}\\s*</button>`);
@@ -741,9 +738,7 @@ test('aria-pressed is an equality against the focused Project, never a negation'
   // the whole suite stayed green. The comparison is pinned exactly, and the
   // negated form banned, because `!==` is a one-character edit away and reads as
   // plausible.
-  const code = readFileSync(NAV_TSX, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(NAV_TSX, 'utf8'));
 
   assert.match(
     code,
@@ -763,9 +758,7 @@ test('the renderer subscribes with a selector rather than the whole store', () =
   // `scrollProgress`, sixty times a second, and nothing else in this suite would
   // notice. Pinned positively because the selector is the correct form and a
   // negative scan cannot see it go missing.
-  const code = readFileSync(NAV_TSX, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(NAV_TSX, 'utf8'));
 
   assert.match(
     code,
@@ -796,9 +789,7 @@ test('the title and the depth word reach the reader as text, not as attribute va
   // scan cannot observe the good form going missing. So this one is positive: each
   // model field must appear between a `>` and a `<`, which is the only position
   // where JSX emits a text node.
-  const code = readFileSync(NAV_TSX, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(NAV_TSX, 'utf8'));
 
   for (const field of ['client.name', 'project.title', 'project.depth']) {
     assert.match(
@@ -832,9 +823,7 @@ test('each Client’s Projects are nested inside its own list item, not beside i
   //
   // Tag order in the source is the check: within the Client's `<li>`, the Client
   // `<button>` must be followed by the nested `<ul>` before that `<li>` closes.
-  const code = readFileSync(NAV_TSX, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(NAV_TSX, 'utf8'));
 
   const tags = code.match(/<\/?(?:nav|ul|li|button)\b/g) ?? [];
   assert.deepEqual(

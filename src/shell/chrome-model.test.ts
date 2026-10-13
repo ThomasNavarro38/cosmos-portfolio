@@ -11,24 +11,21 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+// Comments blanked in place by the shared stripper, so a scan reads code and a
+// line keeps its number.
+import { stripComments } from '../../scripts/source-scan.ts';
 import { tokens } from '../tokens/tokens.ts';
 import { IDENTITY_LINE, SLOT_TEXT, chromeSlot, slotStyle, type ChromeSlot } from './chrome-model.ts';
 import { FOCUS_SECONDS, focusEasingCss } from './focus-motion.ts';
 import { contrast } from './contrast.ts';
 import { REDUCED_MOTION_PACE, motionPace } from './motion-preference.ts';
 import { panelStyle, panelWidthCss } from './panel-model.ts';
+import { stripCssComments } from '../../scripts/colour-literals.ts';
 
 const MODEL_TS = fileURLToPath(new URL('./chrome-model.ts', import.meta.url));
 const CHROME_TSX = fileURLToPath(new URL('./corner-chrome.tsx', import.meta.url));
 const CHROME_CSS = fileURLToPath(new URL('./corner-chrome.css', import.meta.url));
 const TOKENS_CSS = fileURLToPath(new URL('../tokens/tokens.css', import.meta.url));
-
-/** Comments blanked in place, so a scan reads code and a line keeps its number. */
-function blank(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-    .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
-}
 
 /** A file as the mutations see it: LF line endings, whatever the checkout wrote. */
 const read = (path: string): string => readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
@@ -135,7 +132,7 @@ test('the chrome ink clears the 4.5:1 floor on the ground, from the generated to
 // --- Purity of the model -----------------------------------------------------------------
 
 function auditModel(source: string): string[] {
-  const code = blank(source);
+  const code = stripComments(source);
   const failures: string[] = [];
   for (const [, specifier] of code.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {
     if (specifier !== './focus-motion.ts' && specifier !== './panel-model.ts') failures.push(`imports ${specifier} — the chrome model imports the timing and the panel width only`);
@@ -197,7 +194,7 @@ interface CssDeclaration {
  * file is not a module to import.
  */
 function declarationsOf(css: string): CssDeclaration[] {
-  const code = css.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  const code = stripCssComments(css);
   const out: CssDeclaration[] = [];
   const squash = (text: string) => text.trim().replace(/\s+/g, ' ');
   const rules = (body: string, media: string | null) => {
@@ -390,7 +387,7 @@ test('the stylesheet audit rejects the real stylesheet with any one departure', 
  * `return`: a release's focus target is `focusMove`'s alone.
  */
 function auditChrome(source: string): string[] {
-  const code = blank(source);
+  const code = stripComments(source);
   const failures: string[] = [];
   if (!/const\s+mode\s*=\s*useStore\(\s*navigationStore\s*,\s*\(\s*(\w+)\s*\)\s*=>\s*\1\.mode\s*\)/.test(code)) failures.push('does not subscribe to mode with a selector');
   if (!/const\s+focusedProjectId\s*=\s*useStore\(\s*navigationStore\s*,\s*\(\s*(\w+)\s*\)\s*=>\s*\1\.focusedProjectId\s*\)/.test(code)) {

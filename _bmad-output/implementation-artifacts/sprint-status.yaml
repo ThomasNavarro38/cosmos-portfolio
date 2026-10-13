@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 10-12-2026 16:02
+last_updated: 10-13-2026 08:33
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -73,7 +73,7 @@ development_status:
   3-11-the-bundle-assertion-over-bundler-output: done
   3-12-data-validation-on-the-build-path-and-the-gate-s-content-che: done
   3-13-boundary-table-and-boundary-parser-hardening: done
-  3-14-test-infrastructure: backlog
+  3-14-test-infrastructure: done
   3-15-navigation-and-panel-correctness-fixes: backlog
   3-16-scene-colour-management: backlog
   3-17-no-technology-names-in-field-values: backlog
@@ -202,14 +202,16 @@ action_items:
     action: "Run a dedicated verification-gap pass over src/derive/*.test.ts; the
       lens did not complete in the retro"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-12: story 3.14 — verification-gap pass over src/derive/*.test.ts by mutation probe (18 mutations); three survivors fixed test-only (mote-tier split at 0.5, MIN_SHOT_DISTANCE, slug separator trim), golden-only constants deferred; findings in spec-3-14"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-11-multi-client-maintenance-test"
     epic: 1
     action: "Add a multi-Client maintenance case that appends a new Client and asserts
       Client-granular consequences"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-12: story 3.14 — maintenance.test.ts appends an unseen Client and asserts dwell/shots/rail +1, destinations +2, the new Shot outside its orbit, every existing Shot and tempo unchanged; artifact.test.ts solves a multi-Client career in separate processes, forward and reversed"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-12-packaging-enforcement"
     epic: 1
@@ -341,7 +343,8 @@ action_items:
       collapse the 7 directory walkers and parameterise the renderer scans over the
       directory"
     owner: "Thomas"
-    status: in-progress
+    status: done
+    resolution: "2026-10-12: story 3.14 — scripts/source-scan.ts holds the one walker and the single-pass stripper; every walk and regex stripper in the suite collapsed onto it; the renderer scans walk src/render-scene/ and the coverage test is gone"
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
   - id: "epic-3-retro-item-1-run-identity-protocols"
     epic: 3
@@ -371,7 +374,8 @@ action_items:
     action: "Write test mutants to os.tmpdir() instead of beside solve.test.ts so
       tree scans cannot race them"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-12: story 3.14 — scripts/mutant.ts writes mutants under os.tmpdir() with specifiers rewritten to absolute URLs; the .gitignore entry and the colour scan dot-file skip are gone"
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
   - id: "epic-3-retro-item-5-spec-reconciliations"
     epic: 3

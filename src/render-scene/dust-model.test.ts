@@ -51,6 +51,7 @@ import {
   type SceneArtifactClient,
   type SceneArtifactProject,
 } from './scene-model.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const DUST_TS = fileURLToPath(new URL('./dust-model.ts', import.meta.url));
 const ARTIFACT_JSON = fileURLToPath(new URL('../../generated/layout.generated.json', import.meta.url));
@@ -519,9 +520,7 @@ test('Dust renders before every Body: DUST_RENDER_ORDER < BODY_RENDER_ORDER', ()
  * clock, and may not read an authored field or name a Mote or a Skill.
  */
 function auditDustModel(source: string): string[] {
-  const code = source
-    .replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, ' '))
-    .replace(/\/\/[^\n]*/g, (match) => ' '.repeat(match.length));
+  const code = stripComments(source);
   const failures: string[] = [];
 
   for (const match of code.matchAll(/\bfrom\s*['"]([^'"]+)['"]|\brequire\s*\(/g)) {

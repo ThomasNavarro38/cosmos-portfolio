@@ -105,13 +105,16 @@ test('the line reported is the authored line, across comments that span lines', 
   ]);
 });
 
-test('the scan reports file:line under src/, and skips tokens/, tests, dot-files, dot-directories and node_modules', () => {
+test('the scan reports file:line under src/, reads dot-files, and skips tokens/, tests, dot-directories and node_modules', () => {
   const root = treeOf({
     'shell/panel-model.ts': "export const a = 1;\nexport const b = '#fff';\n",
     'render-scene/scene.tsx': 'export const s = <color args={["rgba(0,0,0,1)"]} />;\n',
     'shell/panel.css': '.x {\n  color: #123456;\n}\n',
     'shell/chrome.css': '.y { background: url(//cdn/x.png) #abc; }\n',
-    'derive/.mutant-5.ts': "const c = '#fff';\n",
+    // A dot-file ships if anything imports it, so it is governed: the
+    // skip existed only to dodge `solve.test.ts`'s mutants, which no longer live
+    // under `src/`.
+    'derive/.helper.ts': "const c = '#fff';\n",
     'tokens/tokens.ts': "export const tokens = { a: '#08080A' } as const;\n",
     'tokens/tokens.css': ':root { --a: #08080A; }\n',
     'shell/panel-model.test.ts': "const fixture = '#fff';\n",
@@ -120,11 +123,12 @@ test('the scan reports file:line under src/, and skips tokens/, tests, dot-files
     'shell/README.md': 'The colour `#fff` in prose.\n',
   });
   const failures = checkColourLiterals(root);
-  assert.equal(failures.length, 4, failures.join('\n'));
-  assert.match(failures[0] as string, /^src\/render-scene\/scene\.tsx:1 .*rgba\(/);
-  assert.match(failures[1] as string, /^src\/shell\/chrome\.css:1 .*#abc/);
-  assert.match(failures[2] as string, /^src\/shell\/panel-model\.ts:2 .*#fff/);
-  assert.match(failures[3] as string, /^src\/shell\/panel\.css:2 .*#123456/);
+  assert.equal(failures.length, 5, failures.join('\n'));
+  assert.match(failures[0] as string, /^src\/derive\/\.helper\.ts:1 .*#fff/);
+  assert.match(failures[1] as string, /^src\/render-scene\/scene\.tsx:1 .*rgba\(/);
+  assert.match(failures[2] as string, /^src\/shell\/chrome\.css:1 .*#abc/);
+  assert.match(failures[3] as string, /^src\/shell\/panel-model\.ts:2 .*#fff/);
+  assert.match(failures[4] as string, /^src\/shell\/panel\.css:2 .*#123456/);
   for (const line of failures) assert.match(line, /src\/tokens\/tokens\.ts/, 'each failure names where the colour comes from');
 });
 

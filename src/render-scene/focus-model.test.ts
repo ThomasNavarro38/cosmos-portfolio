@@ -26,6 +26,7 @@ import {
   type SceneArtifactClient,
   type ScenePosition,
 } from './scene-model.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const MODEL_TS = fileURLToPath(new URL('./focus-model.ts', import.meta.url));
 const ARTIFACT_JSON = fileURLToPath(new URL('../../generated/layout.generated.json', import.meta.url));
@@ -524,7 +525,7 @@ test('focusFrame binds the Rail’s frame, its damped aspect and the panel’s s
 // --- Purity --------------------------------------------------------------------
 
 function auditFocusModel(source: string): string[] {
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+  const code = stripComments(source);
   const failures: string[] = [];
   const allowed = new Set(['../shell/focus-motion.ts', '../shell/motion-preference.ts', '../shell/panel-model.ts', './rail-model.ts', './scene-model.ts']);
   for (const [, specifier] of code.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {

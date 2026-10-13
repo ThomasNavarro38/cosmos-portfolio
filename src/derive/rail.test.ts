@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { CareerSchema, type Career } from '../data/schema.ts';
 import { clientIdOf, deriveEntities, type EntityGraph } from './entities.ts';
 import { buildRail, compareRailKeys, earliestStart, inRailOrder, startsAt } from './rail.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const AS_OF = '2026-09';
 const RAIL_TS = fileURLToPath(new URL('./rail.ts', import.meta.url));
@@ -275,7 +276,7 @@ test('solve.ts imports the Rail ordering rather than restating it', () => {
     'solve.ts must import the ordering from rail.ts',
   );
 
-  const code = solve.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(solve);
   assert.doesNotMatch(code, /function\s+inRailOrder\b/, 'and must not declare its own');
   assert.doesNotMatch(code, /function\s+startsAt\b/, 'nor its own start-month reader');
   assert.doesNotMatch(code, /function\s+compareCodepoints\b/, 'nor its own comparator');
@@ -292,9 +293,7 @@ test('the emitted Rail is the node order the solve builds from, not a parallel l
   // emitted Rail — needs a solve to observe, so it is asserted where the solve
   // already runs: `solve.test.ts`, "the Rail the artifact emits is the order the
   // solve lays Client Stars out in".
-  const code = readFileSync(SOLVE_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(SOLVE_TS, 'utf8'));
 
   assert.match(
     code,
@@ -314,9 +313,7 @@ test('the emitted Rail is the node order the solve builds from, not a parallel l
 // --- Purity -----------------------------------------------------------------
 
 test('rail.ts reads no clock, no random, no environment, and no DOM', () => {
-  const code = readFileSync(RAIL_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(RAIL_TS, 'utf8'));
   assert.doesNotMatch(code, /new\s+Date\b/, 'no clock read');
   assert.doesNotMatch(code, /Date\s*\.\s*now/, 'no clock read');
   assert.doesNotMatch(code, /Math\s*\.\s*random/, 'no randomness');
@@ -330,9 +327,7 @@ test('rail.ts reads no clock, no random, no environment, and no DOM', () => {
 test('the module mints no ID and re-derives no entity property', () => {
   // Read off the source, because a re-derivation on a branch these fixtures do
   // not reach would leave every assertion above green.
-  const code = readFileSync(RAIL_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(RAIL_TS, 'utf8'));
   assert.doesNotMatch(code, /\bderive[A-Z]/, 'the walk must not call a mapping rule');
   assert.doesNotMatch(code, /slugify|toLowerCase|normalize\(/, 'nor mint an ID of its own');
   assert.doesNotMatch(code, /isDeep|luminanceBand|moteTier|railDistance|\bmass\b/, 'nor copy a derived property');

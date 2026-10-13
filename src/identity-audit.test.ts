@@ -25,11 +25,12 @@
  */
 
 import { strict as assert } from 'node:assert';
-import { readFileSync, readdirSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { basename, relative, sep } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { codeOf, languageOf } from '../scripts/colour-literals.ts';
+import { filesUnder } from '../scripts/source-scan.ts';
 import { IDENTITY_LINE, SLOT_TEXT } from './shell/chrome-model.ts';
 import { contrast, channels, linear } from './shell/contrast.ts';
 import { DEPTH_LABELS } from './shell/index-model.ts';
@@ -429,16 +430,17 @@ const staticParts = (body: string): string[] => body.split(/\$\{[^}]*\}/);
  * Every shipped script, stylesheet and markup file under `src/`, as path → text.
  * "Shipped" is the colour gate's own classification (`languageOf` in
  * `scripts/colour-literals.ts`), so the two scans cannot disagree about what a
- * test is (`.test.mts`, `.spec.tsx`…); the generated tokens and dot-paths are
- * skipped as the gate skips them.
+ * test is (`.test.mts`, `.spec.tsx`…), and the walk is the gate's own
+ * (`scripts/source-scan.ts`): dot-files read, dot-directories and `node_modules`
+ * skipped. The generated tokens are skipped as the gate skips them.
  */
 function shippedFiles(): Record<string, string> {
   const found: Record<string, string> = {};
-  for (const entry of readdirSync(SRC, { recursive: true, withFileTypes: true })) {
-    if (!entry.isFile() || languageOf(entry.name) === undefined) continue;
-    const path = relative(SRC, join(entry.parentPath, entry.name)).split(sep).join('/');
-    if (path.startsWith('tokens/') || path.split('/').some((part) => part.startsWith('.'))) continue;
-    found[path] = readFileSync(join(entry.parentPath, entry.name), 'utf8').replace(/\r\n/g, '\n');
+  for (const file of filesUnder(SRC)) {
+    if (languageOf(basename(file)) === undefined) continue;
+    const path = relative(SRC, file).split(sep).join('/');
+    if (path.startsWith('tokens/')) continue;
+    found[path] = readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
   }
   return found;
 }

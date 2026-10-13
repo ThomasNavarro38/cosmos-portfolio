@@ -58,6 +58,7 @@ import {
   type SceneArtifactClient,
   type ScenePosition,
 } from './scene-model.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const MODEL_TS = fileURLToPath(new URL('./rail-model.ts', import.meta.url));
 const DWELL_TS = fileURLToPath(new URL('../derive/dwell.ts', import.meta.url));
@@ -1296,7 +1297,7 @@ test('the committed artifact draws a Rail exactly when it has two stops or more'
 
 /** The model's imports and globals, as a pure function over its source. */
 function auditRailModel(source: string): string[] {
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+  const code = stripComments(source);
   const failures: string[] = [];
   const specifiers = [...code.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)].map((match) => match[1]);
   for (const specifier of specifiers) {

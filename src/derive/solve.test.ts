@@ -23,10 +23,13 @@
  */
 
 import { strict as assert } from 'node:assert';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { after, test } from 'node:test';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { isAbsolute, relative } from 'node:path';
+import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { loadMutant, writeMutant } from '../../scripts/mutant.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 import { CareerSchema } from '../data/schema.ts';
 import { deriveEntities, type EntityGraph } from './entities.ts';
 import { buildRail } from './rail.ts';
@@ -36,6 +39,7 @@ import { MIN_ORBIT_RADIUS, solveLayout, type Position, type SolvedLayout } from 
 const SOLVE_TS = fileURLToPath(new URL('./solve.ts', import.meta.url));
 const RAIL_TS = fileURLToPath(new URL('./rail.ts', import.meta.url));
 const CAREER_JSON = fileURLToPath(new URL('../data/career.json', import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 const AS_OF = '2026-09';
 
@@ -199,7 +203,7 @@ test('the module names no clock and no Math.random', () => {
   // reach would leave every assertion above green.
   const source = readFileSync(SOLVE_TS, 'utf8');
   // Comments legitimately discuss both, so strip them before scanning.
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(source);
   assert.doesNotMatch(code, /Math\s*\.\s*random/, 'no Math.random anywhere in the module');
   assert.doesNotMatch(code, /new\s+Date\b/, 'no clock read anywhere in the module');
   assert.doesNotMatch(code, /Date\s*\.\s*now/, 'no clock read anywhere in the module');
@@ -686,35 +690,37 @@ test('the committed career.json solves without throwing', () => {
 // --- Mutation guards --------------------------------------------------------
 
 /**
- * Loads a copy of `solve.ts` with one textual mutation applied.
- *
- * The copy lives beside the original so its relative `./entities.ts` and
- * `../data/schema.ts` imports still resolve, and a cache-busting query keeps
- * repeated loads independent. Returns `undefined` where the mutation would not
- * apply, so the caller can fail with a message about the *mutation* rather than
- * about an import error.
+ * Loads a copy of `solve.ts` with one textual mutation applied, through the
+ * shared loader (`scripts/mutant.ts`): the copy is written under `os.tmpdir()`,
+ * never beside the original, with every specifier rewritten to an absolute URL so
+ * `d3-force-3d`, `./entities.ts` and `./rail.ts` still resolve. A mutation that
+ * matches nothing fails, naming the mutation rather than an import error.
  */
-const MUTANTS: string[] = [];
-let mutantCount = 0;
-
-function loadMutant(
-  find: string | RegExp,
-  replace: string,
-): Promise<{ solveLayout: typeof solveLayout }> {
-  const source = readFileSync(SOLVE_TS, 'utf8');
-  const mutated = source.replace(find, replace);
-  assert.notEqual(
-    mutated,
-    source,
-    `the mutation ${String(find)} matched nothing — the guard is no longer pinning anything`,
-  );
-
-  mutantCount += 1;
-  const path = join(fileURLToPath(new URL('.', import.meta.url)), `.mutant-${mutantCount}.ts`);
-  writeFileSync(path, mutated);
-  MUTANTS.push(path);
-  return import(pathToFileURL(path).href) as Promise<{ solveLayout: typeof solveLayout }>;
+function loadSolveMutant(find: string | RegExp, replace: string): Promise<{ solveLayout: typeof solveLayout }> {
+  return loadMutant<{ solveLayout: typeof solveLayout }>(SOLVE_TS, find, replace);
 }
+
+test('a mutant is written outside the repository, and its specifiers are absolute', async () => {
+  // A mutant beside the module under test raced every suite that walks the tree
+  // (an intermittent ENOENT) — the reason this loader exists.
+  const path = writeMutant(SOLVE_TS, /const TICK_COUNT = \d+;/, 'const TICK_COUNT = 17;');
+  const fromRepo = relative(REPO_ROOT, path);
+  assert.ok(fromRepo.startsWith('..') || isAbsolute(fromRepo), `${path} is outside ${REPO_ROOT}`);
+  assert.ok(path.startsWith(tmpdir()), `${path} is under os.tmpdir()`);
+  const written = readFileSync(path, 'utf8');
+  for (const specifier of ['d3-force-3d', './entities.ts', './rail.ts']) {
+    assert.ok(!written.includes(`'${specifier}'`), `${specifier} was rewritten`);
+  }
+  assert.match(written, /from 'file:\/\/[^']*\/src\/derive\/rail\.ts'/, 'a relative specifier resolves against the original');
+  assert.match(written, /from 'file:\/\/[^']*\/node_modules\/d3-force-3d\//, 'a bare one through the repository node_modules');
+  const mutant = await loadSolveMutant(/const TICK_COUNT = \d+;/, 'const TICK_COUNT = 17;');
+  assert.equal(typeof mutant.solveLayout, 'function', 'and the mutant loads');
+  assert.throws(
+    () => writeMutant(SOLVE_TS, 'no such text in solve.ts', 'x'),
+    /the mutation no such text in solve\.ts matched nothing/,
+    'a mutation that applies nowhere fails naming the mutation',
+  );
+});
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -727,7 +733,7 @@ test('changing the tick count changes the solved positions', async () => {
   const graph = graphOf(...multiClientEntries());
   const baseline = solve(graph);
 
-  const mutant = await loadMutant(/const TICK_COUNT = \d+;/, 'const TICK_COUNT = 17;');
+  const mutant = await loadSolveMutant(/const TICK_COUNT = \d+;/, 'const TICK_COUNT = 17;');
   const mutated = mutant.solveLayout(graph, { randomSource: seededRandom() });
 
   assert.notDeepEqual(
@@ -741,7 +747,7 @@ test('the tick count is a literal, never an energy threshold', async () => {
   // The count must not become `while (simulation.alpha() > x)`. Read off the
   // source, since a settling loop can produce the same positions on one fixture.
   const source = readFileSync(SOLVE_TS, 'utf8');
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(source);
 
   assert.match(code, /const TICK_COUNT = \d+;/, 'the tick count must be a literal constant');
   assert.match(code, /\.tick\(TICK_COUNT\)/, 'and it must be what drives the simulation');
@@ -751,7 +757,7 @@ test('the tick count is a literal, never an energy threshold', async () => {
 
   // And a settling form genuinely produces a different answer here, so the
   // assertions above are pinning a real difference rather than a style choice.
-  const mutant = await loadMutant(/const TICK_COUNT = \d+;/, 'const TICK_COUNT = 1;');
+  const mutant = await loadSolveMutant(/const TICK_COUNT = \d+;/, 'const TICK_COUNT = 1;');
   assert.notDeepEqual(
     mutant.solveLayout(graphOf(...multiClientEntries()), { randomSource: seededRandom() }),
     solve(graphOf(...multiClientEntries())),
@@ -777,13 +783,13 @@ test('dropping the pre-solve sort makes the layout depend on authored order', as
   //
   // The comparator itself moved to `rail.ts` when Story 2.1 published the
   // ordering, so this guard mutates the **seam** rather than the rule: the copy
-  // this loader writes sits beside the original and imports the real `rail.ts`,
+  // this loader writes imports the real `rail.ts` (by absolute URL),
   // so rewriting that module in place is not an option, and mutating the point
   // of use is what pins that `solveLayout` actually sorts. `rail.test.ts` pins
   // the rule; this pins the wiring. The intra-system `inOrbitOrder` is left
   // alone — it orders a Client's own Projects, not the Rail, and neutralizing it
   // here would confuse two claims.
-  const mutant = await loadMutant(
+  const mutant = await loadSolveMutant(
     /import \{ compareCodepoints, inRailOrder \} from '\.\/rail\.ts';/,
     "import { compareCodepoints } from './rail.ts';\n" +
       'import type { ClientEntity as _Unsorted } from \'./entities.ts\';\n' +
@@ -840,7 +846,7 @@ test('the immediate .stop() is present and precedes every force', () => {
   // is not observable from a single synchronous solve — so it is pinned
   // structurally, by asserting the ordering the module must keep.
   const source = readFileSync(SOLVE_TS, 'utf8');
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(source);
 
   const constructed = code.indexOf('forceSimulation<StarNode>');
   const stopped = code.indexOf('simulation.stop()');
@@ -871,7 +877,7 @@ test('an unstopped simulation really does drift, so the .stop() earns its place'
   // Remove *every* `.stop()` and leak the live node array, so the drift is
   // observable. Both stops have to go: the trailing one would otherwise halt
   // the timer even with the immediate one removed.
-  const mutant = await loadMutant(
+  const mutant = await loadSolveMutant(
     /simulation\.stop\(\);/g,
     '(globalThis as Record<string, unknown>)["__solveNodes"] = nodes;',
   );
@@ -926,7 +932,7 @@ test('the injected source is actually drawn from, not merely accepted', async ()
   solveLayout(graph, { randomSource: source });
   assert.ok(draws() > 0, 'the real module must draw from the source it is handed');
 
-  const mutant = await loadMutant(
+  const mutant = await loadSolveMutant(
     /  simulation\.randomSource\(randomSource\);\n/,
     '  void randomSource;\n',
   );
@@ -967,8 +973,4 @@ test('the build script does not name the solve', () => {
     /\bsolve\b/,
     'the build must never invoke the solve',
   );
-});
-
-after(() => {
-  for (const path of MUTANTS) rmSync(path, { force: true });
 });

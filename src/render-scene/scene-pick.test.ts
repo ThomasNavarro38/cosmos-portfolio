@@ -12,6 +12,7 @@ import { activateClient, pullBack } from '../shell/activate.ts';
 import { advanceScroll, navigationStore, resetNavigation, selectClient } from '../shell/state.ts';
 import { PICK_DRAG_PX, activateBody, hoverBody, leaveBody, repickPointer } from './scene-pick.ts';
 import { buildScene, type Body } from './scene-model.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const PICK_TS = fileURLToPath(new URL('./scene-pick.ts', import.meta.url));
 
@@ -261,7 +262,7 @@ test('the re-pick re-dispatches R3F’s last pointer only while the pointer is i
 // --- The rule's shape ----------------------------------------------------------
 
 function auditPickRule(source: string): string[] {
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+  const code = stripComments(source);
   const failures: string[] = [];
   if (/\b(?:releaseFocus|selectClient|advanceScroll|enterRail|enterFreeFlight|focusProject|keyboardApproach|pullBack|returnToRail|setState)\b/.test(code)) {
     failures.push('names a store event or a door other than activateClient / activateProject / hoverProject');
