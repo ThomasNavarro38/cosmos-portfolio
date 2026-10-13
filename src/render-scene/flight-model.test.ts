@@ -17,6 +17,7 @@ import { FLIGHT_SECONDS, flightFrame, flightPose, stepFlight, type FlightMotion 
 import { focusFrame, focusPose } from './focus-model.ts';
 import { RAIL_MAX_FRAME_SECONDS, buildRail, railFrame, railPose, stopDistance, type Rail, type RailPose } from './rail-model.ts';
 import { buildScene, type Body, type SceneArtifact, type SceneArtifactClient, type ScenePosition } from './scene-model.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const MODEL_TS = fileURLToPath(new URL('./flight-model.ts', import.meta.url));
 const ARTIFACT_JSON = fileURLToPath(new URL('../../generated/layout.generated.json', import.meta.url));
@@ -362,7 +363,7 @@ test('an unknown flight target throws from the frame, naming it', () => {
 // --- Purity --------------------------------------------------------------------
 
 function auditFlightModel(source: string): string[] {
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+  const code = stripComments(source);
   const failures: string[] = [];
   const allowed = new Set(['../shell/focus-motion.ts', '../shell/motion-preference.ts', './rail-model.ts']);
   for (const [, specifier] of code.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {

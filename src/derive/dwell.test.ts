@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { CareerSchema, type Career } from '../data/schema.ts';
 import { DWELL_TEMPOS, buildDwell, deriveDwell, type DwellTempo } from './dwell.ts';
 import { clientIdOf, deriveEntities, projectIdOf, type ClientEntity, type EntityGraph } from './entities.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const AS_OF = '2026-09';
 const DWELL_TS = fileURLToPath(new URL('./dwell.ts', import.meta.url));
@@ -431,9 +432,7 @@ test('no tempo is a millisecond, a second, or a frame count', () => {
 test('the module emits no duration number of any kind', () => {
   // Read off the source, because a millisecond on a branch these fixtures do not
   // reach would leave every assertion above green.
-  const code = readFileSync(DWELL_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(DWELL_TS, 'utf8'));
   assert.doesNotMatch(code, /\bms\b|milliseconds?|setTimeout|requestAnimationFrame/i, 'no time unit');
   assert.doesNotMatch(code, /\b\d{3,}\b/, 'no duration-shaped literal');
 });
@@ -453,9 +452,7 @@ test('the tempos are a closed set, ordered shortest first', () => {
 test('the module reads no authored field and re-classifies nothing', () => {
   // Not a fourth mapping rule (FR-3): it computes no Body appearance and reads
   // no authored field, only `isDeep`, which `entities.ts` resolved once.
-  const code = readFileSync(DWELL_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(DWELL_TS, 'utf8'));
   assert.doesNotMatch(code, /\bnotable\b/, 'it must not re-classify from `notable`');
   assert.doesNotMatch(code, /\bderive(?!Dwell)[A-Z]/, 'nor call a mapping rule');
   assert.doesNotMatch(code, /slugify|toLowerCase/, 'nor mint an ID of its own');
@@ -473,9 +470,7 @@ test('career.json carries no authored Dwell field', () => {
 // --- Purity ------------------------------------------------------------------
 
 test('dwell.ts reads no clock, no random, no environment, and no DOM', () => {
-  const code = readFileSync(DWELL_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(DWELL_TS, 'utf8'));
   assert.doesNotMatch(code, /new\s+Date\b/, 'no clock read');
   assert.doesNotMatch(code, /Date\s*\.\s*now/, 'no clock read');
   assert.doesNotMatch(code, /Math\s*\.\s*random/, 'no randomness');

@@ -27,10 +27,12 @@
  */
 
 import { strict as assert } from 'node:assert';
-import { readFileSync, readdirSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { SOURCE_MODULE, filesUnder, isTestFile, sourceFilesUnder, stripComments, stripCommentsAndStrings } from '../../scripts/source-scan.ts';
 import { Frustum, Matrix4, PerspectiveCamera, Quaternion, Vector3 } from 'three';
 import { DUST_PARTICLE_RADIUS } from './dust-model.ts';
 import { FOCUS_REACH } from './focus-model.ts';
@@ -53,18 +55,12 @@ const SCENE_DIR = fileURLToPath(new URL('.', import.meta.url));
 const MODEL_TS = fileURLToPath(new URL('./scene-model.ts', import.meta.url));
 const DUST_TS = fileURLToPath(new URL('./dust-model.ts', import.meta.url));
 const SCENE_TSX = fileURLToPath(new URL('./scene.tsx', import.meta.url));
-const RAIL_MODEL_TS = fileURLToPath(new URL('./rail-model.ts', import.meta.url));
 const RAIL_CAMERA_TSX = fileURLToPath(new URL('./rail-camera.tsx', import.meta.url));
-const FOCUS_MODEL_TS = fileURLToPath(new URL('./focus-model.ts', import.meta.url));
-const FLIGHT_MODEL_TS = fileURLToPath(new URL('./flight-model.ts', import.meta.url));
 const SCENE_PICK_TS = fileURLToPath(new URL('./scene-pick.ts', import.meta.url));
-const MOTE_MODEL_TS = fileURLToPath(new URL('./mote-model.ts', import.meta.url));
 const MOTE_FIELD_TSX = fileURLToPath(new URL('./mote-field.tsx', import.meta.url));
 const STROKE_MODEL_TS = fileURLToPath(new URL('./stroke-model.ts', import.meta.url));
 const BODY_FIELD_TSX = fileURLToPath(new URL('./body-field.tsx', import.meta.url));
-const NOTABLE_MODEL_TS = fileURLToPath(new URL('./notable-model.ts', import.meta.url));
 const MOON_FIELD_TSX = fileURLToPath(new URL('./moon-field.tsx', import.meta.url));
-const AFFORDANCE_MODEL_TS = fileURLToPath(new URL('./affordance-model.ts', import.meta.url));
 const AFFORDANCE_FIELD_TSX = fileURLToPath(new URL('./affordance-field.tsx', import.meta.url));
 const SRC_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SCENE_HOST_TSX = fileURLToPath(new URL('../shell/scene-host.tsx', import.meta.url));
@@ -72,49 +68,60 @@ const APP_TSX = fileURLToPath(new URL('../App.tsx', import.meta.url));
 const ARTIFACT_JSON = fileURLToPath(new URL('../../generated/layout.generated.json', import.meta.url));
 
 /**
- * Source with comments **and string literals** blanked, preserving line count.
+ * Source with comments **and string literals** blanked, preserving line count —
+ * the shared `stripCommentsAndStrings` (`scripts/source-scan.ts`).
  *
- * Both, not comments alone: `checkImportBoundaries` blanks both via
- * `stripCommentsAndStrings` precisely because a forbidden token inside a string is
- * not a use of it, and a scan here that stripped only comments would report a
- * baffling failure the first time a message mentioned a banned word. `src/derive/`
- * is not importable from this directory, so the idiom is carried rather than reused.
+ * Both, not comments alone: a forbidden token inside a string is not a use of it,
+ * and a scan that stripped only comments would report a baffling failure the first
+ * time a message mentioned a banned word.
  *
  * JSX comments (`{/* … *\/}`) reduce to `{}` rather than to nothing, so a scan
  * reasoning about brace placement reads a mutated tree — stated because no scan
  * below does, and the next one that wants to must not assume otherwise.
  */
 function codeOf(path: string): string {
-  return blankProse(readFileSync(path, 'utf8'));
-}
-
-/** The same blanking, over a string, so a reconstructed form is treated like a file. */
-function blankProse(source: string): string {
-  return blankComments(source).replace(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g, (match) =>
-    match.replace(/[^\n]/g, ' '),
-  );
+  return stripCommentsAndStrings(readFileSync(path, 'utf8'));
 }
 
 /**
- * Comments blanked, **string literals kept** — for the scans whose subject *is* a
- * string.
- *
- * An import specifier, an `aria-hidden="true"` value and a `kind === 'star'`
- * comparison all live inside quotes, so blanking string bodies erases the very thing
- * those scans assert. `stripCommentsAndStrings` blanks both because it is looking for
- * a forbidden *token*, where a mention in a string is not a use; here the string is
- * the evidence. Two strippers, each named for what it keeps, rather than one that is
- * wrong for half its callers.
+ * A file with comments blanked and **string literals kept** — the shared
+ * `stripComments` — for the scans whose subject *is* a string: an import
+ * specifier, an `aria-hidden="true"` value and a `kind === 'star'` comparison all
+ * live inside quotes.
  */
-function blankComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, ' '))
-    .replace(/\/\/[^\n]*/g, (match) => ' '.repeat(match.length));
+function quotedCodeOf(path: string): string {
+  return stripComments(readFileSync(path, 'utf8'));
 }
 
-/** A file with its comments blanked and its string literals intact. */
-function quotedCodeOf(path: string): string {
-  return blankComments(readFileSync(path, 'utf8'));
+/** A path under `src/`, forward-slashed and `src/`-prefixed, so a failure reads the same on every OS. */
+function srcPath(path: string): string {
+  return `src/${relative(SRC_ROOT, path).split(sep).join('/')}`;
+}
+
+/** Every file under `src/` that `keep` admits, by the shared walk (`scripts/source-scan.ts`), with its source. */
+function srcFiles(keep: (path: string) => boolean): { path: string; source: string }[] {
+  return filesUnder(SRC_ROOT)
+    .filter(keep)
+    .map((path) => ({ path: srcPath(path), source: readFileSync(path, 'utf8') }));
+}
+
+/**
+ * Every shipped module in this directory, by the shared walk — test files
+ * excluded, and each of `exempt`'s files with the reason it states.
+ *
+ * The renderer scans read the directory rather than a list of names,
+ * so a new module here is scanned with no list edit; the directory-coverage test
+ * that made an unlisted module fail is gone with the lists. Each exemption must
+ * name a file the walk reaches, or a renamed module would be exempted by a name
+ * nothing carries.
+ */
+function sceneModules(exempt: Readonly<Record<string, string>> = {}, dir: string = SCENE_DIR): string[] {
+  const all = sourceFilesUnder(dir).filter((path) => !isTestFile(path));
+  const names = all.map((path) => relative(dir, path).split(sep).join('/'));
+  for (const name of Object.keys(exempt)) {
+    assert.ok(names.includes(name), `the exemption ${name} names a file the walk reaches`);
+  }
+  return all.filter((_path, index) => !Object.hasOwn(exempt, names[index] as string));
 }
 
 // --- Fixtures ---------------------------------------------------------------
@@ -805,7 +812,7 @@ test('no module here imports src/data/, src/derive/, the solver, or zustand/reac
   // package, so `zustand/react` and `zustand/vanilla` are both `zustand`, and a row
   // banning `zustand` would reject the navigation store this directory's README
   // explicitly permits.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX, NOTABLE_MODEL_TS, MOON_FIELD_TSX, AFFORDANCE_MODEL_TS, AFFORDANCE_FIELD_TSX]) {
+  for (const path of sceneModules()) {
     assert.deepEqual(auditForbiddenImports(readFileSync(path, 'utf8')), [], `${path} must hold no forbidden import`);
   }
 });
@@ -855,7 +862,7 @@ test('the scene holds no classification or mapping-rule vocabulary of its own', 
   // A case-insensitive `\balpha\b` ban was dropped from this list deliberately — over
   // a pure-structure module it cannot fail by construction, and it would misfire on a
   // future token name or on a fixture Client named Alpha.
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX, NOTABLE_MODEL_TS, MOON_FIELD_TSX, AFFORDANCE_MODEL_TS, AFFORDANCE_FIELD_TSX]) {
+  for (const path of sceneModules()) {
     const code = codeOf(path);
     assert.doesNotMatch(code, /\bclassify\w*\s*\(|\bfunction\s+classify/i, 'no classification test');
     assert.doesNotMatch(code, /\b(?:luminance|mote|mass|rail)(?:Band|Tier|Of|For|From)?\s*\(/i, 'no mapping computed');
@@ -901,7 +908,7 @@ test('the scene holds no classification or mapping-rule vocabulary of its own', 
  * moment the renderer grows a rule of its own rather than when someone notices.
  */
 function auditRenderer(source: string): string[] {
-  const code = blankProse(source);
+  const code = stripCommentsAndStrings(source);
   const failures: string[] = [];
 
   if (/\.sort\s*\(|\.filter\s*\(|\.reverse\s*\(|\.slice\s*\(/.test(code)) {
@@ -1030,7 +1037,7 @@ test('every Body’s hit sphere hands its click to activateBody and its pointer 
  * reveals, never activates: a pointer handler handed a door is a finding.
  */
 function auditPick(source: string): string[] {
-  const code = blankProse(source);
+  const code = stripCommentsAndStrings(source);
   const failures: string[] = [];
   const pick = /\bonClick=\{\s*\(\s*event\s*\)\s*=>\s*activateBody\(\s*body\s*,\s*event\s*\)\s*\}/g;
   const over = /\bonPointerOver=\{\s*\(\s*event\s*\)\s*=>\s*hoverBody\(\s*body\s*,\s*event\s*\)\s*\}/g;
@@ -1057,7 +1064,7 @@ function auditPick(source: string): string[] {
   if (/\braycast\w*|\bonClick\b|\bonPointer\w+|\bonWheel\b|\bonScroll\b|\bonDoubleClick\b|\bonContextMenu\b|\bonUpdate\b/i.test(rest)) {
     failures.push('handles an interaction beyond the click and the approach — Focus is deliberate, and hover reveals, never activates');
   }
-  if (!/import\s*\{\s*activateBody\s*,\s*hoverBody\s*,\s*leaveBody\s*\}\s*from\s*'\.\/scene-pick\.ts'/.test(blankComments(source))) {
+  if (!/import\s*\{\s*activateBody\s*,\s*hoverBody\s*,\s*leaveBody\s*\}\s*from\s*'\.\/scene-pick\.ts'/.test(stripComments(source))) {
     failures.push('activateBody, hoverBody and leaveBody are not imported from the pure rule');
   }
   return failures;
@@ -1105,8 +1112,8 @@ test('the drawn radius discriminates on kind, never on a missing mass', () => {
  *     opacity 1 — after the Dust — and nothing else carries a `renderOrder`.
  */
 function auditBodyField(source: string): string[] {
-  const code = blankProse(source);
-  const quoted = blankComments(source);
+  const code = stripCommentsAndStrings(source);
+  const quoted = stripComments(source);
   const failures: string[] = [];
   const squash = (text: string) => text.replace(/\s+/g, ' ');
 
@@ -1342,7 +1349,7 @@ test('the Bodies’ binding audit rejects the real binding with any one guarante
 function auditLadders(files: readonly { readonly path: string; readonly source: string }[]): string[] {
   const failures: string[] = [];
   for (const file of files) {
-    const code = blankComments(file.source);
+    const code = stripComments(file.source);
     if (file.path.endsWith('/stroke-model.ts') && /\bink-/.test(code)) {
       failures.push(`${file.path} names an ink token — the stroke model colours lines only`);
     }
@@ -1382,9 +1389,7 @@ function auditLadders(files: readonly { readonly path: string; readonly source: 
 }
 
 function renderSceneSources(): { path: string; source: string }[] {
-  return readdirSync(SCENE_DIR)
-    .filter((name) => /\.tsx?$/.test(name) && !/\.test\.ts$/.test(name))
-    .map((name) => ({ path: `src/render-scene/${name}`, source: readFileSync(join(SCENE_DIR, name), 'utf8') }));
+  return sceneModules().map((path) => ({ path: srcPath(path), source: readFileSync(path, 'utf8') }));
 }
 
 test('no ink token on a line, and no stroke token on a label', () => {
@@ -1421,14 +1426,9 @@ test('the ladder audit rejects each borrowing', () => {
   );
 });
 
-/** Every non-test source file under `src/` outside `src/tokens/`, any extension. */
+/** Every non-test file under `src/` outside `src/tokens/`, any extension. */
 function untokenisedSources(): { path: string; source: string }[] {
-  return readdirSync(SRC_ROOT, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile() && !/\.test\.ts$/.test(entry.name))
-    .map((entry) => join(entry.parentPath, entry.name))
-    .map((path) => `src/${relative(SRC_ROOT, path).split(sep).join('/')}`)
-    .filter((path) => !path.startsWith('src/tokens/'))
-    .map((path) => ({ path, source: readFileSync(join(SRC_ROOT, path.slice('src/'.length)), 'utf8') }));
+  return srcFiles((path) => !isTestFile(path) && !srcPath(path).startsWith('src/tokens/'));
 }
 
 /** The token that fails the contrast floor, assembled so this file never names it whole. */
@@ -1461,7 +1461,7 @@ const EFFECTS =
 function effectsIn(files: readonly { readonly path: string; readonly source: string }[]): string[] {
   const every = new RegExp(EFFECTS.source, `${EFFECTS.flags.replace('g', '')}g`);
   return files.flatMap((file) => {
-    const code = blankComments(file.source);
+    const code = stripComments(file.source);
     return [...code.matchAll(every)].map((match) => {
       const line = code.slice(0, match.index).split('\n').length;
       return `${file.path}:${line} holds ${match[0]}`;
@@ -1632,14 +1632,21 @@ function auditConnectors(code: string): string[] {
   return failures;
 }
 
+/** The modules the connector scan skips, each with its reason. */
+const CONNECTOR_EXEMPT: Readonly<Record<string, string>> = {
+  'body-field.tsx': 'the Bodies’ binding is where every line is drawn — held by auditBodyField instead',
+};
+
 test('no module but the Bodies’ binding draws a line, edge, or connector', () => {
+  // Every module in the directory, by the shared walk: a new one is
+  // read with no list edit.
   // The Rail's files too: the Rail is drawn by `body-field.tsx` from `railLine`, and
   // a second, hand-made line elsewhere would be one no audit reads.
   // 3.4: the affordance's leader is an SVG `<path>`, which no connector here names —
   // `auditAffordanceField` holds it to one open segment.
   // 3.5: the Motes' three orbit lines are `mote-field.tsx`'s, held to exactly that
   // block by `auditMoteField`; with the block cut out, the field draws no line.
-  for (const path of [SCENE_TSX, RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, SCENE_PICK_TS, MOTE_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, NOTABLE_MODEL_TS, MOON_FIELD_TSX, AFFORDANCE_MODEL_TS, AFFORDANCE_FIELD_TSX]) {
+  for (const path of sceneModules(CONNECTOR_EXEMPT)) {
     const source = readFileSync(path, 'utf8');
     assert.deepEqual(auditConnectors(path === MOTE_FIELD_TSX ? withoutOrbitLines(source) : source), [], `${path}: lines are body-field.tsx's alone`);
   }
@@ -1730,7 +1737,7 @@ function mapBlocks(code: string, collection: string): string[] {
  * the framing still reads the Bodies only.
  */
 function auditDrawOrder(source: string): string[] {
-  const code = blankProse(source);
+  const code = stripCommentsAndStrings(source);
   const failures: string[] = [];
 
   for (const collection of ['media', 'particles']) {
@@ -1776,7 +1783,7 @@ function auditDrawOrder(source: string): string[] {
   const bodyMount = inside.search(/<BodyField\b/);
   const moonMount = inside.search(/<MoonField\b/);
   if (bodyMount < 0 || moonMount < 0 || moonMount < bodyMount) failures.push('the Moons are not mounted after the Bodies');
-  if (!/import\s*\{\s*MoonField\s*\}\s*from\s*'\.\/moon-field\.tsx'/.test(blankComments(source))) failures.push('MoonField is not imported');
+  if (!/import\s*\{\s*MoonField\s*\}\s*from\s*'\.\/moon-field\.tsx'/.test(stripComments(source))) failures.push('MoonField is not imported');
   // The affordance (3.4) is `<AffordanceField>`'s, held by `auditAffordanceField`:
   // a DOM overlay drawing no scene object. Here: mounted exactly once, inside the
   // Canvas (its frame loop needs one), with the artifact and the Bodies, last — after
@@ -1789,7 +1796,7 @@ function auditDrawOrder(source: string): string[] {
   if (affordanceMount < 0 || affordanceMount < moonMount || affordanceMount < inside.search(/<RailCamera\b/)) {
     failures.push('the affordance is not mounted last, after the rig and the Moons');
   }
-  if (!/import\s*\{\s*AffordanceField\s*\}\s*from\s*'\.\/affordance-field\.tsx'/.test(blankComments(source))) failures.push('AffordanceField is not imported');
+  if (!/import\s*\{\s*AffordanceField\s*\}\s*from\s*'\.\/affordance-field\.tsx'/.test(stripComments(source))) failures.push('AffordanceField is not imported');
 
   // The medium is drawn at the model's radius through the model's own scale, so the
   // non-overlap and ceiling proofs over `radius` are proofs about the screen too.
@@ -1939,7 +1946,7 @@ test('the draw-order audit rejects the real renderer with any one of its guarant
  * evidence. `stroke-model.test.ts` checks the style's value; this checks it is drawn.
  */
 function auditVignette(source: string): string[] {
-  const code = blankComments(source);
+  const code = stripComments(source);
   const failures: string[] = [];
   const overlays = code.match(/<\w+\b[^>]*\bstyle=\{\s*vignetteStyle\(\)\s*\}[^>]*>/g) ?? [];
   if (overlays.length !== 1) {
@@ -2007,7 +2014,7 @@ test('the vignette audit rejects the real renderer with any one of its guarantee
  * Comments are blanked but strings kept, because the token key *is* a string.
  */
 function auditSceneColours(source: string): string[] {
-  const code = blankComments(source);
+  const code = stripComments(source);
   const failures: string[] = [];
   const colourOf = (material: string) => /\bcolor\s*=\s*\{\s*([^}]*?)\s*\}/.exec(material)?.[1];
 
@@ -2258,12 +2265,20 @@ function coordinateLiterals(code: string): string[] {
   return failures;
 }
 
-test('neither Rail file, nor the focus model, nor the Motes’ renderer, holds a world-coordinate literal', () => {
-  // `mote-model.ts` is not in this list: its orbit radii and tilts are numeric
-  // triples by nature, and this scan cannot tell them from a place. What the scan
-  // stands for is proven there instead, by execution — translating every Body
-  // translates every Mote (`mote-model.test.ts`).
-  for (const path of [RAIL_MODEL_TS, RAIL_CAMERA_TSX, FOCUS_MODEL_TS, FLIGHT_MODEL_TS, MOTE_FIELD_TSX, STROKE_MODEL_TS, BODY_FIELD_TSX, NOTABLE_MODEL_TS, MOON_FIELD_TSX, AFFORDANCE_MODEL_TS, AFFORDANCE_FIELD_TSX]) {
+/** The modules the coordinate-literal scan skips, each with its reason. */
+const COORDINATE_EXEMPT: Readonly<Record<string, string>> = {
+  // Its orbit radii and tilts are numeric triples by nature, and this scan cannot
+  // tell them from a place. What the scan stands for is proven there instead, by
+  // execution — translating every Body translates every Mote (`mote-model.test.ts`).
+  'mote-model.ts': 'orbit radii and tilts are numeric triples by nature; held by execution in mote-model.test.ts',
+  // The opening camera's `rotation: { x: 0, y: 0, z: 0 }` is an orientation, not a
+  // place — the identity R3F needs so it does not `lookAt(0, 0, 0)` — and the
+  // framing is held by execution (`frameBodies` above).
+  'scene-model.ts': 'the camera’s identity rotation is an orientation, not a place; framing is held by frameBodies’ tests',
+};
+
+test('no renderer module but the named exemptions holds a world-coordinate literal', () => {
+  for (const path of sceneModules(COORDINATE_EXEMPT)) {
     assert.deepEqual(coordinateLiterals(codeOf(path)), [], `${path} must resolve every pose from entities`);
   }
 });
@@ -2305,8 +2320,8 @@ test('the coordinate-literal scan rejects each shape, and passes entity-derived 
  * still does the one thing it is for.
  */
 function auditRig(source: string): string[] {
-  const code = blankProse(source);
-  const quoted = blankComments(source);
+  const code = stripCommentsAndStrings(source);
+  const quoted = stripComments(source);
   const failures: string[] = [];
 
   if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) failures.push('writes the store with setState');
@@ -2467,7 +2482,7 @@ test('the rig audit rejects the real rig with any one guarantee broken', () => {
  * pose the rig can reach, not only the opening frame.
  */
 function auditRailMount(source: string): string[] {
-  const code = blankProse(source);
+  const code = stripCommentsAndStrings(source);
   const failures: string[] = [];
   if (!/\bconst\s+rail\s*=\s*buildRail\s*\(\s*artifact\s*,\s*bodies\s*\)/.test(code)) {
     failures.push('the keyframes do not come from buildRail(artifact, bodies)');
@@ -2522,7 +2537,7 @@ function railImporters(files: readonly { readonly path: string; readonly source:
   const failures: string[] = [];
   for (const file of files) {
     if (file.path.startsWith('src/render-scene/')) continue;
-    const code = blankComments(file.source);
+    const code = stripComments(file.source);
     for (const match of code.matchAll(/(?:\bfrom|\bimport|\brequire)\s*\(?\s*['"`]([^'"`]+)['"`]/g)) {
       if (/(?:^|\/)rail-(?:model|camera)(?:\.tsx?)?$/.test(match[1] ?? '')) {
         failures.push(`${file.path} imports ${match[1]} — only src/render-scene/ may reach the Rail`);
@@ -2533,10 +2548,7 @@ function railImporters(files: readonly { readonly path: string; readonly source:
 }
 
 test('nothing outside src/render-scene/ imports the Rail model or the rig', () => {
-  const files = readdirSync(SRC_ROOT, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile() && /\.tsx?$/.test(entry.name))
-    .map((entry) => join(entry.parentPath, entry.name))
-    .map((path) => ({ path: `src/${relative(SRC_ROOT, path).split(sep).join('/')}`, source: readFileSync(path, 'utf8') }));
+  const files = srcFiles((path) => SOURCE_MODULE.test(path));
   assert.ok(files.some((file) => file.path === 'src/shell/scene-host.tsx'), 'the walk must reach the shell');
   assert.deepEqual(railImporters(files), []);
 });
@@ -2584,8 +2596,8 @@ test('the Rail-importer scan rejects every edge form from outside, and ignores p
  * lines here, so the connector ban runs over the source with that block cut out.
  */
 function auditMoteField(source: string): string[] {
-  const code = blankProse(source);
-  const quoted = blankComments(source);
+  const code = stripCommentsAndStrings(source);
+  const quoted = stripComments(source);
   const failures: string[] = [];
 
   // The orbit lines (3.5): exactly one block, exactly this shape.
@@ -2787,7 +2799,7 @@ test('the Mote audit rejects the real renderer with any one guarantee broken', (
  * handed the artifact, the Bodies and the Dust media the scene built.
  */
 function auditMoteMount(source: string): string[] {
-  const code = blankProse(source);
+  const code = stripCommentsAndStrings(source);
   const failures: string[] = [];
   const inside = /<Canvas\b[\s\S]*<\/Canvas>/.exec(code)?.[0] ?? '';
   const mount = /<MoteField\s+artifact=\{\s*artifact\s*\}\s+bodies=\{\s*bodies\s*\}\s+media=\{\s*media\s*\}\s*\/>/;
@@ -2797,7 +2809,7 @@ function auditMoteMount(source: string): string[] {
   const motes = inside.search(/<MoteField\b/);
   if (rig === -1 || motes === -1 || motes < rig) failures.push('the Motes are mounted before the rig — they would project last frame’s camera');
   if (!/const\s*\{\s*media\s*,\s*particles\s*\}\s*=\s*buildDust\(\s*bodies\s*\)/.test(code)) failures.push('the media are not the Dust the scene draws');
-  if (!/import\s*\{\s*MoteField\s*\}\s*from\s*'\.\/mote-field\.tsx'/.test(blankComments(source))) failures.push('MoteField is not imported');
+  if (!/import\s*\{\s*MoteField\s*\}\s*from\s*'\.\/mote-field\.tsx'/.test(stripComments(source))) failures.push('MoteField is not imported');
   return failures;
 }
 
@@ -2844,8 +2856,8 @@ test('the Mote mount audit rejects the real scene with any one guarantee removed
  * Moon's colour.
  */
 function auditMoonField(source: string): string[] {
-  const code = blankProse(source);
-  const quoted = blankComments(source);
+  const code = stripCommentsAndStrings(source);
+  const quoted = stripComments(source);
   const squash = (text: string) => text.replace(/\s+/g, ' ');
   const failures: string[] = [];
 
@@ -3026,8 +3038,8 @@ test('the Moon audit rejects the real renderer with any one guarantee broken', (
  * and the secondary line, each in the model's style.
  */
 function auditAffordanceField(source: string): string[] {
-  const code = blankProse(source);
-  const quoted = blankComments(source);
+  const code = stripCommentsAndStrings(source);
+  const quoted = stripComments(source);
   const squash = (text: string) => text.replace(/\s+/g, ' ');
   const failures: string[] = [];
 
@@ -3200,7 +3212,7 @@ test('the affordance audit rejects the real binding with any one guarantee broke
 
 /** Every string literal in a source, comments blanked first. */
 function stringLiterals(source: string): string[] {
-  return blankComments(source).match(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g) ?? [];
+  return stripComments(source).match(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g) ?? [];
 }
 
 /**
@@ -3210,7 +3222,7 @@ function stringLiterals(source: string): string[] {
  * between a generic's `>` and a `<` can be read too, which only widens the scan.
  */
 function jsxTexts(source: string): string[] {
-  return [...blankComments(source).matchAll(/>([^<>{}]+)</g)]
+  return [...stripComments(source).matchAll(/>([^<>{}]+)</g)]
     .map((match) => (match[1] ?? '').trim())
     .filter((text) => /[a-z]/i.test(text));
 }
@@ -3268,83 +3280,37 @@ test('no shipped string says what a ring opens — the Ring means a Notable, and
   );
 });
 
-// --- Directory coverage ----------------------------------------------------
+// --- Directory walk (3.14) ------------------------------------------------------
 
-test('every module in this directory is covered by the scans above', () => {
-  // The scans resolve each module by name, so a new module under
-  // `src/render-scene/` would inherit none of the connector, hook, store-write or
-  // coordinate-literal bans. 2.5's `rail-model.ts` and `rail-camera.tsx` are named
-  // in every scan that applies to them (the rig has its own audit below). This does not widen them; it makes an
-  // unscanned module fail *loudly*, naming itself, rather than passing silently. The
-  // same shape as `checkRuleCoverage` in `boundaries.ts`, one level down. Widening the
-  // scans themselves is recorded in `deferred-work.md`.
-  const known = new Set([
-    'scene-model.ts',
-    'scene-model.test.ts',
-    'dust-model.ts',
-    'dust-model.test.ts',
-    'scene.tsx',
-    'rail-model.ts',
-    'rail-model.test.ts',
-    'rail-camera.tsx',
-    // 2.7: named in the import, vocabulary and connector scans (the focus model in the
-    // coordinate-literal scan too), and each carries its own purity audit.
-    'focus-model.ts',
-    'focus-model.test.ts',
-    'scene-pick.ts',
-    'scene-pick.test.ts',
-    // 2.8: named in the import, vocabulary and connector scans (the field in the
-    // coordinate-literal scan too); the field has its own audit below, the model
-    // its purity audit in `mote-model.test.ts`.
-    'mote-model.ts',
-    'mote-model.test.ts',
-    'mote-field.tsx',
-    // 2.9: named in the import, vocabulary, connector and coordinate-literal scans;
-    // its purity audit is in `flight-model.test.ts`.
-    'flight-model.ts',
-    'flight-model.test.ts',
-    // 3.2: named in the import, vocabulary and coordinate-literal scans; the model is
-    // in the connector scan too and carries its own purity audit in
-    // `stroke-model.test.ts`, the binding has `auditBodyField` and `auditPick` above.
-    'stroke-model.ts',
-    'stroke-model.test.ts',
-    'body-field.tsx',
-    // 3.3: named in the import, vocabulary, connector and coordinate-literal scans;
-    // the model carries its own purity audit in `notable-model.test.ts`, the binding
-    // has `auditMoonField` above, and its mount is held by `auditDrawOrder`.
-    'notable-model.ts',
-    'notable-model.test.ts',
-    'moon-field.tsx',
-    // 3.4: named in the import, vocabulary, connector and coordinate-literal scans;
-    // the model carries its own purity audit in `affordance-model.test.ts`, the
-    // binding has `auditAffordanceField` above, and its mount is held by
-    // `auditDrawOrder`.
-    'affordance-model.ts',
-    'affordance-model.test.ts',
-    'affordance-field.tsx',
-    'README.md',
-  ]);
-  const found: string[] = [];
-  // `withFileTypes`, so a subdirectory is descended into rather than read as an
-  // unscanned module — without it a `src/render-scene/camera/` would pass as a file
-  // nobody recognised, which is the opposite of what this test is for.
-  const walk = (dir: string, prefix: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.isDirectory()) {
-        walk(`${dir}/${entry.name}`, `${prefix}${entry.name}/`);
-        continue;
-      }
-      found.push(`${prefix}${entry.name}`);
+test('the renderer scans walk the whole directory, and every exemption names a file the walk reaches', () => {
+  // The scans read `sceneModules()`, not a list of names, so a new module here is
+  // scanned with no edit. Each exempted file is reached by the walk — an exemption
+  // naming a file that moved would otherwise exempt nothing while reading as a rule.
+  const walked = sceneModules().map((path) => relative(SCENE_DIR, path).split(sep).join('/'));
+  for (const name of [...Object.keys(CONNECTOR_EXEMPT), ...Object.keys(COORDINATE_EXEMPT)]) {
+    assert.ok(walked.includes(name), `${name} is walked`);
+  }
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, SCENE_PICK_TS, RAIL_CAMERA_TSX, AFFORDANCE_FIELD_TSX]) {
+    assert.ok(sceneModules().includes(path), `${path} is walked`);
+  }
+  assert.ok(walked.every((name) => !isTestFile(name)), 'and no test file is scanned');
+  assert.throws(() => sceneModules({ 'no-such-module.ts': 'stale' }), /no-such-module\.ts names a file the walk reaches/);
+
+  // The matrix row: a new renderer module is read with no list edit. Driven over a
+  // fixture copy of the directory's shape, never the real one.
+  const fixture = mkdtempSync(join(tmpdir(), 'scene-walk-'));
+  try {
+    for (const name of ['scene.tsx', 'new-x.ts', 'new-x.test.ts', 'camera/rig.tsx']) {
+      mkdirSync(join(fixture, name, '..'), { recursive: true });
+      writeFileSync(join(fixture, name), 'export {};\n');
     }
-  };
-  walk(SCENE_DIR, '');
-
-  assert.ok(found.length > 0, 'the walk must find something, or this test certifies nothing');
-  assert.deepEqual(
-    found.filter((name) => !known.has(name)).sort(),
-    [],
-    'a new module here inherits none of the scans above — widen them, then add it to this list',
-  );
+    assert.deepEqual(
+      sceneModules({}, fixture).map((path) => relative(fixture, path).split(sep).join('/')),
+      ['camera/rig.tsx', 'new-x.ts', 'scene.tsx'],
+    );
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
 });
 
 // --- Who reads the reduced-motion preference (2.10) -------------------------------
@@ -3379,8 +3345,8 @@ function preferenceReaders(files: readonly { readonly path: string; readonly sou
   const failures: string[] = [];
   const names = /\b(?:reducedMotion|subscribeReducedMotion|setReducedMotion|motionPace|REDUCED_MOTION_PACE|REDUCED_MOTION_QUERY)\b/;
   for (const file of files) {
-    if (file.path === 'src/shell/motion-preference.ts' || /\.test\.ts$/.test(file.path)) continue;
-    const code = blankComments(file.source);
+    if (file.path === 'src/shell/motion-preference.ts' || isTestFile(file.path)) continue;
+    const code = stripComments(file.source);
     const imports = [...code.matchAll(/(?:\bfrom|\bimport|\brequire)\s*\(?\s*['"`]([^'"`]+)['"`]/g)].some((match) =>
       /(?:^|\/)motion-preference(?:\.tsx?)?$/.test(match[1] ?? ''),
     );
@@ -3400,10 +3366,7 @@ function preferenceReaders(files: readonly { readonly path: string; readonly sou
 }
 
 function sourceFiles(): { path: string; source: string }[] {
-  return readdirSync(SRC_ROOT, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile() && /\.tsx?$/.test(entry.name))
-    .map((entry) => join(entry.parentPath, entry.name))
-    .map((path) => ({ path: `src/${relative(SRC_ROOT, path).split(sep).join('/')}`, source: readFileSync(path, 'utf8') }));
+  return srcFiles((path) => SOURCE_MODULE.test(path));
 }
 
 test('only the pacing surfaces reference the reduced-motion preference, each in its own role', () => {
@@ -3411,7 +3374,7 @@ test('only the pacing surfaces reference the reduced-motion preference, each in 
   for (const path of Object.keys(PREFERENCE_ROLES)) {
     const file = files.find((entry) => entry.path === path);
     assert.ok(file !== undefined, `${path} is walked`);
-    assert.match(blankComments(file.source), /motion-preference\.ts/, `${path} does reference it — the set is not stale`);
+    assert.match(stripComments(file.source), /motion-preference\.ts/, `${path} does reference it — the set is not stale`);
   }
   assert.deepEqual(preferenceReaders(files), []);
 });
@@ -3436,6 +3399,7 @@ test('the preference-reader audit rejects each bad form, and ignores prose, test
     preferenceReaders([
       { path: 'src/shell/motion-preference.ts', source: 'export function reducedMotion() {}' },
       { path: 'src/shell/state.test.ts', source: "import { reducedMotion } from './motion-preference.ts';" },
+      { path: 'src/shell/scene-host.test.tsx', source: 'const reduced = reducedMotion();' },
       { path: 'src/shell/state.ts', source: '// reducedMotion() is read by the rig, not here.' },
       { path: 'src/render-scene/rail-model.ts', source: "import { motionPace } from '../shell/motion-preference.ts';\nfunction f(dt: number, reduced = false) { return motionPace(reduced); }" },
       { path: 'src/shell/scene-host.tsx', source: "import { REDUCED_MOTION_QUERY, setReducedMotion } from './motion-preference.ts';" },

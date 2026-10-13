@@ -30,7 +30,7 @@
 
 import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import { after, test } from 'node:test';
@@ -38,7 +38,8 @@ import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { stripBanner } from './artifact.ts';
 import { parseArtifact } from './artifact-schema.ts';
-import { SRC_ROOT, findImports, stripCommentsAndStrings } from './boundaries.ts';
+import { SRC_ROOT, findImports } from './boundaries.ts';
+import { filesUnder, isTestFile, sourceFilesUnder, stripCommentsAndStrings } from '../../scripts/source-scan.ts';
 import { DWELL_TEMPOS } from './dwell.ts';
 import { runPipeline } from './index.ts';
 
@@ -83,20 +84,14 @@ after(() => {
  */
 function snapshot(dir: string): Record<string, string> {
   const out: Record<string, string> = {};
-  const walk = (current: string): void => {
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const path = join(current, entry.name);
-      if (entry.isDirectory()) {
-        walk(path);
-        continue;
-      }
-      const stats = statSync(path);
-      const contents = readFileSync(path);
-      out[relative(REPO_ROOT, path).split(sep).join('/')] =
-        `${stats.size}:${createHash('sha256').update(contents).digest('hex')}`;
-    }
-  };
-  walk(dir);
+  // The shared walk with nothing skipped: the question is whether the solve wrote
+  // anything, and a write into a dot-directory or `node_modules` is still a write.
+  for (const path of filesUnder(dir, { all: true })) {
+    const stats = statSync(path);
+    const contents = readFileSync(path);
+    out[relative(REPO_ROOT, path).split(sep).join('/')] =
+      `${stats.size}:${createHash('sha256').update(contents).digest('hex')}`;
+  }
   return out;
 }
 
@@ -246,6 +241,61 @@ test('appending a Project reframes only its own Client and adds no stop of its o
   );
 });
 
+test('appending a Project under a new Client adds one stop, frames it, and reframes or re-paces no other', () => {
+  // The other half of NFR-5: an entry naming a Client the career has never seen
+  // costs the same one object, and buys exactly one new Rail stop. Every list that
+  // is Client-granular grows by one, `destinations` by two (the Client and its
+  // Project), and nothing already there is reframed or re-paced.
+  type Doc = {
+    clients: readonly {
+      id: string;
+      position: { x: number; y: number; z: number };
+      projects: readonly { id: string; position: { x: number; y: number; z: number } }[];
+    }[];
+    dwell: readonly { subject: string; tempo: string }[];
+    shots: readonly { subject: string; distance: number }[];
+    rail: readonly string[];
+    destinations: readonly { id: string }[];
+  };
+  const before = solve(writeTemp(JSON.stringify(committedCareer(), null, 2))).document as Doc;
+  const career = committedCareer();
+  career.projects.push(appendedEntry({ client: 'Meridian Freight', project: 'Yard planning service' }));
+  const after_ = solve(writeTemp(JSON.stringify(career, null, 2))).document as Doc;
+
+  const known = new Set(before.clients.map((client) => client.id));
+  const added = after_.clients.filter((client) => !known.has(client.id));
+  assert.equal(added.length, 1, 'exactly one new Client');
+  const client = added[0]!;
+  assert.equal(client.projects.length, 1, 'owning the appended Project');
+
+  assert.equal(after_.dwell.length, before.dwell.length + 1, 'one new Dwell entry');
+  assert.equal(after_.shots.length, before.shots.length + 1, 'one new Shot');
+  assert.equal(after_.rail.length, before.rail.length + 1, 'one new Rail stop');
+  assert.equal(after_.destinations.length, before.destinations.length + 2, 'two new destinations: the Client and its Project');
+  assert.ok(after_.rail.includes(client.id), 'the new stop is the new Client');
+
+  // The new Shot frames the new system: it stands further from the Star than any
+  // of its Projects orbits, or the camera would sit inside the system it frames.
+  const shot = after_.shots.find((entry) => entry.subject === client.id);
+  assert.ok(shot !== undefined, 'the new Client has a Shot');
+  for (const project of client.projects) {
+    const orbit = Math.hypot(
+      project.position.x - client.position.x,
+      project.position.y - client.position.y,
+      project.position.z - client.position.z,
+    );
+    assert.ok(shot.distance > orbit, `the Shot (${shot.distance}) stands outside ${project.id}'s orbit (${orbit})`);
+  }
+
+  // And every existing stop keeps its framing and its pace.
+  for (const prior of before.shots) {
+    assert.deepEqual(after_.shots.find((entry) => entry.subject === prior.subject), prior, `${prior.subject}'s Shot is unchanged`);
+  }
+  for (const prior of before.dwell) {
+    assert.deepEqual(after_.dwell.find((entry) => entry.subject === prior.subject), prior, `${prior.subject}'s tempo is unchanged`);
+  }
+});
+
 // --- FR-5: promotion is free -------------------------------------------------
 
 /** A one-Client, one-Project career whose only Project is Shallow. */
@@ -271,8 +321,9 @@ function shallowFixture(notable?: string): { asOf: string; projects: Record<stri
 test('promoting a Shallow Project to Deep flips isDeep and lengthens its Client Dwell tempo', () => {
   // FR-5's promise stated as the two things that must move and the everything
   // else that must not. The fixture is built here rather than taken from the
-  // committed data, because `career.json` holds one Client with one Project and
-  // that Project is already Deep — there is nothing in it to promote.
+  // committed data so the promoted Project is its Client's only one: in
+  // `career.json` a Client's tempo also answers to its sibling Projects, which would
+  // tie the comparison to whichever Client the test happened to pick.
   const shallowPath = writeTemp(JSON.stringify(shallowFixture(), null, 2));
   const deepPath = writeTemp(JSON.stringify(shallowFixture('Problem stated. [[The constraint, in one sentence.]] The decision taken.'), null, 2));
 
@@ -434,7 +485,7 @@ const NETWORK_PATTERNS: readonly { readonly pattern: RegExp; readonly what: stri
 const NETWORK_MODULES = new Set(['http', 'https', 'net', 'dgram', 'http2', 'tls', 'dns']);
 
 /**
- * Every shipped `.ts`/`.tsx` file under `src/`, sorted — **`*.test.ts` excluded**.
+ * Every shipped source module under `src/`, by the shared walk (`scripts/source-scan.ts`) — **test files excluded**.
  *
  * A test file is not shipped source: `npm test` runs it and no bundle contains
  * it. It is excluded because a suite that audits network calls must be able to
@@ -445,23 +496,7 @@ const NETWORK_MODULES = new Set(['http', 'https', 'net', 'dgram', 'http2', 'tls'
  * network, which would fail loudly and immediately in CI rather than shipping.
  */
 function shippedFilesUnder(dir: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
-    a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
-  )) {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      // Same skip `sourceFilesUnder` uses in `boundaries.ts`: a vendored
-      // dependency under `src/` is not shipped source of this repo's authorship,
-      // and neither is a tool's dot-directory cache. The two walkers must agree,
-      // or a file exempt from the boundary rules is still audited here.
-      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-      found.push(...shippedFilesUnder(path));
-      continue;
-    }
-    if (/\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) found.push(path);
-  }
-  return found;
+  return sourceFilesUnder(dir).filter((path) => !isTestFile(path));
 }
 
 /**

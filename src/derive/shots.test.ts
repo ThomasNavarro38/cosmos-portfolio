@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { CareerSchema, type Career } from '../data/schema.ts';
 import { clientIdOf, deriveEntities, projectIdOf, type EntityGraph } from './entities.ts';
 import { SHOT_FRAMINGS, buildShots, type Shot } from './shots.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const AS_OF = '2026-09';
 const SHOTS_TS = fileURLToPath(new URL('./shots.ts', import.meta.url));
@@ -240,6 +241,10 @@ test('a heavily weighted system is not framed from inside its own Star', () => {
   assert.ok(shot !== undefined);
   assert.ok(shot.distance > widestOrbit(graph, clientIdOf('Tight')), 'containment still holds');
   assert.ok(shot.distance > 1, 'and the camera is not inside the Star');
+  // Pinned because `> 1` held for any floor above 1, so the
+  // floor's value was pinned nowhere. A weight of 20 gives a 0.5 orbit and a 0.75
+  // proportional distance, so the floor alone decides.
+  assert.equal(shot.distance, 5, 'the floor decides: 5, the declared minimum framing distance');
 });
 
 // --- Matrix row: a Project added later --------------------------------------
@@ -351,18 +356,14 @@ test('the module reads no solved position and re-derives no radius from one', ()
   // reach would leave every assertion above green. `railDistance` *is* the
   // orbital radius; recovering it from a solved position would be the same
   // number computed a second, lossier way.
-  const code = readFileSync(SHOTS_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(SHOTS_TS, 'utf8'));
   assert.doesNotMatch(code, /\bposition\b|SolvedLayout|\.x\b|\.y\b|\.z\b/, 'no solved position is read');
   assert.doesNotMatch(code, /Math\s*\.\s*hypot|Math\s*\.\s*sqrt|Math\s*\.\s*atan/, 'no radius recovered from a coordinate');
   assert.doesNotMatch(code, /from ['"]\.\/solve\.ts['"]/, 'the assembler must not depend on solver internals');
 });
 
 test('the module mints no ID and calls no mapping rule', () => {
-  const code = readFileSync(SHOTS_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(SHOTS_TS, 'utf8'));
   assert.doesNotMatch(code, /\bderive[A-Z]/, 'the framing must not call a mapping rule');
   assert.doesNotMatch(code, /slugify|toLowerCase/, 'nor mint an ID of its own');
   assert.doesNotMatch(code, /isDeep|luminanceBand|moteTier|\bmass\b|timeAxis/, 'nor copy a derived property it does not frame from');
@@ -439,9 +440,7 @@ test('the constant-distance mutation is only caught because the systems differ',
 // --- Purity ------------------------------------------------------------------
 
 test('shots.ts reads no clock, no random, no environment, and no DOM', () => {
-  const code = readFileSync(SHOTS_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(SHOTS_TS, 'utf8'));
   assert.doesNotMatch(code, /new\s+Date\b/, 'no clock read');
   assert.doesNotMatch(code, /Date\s*\.\s*now/, 'no clock read');
   assert.doesNotMatch(code, /Math\s*\.\s*random/, 'no randomness');

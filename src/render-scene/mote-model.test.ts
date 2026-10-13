@@ -82,6 +82,7 @@ import {
 import { RAIL_MAX_FRAME_SECONDS, buildRail } from './rail-model.ts';
 import { DEFAULT_FOV, DEFAULT_NEAR, buildScene, type SceneArtifact, type ScenePosition } from './scene-model.ts';
 import { worldPerPixel } from './notable-model.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const MODEL_TS = fileURLToPath(new URL('./mote-model.ts', import.meta.url));
 const RULES_TS = fileURLToPath(new URL('../derive/rules.ts', import.meta.url));
@@ -1180,7 +1181,7 @@ test('a draw’s scale and opacity follow the level, and its label shows only wh
 // --- Purity ------------------------------------------------------------------------
 
 function auditMoteModel(source: string): string[] {
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+  const code = stripComments(source);
   const failures: string[] = [];
   const allowed = new Set([
     '../shell/focus-motion.ts',

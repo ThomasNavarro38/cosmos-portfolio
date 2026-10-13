@@ -324,6 +324,15 @@ test('a non-Latin name yields a distinct, content-derived ID', () => {
   assert.equal(clientIdOf('日本電気'), a, 'and the ID is stable for the same name');
 });
 
+test('an ID never starts or ends on a separator, whatever punctuation frames the name', () => {
+  // Pinned because trimming the trailing run could be
+  // deleted with the suite green, minting `client:acme-corp-` for "Acme Corp." —
+  // an ID that differs from "Acme Corp"'s by a dash nobody can see.
+  assert.equal(clientIdOf('Acme Corp.'), 'client:acme-corp');
+  assert.equal(clientIdOf('  (Acme Corp)  '), 'client:acme-corp');
+  assert.equal(projectIdOf('Acme!', 'Ledger v2 —'), 'project:acme/ledger-v2');
+});
+
 test('non-Latin IDs survive a re-order unchanged', () => {
   const entries = [
     { ...baseEntry(), client: '日本電気', project: 'Alpha' },

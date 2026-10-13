@@ -39,6 +39,7 @@ import {
   strokeWidthPx,
   type SubjectState,
 } from './stroke-model.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const MODEL_TS = fileURLToPath(new URL('./notable-model.ts', import.meta.url));
 const ARTIFACT_JSON = fileURLToPath(new URL('../../generated/layout.generated.json', import.meta.url));
@@ -384,7 +385,7 @@ test('over every reachable subject, flipping isDeep changes no outline, and band
 
 /** The model's imports, globals and reads, as a pure function over its source. */
 function auditNotableModel(source: string): string[] {
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+  const code = stripComments(source);
   const failures: string[] = [];
   const allowed = new Set(['./stroke-model.ts', './scene-model.ts']);
   for (const match of code.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {

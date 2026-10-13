@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { CareerSchema, type Career } from '../data/schema.ts';
 import { buildDestinations, type Destination } from './destinations.ts';
 import { clientIdOf, deriveEntities, projectIdOf, type EntityGraph } from './entities.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const AS_OF = '2026-09';
 const DESTINATIONS_TS = fileURLToPath(new URL('./destinations.ts', import.meta.url));
@@ -354,9 +355,7 @@ test('a destination carries an ID and a kind, and no coordinate, index, or offse
 test('the module re-derives no entity property and mints no ID of its own', () => {
   // Read off the source, because a re-derivation on a branch these fixtures do
   // not reach would leave every assertion above green.
-  const code = readFileSync(DESTINATIONS_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(DESTINATIONS_TS, 'utf8'));
   assert.doesNotMatch(code, /\bderive[A-Z]/, 'the walk must not call a mapping rule');
   assert.doesNotMatch(code, /slugify|toLowerCase|normalize\(/, 'nor mint an ID of its own');
   assert.doesNotMatch(code, /isDeep|luminanceBand|moteTier|railDistance|\bmass\b/, 'nor copy a derived property');
@@ -366,9 +365,7 @@ test('the module re-derives no entity property and mints no ID of its own', () =
 // --- Purity ------------------------------------------------------------------
 
 test('destinations.ts reads no clock, no random, no environment, and no DOM', () => {
-  const code = readFileSync(DESTINATIONS_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(DESTINATIONS_TS, 'utf8'));
   assert.doesNotMatch(code, /new\s+Date\b/, 'no clock read');
   assert.doesNotMatch(code, /Date\s*\.\s*now/, 'no clock read');
   assert.doesNotMatch(code, /Math\s*\.\s*random/, 'no randomness');

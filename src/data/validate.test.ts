@@ -22,6 +22,7 @@ import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from './schema.ts';
 import { readCareerFile, validateCareer } from './validate.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const CAREER_JSON = fileURLToPath(new URL('./career.json', import.meta.url));
 const VALIDATE_TS = fileURLToPath(new URL('./validate.ts', import.meta.url));
@@ -523,7 +524,7 @@ test('no test writes into src/, so the suites can run in parallel', () => {
   // trusted. A future test reaching for `writeFileSync(CAREER_JSON, ...)` again
   // reintroduces a cross-suite failure that reproduces only under parallelism.
   const source = readFileSync(fileURLToPath(import.meta.url), 'utf8');
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(source);
   assert.doesNotMatch(
     code,
     /writeFileSync\s*\(\s*CAREER_JSON/,

@@ -7,6 +7,9 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { afterEach, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+// Comments blanked in place by the shared stripper, so a scan reads code and a
+// line keeps its number.
+import { stripComments } from '../../scripts/source-scan.ts';
 import {
   REDUCED_MOTION_PACE,
   REDUCED_MOTION_QUERY,
@@ -67,15 +70,9 @@ test('every listener hears a change, and one unsubscribing mid-notify does not s
 
 // --- Purity ----------------------------------------------------------------------
 
-function blank(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-    .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
-}
-
 /** Imports nothing, reads no DOM, holds no store, and never cuts. */
 function auditPreference(source: string): string[] {
-  const code = blank(source);
+  const code = stripComments(source);
   const failures: string[] = [];
   if (/^\s*import\b|\bimport\s*\(|\brequire\s*\(/m.test(code)) failures.push('imports something');
   if (/\bwindow\b|\bdocument\b|\bnavigator\b|\bmatchMedia\b/.test(code)) failures.push('reads the DOM — the writer is scene-host.tsx');

@@ -35,6 +35,7 @@ import {
   type StrokeWeightKey,
   type SubjectState,
 } from './stroke-model.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const MODEL_TS = fileURLToPath(new URL('./stroke-model.ts', import.meta.url));
 const SCHEMA_TS = fileURLToPath(new URL('../derive/artifact-schema.ts', import.meta.url));
@@ -443,7 +444,7 @@ test('the vignette is vignette-dark at 0 opacity at 42% rising to 0.9 at the cor
 });
 
 test('the stroke model is written without a literal colour', () => {
-  const code = readFileSync(MODEL_TS, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const code = stripComments(readFileSync(MODEL_TS, 'utf8'));
   assert.doesNotMatch(code, /rgba?\(|hsla?\(|#[0-9a-fA-F]{3,8}\b/);
 });
 
@@ -451,7 +452,7 @@ test('the stroke model is written without a literal colour', () => {
 
 /** The model's imports and globals, as a pure function over its source. */
 function auditStrokeModel(source: string): string[] {
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+  const code = stripComments(source);
   const failures: string[] = [];
   const allowed = new Set(['../tokens/tokens.ts', './rail-model.ts', './scene-model.ts']);
   for (const match of code.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {

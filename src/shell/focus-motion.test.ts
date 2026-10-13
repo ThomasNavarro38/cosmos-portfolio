@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { FOCUS_EASING, FOCUS_SECONDS, cubicBezier, easeFocus, focusEasingCss, reversingFactor } from './focus-motion.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const MOTION_TS = fileURLToPath(new URL('./focus-motion.ts', import.meta.url));
 
@@ -93,7 +94,7 @@ test('a transition reversed mid-flight runs for the share CSS gives it', () => {
 });
 
 function auditMotion(source: string): string[] {
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+  const code = stripComments(source);
   const failures: string[] = [];
   if (/^\s*import\b|\bimport\s*\(|\brequire\s*\(/m.test(code)) failures.push('imports a module');
   if (/\bwindow\b|\bdocument\b|performance\s*\.\s*now|Date\s*\.\s*now/.test(code)) {

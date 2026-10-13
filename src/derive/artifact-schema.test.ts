@@ -22,6 +22,7 @@ import { ArtifactSchema, ORBIT_PLANE_TOLERANCE, SCHEMA_VERSION, validateArtifact
 import { DWELL_TEMPOS } from './dwell.ts';
 import { deriveEntities } from './entities.ts';
 import { solveLayout } from './solve.ts';
+import { stripComments } from '../../scripts/source-scan.ts';
 
 const AS_OF = '2026-09';
 /** A well-formed sourceDigest for fixtures built in memory, with no career.json behind them. */
@@ -123,9 +124,7 @@ test('the version is 8 now that the artifact names its source, and changing the 
   // Read off the source: the literal must be in the schema, not merely compared
   // against after parsing. A `z.number()` would accept any version and the
   // mismatch would surface as a missing field in a consumer.
-  const code = readFileSync(SCHEMA_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(SCHEMA_TS, 'utf8'));
   assert.match(code, /schemaVersion:\s*z\.literal\(SCHEMA_VERSION\)/, 'the version is a schema literal');
 });
 
@@ -186,9 +185,7 @@ test('the schema declares dwell and shots, and a version-4 artifact without eith
   // `ArtifactSchema` is a `strictObject`, so an undeclared field would not
   // merely be optional — it would be *rejected*, and the Rail would have no
   // pacing and no framing to read at all.
-  const code = readFileSync(SCHEMA_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(SCHEMA_TS, 'utf8'));
   for (const declared of ['dwell', 'shots']) {
     assert.match(
       code,
@@ -222,9 +219,7 @@ test('the schema declares rail, and a version-4 artifact without it is rejected'
   // would not merely be optional — it would be *rejected*, and the DOM index
   // would have to reconstruct the Rail's order from `content.duration.start`,
   // which is the second implementation Story 1.6 exists to forbid.
-  const code = readFileSync(SCHEMA_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(SCHEMA_TS, 'utf8'));
   assert.match(code, /\brail\s*:/, 'the Rail ordering must be declared at this version');
 
   const artifact = valid();
@@ -412,9 +407,7 @@ test('the schema declares destinations, and a version-4 artifact without it is r
   // is a `strictObject`, so an undeclared `destinations` would not merely be
   // optional — it would be *rejected*, and both future input paths would infer
   // their own reachable set instead (AD-15).
-  const code = readFileSync(SCHEMA_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(SCHEMA_TS, 'utf8'));
   assert.match(code, /\bdestinations\s*:/, 'the destination set must be declared at this version');
 
   const artifact = valid();
@@ -815,9 +808,7 @@ test('the exported types are inferred from the schema, never hand-written', () =
 });
 
 test('the schema reads no clock and no environment', () => {
-  const code = readFileSync(SCHEMA_TS, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripComments(readFileSync(SCHEMA_TS, 'utf8'));
   assert.doesNotMatch(code, /new\s+Date\b|Date\s*\.\s*now/, 'no clock read');
   assert.doesNotMatch(code, /Math\s*\.\s*random/, 'no randomness');
   assert.doesNotMatch(code, /process\s*\./, 'no ambient process state');

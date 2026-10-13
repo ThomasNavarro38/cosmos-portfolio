@@ -36,7 +36,7 @@
  *
  * Matched in code *and* in string literals — a colour literal is almost always a
  * string — but not in comments, which are prose: `stripComments`
- * (`src/derive/boundaries.ts`) blanks them and keeps everything else in place, so
+ * (`scripts/source-scan.ts`) blanks them and keeps everything else in place, so
  * a reported line is the authored line.
  *
  * **What does not.** `0x2a5d17` on its own is a numeric literal and, in this
@@ -82,19 +82,17 @@
  * and tests (`*.test.ts`, `*.test.tsx`, `*.spec.ts`: fixtures and mutations
  * write literals on purpose); and, at the repository root, `index.html` and every
  * governed file under `public/` — scripts, stylesheets, `.html` and `.svg`, the
- * same classification as `src/` (`languageOf`, `checkSiteColourLiterals`). Dot-files and
- * dot-directories are skipped — `solve.test.ts` writes transient
- * `src/derive/.mutant-*.ts` files while sibling suites run — and so is
- * `node_modules`. A file or directory that vanishes between listing and reading
- * was never part of the tree being gated and is skipped too.
+ * same classification as `src/` (`languageOf`, `checkSiteColourLiterals`). The walk is
+ * the shared one (`scripts/source-scan.ts`): dot-files are scanned — every file
+ * Vite could bundle is — while dot-directories and `node_modules` are skipped.
  *
  * Pure apart from reading the tree it is pointed at: no clock, no environment,
  * and it writes nothing.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
-import { stripComments } from '../src/derive/boundaries.ts';
+import { existsSync, readFileSync } from 'node:fs';
+import { basename, join, relative, sep } from 'node:path';
+import { filesUnder, stripComments } from './source-scan.ts';
 
 /** One literal colour, where it was written. */
 export interface ColourLiteral {
@@ -419,37 +417,18 @@ export function languageOf(name: string): Language | undefined {
 }
 
 /**
- * Every governed file under `dir`, sorted, so failures come out stable.
+ * Every governed file under `dir`, by the shared walk (`scripts/source-scan.ts`):
+ * sorted, dot-files included, dot-directories and `node_modules` skipped.
  * `exempt` names the one top-level directory skipped (`tokens` under `src/`),
  * or is null for none.
  */
-function filesUnder(dir: string, root: string, exempt: string | null): string[] {
-  const found: string[] = [];
-  let listed;
-  try {
-    listed = readdirSync(dir, { withFileTypes: true });
-  } catch (error) {
-    // A directory listed by its parent and gone before it was read.
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT' && dir !== root) return found;
-    throw error;
-  }
-  const entries = listed.sort((a, b) =>
-    a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+function governedFilesUnder(dir: string, exempt: string | null): string[] {
+  // `src/tokens/` only, not any directory that happens to be called `tokens`:
+  // the exemption is for the generator's output, which lives in exactly one place.
+  const exemptPrefix = exempt === null ? null : join(dir, exempt) + sep;
+  return filesUnder(dir).filter(
+    (path) => (exemptPrefix === null || !path.startsWith(exemptPrefix)) && languageOf(basename(path)) !== undefined,
   );
-  for (const entry of entries) {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-      // `src/tokens/` only, not any directory that happens to be called `tokens`:
-      // the exemption is for the generator's output, which lives in exactly one place.
-      if (dir === root && entry.name === exempt) continue;
-      found.push(...filesUnder(path, root, exempt));
-      continue;
-    }
-    if (entry.name.startsWith('.')) continue;
-    if (languageOf(entry.name) !== undefined) found.push(path);
-  }
-  return found;
 }
 
 /** Scans `files`, naming each relative to `base`, prefixed by `label` when one is given. */
@@ -458,16 +437,7 @@ function scan(files: readonly string[], base: string, label: string): string[] {
   for (const file of files) {
     const rel = relative(base, file).split(sep).join('/');
     const where = label === '' ? rel : `${label}/${rel}`;
-    let source: string;
-    try {
-      source = readFileSync(file, 'utf8');
-    } catch (error) {
-      // A file listed and then gone — `solve.test.ts` writes and removes
-      // `src/derive/.mutant-*.ts` while sibling suites run — was never part of
-      // the tree being gated. Anything else is a real fault and propagates.
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
-      throw error;
-    }
+    const source = readFileSync(file, 'utf8');
     for (const { line, text } of findColourLiterals(source, languageOf(file) ?? 'script')) {
       failures.push(
         `${where}:${line} writes the literal colour ${text} — read it from src/tokens/tokens.ts ` +
@@ -489,7 +459,7 @@ export function checkColourLiterals(root: string, label = 'src'): string[] {
   if (!existsSync(root)) {
     return [`the colour-literal scan root ${root} does not exist, so nothing was scanned.`];
   }
-  return scan(filesUnder(root, root, 'tokens'), root, label);
+  return scan(governedFilesUnder(root, 'tokens'), root, label);
 }
 
 /**
@@ -507,6 +477,6 @@ export function checkSiteColourLiterals(site: string): string[] {
     return [`the colour-literal scan expected ${index}, which does not exist, so nothing was scanned.`];
   }
   const publicDir = join(site, 'public');
-  const files = [index, ...(existsSync(publicDir) ? filesUnder(publicDir, publicDir, null) : [])];
+  const files = [index, ...(existsSync(publicDir) ? governedFilesUnder(publicDir, null) : [])];
   return scan(files, site, '');
 }

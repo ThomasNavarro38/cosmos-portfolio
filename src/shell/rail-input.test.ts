@@ -15,6 +15,9 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+// Comments blanked in place by the shared stripper, so a scan reads code and a
+// line keeps its number.
+import { stripComments } from '../../scripts/source-scan.ts';
 import {
   DOM_DELTA_LINE,
   DOM_DELTA_PAGE,
@@ -312,19 +315,13 @@ test('the rules that were there are unchanged by Escape', () => {
 
 // --- Purity and wiring ----------------------------------------------------------
 
-function blank(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-    .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length));
-}
-
 /**
  * The input rule's purity, as a pure function over its source: it imports
  * nothing (so no store and no renderer), reads no DOM global — the handler
  * passes the event and the page height in — and orders nothing.
  */
 function auditInputPurity(source: string): string[] {
-  const code = blank(source);
+  const code = stripComments(source);
   const failures: string[] = [];
   if (/^\s*import\b|\bimport\s*\(|\brequire\s*\(/m.test(code)) failures.push('imports something');
   if (/\bwindow\b|\bdocument\b|\bnavigator\b/.test(code)) failures.push('reads a DOM global — the handler passes them in');
@@ -380,7 +377,7 @@ test('the purity audit rejects the real rule with any one impurity added', () =>
  * target or hit-tests: the meaning is the store's.
  */
 function auditWheelWiring(source: string): string[] {
-  const code = blank(source);
+  const code = stripComments(source);
   const failures: string[] = [];
   if (!/const\s+stopCount\s*=\s*railStopCount\(\s*artifact\.rail\s*\)/.test(code)) {
     failures.push('the stop count is not railStopCount(artifact.rail) — a raw length counts a duplicated Client twice');
@@ -460,7 +457,7 @@ function auditWheelWiring(source: string): string[] {
 
 /** The keyboard half of the wiring, over the same source. */
 function auditKeyWiring(source: string): string[] {
-  const code = blank(source);
+  const code = stripComments(source);
   const failures: string[] = [];
   if (!/\bwindow\.addEventListener\(\s*'keydown'\s*,\s*onKeyDown\s*\)/.test(code)) failures.push('no keydown listener on window');
   if (!/\bwindow\.removeEventListener\(\s*'keydown'\s*,\s*onKeyDown\s*\)/.test(code)) failures.push('the keydown listener is never removed');
@@ -618,7 +615,7 @@ test('the wiring audits reject the real host with any one guarantee removed', ()
  * that listener on cleanup. Exactly one `setReducedMotion` write path.
  */
 function auditPreferenceWriter(source: string): string[] {
-  const code = blank(source);
+  const code = stripComments(source);
   const failures: string[] = [];
   if (!/import\s*\{\s*REDUCED_MOTION_QUERY\s*,\s*setReducedMotion\s*\}\s*from\s*'\.\/motion-preference\.ts'/.test(code)) {
     failures.push('the query and the event are not imported from motion-preference.ts');

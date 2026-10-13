@@ -32,8 +32,12 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, relative, resolve, sep } from 'node:path';
+import { relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+// The walker and the stripper are shared with every scan test and with the
+// colour-literal gate step. `scripts/` sits outside `src/`, so no
+// boundary row governs the edge.
+import { isTestFile, sourceFilesUnder, stripCommentsAndStrings } from '../../scripts/source-scan.ts';
 
 /** The directory the rules are declared over, named once. */
 export const SRC_ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -225,9 +229,6 @@ export const BOUNDARY_RULES: readonly BoundaryRule[] = [
  */
 const UNGOVERNED = new Set(['types']);
 
-/** A test module, which `npm test` runs and no bundle contains. */
-const TEST_FILE = /\.test\.(?:[mc]?[jt]s|[jt]sx)$/;
-
 /**
  * A specifier naming a test module, extension written or not — relative,
  * root-absolute or aliased, and with any Vite query (`?raw`, `?url`) after it,
@@ -237,40 +238,6 @@ const TEST_SPECIFIER = /\.test(?:\.(?:[mc]?[jt]s|[jt]sx))?(?:\?.*)?$/;
 
 /** A declaration file — the only thing an `UNGOVERNED` directory may hold. */
 const AMBIENT_DECLARATION = /\.d\.[mc]?ts$/;
-
-/**
- * Characters after which a `/` opens a regex literal rather than dividing.
- *
- * An operator or an opening bracket cannot be followed by a division, so a `/`
- * there is a pattern. After an identifier, a digit, or a closing bracket it is
- * division. The distinction matters only because getting it wrong in the
- * permissive direction blanks the remainder of a file.
- */
-const REGEX_PRECEDERS = new Set('(,=:[!&|?{};+-*%~^<>'.split(''));
-
-/**
- * Keywords after which a `/` opens a regex literal rather than dividing.
- *
- * A single preceding character cannot see these: `return /[/*]/` ends in `n`,
- * which reads as an identifier and therefore as division — and the unclosed
- * `/*` then blanks the rest of the file. Matched against the trailing word, so
- * `returned / 2` still divides.
- */
-const REGEX_PRECEDER_WORDS = new Set([
-  'return',
-  'yield',
-  'await',
-  'typeof',
-  'void',
-  'delete',
-  'instanceof',
-  'in',
-  'of',
-  'new',
-  'do',
-  'else',
-  'case',
-]);
 
 /**
  * The rule for a file sitting directly in `src/` — `main.tsx`, `App.tsx`.
@@ -309,207 +276,6 @@ export const ROOT_RULE: BoundaryRule = {
 };
 
 /**
- * Strips comments and string literals from TypeScript source, preserving line
- * count so a reported line number still points at the right line.
- *
- * The decoy row of the matrix is what this is for: a forbidden import written
- * inside `//`, `/* *\/`, or a string literal is not an import and must not be
- * reported as one. The same idiom the purity tests already use
- * (`destinations.test.ts:354-379`), extended to string literals and to template
- * literals, and made single-pass — a regex-per-construct pipeline gets the
- * nesting wrong in both directions: `// a /* b` and `'a // b'` each defeat it.
- *
- * Replacement, not deletion: a stripped construct becomes spaces of the same
- * width (newlines kept), so every surviving character keeps its line and column.
- */
-export function stripCommentsAndStrings(source: string): string {
-  return strip(source, false);
-}
-
-/**
- * Strips comments only, keeping every string, template and regex literal
- * verbatim — the same single pass as `stripCommentsAndStrings`, in its other
- * mode, rather than a second stripper (retro item 9).
- *
- * The colour-literal scan (`scripts/colour-literals.ts`) needs this shape: a
- * literal colour *is* a string, so blanking strings would blank the thing it looks
- * for, while a colour mentioned in a comment is prose and must not be reported.
- * The literals still have to be walked rather than ignored, because `'a // b'`
- * and `'#fff /* x'` are strings, not comments.
- */
-export function stripComments(source: string): string {
-  return strip(source, true);
-}
-
-/** The one pass behind both exports; `keepLiterals` selects the mode. */
-function strip(source: string, keepLiterals: boolean): string {
-  const out: string[] = [];
-  let index = 0;
-  const length = source.length;
-
-  /** Pushes `count` blanks, preserving any newlines inside the skipped span. */
-  const blank = (from: string): void => {
-    for (const char of from) out.push(char === '\n' ? '\n' : ' ');
-  };
-
-  /**
-   * The last non-whitespace character emitted, which is what distinguishes a
-   * regex literal from a division: `/` after a value divides, `/` after an
-   * operator or an opening bracket starts a pattern. Tracked rather than
-   * guessed, because guessing wrong in the permissive direction blanks the rest
-   * of the file.
-   */
-  let previous = '';
-
-  /**
-   * The identifier or keyword most recently emitted, accumulated a character at
-   * a time rather than re-scanned — `previous` holds one character and cannot
-   * see `return`, whose final `n` reads as an identifier and therefore as
-   * division. Cleared by any non-word character, so `returned / 2` divides
-   * while `return /x/` does not.
-   */
-  let previousWord = '';
-
-  while (index < length) {
-    const char = source[index] as string;
-    const next = source[index + 1];
-
-    // A regex literal, blanked whole. Without this, `/[/*]/` reads as a `/*`
-    // comment that never closes and swallows every import below it, and `/'/`
-    // opens a string that runs to the next quote. Both were live: the check
-    // silently reported nothing for the rest of the file.
-    if (char === '/' && next !== '/' && next !== '*' && (REGEX_PRECEDERS.has(previous) || REGEX_PRECEDER_WORDS.has(previousWord))) {
-      let scan = index + 1;
-      let inClass = false;
-      let closed = false;
-      while (scan < length) {
-        const inner = source[scan] as string;
-        if (inner === '\\') {
-          scan += 2;
-          continue;
-        }
-        // A newline ends the search: a regex literal cannot span lines, so an
-        // unterminated one is a division after all and must not blank forward.
-        if (inner === '\n') break;
-        if (inner === '[') inClass = true;
-        else if (inner === ']') inClass = false;
-        else if (inner === '/' && !inClass) {
-          closed = true;
-          break;
-        }
-        scan += 1;
-      }
-      if (closed) {
-        if (keepLiterals) out.push(source.slice(index, scan + 1));
-        else blank(source.slice(index, scan + 1));
-        index = scan + 1;
-        previous = '/';
-        previousWord = '';
-        continue;
-      }
-    }
-
-    if (char === '/' && next === '/') {
-      const end = source.indexOf('\n', index);
-      const stop = end === -1 ? length : end;
-      blank(source.slice(index, stop));
-      index = stop;
-      continue;
-    }
-
-    if (char === '/' && next === '*') {
-      const end = source.indexOf('*/', index + 2);
-      const stop = end === -1 ? length : end + 2;
-      blank(source.slice(index, stop));
-      index = stop;
-      continue;
-    }
-
-    if (char === '"' || char === "'" || char === '`') {
-      // The specifier itself lives inside quotes, so the quote characters are
-      // kept and only the contents are blanked. `import '...'` therefore still
-      // matches with an empty specifier rather than becoming `import  ` — which
-      // would be indistinguishable from source that imports nothing.
-      const quote = char;
-      const opened = index;
-      index += 1;
-      let contents = '';
-      while (index < length) {
-        const inner = source[index] as string;
-        if (inner === '\\') {
-          contents += source.slice(index, index + 2);
-          index += 2;
-          continue;
-        }
-        if (inner === quote) break;
-        // An unterminated single- or double-quoted string cannot cross a line in
-        // valid TypeScript; stopping at the newline keeps one broken line from
-        // blanking the whole rest of the file.
-        if (inner === '\n' && quote !== '`') break;
-        contents += inner;
-        index += 1;
-      }
-      const terminated = index < length && source[index] === quote;
-      // An unterminated backtick is the same hazard one line up, but a template
-      // *may* cross lines, so the newline guard cannot catch it. Treat the
-      // unclosed run as ordinary text instead of blanking to end-of-file: a
-      // stray backtick in one file must not hide every import beneath it.
-      if (!terminated && quote === '`') {
-        out.push(quote);
-        index = opened + 1;
-        previous = quote;
-        previousWord = '';
-        continue;
-      }
-      out.push(quote);
-      if (keepLiterals) {
-        // The text is a literal and kept; each `${...}` span is code, and a
-        // comment inside it (`` `${x /* #fff */}` ``) is still a comment — so the
-        // span goes back through this same pass, in this same mode.
-        out.push(quote === '`' ? keepTemplateText(contents) : contents);
-        if (terminated) {
-          out.push(quote);
-          index += 1;
-        }
-        previous = quote;
-        previousWord = '';
-        continue;
-      }
-      // A template's `${...}` holds code, not text. Blanking it along with the
-      // literal would hide `` `${await import('../data/x.ts')}` `` from the scan
-      // entirely — silence, which this module treats as its worst failure. The
-      // surrounding text is still blanked; only the interpolated spans survive,
-      // and their own strings are stripped by the recursive call.
-      if (quote === '`') {
-        // `maskTemplateText` has already blanked the literal text and kept the
-        // interpolated spans, so it is emitted as-is rather than through
-        // `blank`, which would erase the code along with the text.
-        for (const char of maskTemplateText(contents)) out.push(char);
-      } else {
-        blank(contents);
-      }
-      if (terminated) {
-        out.push(quote);
-        index += 1;
-      }
-      previous = quote;
-      previousWord = '';
-      continue;
-    }
-
-    out.push(char);
-    if (char.trim() !== '') previous = char;
-    // Whitespace preserves the word (`return  /x/` still starts a regex); any
-    // other non-word character ends it.
-    if (/[\w$]/.test(char)) previousWord += char;
-    else if (char.trim() !== '') previousWord = '';
-    index += 1;
-  }
-
-  return out.join('');
-}
-
-/**
  * Every import in one file's source text, with its line and its kind.
  *
  * Four forms reach the scan, and each is a real one in this repo or an obvious
@@ -523,93 +289,6 @@ function strip(source: string, keepLiterals: boolean): string {
  * The scan runs over stripped source, so a specifier found here was authored as
  * an import rather than mentioned in a comment or a string.
  */
-/**
- * The index of the `}` closing the interpolation whose code starts at `from`,
- * or -1 when it never closes.
- *
- * Nesting is tracked by brace depth rather than by a regex, because an
- * interpolation may itself contain an object literal. A brace inside a string
- * or a comment is not structure, so those are skipped: counted, `${'}' + x}`
- * would close early and turn the rest of the code into text.
- */
-function interpolationClose(contents: string, from: number): number {
-  let depth = 0;
-  let scan = from;
-  while (scan < contents.length) {
-    const char = contents[scan];
-    if (char === "'" || char === '"') {
-      scan += 1;
-      while (scan < contents.length && contents[scan] !== char && contents[scan] !== '\n') {
-        scan += contents[scan] === '\\' ? 2 : 1;
-      }
-    } else if (char === '/' && contents[scan + 1] === '/') {
-      const end = contents.indexOf('\n', scan);
-      scan = end === -1 ? contents.length : end;
-      continue;
-    } else if (char === '/' && contents[scan + 1] === '*') {
-      const end = contents.indexOf('*/', scan + 2);
-      scan = end === -1 ? contents.length : end + 1;
-    } else if (char === '{') {
-      depth += 1;
-    } else if (char === '}') {
-      if (depth === 0) return scan;
-      depth -= 1;
-    }
-    scan += 1;
-  }
-  return -1;
-}
-
-/**
- * Replaces a template literal's *text* with spaces while leaving each `${...}`
- * span intact, so interpolated code still reaches the import scan.
- */
-function maskTemplateText(contents: string): string {
-  let out = '';
-  let index = 0;
-  while (index < contents.length) {
-    const at = contents.indexOf('${', index);
-    if (at === -1) {
-      for (const char of contents.slice(index)) out += char === '\n' ? '\n' : ' ';
-      break;
-    }
-    // Newlines in the blanked text must survive, or every line number below a
-    // multi-line template shifts.
-    for (const char of contents.slice(index, at)) out += char === '\n' ? '\n' : ' ';
-    const close = interpolationClose(contents, at + 2);
-    const end = close === -1 ? contents.length : close;
-    // `${` and the closing `}` are punctuation, not code: keep the span between —
-    // stripped in turn, so a string or comment inside it (`${'require(x)'}`) is
-    // blanked like any other rather than read as code.
-    out += '  ' + strip(contents.slice(at + 2, end), false) + (close === -1 ? '' : ' ');
-    index = close === -1 ? contents.length : close + 1;
-  }
-  return out;
-}
-
-/**
- * `maskTemplateText`'s counterpart for the comments-only mode: the literal text
- * is kept verbatim and each `${...}` span is stripped of comments by a recursive
- * call to the same pass. Width-preserving, like everything else here.
- */
-function keepTemplateText(contents: string): string {
-  let out = '';
-  let index = 0;
-  while (index < contents.length) {
-    const at = contents.indexOf('${', index);
-    if (at === -1) {
-      out += contents.slice(index);
-      break;
-    }
-    out += contents.slice(index, at + 2);
-    const close = interpolationClose(contents, at + 2);
-    const end = close === -1 ? contents.length : close;
-    out += strip(contents.slice(at + 2, end), true) + (close === -1 ? '' : '}');
-    index = close === -1 ? contents.length : close + 1;
-  }
-  return out;
-}
-
 export function findImports(source: string): FoundImport[] {
   // Stripping preserves offsets exactly — every comment and every string body
   // becomes blanks of the same width — so a match found here indexes the
@@ -820,29 +499,6 @@ function packageOf(specifier: string): string {
   return specifier.split('/')[0] ?? specifier;
 }
 
-/** Every source module under `dir`, sorted, so failures come out stable. */
-function sourceFilesUnder(dir: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
-    a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
-  )) {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      // The same pair `checkRuleCoverage` skips. They must agree: a directory
-      // the coverage check excuses but this walker descends into would have its
-      // files judged against a rule nobody wrote for them.
-      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-      found.push(...sourceFilesUnder(path));
-      continue;
-    }
-    // Every module form that can ship under `src/`, not only `.ts`/`.tsx`: a
-    // consumer authored as `.mjs` or `.jsx` imports `src/data/` exactly as
-    // readily, and a walker that cannot see the file cannot judge it.
-    if (/\.(?:[mc]?[jt]s|[jt]sx)$/.test(entry.name)) found.push(path);
-  }
-  return found;
-}
-
 /** A repo-relative, forward-slashed path, so a failure line reads the same on every OS. */
 function displayPath(root: string, file: string): string {
   return `src/${relative(root, file).split(sep).join('/')}`;
@@ -861,7 +517,7 @@ function checkRuleCoverage(root: string): string[] {
   const governed = new Set(BOUNDARY_RULES.map((rule) => rule.directory));
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
-    // The same skips the file walker uses. Without them a vendored
+    // The same skips `sourceFilesUnder` (scripts/source-scan.ts) uses. Without them a vendored
     // `src/node_modules/` or an editor's `src/.cache/` fails the gate as an
     // ungoverned layer, which is a rule nobody declared and a failure nobody can
     // act on by writing a README.
@@ -949,7 +605,7 @@ export function checkImportBoundaries(root: string = SRC_ROOT): string[] {
         // cannot read reaches neither the entry chunk nor a shipped `src/data/`
         // edge — and a mutation test must load a module generated at run time,
         // which no literal can name. Its literal imports are still judged below.
-        if (TEST_FILE.test(file)) continue;
+        if (isTestFile(file)) continue;
         // No rule can be evaluated against a specifier the scan cannot read, so
         // the import is refused outright — in every governed shipped file,
         // including one that may legitimately reach the module it names.
@@ -963,7 +619,7 @@ export function checkImportBoundaries(root: string = SRC_ROOT): string[] {
 
       // The test-file excuse above holds only while no bundle contains a test
       // file — which a shipped module importing one would quietly end.
-      if (!TEST_FILE.test(file) && TEST_SPECIFIER.test(specifier)) {
+      if (!isTestFile(file) && TEST_SPECIFIER.test(specifier)) {
         violations += 1;
         failures.push(
           `${where}:${line} imports "${specifier}", a test module — a shipped module may not import one, ` +

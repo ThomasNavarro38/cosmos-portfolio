@@ -175,6 +175,17 @@ test('the mote tier never leaves the declared set, including at the ceiling', ()
   assert.equal(deriveMoteTier(4, range, true), 'mote-dense');
 });
 
+test('the mote tier splits each class at exactly half the mass range, densest from the midpoint up', () => {
+  // Pinned because `>= 0.5` and `> 0.5` agreed on every mass
+  // the suite drove, so the split point was stated in the module and pinned
+  // nowhere. The midpoint of { 1, 4 } is 2.5.
+  const range = { min: 1, max: 4 };
+  assert.equal(deriveMoteTier(2.5, range, false), 'mote-medium', 'a Shallow Body at the midpoint is the denser of its two tiers');
+  assert.equal(deriveMoteTier(2.5, range, true), 'mote-dense', 'and so is a Deep one');
+  assert.equal(deriveMoteTier(2.49, range, false), 'mote-sparse', 'just below it is the sparser');
+  assert.equal(deriveMoteTier(2.49, range, true), 'mote-medium');
+});
+
 test('the mote tier holds through the graph, not only through the projection', () => {
   const graph = derive(
     { ...baseEntry(), client: 'Deep', project: 'D', notable: 'A real decision. [[Its constraint, stated.]]' },
