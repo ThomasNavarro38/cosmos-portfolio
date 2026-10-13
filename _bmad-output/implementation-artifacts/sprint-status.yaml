@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 10-13-2026 08:33
+last_updated: 10-13-2026 09:10
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -74,7 +74,7 @@ development_status:
   3-12-data-validation-on-the-build-path-and-the-gate-s-content-che: done
   3-13-boundary-table-and-boundary-parser-hardening: done
   3-14-test-infrastructure: done
-  3-15-navigation-and-panel-correctness-fixes: backlog
+  3-15-navigation-and-panel-correctness-fixes: review
   3-16-scene-colour-management: backlog
   3-17-no-technology-names-in-field-values: backlog
   3-18-the-mote-label-pass-and-the-degradation-ruling: backlog
@@ -288,14 +288,22 @@ action_items:
       slide-out (focus-model.ts:242-246): shorten only when reopening the ID the slide
       closed from; add a stepFocus test with B far from A"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-13 (story 3.15): FocusMotion carries closedFrom; stepFocus shortens
+      only a release or a reopen of the ID the slide closed from. The slide mirror
+      (FocusSlide, flipSlide, advanceSlide) moved to shell/focus-motion.ts; stepFocus
+      tests with B 95 units from A"
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
   - id: "epic-2-retro-item-3-panel-visibility-on-reversed-slide"
     epic: 2
     action: "Make the panel's close visibility delay follow the reversed slide rather
       than the full duration (panel-model.ts:388); test pairing panelStyle with flipSlide"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-13 (story 3.15): panelStyle(open, pace, factor) delays visibility by
+      FOCUS_SECONDS x factor x pace when closing; focus-panel.tsx mirrors the slide
+      with panelSlide from performance.now(); a test pairs panelStyle with flipSlide;
+      auditPanel pins the binding with mutation rows"
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
   - id: "epic-2-retro-item-4-keyboard-only-while-scene-mounted"
     epic: 2
@@ -303,7 +311,11 @@ action_items:
       (scene-host.tsx:191-238); extend auditKeyWiring/keyAction with a scene-absent
       case"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-13 (story 3.15): a SceneMounted marker inside <Suspense> sets
+      sceneMounted; keyAction and wheelIntent take it and drop every Rail answer
+      while the scene is absent (Escape and the panel answer kept); both wiring
+      audits pin it with mutation rows"
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
   - id: "epic-2-retro-item-5-review-story-2-10"
     epic: 2

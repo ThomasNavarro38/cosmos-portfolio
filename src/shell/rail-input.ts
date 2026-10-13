@@ -15,6 +15,11 @@
  * releases the innermost layer — Focus, else free flight — and is inert on the
  * Rail with nothing focused.
  *
+ * **No scene, no Rail** (3.15). Both handlers' rules — `wheelIntent` and
+ * `keyAction` — take `sceneMounted`, and while the scene is absent they drop
+ * every Rail answer to `null`, so the index-alone page scrolls natively.
+ * `Escape` and the wheel's panel answer are not Rail input and are kept.
+ *
  * **Rules here, handlers in `scene-host.tsx`.** The host listens for `wheel` over
  * the scene and `keydown` on `window`, asks these rules, and writes: the wheel
  * and the arrows through `advanceScroll`, `Home` through the `goHome` door in
@@ -120,6 +125,13 @@ export type InputMode = 'rail' | 'freeflight';
  *   - `null` — not scroll's to take (a pinch-zoom, a horizontal-only wheel,
  *     noise), in any meaning; the browser keeps the event.
  *
+ * **No scene, no Rail** (3.15). `sceneMounted` is whether the scene has
+ * committed (the host's marker inside `<Suspense>`). While it is `false` — the
+ * chunk still loading, or failed, so the page is the index alone — `{ rail }`
+ * and `{ inert }` are dropped to `null`: there is no camera to move, and the
+ * page must scroll natively. `{ panel }` is kept, because reading the panel is
+ * not Rail input.
+ *
  * A wheel over the panel itself never reaches the scene's listener: the panel
  * is its own scroll container and scrolls natively.
  */
@@ -130,10 +142,12 @@ export function wheelIntent(
   wheel: RailWheel,
   stopCount: number,
   pageHeight: number,
+  sceneMounted: boolean,
 ): { readonly rail: number } | { readonly panel: number } | { readonly inert: true } | null {
   const pixels = scrollPixels(wheel, pageHeight);
   if (pixels === null) return null;
   if (focusedProjectId !== null) return { panel: pixels };
+  if (!sceneMounted) return null;
   if (mode === 'freeflight') return { inert: true };
   const next = wheelProgress(current, wheel, stopCount, pageHeight);
   return next === null ? null : { rail: next };
@@ -213,6 +227,10 @@ export interface RailKey {
  *     travel, and a held arrow is a held journey.
  *   - A modifier is any of alt, ctrl, meta and shift. Shift counts because
  *     Shift+↑/↓/Home are the browser's selection keys.
+ *   - With the scene absent (`sceneMounted` false, 3.15) every Rail answer —
+ *     `{ rail }`, `{ inert }`, `{ home }` — is `null`, so ↑/↓/Home scroll the
+ *     page natively in the index-alone state. `{ release }` is kept: `Escape`
+ *     releases a layer, which is not Rail input.
  *
  * The handler reads the store, asks this, and dispatches the answer.
  */
@@ -222,11 +240,14 @@ export function keyAction(
   focusedProjectId: string | null,
   current: number,
   stopCount: number,
+  sceneMounted: boolean,
 ): ReturnType<typeof keyIntent> {
   if (event.defaultPrevented || event.isComposing) return null;
   if (event.repeat && event.key === 'Escape') return null;
   const modifierHeld = event.altKey || event.ctrlKey || event.metaKey || event.shiftKey;
-  return keyIntent(event.key, modifierHeld, mode, focusedProjectId, current, stopCount);
+  const intent = keyIntent(event.key, modifierHeld, mode, focusedProjectId, current, stopCount);
+  if (intent === null || sceneMounted || 'release' in intent) return intent;
+  return null;
 }
 
 /**

@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 // Comments blanked in place by the shared stripper, so a scan reads code and a
 // line keeps its number.
 import { stripComments } from '../../scripts/source-scan.ts';
-import { FOCUS_SECONDS, focusEasingCss } from './focus-motion.ts';
+import { FOCUS_SECONDS, advanceSlide, easeFocus, flipSlide, focusEasingCss, reversingFactor, settledSlide } from './focus-motion.ts';
 import { motionPace } from './motion-preference.ts';
 import {
   FIELD_LABELS,
@@ -37,6 +37,7 @@ import {
   leavingAfter,
   indexEntryId,
   panelFraction,
+  panelSlide,
   panelStyle,
   panelWidth,
   panelWidthCss,
@@ -364,6 +365,94 @@ test('the slide runs on the Focus duration and curve, and hides the panel only o
     `transform ${curve}, visibility 0s linear ${FOCUS_SECONDS}s`,
     'visible for the whole slide out, hidden exactly when it ends',
   );
+});
+
+// --- The close follows the actual slide (3.15, F-2) ------------------------------
+
+test('closing on a reversed slide hides the panel at the reversed slide’s end; the transform keeps its full duration', () => {
+  for (const pace of [1, motionPace(true)]) {
+    const seconds = FOCUS_SECONDS * pace;
+    const curve = `${seconds}s ${focusEasingCss()}`;
+    for (const factor of [0, 0.25, 0.5, 1]) {
+      const closed = panelStyle(false, pace, factor);
+      assert.equal(closed.transition, `transform ${curve}, visibility 0s linear ${FOCUS_SECONDS * factor * pace}s`, `factor ${factor}, pace ${pace}`);
+      assert.equal(closed.visibility, 'hidden');
+      assert.equal(closed.transform, 'translateX(100%)');
+      // Opening is visible from its first frame, whatever the factor.
+      assert.equal(panelStyle(true, pace, factor).transition, `transform ${curve}, visibility 0s linear 0s`);
+    }
+  }
+  assert.deepEqual(panelStyle(false, 1, 1), panelStyle(false), 'a settled open closes as it always did');
+});
+
+test('a factor that is not in [0, 1] is clamped, and a non-finite one reads as 1', () => {
+  assert.deepEqual(panelStyle(false, 1, 2), panelStyle(false, 1, 1));
+  assert.deepEqual(panelStyle(false, 1, -1), panelStyle(false, 1, 0));
+  for (const factor of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+    assert.deepEqual(panelStyle(false, 1, factor), panelStyle(false, 1, 1), `factor ${factor}`);
+  }
+});
+
+test('paired with flipSlide: a release mid opening slide hides the panel when CSS’s reversed slide ends', () => {
+  for (const pace of [1, motionPace(true)]) {
+    const opening = advanceSlide(flipSlide(settledSlide(false), true), 0.3 * FOCUS_SECONDS);
+    const closing = flipSlide(opening, false);
+    assert.ok(closing.factor > 0 && closing.factor < 1);
+    const delay = /visibility 0s linear ([\d.e-]+)s$/.exec(panelStyle(closing.open, pace, closing.factor).transition)?.[1];
+    assert.equal(Number(delay), closing.seconds * pace, 'the reversed slide’s length, at the pace the slide runs');
+  }
+});
+
+test('panelSlide mirrors the slide in wall time: unchanged while open is, flipped and advanced when it changes', () => {
+  const first = panelSlide(null, false, 1000, 1);
+  assert.deepEqual(first, { ...settledSlide(false), at: 1000, pace: 1 }, 'a first render is at rest');
+  assert.equal(panelSlide(first, false, 5000, 1), first, 'the same object while open is unchanged');
+  const opened = panelSlide(first, true, 2000, 1);
+  assert.deepEqual(opened, { ...flipSlide(settledSlide(false), true), at: 2000, pace: 1 }, 'a settled slide flips at full length');
+  assert.equal(panelSlide(opened, true, 2100, 1), opened);
+  // Released 0.3 × FOCUS_SECONDS into the opening slide.
+  const released = panelSlide(opened, false, 2000 + 0.3 * FOCUS_SECONDS * 1000, 1);
+  assert.equal(released.open, false);
+  assert.equal(released.at, 2000 + 0.3 * FOCUS_SECONDS * 1000);
+  assert.ok(Math.abs(released.factor - reversingFactor(easeFocus(0.3), 1)) < 1e-9);
+  // Released after the opening slide settled: the whole duration back.
+  const late = panelSlide(opened, false, 2000 + FOCUS_SECONDS * 1000 + 50, 1);
+  assert.equal(late.factor, 1);
+  assert.equal(late.seconds, FOCUS_SECONDS);
+});
+
+test('panelSlide reads wall time at the pace the slide runs, and an unusable pace as 1', () => {
+  const pace = motionPace(true);
+  const opened = panelSlide(panelSlide(null, false, 0, pace), true, 1000, pace);
+  // The same share of a slide that runs FOCUS_SECONDS × pace takes pace times the wall time.
+  const reduced = panelSlide(opened, false, 1000 + 0.3 * FOCUS_SECONDS * pace * 1000, pace);
+  const full = panelSlide(panelSlide(panelSlide(null, false, 0, 1), true, 1000, 1), false, 1000 + 0.3 * FOCUS_SECONDS * 1000, 1);
+  assert.ok(Math.abs(reduced.factor - full.factor) < 1e-9);
+  for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const start = panelSlide(panelSlide(null, false, 0, bad), true, 1000, bad);
+    const end = panelSlide(start, false, 1000 + 0.3 * FOCUS_SECONDS * 1000, bad);
+    assert.ok(Math.abs(end.factor - full.factor) < 1e-9, `pace ${bad}`);
+  }
+  // A clock read earlier than the slide started does not run it backwards.
+  assert.equal(panelSlide(opened, false, 500, pace).factor, 0);
+  // The usable pace is what the slide records, at the flip.
+  assert.equal(opened.pace, pace);
+  assert.equal(panelSlide(null, true, 0, Number.NaN).pace, 1);
+});
+
+test('a pace that changes mid-slide: the time already run is read at the pace that slide started with', () => {
+  const pace = motionPace(true);
+  const wall = 0.3 * FOCUS_SECONDS * 1000;
+  // Opened at full motion, released after the preference turned reduced.
+  const openedFull = panelSlide(panelSlide(null, false, 0, 1), true, 1000, 1);
+  const releasedReduced = panelSlide(openedFull, false, 1000 + wall, pace);
+  assert.ok(Math.abs(releasedReduced.factor - reversingFactor(easeFocus(0.3), 1)) < 1e-9, 'the open ran at pace 1');
+  assert.equal(releasedReduced.pace, pace, 'and the reversal runs at the new pace');
+  // Opened reduced, released at full motion.
+  const openedReduced = panelSlide(panelSlide(null, false, 0, pace), true, 1000, pace);
+  const releasedFull = panelSlide(openedReduced, false, 1000 + wall * pace, 1);
+  assert.ok(Math.abs(releasedFull.factor - reversingFactor(easeFocus(0.3), 1)) < 1e-9, 'the open ran at the reduced pace');
+  assert.equal(releasedFull.pace, 1);
 });
 
 test('the panel paints its own column and nothing else — no scrim, no backdrop, no overlay', () => {
@@ -883,14 +972,16 @@ function auditPanel(source: string): string[] {
     failures.push('the pace is not motionPace of the preference, read through useSyncExternalStore');
   }
   if ((code.match(/\buseSyncExternalStore\s*\(/g) ?? []).length !== 1) failures.push('the preference is read other than once');
-  if ((code.match(/\bpace\b/g) ?? []).length !== 3) failures.push('the pace is used other than by the slide and the cross-fade');
+  if ((code.match(/\bpace\b/g) ?? []).length !== 4) failures.push('the pace is used other than by the slide mirror, the slide and the cross-fade');
   if (/\bsetReducedMotion\b/.test(code)) failures.push('the panel writes the preference — scene-host.tsx is its one writer');
   if (!/const\s+previousFlight\s*=\s*useRef\(\s*flight\s*\)/.test(code)) failures.push('the flight key last seen is not a ref seeded at mount');
   if (/\buseState\b|\buseReducer\b|\buseMemo\b|\bsubscribe\s*\(/.test(code)) {
     failures.push('keeps state of its own — the store is the one authority');
   }
   // One layout effect, for the cross-fade alone (2.8): it must start before paint.
-  if ((code.match(/\buseLayoutEffect\s*\(/g) ?? []).length !== 1) failures.push('a layout effect other than the cross-fade’s');
+  // Two layout effects: the cross-fade's (2.8), which must start before paint, and
+  // the one recording the slide mirror on commit (3.15).
+  if ((code.match(/\buseLayoutEffect\s*\(/g) ?? []).length !== 2) failures.push('a layout effect other than the cross-fade’s and the slide mirror’s');
   if (/\.sort\s*\(|\.filter\s*\(|\.reverse\s*\(|\.slice\s*\(/.test(code)) failures.push('orders or selects — the model owns the order');
   if (/\bisDeep\b|\bnotable\b|\bteam_size\b|\bcontent\s*\./.test(code)) failures.push('reads the artifact directly — the model owns the blocks');
   if (/\bwindow\b|innerWidth|innerHeight|getBoundingClientRect|matchMedia/.test(code)) failures.push('reads the viewport');
@@ -1000,8 +1091,8 @@ function auditPanel(source: string): string[] {
       failures.push('the container is not labelled by its title exactly while the title is rendered');
     }
     if (!/\bref=\{\s*container\s*\}/.test(attributes)) failures.push('the container is not the element focus moves to');
-    if (!/\bstyle=\{\s*panelStyle\(\s*focusedProjectId\s*!==\s*null\s*&&\s*panel\s*!==\s*null\s*,\s*pace\s*\)\s*\}/.test(attributes)) {
-      failures.push('the style is not panelStyle(open, pace), open exactly while a known Project is focused');
+    if (!/\bstyle=\{\s*panelStyle\(\s*slide\.open\s*,\s*pace\s*,\s*slide\.factor\s*\)\s*\}/.test(attributes)) {
+      failures.push('the style is not panelStyle(slide.open, pace, slide.factor) — the close would not follow the slide the browser runs');
     }
   }
   if (!/<h2\b[^>]*\bid=\{\s*titleId\s*\}[^>]*>\s*\{\s*block\.text\s*\}\s*<\/h2>/.test(code)) {
@@ -1054,6 +1145,23 @@ function auditPanel(source: string): string[] {
   if (/\bstyle=\{\{/.test(code)) failures.push('an inline style literal — the treatment lives in focus-panel.css and the model');
   if (/aria-live|role=["'](?:status|alert|log|marquee|timer)["']/.test(code)) failures.push('a live region — the Skills list is static');
   if (/<h[1-6]\b[^>]*>\s*Skills\b|>\s*Skills\s*</.test(code)) failures.push('a visible Skills heading');
+  // The slide mirror (3.15): a ref seeded null, from which each render computes
+  // the slide (one clock read, open exactly while a known Project is focused) for
+  // the style, and which a layout effect alone writes, once the render commits —
+  // so a render React discards never records a flip.
+  if (!/const\s+slideMirror\s*=\s*useRef<PanelSlide\s*\|\s*null>\(\s*null\s*\)/.test(code)) failures.push('the slide is not mirrored in a ref seeded null');
+  if (
+    !/const\s+slide\s*=\s*panelSlide\(\s*slideMirror\.current\s*,\s*focusedProjectId\s*!==\s*null\s*&&\s*panel\s*!==\s*null\s*,\s*performance\.now\(\s*\)\s*,\s*pace\s*\)\s*;/.test(
+      code,
+    )
+  ) {
+    failures.push('the slide is not panelSlide(mirror, open, performance.now(), pace), open exactly while a known Project is focused');
+  }
+  if (!/useLayoutEffect\(\s*\(\)\s*=>\s*\{\s*slideMirror\.current\s*=\s*slide\s*;\s*\}\s*,\s*\[\s*slide\s*\]\s*\)\s*;/.test(code)) {
+    failures.push('the slide mirror is not recorded by a layout effect keyed on the slide — a discarded render would record its flip');
+  }
+  if ((code.match(/\bslideMirror\.current\s*=(?!=)/g) ?? []).length !== 1) failures.push('the slide mirror is written other than once, in its layout effect');
+  if ((code.match(/\bperformance\.now\(/g) ?? []).length !== 1) failures.push('the clock is read other than once, for the slide mirror');
   if (!/const\s+shown\s*=\s*useRef<string\s*\|\s*null>\(\s*null\s*\)/.test(code) ||
     !/if\s*\(\s*focusedProjectId\s*!==\s*null\s*\)\s*shown\.current\s*=\s*focusedProjectId\s*;/.test(code) ||
     !/const\s+panel\s*=\s*buildPanel\(\s*artifact\s*,\s*shown\.current\s*\)/.test(code)) {
@@ -1172,8 +1280,23 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
     ['the fade from full every time', (s) => s.replace('crossFadeTiming(getComputedStyle(incoming.current).opacity, pace)', "crossFadeTiming('1', pace)")],
     // 2.10's pace.
     ['the fade at full length always', (s) => s.replace('crossFadeTiming(getComputedStyle(incoming.current).opacity, pace)', 'crossFadeTiming(getComputedStyle(incoming.current).opacity)')],
-    ['the slide at full length always', (s) => s.replace('panelStyle(focusedProjectId !== null && panel !== null, pace)', 'panelStyle(focusedProjectId !== null && panel !== null)')],
-    ['the slide cut', (s) => s.replace('panelStyle(focusedProjectId !== null && panel !== null, pace)', 'panelStyle(focusedProjectId !== null && panel !== null, 0)')],
+    ['the slide at full length always', (s) => s.replace('panelStyle(slide.open, pace, slide.factor)', 'panelStyle(slide.open, 1, slide.factor)')],
+    ['the slide cut', (s) => s.replace('panelStyle(slide.open, pace, slide.factor)', 'panelStyle(slide.open, 0, slide.factor)')],
+    // 3.15's slide mirror: the close follows the slide the browser actually runs.
+    ['the factor dropped', (s) => s.replace('panelStyle(slide.open, pace, slide.factor)', 'panelStyle(slide.open, pace)')],
+    ['the factor a literal', (s) => s.replace('panelStyle(slide.open, pace, slide.factor)', 'panelStyle(slide.open, pace, 1)')],
+    ['the clock replaced by a literal', (s) => s.replace('performance.now(), pace)', '0, pace)')],
+    ['the clock read twice', (s) => s.replace('const container = useRef', 'const started = performance.now();\n  const container = useRef')],
+    ['the slide ignored', (s) => s.replace('panelStyle(slide.open, pace, slide.factor)', 'panelStyle(focusedProjectId !== null && panel !== null, pace)')],
+    ['the slide never remembered', (s) => s.replace('panelSlide(slideMirror.current,', 'panelSlide(null,')],
+    ['the mirror at full motion always', (s) => s.replace('performance.now(), pace)', 'performance.now(), 1)')],
+    ['the mirror open on any Focus', (s) => s.replace('panelSlide(slideMirror.current, focusedProjectId !== null && panel !== null,', 'panelSlide(slideMirror.current, focusedProjectId !== null,')],
+    ['the mirror written twice', (s) => s.replace('slideMirror.current = slide;', 'slideMirror.current = slide;\n    slideMirror.current = null;')],
+    ['the mirror written during render', (s) => s.replace(/\r?\n\s*useLayoutEffect\(\(\) => \{\s*slideMirror\.current = slide;\s*\}, \[slide\]\);/, '').replace('const container = useRef', 'slideMirror.current = slide;\n  const container = useRef')],
+    ['the mirror never recorded', (s) => s.replace(/\r?\n\s*useLayoutEffect\(\(\) => \{\s*slideMirror\.current = slide;\s*\}, \[slide\]\);/, '')],
+    ['the mirror recorded after paint', (s) => s.replace(/useLayoutEffect\(\(\) => \{(\s*)slideMirror\.current = slide;/, 'useEffect(() => {$1slideMirror.current = slide;')],
+    ['the mirror recorded once only', (s) => s.replace(/(slideMirror\.current = slide;\s*\}, )\[slide\]/, '$1[]')],
+    ['the mirror seeded with a slide', (s) => s.replace('useRef<PanelSlide | null>(null)', 'useRef<PanelSlide | null>(panelSlide(null, true, 0))')],
     ['the pace ignoring the preference', (s) => s.replace('motionPace(useSyncExternalStore(subscribeReducedMotion, reducedMotion))', 'motionPace(false)')],
     ['the preference read without subscribing', (s) => s.replace('motionPace(useSyncExternalStore(subscribeReducedMotion, reducedMotion))', 'motionPace(reducedMotion())')],
     ['the preference written from the panel', (s) => s.replace('const container = useRef', 'setReducedMotion(true);\n  const container = useRef')],
@@ -1183,7 +1306,7 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
       (s) => s.replace('    const fade = crossFade(', '    previous.current = focusedProjectId;\n    const fade = crossFade('),
     ],
     ['inert on the whole panel', (s) => s.replace('tabIndex={-1}', 'tabIndex={-1}\n      inert')],
-    ['always open', (s) => s.replace('panelStyle(focusedProjectId !== null && panel !== null, pace)', 'panelStyle(true, pace)')],
+    ['always open', (s) => s.replace('panelStyle(slide.open, pace, slide.factor)', 'panelStyle(true, pace, slide.factor)')],
     ['blank on close', (s) => s.replace('buildPanel(artifact, shown.current)', 'buildPanel(artifact, focusedProjectId)')],
     ['no focus on entry', (s) => s.replace('container.current?.focus({ preventScroll: true });', '')],
     ['no focus on release', (s) => s.replace('document.getElementById(indexEntryId(move.entry))?.focus();', '')],

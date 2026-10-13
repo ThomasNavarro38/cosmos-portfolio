@@ -101,49 +101,49 @@ test('with nothing focused the wheel is the Rail’s, exactly as wheelProgress a
   ] as const) {
     const next = wheelProgress(current, event, stops, PAGE);
     assert.ok(next !== null);
-    assert.deepEqual(wheelIntent('rail', null, current, event, stops, PAGE), { rail: next });
+    assert.deepEqual(wheelIntent('rail', null, current, event, stops, PAGE, true), { rail: next });
   }
 });
 
 test('with a Project focused the wheel scrolls the panel by its distance in pixels, and never the Rail', () => {
   // The I/O matrix row: focused A, wheel deltaY 120 → { panel: 120 }, store unchanged.
-  assert.deepEqual(wheelIntent('rail', 'project:a', 0.5, wheel(120), 3, PAGE), { panel: 120 });
-  assert.deepEqual(wheelIntent('rail', 'project:a', 0.5, wheel(-40), 3, PAGE), { panel: -40 }, 'up scrolls the panel up');
-  assert.deepEqual(wheelIntent('rail', 'project:a', 0.5, wheel(3, DOM_DELTA_LINE), 3, PAGE), { panel: 3 * WHEEL_LINE_PIXELS });
-  assert.deepEqual(wheelIntent('rail', 'project:a', 0.5, wheel(1, DOM_DELTA_PAGE), 3, PAGE), { panel: PAGE });
+  assert.deepEqual(wheelIntent('rail', 'project:a', 0.5, wheel(120), 3, PAGE, true), { panel: 120 });
+  assert.deepEqual(wheelIntent('rail', 'project:a', 0.5, wheel(-40), 3, PAGE, true), { panel: -40 }, 'up scrolls the panel up');
+  assert.deepEqual(wheelIntent('rail', 'project:a', 0.5, wheel(3, DOM_DELTA_LINE), 3, PAGE, true), { panel: 3 * WHEEL_LINE_PIXELS });
+  assert.deepEqual(wheelIntent('rail', 'project:a', 0.5, wheel(1, DOM_DELTA_PAGE), 3, PAGE, true), { panel: PAGE });
   // The meaning does not depend on where the Rail is, nor on whether it could move:
   // at either end, on an empty Rail, and with a progress the Rail would clamp.
   for (const [current, stops] of [[0, 3], [3, 3], [0, 0], [Number.NaN, 3], [99, 1]] as const) {
-    assert.deepEqual(wheelIntent('rail', 'project:a', current, wheel(120), stops, PAGE), { panel: 120 }, `at ${current} of ${stops}`);
+    assert.deepEqual(wheelIntent('rail', 'project:a', current, wheel(120), stops, PAGE, true), { panel: 120 }, `at ${current} of ${stops}`);
   }
   // No result carries a Rail value, so the handler has nothing to write.
-  assert.equal('rail' in (wheelIntent('rail', 'project:a', 0.5, wheel(120), 3, PAGE) ?? {}), false);
+  assert.equal('rail' in (wheelIntent('rail', 'project:a', 0.5, wheel(120), 3, PAGE, true) ?? {}), false);
 });
 
 test('the meaning is chosen by the focused ID alone, never by the event', () => {
   // The same event, the same Rail: only the focused ID differs, and it alone flips
   // the answer.
   const event = wheel(120);
-  assert.ok('rail' in (wheelIntent('rail', null, 1, event, 3, PAGE) ?? {}));
-  assert.ok('panel' in (wheelIntent('rail', 'project:a', 1, event, 3, PAGE) ?? {}));
-  assert.ok('panel' in (wheelIntent('rail', 'project:b', 1, event, 3, PAGE) ?? {}), 'any focused Project, not one in particular');
+  assert.ok('rail' in (wheelIntent('rail', null, 1, event, 3, PAGE, true) ?? {}));
+  assert.ok('panel' in (wheelIntent('rail', 'project:a', 1, event, 3, PAGE, true) ?? {}));
+  assert.ok('panel' in (wheelIntent('rail', 'project:b', 1, event, 3, PAGE, true) ?? {}), 'any focused Project, not one in particular');
   // An event carrying extra fields — a DOM target among them — gets the same answer.
   const withTarget = { ...event, target: { id: 'focus-panel' } } as RailWheel;
-  assert.deepEqual(wheelIntent('rail', null, 1, withTarget, 3, PAGE), wheelIntent('rail', null, 1, event, 3, PAGE));
-  assert.deepEqual(wheelIntent('rail', 'project:a', 1, withTarget, 3, PAGE), wheelIntent('rail', 'project:a', 1, event, 3, PAGE));
+  assert.deepEqual(wheelIntent('rail', null, 1, withTarget, 3, PAGE, true), wheelIntent('rail', null, 1, event, 3, PAGE, true));
+  assert.deepEqual(wheelIntent('rail', 'project:a', 1, withTarget, 3, PAGE, true), wheelIntent('rail', 'project:a', 1, event, 3, PAGE, true));
 });
 
 test('an event that is scroll’s in neither meaning returns null, focused or not', () => {
   for (const [mode, focused] of [['rail', null], ['rail', 'project:a'], ['freeflight', null], ['freeflight', 'project:a']] as const) {
-    assert.equal(wheelIntent(mode, focused, 1, wheel(120, DOM_DELTA_PIXEL, true), 3, PAGE), null, `${focused}: pinch-zoom`);
-    assert.equal(wheelIntent(mode, focused, 1, wheel(0), 3, PAGE), null, `${focused}: horizontal-only`);
-    assert.equal(wheelIntent(mode, focused, 1, wheel(-0), 3, PAGE), null, `${focused}: negative zero`);
+    assert.equal(wheelIntent(mode, focused, 1, wheel(120, DOM_DELTA_PIXEL, true), 3, PAGE, true), null, `${focused}: pinch-zoom`);
+    assert.equal(wheelIntent(mode, focused, 1, wheel(0), 3, PAGE, true), null, `${focused}: horizontal-only`);
+    assert.equal(wheelIntent(mode, focused, 1, wheel(-0), 3, PAGE, true), null, `${focused}: negative zero`);
     for (const delta of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
-      assert.equal(wheelIntent(mode, focused, 1, wheel(delta), 3, PAGE), null, `${focused}: delta ${delta}`);
+      assert.equal(wheelIntent(mode, focused, 1, wheel(delta), 3, PAGE, true), null, `${focused}: delta ${delta}`);
     }
-    assert.equal(wheelIntent(mode, focused, 1, wheel(100, 7), 3, PAGE), null, `${focused}: an unknown deltaMode`);
+    assert.equal(wheelIntent(mode, focused, 1, wheel(100, 7), 3, PAGE, true), null, `${focused}: an unknown deltaMode`);
     for (const page of [0, -1, Number.NaN]) {
-      assert.equal(wheelIntent(mode, focused, 1, wheel(1, DOM_DELTA_PAGE), 3, page), null, `${focused}: page height ${page}`);
+      assert.equal(wheelIntent(mode, focused, 1, wheel(1, DOM_DELTA_PAGE), 3, page, true), null, `${focused}: page height ${page}`);
     }
   }
 });
@@ -154,12 +154,12 @@ test('in free flight with nothing focused the wheel is swallowed and writes noth
   // Inert rather than null: the handler prevents the default so the page does not
   // scroll under the flight, and there is no Rail value to write.
   for (const [current, event] of [[0, wheel(120)], [2.3, wheel(-40)], [3, wheel(3, DOM_DELTA_LINE)]] as const) {
-    assert.deepEqual(wheelIntent('freeflight', null, current, event, 3, PAGE), { inert: true });
+    assert.deepEqual(wheelIntent('freeflight', null, current, event, 3, PAGE, true), { inert: true });
   }
   // Focus wins in either mode: the panel reads.
-  assert.deepEqual(wheelIntent('freeflight', 'project:a', 1, wheel(120), 3, PAGE), { panel: 120 });
+  assert.deepEqual(wheelIntent('freeflight', 'project:a', 1, wheel(120), 3, PAGE, true), { panel: 120 });
   // And the Rail is the Rail's only on the Rail.
-  assert.deepEqual(wheelIntent('rail', null, 1, wheel(400), 3, PAGE), { rail: 1.5 });
+  assert.deepEqual(wheelIntent('rail', null, 1, wheel(400), 3, PAGE, true), { rail: 1.5 });
 });
 
 test('↓ steps to the next whole stop and ↑ to the previous, holding at either end', () => {
@@ -219,21 +219,21 @@ test('a plain key press means exactly what keyIntent says it means', () => {
     for (const mode of ['rail', 'freeflight'] as const) {
       for (const focused of [null, 'project:a']) {
         assert.deepEqual(
-          keyAction(press(key), mode, focused, 1.4, 3),
+          keyAction(press(key), mode, focused, 1.4, 3, true),
           keyIntent(key, false, mode, focused, 1.4, 3),
           `${key} in ${mode}, focused ${String(focused)}`,
         );
       }
     }
   }
-  assert.deepEqual(keyAction(press('ArrowDown'), 'rail', null, 1.4, 3), { rail: 2 }, 'the key is the event’s own');
+  assert.deepEqual(keyAction(press('ArrowDown'), 'rail', null, 1.4, 3, true), { rail: 2 }, 'the key is the event’s own');
 });
 
 test('a key another handler took, or one inside an IME composition, is left alone in every mode', () => {
   for (const key of ['ArrowDown', 'ArrowUp', 'Home']) {
     for (const mode of ['rail', 'freeflight'] as const) {
-      assert.equal(keyAction(press(key, { defaultPrevented: true }), mode, null, 1, 3), null, `${key} already prevented in ${mode}`);
-      assert.equal(keyAction(press(key, { isComposing: true }), mode, null, 1, 3), null, `${key} composing in ${mode}`);
+      assert.equal(keyAction(press(key, { defaultPrevented: true }), mode, null, 1, 3, true), null, `${key} already prevented in ${mode}`);
+      assert.equal(keyAction(press(key, { isComposing: true }), mode, null, 1, 3, true), null, `${key} composing in ${mode}`);
     }
   }
 });
@@ -241,7 +241,7 @@ test('a key another handler took, or one inside an IME composition, is left alon
 test('any one of the four modifiers makes a key not the Rail’s', () => {
   for (const modifier of ['altKey', 'ctrlKey', 'metaKey', 'shiftKey'] as const) {
     for (const key of ['ArrowDown', 'ArrowUp', 'Home']) {
-      assert.equal(keyAction(press(key, { [modifier]: true }), 'rail', null, 1, 3), null, `${modifier} + ${key}`);
+      assert.equal(keyAction(press(key, { [modifier]: true }), 'rail', null, 1, 3, true), null, `${modifier} + ${key}`);
     }
   }
 });
@@ -269,11 +269,11 @@ test('Escape with any modifier, already handled, or composing is left alone, in 
       const where = `${mode}, focused ${String(focused)}`;
       assert.equal(keyIntent('Escape', true, mode, focused, 1, 3), null, `modifier held — asked first: ${where}`);
       for (const modifier of ['altKey', 'ctrlKey', 'metaKey', 'shiftKey'] as const) {
-        assert.equal(keyAction(press('Escape', { [modifier]: true }), mode, focused, 1, 3), null, `${modifier} + Escape: ${where}`);
+        assert.equal(keyAction(press('Escape', { [modifier]: true }), mode, focused, 1, 3, true), null, `${modifier} + Escape: ${where}`);
       }
-      assert.equal(keyAction(press('Escape', { isComposing: true }), mode, focused, 1, 3), null, `IME: ${where}`);
-      assert.equal(keyAction(press('Escape', { defaultPrevented: true }), mode, focused, 1, 3), null, `handled: ${where}`);
-      assert.deepEqual(keyAction(press('Escape'), mode, focused, 1, 3), keyIntent('Escape', false, mode, focused, 1, 3), `plain: ${where}`);
+      assert.equal(keyAction(press('Escape', { isComposing: true }), mode, focused, 1, 3, true), null, `IME: ${where}`);
+      assert.equal(keyAction(press('Escape', { defaultPrevented: true }), mode, focused, 1, 3, true), null, `handled: ${where}`);
+      assert.deepEqual(keyAction(press('Escape'), mode, focused, 1, 3, true), keyIntent('Escape', false, mode, focused, 1, 3), `plain: ${where}`);
     }
   }
 });
@@ -281,24 +281,24 @@ test('Escape with any modifier, already handled, or composing is left alone, in 
 test('a held Escape releases one layer: its auto-repeats are left alone, in all four states', () => {
   for (const mode of ['rail', 'freeflight'] as const) {
     for (const focused of [null, 'project:a']) {
-      assert.equal(keyAction(press('Escape', { repeat: true }), mode, focused, 1, 3), null, `repeat in ${mode}, focused ${String(focused)}`);
+      assert.equal(keyAction(press('Escape', { repeat: true }), mode, focused, 1, 3, true), null, `repeat in ${mode}, focused ${String(focused)}`);
     }
   }
   // The first press still releases, so one physical press is one layer.
-  assert.deepEqual(keyAction(press('Escape'), 'freeflight', 'project:a', 1, 3), { release: true });
+  assert.deepEqual(keyAction(press('Escape'), 'freeflight', 'project:a', 1, 3, true), { release: true });
 });
 
 test('a held arrow keeps travelling: a repeated ↑/↓/Home means what a fresh one does', () => {
   for (const key of ['ArrowDown', 'ArrowUp', 'Home']) {
     for (const mode of ['rail', 'freeflight'] as const) {
       assert.deepEqual(
-        keyAction(press(key, { repeat: true }), mode, null, 1.4, 3),
-        keyAction(press(key), mode, null, 1.4, 3),
+        keyAction(press(key, { repeat: true }), mode, null, 1.4, 3, true),
+        keyAction(press(key), mode, null, 1.4, 3, true),
         `${key} repeated in ${mode}`,
       );
     }
   }
-  assert.deepEqual(keyAction(press('ArrowDown', { repeat: true }), 'rail', null, 1.4, 3), { rail: 2 });
+  assert.deepEqual(keyAction(press('ArrowDown', { repeat: true }), 'rail', null, 1.4, 3, true), { rail: 2 });
 });
 
 test('the rules that were there are unchanged by Escape', () => {
@@ -311,6 +311,38 @@ test('the rules that were there are unchanged by Escape', () => {
   assert.deepEqual(keyIntent('Home', false, 'freeflight', null, 1, 3), { home: 0 });
   assert.deepEqual(keyIntent('ArrowDown', false, 'rail', null, 1.4, 3), { rail: 2 });
   assert.deepEqual(keyIntent('ArrowUp', false, 'freeflight', null, 1, 3), { inert: true });
+});
+
+// --- The scene absent (3.15, F-3) -------------------------------------------------
+
+test('with the scene absent, ↑/↓/Home are never the Rail’s: null, so the browser keeps them for native scrolling', () => {
+  for (const key of ['ArrowDown', 'ArrowUp', 'Home']) {
+    for (const mode of ['rail', 'freeflight'] as const) {
+      assert.notEqual(keyAction(press(key), mode, null, 1.4, 3, true), null, `${key} in ${mode} is the Rail’s with the scene mounted`);
+      assert.equal(keyAction(press(key), mode, null, 1.4, 3, false), null, `${key} in ${mode}, scene absent`);
+      assert.equal(keyAction(press(key, { repeat: true }), mode, null, 1.4, 3, false), null, `${key} repeated in ${mode}, scene absent`);
+    }
+  }
+});
+
+test('with the scene absent, Escape still releases a layer: it is not Rail input', () => {
+  assert.deepEqual(keyAction(press('Escape'), 'rail', 'project:a', 1, 3, false), { release: true }, 'Focused on the Rail');
+  assert.deepEqual(keyAction(press('Escape'), 'freeflight', 'project:a', 1, 3, false), { release: true }, 'Focused in flight');
+  assert.deepEqual(keyAction(press('Escape'), 'freeflight', null, 1, 3, false), { release: true }, 'free flight, unfocused');
+  assert.equal(keyAction(press('Escape'), 'rail', null, 1, 3, false), null, 'the bare Rail: still nothing to release');
+  // The event's own settling still comes first.
+  assert.equal(keyAction(press('Escape', { repeat: true }), 'rail', 'project:a', 1, 3, false), null);
+  assert.equal(keyAction(press('Escape', { shiftKey: true }), 'rail', 'project:a', 1, 3, false), null);
+});
+
+test('with the scene absent, a wheel on the Rail or in free flight is null; the panel still reads it', () => {
+  for (const mode of ['rail', 'freeflight'] as const) {
+    assert.notEqual(wheelIntent(mode, null, 1, wheel(120), 3, PAGE, true), null, `${mode} takes the wheel with the scene mounted`);
+    assert.equal(wheelIntent(mode, null, 1, wheel(120), 3, PAGE, false), null, `${mode}, scene absent: not prevented, nothing written`);
+    assert.equal(wheelIntent(mode, null, 1, wheel(1, DOM_DELTA_LINE), 3, PAGE, false), null);
+    assert.deepEqual(wheelIntent(mode, 'project:a', 1, wheel(120), 3, PAGE, false), { panel: 120 }, `${mode}, focused, scene absent`);
+    assert.equal(wheelIntent(mode, 'project:a', 1, wheel(120, DOM_DELTA_PIXEL, true), 3, PAGE, false), null, 'a pinch is still the browser’s');
+  }
 });
 
 // --- Purity and wiring ----------------------------------------------------------
@@ -415,12 +447,12 @@ function auditWheelWiring(source: string): string[] {
   const read = /const\s*\{\s*mode\s*,\s*focusedProjectId\s*,\s*scrollProgress\s*\}\s*=\s*navigationStore\.getState\(\)\s*;/.exec(wheelBody);
   if (read === null) failures.push('the mode, the focused ID and the progress are not read from the store at the wheel event');
   const call =
-    /const\s+intent\s*=\s*wheelIntent\(\s*mode\s*,\s*focusedProjectId\s*,\s*scrollProgress\s*,\s*event\s*,\s*stopCount\s*,\s*window\.innerHeight\s*\)\s*;/.exec(
+    /const\s+intent\s*=\s*wheelIntent\(\s*mode\s*,\s*focusedProjectId\s*,\s*scrollProgress\s*,\s*event\s*,\s*stopCount\s*,\s*window\.innerHeight\s*,\s*sceneMounted\s*\)\s*;/.exec(
       wheelBody,
     );
   if (call === null) {
     failures.push(
-      'wheelIntent is not asked with the store’s mode, focused ID and progress, the event unchanged, the stop count and the page height',
+      'wheelIntent is not asked with the store’s mode, focused ID and progress, the event unchanged, the stop count, the page height and whether the scene is mounted',
     );
   }
   if (/\bwheelProgress\s*\(/.test(code)) failures.push('wheelProgress is asked directly — the meaning must go through wheelIntent');
@@ -452,6 +484,34 @@ function auditWheelWiring(source: string): string[] {
   }
   if (/\bselectClient\s*\(/.test(code)) failures.push('scroll selects a Client — railPosition is not the input’s');
   if (/\bonWheel\s*=\s*\{/.test(code)) failures.push('a React onWheel prop — React attaches wheel passively');
+  failures.push(...auditSceneMounted(code));
+  return failures;
+}
+
+/**
+ * Whether the scene is mounted (3.15), over comment-stripped source: state that
+ * starts `false`, set only by a `SceneMounted` marker that is `<Scene>`'s
+ * sibling inside `<Suspense>` — so it commits only when the scene does — whose
+ * layout effect sets it on mount and clears it on unmount, or when re-suspended
+ * content is hidden (a passive effect survives that); and the listeners' effect
+ * re-registers when it changes, so the handlers never hold a stale flag.
+ */
+function auditSceneMounted(code: string): string[] {
+  const failures: string[] = [];
+  if (!/const\s*\[\s*sceneMounted\s*,\s*setSceneMounted\s*\]\s*=\s*useState\(\s*false\s*\)\s*;/.test(code)) {
+    failures.push('sceneMounted is not state that starts false — the Rail would bind before the scene exists');
+  }
+  if ((code.match(/\bsetSceneMounted\b/g) ?? []).length !== 2) failures.push('setSceneMounted is used other than by the marker');
+  if (!/<Suspense\s+fallback=\{\s*null\s*\}\s*>\s*<Scene\s+artifact=\{\s*artifact\s*\}\s*\/>\s*<SceneMounted\s+onMount=\{\s*setSceneMounted\s*\}\s*\/>\s*<\/Suspense>/.test(code)) {
+    failures.push('the SceneMounted marker is not <Scene>’s sibling after it inside <Suspense> — it would mount before the scene does');
+  }
+  if ((code.match(/<SceneMounted\b/g) ?? []).length !== 1) failures.push('the SceneMounted marker is rendered other than once');
+  const marker =
+    /function\s+SceneMounted\(\s*\{\s*onMount\s*\}\s*:\s*SceneMountedProps\s*\)\s*:\s*null\s*\{\s*useLayoutEffect\(\s*\(\)\s*=>\s*\{\s*onMount\(\s*true\s*\)\s*;\s*return\s*\(\)\s*=>\s*onMount\(\s*false\s*\)\s*;\s*\}\s*,\s*\[\s*onMount\s*\]\s*\)\s*;\s*return\s+null\s*;\s*\}/;
+  if (!marker.test(code)) failures.push('the marker does not set the flag in a layout effect and clear it on unmount or hide, rendering nothing');
+  if (!/\}\s*,\s*\[\s*stopCount\s*,\s*sceneMounted\s*\]\s*\)\s*;/.test(code)) {
+    failures.push('the listeners’ effect does not depend on sceneMounted — the handlers would keep the flag they were registered with');
+  }
   return failures;
 }
 
@@ -470,7 +530,7 @@ function auditKeyWiring(source: string): string[] {
   const body = code.slice(keyStart, listenStart);
 
   const read = /const\s*\{\s*mode\s*,\s*focusedProjectId\s*,\s*scrollProgress\s*\}\s*=\s*navigationStore\.getState\(\)\s*;/.exec(body);
-  const call = /const\s+key\s*=\s*keyAction\(\s*event\s*,\s*mode\s*,\s*focusedProjectId\s*,\s*scrollProgress\s*,\s*stopCount\s*\)\s*;/.exec(body);
+  const call = /const\s+key\s*=\s*keyAction\(\s*event\s*,\s*mode\s*,\s*focusedProjectId\s*,\s*scrollProgress\s*,\s*stopCount\s*,\s*sceneMounted\s*\)\s*;/.exec(body);
   const guard = /if\s*\(\s*key\s*===\s*null\s*\)\s*return\s*;/.exec(body);
   const prevent = /\bevent\.preventDefault\(\s*\)\s*;/.exec(body);
   const inert = /if\s*\(\s*'inert'\s+in\s+key\s*\)\s*return\s*;/.exec(body);
@@ -478,7 +538,7 @@ function auditKeyWiring(source: string): string[] {
   const release = /if\s*\(\s*'release'\s+in\s+key\s*\)\s*\{\s*releaseLayer\(\s*\)\s*;\s*return\s*;\s*\}/.exec(body);
   const write = /\btoRail\(\s*key\.rail\s*\)\s*;/.exec(body);
   if (read === null) failures.push('the mode, the focused ID and the progress are not read from the store at the key event');
-  if (call === null) failures.push('keyAction is not asked with the event unchanged and the store’s values');
+  if (call === null) failures.push('keyAction is not asked with the event unchanged, the store’s values and whether the scene is mounted');
   // The event's own settling — handled, composing, modified — is keyAction's,
   // executed in this file; restated here it would be a second rule nobody runs.
   if (/\b(?:defaultPrevented|isComposing|repeat|altKey|ctrlKey|metaKey|shiftKey)\b/.test(body)) {
@@ -546,7 +606,7 @@ test('the wiring audits reject the real host with any one guarantee removed', ()
       (s) => s.replace('scrollProgress, event, stopCount', 'scrollProgress, { ...event, deltaY: -event.deltaY }, stopCount'),
     ],
     ['a raw rail length', (s) => s.replace('railStopCount(artifact.rail)', 'artifact.rail.length')],
-    ['a constant page height', (s) => s.replace('stopCount, window.innerHeight)', 'stopCount, 800)')],
+    ['a constant page height', (s) => s.replace('stopCount, window.innerHeight,', 'stopCount, 800,')],
     ['the ref dropped', (s) => s.replace('<div ref={host} className="scene-host">', '<div className="scene-host">')],
     ['the ref on an empty sibling', (s) => s.replace('<div ref={host} className="scene-host">', '<div ref={host} />\n    <div className="scene-host">')],
     ['the panel scrolled by a constant', (s) => s.replace('{ top: intent.panel }', '{ top: 120 }')],
@@ -596,8 +656,22 @@ test('the wiring audits reject the real host with any one guarantee removed', ()
     ['an arrow to a literal', (s) => s.replace('toRail(key.rail);', 'toRail(scrollProgress + 1);')],
     ['the mode ignored by the keys', (s) => s.replace('keyAction(event, mode,', "keyAction(event, 'rail',")],
     ['Focus ignored by the keys', (s) => s.replace('keyAction(event, mode, focusedProjectId,', 'keyAction(event, mode, null,')],
-    ['a literal progress for the keys', (s) => s.replace('focusedProjectId, scrollProgress, stopCount)', 'focusedProjectId, 0, stopCount)')],
+    ['a literal progress for the keys', (s) => s.replace('focusedProjectId, scrollProgress, stopCount,', 'focusedProjectId, 0, stopCount,')],
     ['the key read off the target', (s) => s.replace('keyAction(event,', 'keyAction(event.target as unknown as KeyboardEvent,')],
+    // 3.15: no Rail input while the scene is absent.
+    ['the wheel told the scene is always mounted', (s) => s.replace('window.innerHeight, sceneMounted)', 'window.innerHeight, true)')],
+    ['the keys told the scene is always mounted', (s) => s.replace('stopCount, sceneMounted)', 'stopCount, true)')],
+    ['the dep dropped', (s) => s.replace('}, [stopCount, sceneMounted]);', '}, [stopCount]);')],
+    ['the marker outside Suspense', (s) => s.replace(/\s*<SceneMounted onMount=\{setSceneMounted\} \/>/, '').replace('</SceneBoundary>', '</SceneBoundary>\n      <SceneMounted onMount={setSceneMounted} />')],
+    ['the marker outside the boundary', (s) => s.replace(/\s*<SceneMounted onMount=\{setSceneMounted\} \/>/, '').replace('<SceneBoundary>', '<SceneMounted onMount={setSceneMounted} />\n      <SceneBoundary>')],
+    ['the marker dropped', (s) => s.replace(/\s*<SceneMounted onMount=\{setSceneMounted\} \/>/, '')],
+    ['the marker before the scene', (s) => s.replace(/(<Scene artifact=\{artifact\} \/>)(\s*)(<SceneMounted onMount=\{setSceneMounted\} \/>)/, '$3$2$1')],
+    ['mounted from the start', (s) => s.replace('useState(false)', 'useState(true)')],
+    ['the flag never cleared', (s) => s.replace('return () => onMount(false);', 'return undefined;')],
+    ['the flag cleared on mount', (s) => s.replace('onMount(true);', 'onMount(false);')],
+    ['the marker on a passive effect', (s) => s.replace(/useLayoutEffect\(\(\) => \{(\s*)onMount\(true\);/, 'useEffect(() => {$1onMount(true);')],
+    ['a second marker', (s) => s.replace('<SceneMounted onMount={setSceneMounted} />', '<SceneMounted onMount={setSceneMounted} />\n          <SceneMounted onMount={setSceneMounted} />')],
+    ['the flag set elsewhere', (s) => s.replace('const stopCount = railStopCount(artifact.rail);', 'const stopCount = railStopCount(artifact.rail);\nuseEffect(() => setSceneMounted(true), []);')],
     ['a React onKeyDown prop', (s) => s.replace('<div ref={host} className="scene-host">', '<div ref={host} className="scene-host" onKeyDown={() => undefined}>')],
   ];
   for (const [name, mutate] of mutations) {

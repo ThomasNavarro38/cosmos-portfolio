@@ -34,7 +34,7 @@
  * arrives as an argument and the element IDs leave as strings.
  */
 
-import { FOCUS_SECONDS, focusEasingCss } from './focus-motion.ts';
+import { FOCUS_SECONDS, advanceSlide, flipSlide, focusEasingCss, settledSlide, type FocusSlide } from './focus-motion.ts';
 
 /** The panel's widest, in CSS pixels (DESIGN.md: 560px on desktop). */
 export const PANEL_MAX_PX = 560;
@@ -439,9 +439,18 @@ export interface PanelStyle {
  * and curve — so the two halves of the move start and end together. Closed, it
  * is translated off the right edge **and** `visibility: hidden`, which takes it
  * out of the tab order and the accessibility tree. The visibility switch is
- * delayed by the slide's duration when closing (and not at all when opening),
- * so the panel is visible for the whole slide and hidden exactly once it ends,
- * with no `transitionend` listener to miss.
+ * delayed when closing (and not at all when opening) by the length of the
+ * slide the browser actually runs: `FOCUS_SECONDS × factor`, where `factor` is
+ * the slide's reversing shortening factor (`panelSlide`, 3.15) — 1 after a
+ * settled open, less when the release reverses an opening slide still running,
+ * which CSS then runs for only that share of its duration. So the panel is
+ * visible for the whole slide and hidden once it ends, with no `transitionend`
+ * listener to miss, rather than sitting off-screen, visible and tabbable, for
+ * the rest of a full duration. `factor` is clamped to `[0, 1]`, a non-finite
+ * one reading as 1.
+ *
+ * The `transform` transition keeps its full `FOCUS_SECONDS × pace` duration:
+ * the browser applies the reversing factor to it itself.
  *
  * Both the slide and the visibility delay run on `FOCUS_SECONDS × pace` (2.10),
  * the reduced-motion pace the camera's Focus ease is dilated by, so the two
@@ -453,8 +462,9 @@ export interface PanelStyle {
  * and a focus ring there would be a second boundary. It paints its own column
  * and nothing else — no scrim, no backdrop, no overlay.
  */
-export function panelStyle(open: boolean, pace = 1): PanelStyle {
+export function panelStyle(open: boolean, pace = 1, factor = 1): PanelStyle {
   const seconds = FOCUS_SECONDS * usablePace(pace);
+  const share = Number.isFinite(factor) ? Math.min(Math.max(factor, 0), 1) : 1;
   const curve = `${seconds}s ${focusEasingCss()}`;
   return {
     position: 'fixed',
@@ -473,8 +483,44 @@ export function panelStyle(open: boolean, pace = 1): PanelStyle {
     outline: 'none',
     transform: open ? 'translateX(0)' : 'translateX(100%)',
     visibility: open ? 'visible' : 'hidden',
-    transition: `transform ${curve}, visibility 0s linear ${open ? 0 : seconds}s`,
+    transition: `transform ${curve}, visibility 0s linear ${open ? 0 : FOCUS_SECONDS * share * usablePace(pace)}s`,
   };
+}
+
+/** The panel's slide as the panel mirrors it: `FocusSlide`, plus when it started and at what pace. */
+export interface PanelSlide extends FocusSlide {
+  /** The clock reading, in milliseconds, at which the current slide started. */
+  readonly at: number;
+  /** The usable pace the current slide started at: a running CSS transition keeps its duration. */
+  readonly pace: number;
+}
+
+/**
+ * The panel's slide after a render at `nowMs` with the panel `open` or not:
+ * the mirror of the slide the browser runs on its `transform`, from which
+ * `panelStyle` takes the reversing factor for its `visibility` delay.
+ *
+ * On the first render (`previous` null) it is at rest — CSS does not transition
+ * an element's first style. While `open` is unchanged it is `previous`, the same
+ * object, so a re-render records nothing. When `open` flips, the previous slide
+ * is advanced by the wall time since it started, in the slide's own seconds —
+ * `(nowMs − at) / 1000 / previous.pace`, because a slide running at
+ * `FOCUS_SECONDS × pace` covers its curve `pace` times slower, and a running
+ * CSS transition keeps the duration it started with, so the time already run is
+ * read at the pace recorded when that slide began, not today's — and then
+ * flipped (`flipSlide`): a running slide reverses for the share CSS gives it, a
+ * settled one starts afresh. The new slide records the current pace. A pace
+ * that is not a positive finite number reads as 1; a clock read before `at`
+ * advances nothing.
+ *
+ * Pure: the clock reading arrives as an argument (`focus-panel.tsx` passes
+ * `performance.now()`).
+ */
+export function panelSlide(previous: PanelSlide | null, open: boolean, nowMs: number, pace = 1): PanelSlide {
+  if (previous === null) return { ...settledSlide(open), at: nowMs, pace: usablePace(pace) };
+  if (open === previous.open) return previous;
+  const ran = advanceSlide(previous, (nowMs - previous.at) / 1000 / previous.pace);
+  return { ...flipSlide(ran, open), at: nowMs, pace: usablePace(pace) };
 }
 
 /**

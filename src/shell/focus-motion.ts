@@ -126,6 +126,55 @@ export function reversingFactor(progress: number, factor: number): number {
   return Math.min(Math.max(Math.abs(p * f + (1 - f)), 0), 1);
 }
 
+/**
+ * The panel's CSS slide, mirrored: open or closed, how far into its current
+ * transition, how long that transition runs and the reversing factor it ran
+ * with. The browser keeps this state for the panel's `transform`; the camera
+ * (`src/render-scene/focus-model.ts`) and the panel's own `visibility` delay
+ * (`panel-model.ts`) each keep a copy, so a reversed slide, the camera's
+ * reversed ease and the moment the panel leaves the tab order end together.
+ * The rules are shared — these functions are the one statement of what CSS
+ * does — but the state is held twice: the camera advances its copy on clamped
+ * frame `dt`, the panel on wall time, and each decides `open` by its own rule
+ * (a focused ID, versus a focused ID with a known Project). The two copies can
+ * therefore drift apart; they are not guaranteed equal.
+ */
+export interface FocusSlide {
+  readonly open: boolean;
+  /** Seconds into the current slide, capped at `seconds`. */
+  readonly elapsed: number;
+  /** How long the current slide runs: `FOCUS_SECONDS × factor`. */
+  readonly seconds: number;
+  /** Its reversing shortening factor — 1 unless it reversed a running slide. */
+  readonly factor: number;
+}
+
+/** A slide at rest, open or closed: full length, unreversed, over. */
+export function settledSlide(open: boolean): FocusSlide {
+  return { open, elapsed: FOCUS_SECONDS, seconds: FOCUS_SECONDS, factor: 1 };
+}
+
+/**
+ * The slide that starts when the panel's open state flips. A slide still
+ * running is reversed, and runs only as long as CSS runs a reversal; a settled
+ * one starts afresh at full length.
+ */
+export function flipSlide(slide: FocusSlide, open: boolean): FocusSlide {
+  const running = slide.elapsed < slide.seconds;
+  const factor = running ? reversingFactor(easeFocus(slide.elapsed / slide.seconds), slide.factor) : 1;
+  return { open, elapsed: 0, seconds: FOCUS_SECONDS * factor, factor };
+}
+
+/**
+ * `slide`, `seconds` further on: its clock advanced and capped at its length.
+ * A negative or non-finite step does not move it — time arrives as an argument,
+ * already in the slide's own (pace-divided) seconds.
+ */
+export function advanceSlide(slide: FocusSlide, seconds: number): FocusSlide {
+  const step = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+  return { ...slide, elapsed: Math.min(slide.elapsed + step, slide.seconds) };
+}
+
 /** The Focus curve as CSS: the panel's half of the one curve. */
 export function focusEasingCss(): string {
   return `cubic-bezier(${FOCUS_EASING.join(', ')})`;
