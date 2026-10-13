@@ -104,6 +104,20 @@ Three layers ran: blind, edge-case and verification-gap. No intent_gap or bad_sp
 - [x] [Review][Patch] Manual checks for F-1 and F-3 are added under Verification.
 - [x] [Review][Reject] "A release after `A → null → B` is shortened by an unrelated slide factor, so it cuts." A probe stepped `A → null (1–46 f) → B (1–20 f) → null` and `A (1–24 f) → B → null`. The worst per-frame jump was 6.10 units, against 6.08 for an ordinary settled release, so no cut. A reversal of a short reversal comes out long, because `|p·f + 1 − f|` is near 1 when `f` is small. The proposed rule would also undo the A → B → release shortening that 2.8 pinned deliberately (`focus-model.test.ts`, "A → B keeps the panel's slide running…").
 
+### Review Findings
+
+Second pass, 2026-10-13. Four layers ran: blind, edge-case, verification-gap and acceptance. The acceptance layer found every AC and matrix row met, and `typecheck`, `test` and `gate` exit 0. 16 findings were dismissed.
+
+- [x] [Review][Patch] Two count clauses are never red on their own. `'a second marker'` also breaks the placement regex, and `'the mirror written twice'` also breaks the layout-effect regex. So `<SceneMounted` ×1 and `slideMirror.current =` ×1 have no isolating row, and the rule that every new clause gets a red row is unmet [src/shell/rail-input.test.ts:673, src/shell/panel-model.test.ts:1294]
+- [x] [Review][Patch] `'the marker outside Suspense'` moves the marker after `</SceneBoundary>`, which is outside the boundary too. No row puts it inside `SceneBoundary` but outside `<Suspense>`, the placement that would mount before the chunk arrives [src/shell/rail-input.test.ts:665]
+- [x] [Review][Patch] The reopen-A no-cut test is close to vacuous. A is reopened four frames into the slide-out, so `seconds` is under one `DT`, `assertNoCut`'s bound is huge, and the loop ends in one step. Reopen A partway through the slide-out instead [src/render-scene/focus-model.test.ts:445]
+- [x] [Review][Patch] `closedFrom` is never asserted directly: not `null` on the first frame, carried across advance frames, or reset by an open. Also untested: reopening A after the slide-out has settled, and `A → null → B → null → A` [src/render-scene/focus-model.test.ts:391]
+- [x] [Review][Patch] Refocus mid-release has no reduced-motion row. B should take `FOCUS_SECONDS × pace`, and reopening A should end with the paced reversed slide [src/render-scene/focus-model.test.ts:521]
+- [x] [Review][Defer] No test renders `SceneHost` or `FocusPanel`. The `sceneMounted` lifecycle and the slide mirror are pinned by source-text audits alone [src/shell/scene-host.tsx:205, src/shell/focus-panel.tsx:106]. Deferred: pre-existing policy, and a DOM harness is new infrastructure.
+- [x] [Review][Defer] `sceneMounted` means the scene committed, not that it can be driven. A WebGL context loss, or an R3F failure that is not rethrown, leaves the flag `true` [src/shell/scene-host.tsx:205]. Deferred: beyond the spec's mount signal.
+- [x] [Review][Defer] `A → null → B` mid slide-out swaps the panel content from A to B in one frame, with no cross-fade [src/shell/focus-panel.tsx:106]. Deferred: pre-existing 2.8 behaviour.
+- [x] [Review][Defer] The camera reads a mid-slide pace change at the current pace, but `panelSlide` reads it at the recorded pace [src/render-scene/focus-model.ts:249]. Deferred: pre-existing, and it belongs with F-4.
+
 ## Suggested Review Order
 
 **F-1: the camera never cuts on refocus**

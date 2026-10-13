@@ -662,7 +662,9 @@ test('the wiring audits reject the real host with any one guarantee removed', ()
     ['the wheel told the scene is always mounted', (s) => s.replace('window.innerHeight, sceneMounted)', 'window.innerHeight, true)')],
     ['the keys told the scene is always mounted', (s) => s.replace('stopCount, sceneMounted)', 'stopCount, true)')],
     ['the dep dropped', (s) => s.replace('}, [stopCount, sceneMounted]);', '}, [stopCount]);')],
-    ['the marker outside Suspense', (s) => s.replace(/\s*<SceneMounted onMount=\{setSceneMounted\} \/>/, '').replace('</SceneBoundary>', '</SceneBoundary>\n      <SceneMounted onMount={setSceneMounted} />')],
+    // Inside the boundary but outside the suspense edge: it would commit before the chunk arrives.
+    ['the marker outside Suspense', (s) => s.replace(/\s*<SceneMounted onMount=\{setSceneMounted\} \/>/, '').replace('</Suspense>', '</Suspense>\n        <SceneMounted onMount={setSceneMounted} />')],
+    ['the marker after the boundary', (s) => s.replace(/\s*<SceneMounted onMount=\{setSceneMounted\} \/>/, '').replace('</SceneBoundary>', '</SceneBoundary>\n      <SceneMounted onMount={setSceneMounted} />')],
     ['the marker outside the boundary', (s) => s.replace(/\s*<SceneMounted onMount=\{setSceneMounted\} \/>/, '').replace('<SceneBoundary>', '<SceneMounted onMount={setSceneMounted} />\n      <SceneBoundary>')],
     ['the marker dropped', (s) => s.replace(/\s*<SceneMounted onMount=\{setSceneMounted\} \/>/, '')],
     ['the marker before the scene', (s) => s.replace(/(<Scene artifact=\{artifact\} \/>)(\s*)(<SceneMounted onMount=\{setSceneMounted\} \/>)/, '$3$2$1')],
@@ -670,7 +672,7 @@ test('the wiring audits reject the real host with any one guarantee removed', ()
     ['the flag never cleared', (s) => s.replace('return () => onMount(false);', 'return undefined;')],
     ['the flag cleared on mount', (s) => s.replace('onMount(true);', 'onMount(false);')],
     ['the marker on a passive effect', (s) => s.replace(/useLayoutEffect\(\(\) => \{(\s*)onMount\(true\);/, 'useEffect(() => {$1onMount(true);')],
-    ['a second marker', (s) => s.replace('<SceneMounted onMount={setSceneMounted} />', '<SceneMounted onMount={setSceneMounted} />\n          <SceneMounted onMount={setSceneMounted} />')],
+    ['a second marker', secondMarker],
     ['the flag set elsewhere', (s) => s.replace('const stopCount = railStopCount(artifact.rail);', 'const stopCount = railStopCount(artifact.rail);\nuseEffect(() => setSceneMounted(true), []);')],
     ['a React onKeyDown prop', (s) => s.replace('<div ref={host} className="scene-host">', '<div ref={host} className="scene-host" onKeyDown={() => undefined}>')],
   ];
@@ -679,6 +681,22 @@ test('the wiring audits reject the real host with any one guarantee removed', ()
     assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
     assert.notDeepEqual(audit(mutated), [], `"${name}" must be rejected`);
   }
+});
+
+/**
+ * A second marker after the suspense edge, wired to nothing: the first stays where
+ * the placement clause wants it, the host still wraps the boundary alone, and
+ * `setSceneMounted` keeps its two uses, so only the marker count can see it.
+ */
+function secondMarker(source: string): string {
+  return source.replace('</Suspense>', '</Suspense>\n        <SceneMounted onMount={() => undefined} />');
+}
+
+test('the marker count is red on its own: a second marker breaks no other clause', () => {
+  const real = readFileSync(SCENE_HOST_TSX, 'utf8');
+  const mutated = secondMarker(real);
+  assert.notEqual(mutated, real, 'the mutation must apply');
+  assert.deepEqual([...auditWheelWiring(mutated), ...auditKeyWiring(mutated)], ['the SceneMounted marker is rendered other than once']);
 });
 
 /**
