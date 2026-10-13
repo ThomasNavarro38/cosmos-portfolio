@@ -374,6 +374,84 @@ test('A → B keeps the panel’s slide running and takes the full duration; the
   assert.equal(released.seconds, FOCUS_SECONDS * easeFocus(onward.slide.elapsed / onward.slide.seconds));
 });
 
+// --- Refocus mid-release (3.15, F-1) ---------------------------------------------
+
+/** Two Projects far apart: B's focus pose stands 95 units from A's. */
+const farPoses: Readonly<Record<string, RailPose>> = {
+  'p-a': { position: at(0, 2, 20), target: at(0, 0, 0) },
+  'p-b': { position: at(95, 2, 20), target: at(95, 0, 0) },
+};
+const farPoseOf = (id: string): RailPose => {
+  const pose = farPoses[id];
+  assert.ok(pose !== undefined, id);
+  return pose;
+};
+
+/** A focused and settled, then released, then `next` focused three frames into the slide-out. */
+function refocusMidRelease(next: string): { closing: FocusMotion; reopened: FocusMotion } {
+  let motion = stepFocus(null, null, railA, farPoseOf, DT);
+  for (let i = 0; i < settleFrames; i += 1) motion = stepFocus(motion, 'p-a', railA, farPoseOf, DT);
+  assert.deepEqual(motion.pose, farPoseOf('p-a'), 'A at rest');
+  motion = stepFocus(motion, null, railA, farPoseOf, DT);
+  for (let i = 0; i < 3; i += 1) motion = stepFocus(motion, null, railA, farPoseOf, DT);
+  assert.ok(motion.slide.elapsed > 0 && motion.slide.elapsed < motion.slide.seconds, 'the slide-out is running');
+  return { closing: motion, reopened: stepFocus(motion, next, railA, farPoseOf, DT) };
+}
+
+test('focusing B during A’s release slide-out takes the full duration and never cuts; the slide still flips', () => {
+  const { closing, reopened } = refocusMidRelease('p-b');
+  assert.equal(reopened.seconds, FOCUS_SECONDS, 'a new journey, not the reversed slide');
+  assert.equal(reopened.slide.open, true, 'the panel’s CSS does reverse');
+  assert.equal(reopened.slide.factor, reversingFactor(easeFocus(closing.slide.elapsed / closing.slide.seconds), closing.slide.factor));
+  assert.ok(reopened.slide.seconds < FOCUS_SECONDS / 10, 'so the panel lands well before the camera');
+  assert.deepEqual(reopened.pose, closing.pose, 'the change frame holds the pose on screen');
+  // Every frame of the journey — position and aim — is bounded by the full-length ease's steepest step.
+  assert.ok(distance(reopened.from.position, farPoseOf('p-b').position) > 90, 'B is far from where the camera stands');
+  const rested = assertNoCut(reopened, 'p-b', FOCUS_SECONDS);
+  assert.deepEqual(rested.pose, farPoseOf('p-b'), 'at rest on B exactly');
+});
+
+/** The Focus curve's steepest slope, sampled finely. */
+function steepestSlope(): number {
+  const samples = 4000;
+  let steepest = 0;
+  for (let i = 1; i <= samples; i += 1) steepest = Math.max(steepest, (easeFocus(i / samples) - easeFocus((i - 1) / samples)) * samples);
+  return steepest;
+}
+
+/**
+ * Steps `motion` toward `focused` until it rests, asserting no frame moves the
+ * position or the aim further than an ease of `seconds` allows, and returns the
+ * motion at rest.
+ */
+function assertNoCut(motion: FocusMotion, focused: string, seconds: number): FocusMotion {
+  const goal = farPoseOf(focused);
+  const steepest = steepestSlope();
+  const bounds = {
+    position: (distance(motion.from.position, goal.position) * steepest * 1.05 * DT) / seconds,
+    target: (distance(motion.from.target, goal.target) * steepest * 1.05 * DT) / seconds,
+  };
+  let previous = motion;
+  for (let i = 0; i < 2 * settleFrames && previous.elapsed < previous.seconds; i += 1) {
+    const next = stepFocus(previous, focused, railA, farPoseOf, DT);
+    assert.ok(distance(previous.pose.position, next.pose.position) <= bounds.position + 1e-12, `frame ${i}: the position jumps`);
+    assert.ok(distance(previous.pose.target, next.pose.target) <= bounds.target + 1e-12, `frame ${i}: the aim jumps`);
+    previous = next;
+  }
+  assert.ok(previous.elapsed >= previous.seconds, 'came to rest');
+  return previous;
+}
+
+test('reopening the Project the slide closed from is still shortened to the reversed slide', () => {
+  const { closing, reopened } = refocusMidRelease('p-a');
+  assert.equal(reopened.slide.open, true);
+  assert.equal(reopened.seconds, reopened.slide.seconds, 'the same move reversed, ending with the panel');
+  assert.ok(reopened.seconds > 0 && reopened.seconds < FOCUS_SECONDS);
+  assert.deepEqual(reopened.pose, closing.pose, 'the change frame holds the pose on screen');
+  const rested = assertNoCut(reopened, 'p-a', reopened.seconds);
+  assert.deepEqual(rested.pose, farPoseOf('p-a'), 'at rest on A exactly');
+});
+
 test('a release after the slide has settled, or a reversal on its first frame, is not a mid-flight reversal', () => {
   const rest = last(run(null, null, 3));
   const settled = last(run(rest, 'p-a', settleFrames));

@@ -50,6 +50,17 @@
  * through the `releaseLayer` door — Focus, else free flight — and is left alone
  * on the Rail with nothing focused.
  *
+ * **No scene, no Rail input** (3.15). Until the scene has committed — the chunk
+ * still loading, or the boundary holding the index alone after a failure — there
+ * is no camera for ↑/↓/Home or the wheel to move, and the page must scroll
+ * natively for a keyboard visitor. A `SceneMounted` marker sits beside `<Scene>`
+ * inside `<Suspense>`, so it commits only when the scene does; its layout
+ * effect sets `sceneMounted` on mount and clears it whenever the scene leaves
+ * the screen — unmounted when the boundary drops a scene that failed after
+ * mounting, or hidden when committed content re-suspends. Both rules take the flag: while it is
+ * `false` they drop every Rail answer, and the handlers leave the event alone.
+ * `Escape` and the wheel's panel answer are kept — they are not Rail input.
+ *
  * **The reduced-motion preference's one writer is here too** (2.10): a
  * `matchMedia(REDUCED_MOTION_QUERY)` listener calling `setReducedMotion`, so the
  * rig, the Mote field and the panel read the visitor's preference and nothing
@@ -61,7 +72,7 @@
  * surface, fails to initialise, and keeps the index — recorded in `deferred-work.md`.
  */
 
-import { Component, Suspense, lazy, useEffect, useRef, type ReactNode } from 'react';
+import { Component, Suspense, lazy, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { FOCUS_PANEL_ID } from './panel-model.ts';
 import { goHome, releaseLayer } from './activate.ts';
 import { REDUCED_MOTION_QUERY, setReducedMotion } from './motion-preference.ts';
@@ -173,6 +184,32 @@ class SceneBoundary extends Component<SceneBoundaryProps, SceneBoundaryState> {
   }
 }
 
+interface SceneMountedProps {
+  /** Told `true` when the marker commits, `false` when it unmounts. */
+  readonly onMount: (mounted: boolean) => void;
+}
+
+/**
+ * Renders nothing; says whether the scene is in the document (3.15).
+ *
+ * It is `<Scene>`'s sibling inside `<Suspense>`, and React commits the children
+ * of a suspense edge together, so this effect runs only once the scene's chunk
+ * has arrived and the scene has committed. If the boundary later drops a scene
+ * that failed — `buildScene` throwing, R3F rethrowing a WebGL failure — this
+ * unmounts with it, and the cleanup clears the flag.
+ *
+ * A **layout** effect, not a passive one: when committed content re-suspends,
+ * React hides it and destroys its layout effects but keeps its passive ones, so
+ * a `useEffect` here would leave `sceneMounted` true while the scene is hidden.
+ */
+function SceneMounted({ onMount }: SceneMountedProps): null {
+  useLayoutEffect(() => {
+    onMount(true);
+    return () => onMount(false);
+  }, [onMount]);
+  return null;
+}
+
 /**
  * Mounts the scene beside the index, behind the boundary and the suspense edge.
  *
@@ -193,6 +230,7 @@ class SceneBoundary extends Component<SceneBoundaryProps, SceneBoundaryState> {
 export function SceneHost({ artifact }: SceneHostProps) {
   const host = useRef<HTMLDivElement>(null);
   const stopCount = railStopCount(artifact.rail);
+  const [sceneMounted, setSceneMounted] = useState(false);
 
   // Scroll's two meanings, over the scene only: a wheel over the index or over the
   // panel is never seen here, so both scroll natively. Registered by hand because
@@ -202,14 +240,15 @@ export function SceneHost({ artifact }: SceneHostProps) {
   // The keyboard's equivalent (2.9) is on `window`, so ↑/↓/Home work wherever DOM
   // focus is; `keyIntent` answers `null` while a Project is focused, so the panel
   // keeps them. The arrows and the wheel reach the Rail through the one write
-  // path, `toRail`; Home goes through the `goHome` door.
+  // path, `toRail`; Home goes through the `goHome` door. Neither rule answers
+  // for the Rail until the scene has mounted (`sceneMounted`, 3.15).
   useEffect(() => {
     const element = host.current;
     if (element === null) return undefined;
     const toRail = (progress: number): void => advanceScroll(progress);
     const onWheel = (event: WheelEvent): void => {
       const { mode, focusedProjectId, scrollProgress } = navigationStore.getState();
-      const intent = wheelIntent(mode, focusedProjectId, scrollProgress, event, stopCount, window.innerHeight);
+      const intent = wheelIntent(mode, focusedProjectId, scrollProgress, event, stopCount, window.innerHeight, sceneMounted);
       // Not scroll's to take (a pinch-zoom, a horizontal-only wheel, noise): the
       // browser keeps it, and the store is not written.
       if (intent === null) return;
@@ -227,7 +266,7 @@ export function SceneHost({ artifact }: SceneHostProps) {
       const { mode, focusedProjectId, scrollProgress } = navigationStore.getState();
       // Handled elsewhere, composing, modified or simply not the Rail's: `null`,
       // and the event is left alone.
-      const key = keyAction(event, mode, focusedProjectId, scrollProgress, stopCount);
+      const key = keyAction(event, mode, focusedProjectId, scrollProgress, stopCount, sceneMounted);
       if (key === null) return;
       event.preventDefault();
       if ('inert' in key) return;
@@ -250,7 +289,7 @@ export function SceneHost({ artifact }: SceneHostProps) {
       element.removeEventListener('wheel', onWheel);
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [stopCount]);
+  }, [stopCount, sceneMounted]);
 
   // The reduced-motion preference's one writer (2.10): the media query, read on
   // mount and on every change. Guarded where `matchMedia` is absent, which then
@@ -269,6 +308,7 @@ export function SceneHost({ artifact }: SceneHostProps) {
       <SceneBoundary>
         <Suspense fallback={null}>
           <Scene artifact={artifact} />
+          <SceneMounted onMount={setSceneMounted} />
         </Suspense>
       </SceneBoundary>
     </div>

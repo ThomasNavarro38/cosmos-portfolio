@@ -8,7 +8,17 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { FOCUS_EASING, FOCUS_SECONDS, cubicBezier, easeFocus, focusEasingCss, reversingFactor } from './focus-motion.ts';
+import {
+  FOCUS_EASING,
+  FOCUS_SECONDS,
+  advanceSlide,
+  cubicBezier,
+  easeFocus,
+  flipSlide,
+  focusEasingCss,
+  reversingFactor,
+  settledSlide,
+} from './focus-motion.ts';
 import { stripComments } from '../../scripts/source-scan.ts';
 
 const MOTION_TS = fileURLToPath(new URL('./focus-motion.ts', import.meta.url));
@@ -91,6 +101,50 @@ test('a transition reversed mid-flight runs for the share CSS gives it', () => {
       assert.ok(factor >= 0 && factor <= 1, `${p}, ${f}`);
     }
   }
+});
+
+// --- The panel's slide, mirrored (3.15) ------------------------------------------
+
+test('a settled slide is at rest, full length, unreversed', () => {
+  for (const open of [true, false]) {
+    assert.deepEqual(settledSlide(open), { open, elapsed: FOCUS_SECONDS, seconds: FOCUS_SECONDS, factor: 1 });
+  }
+});
+
+test('flipping a settled slide starts a fresh one at full length', () => {
+  assert.deepEqual(flipSlide(settledSlide(false), true), { open: true, elapsed: 0, seconds: FOCUS_SECONDS, factor: 1 });
+  assert.deepEqual(flipSlide(settledSlide(true), false), { open: false, elapsed: 0, seconds: FOCUS_SECONDS, factor: 1 });
+});
+
+test('flipping a running slide reverses it for the share CSS gives a reversal', () => {
+  const opening = advanceSlide(flipSlide(settledSlide(false), true), 0.3 * FOCUS_SECONDS);
+  const progress = easeFocus(opening.elapsed / opening.seconds);
+  assert.ok(progress > 0 && progress < 1);
+  const closing = flipSlide(opening, false);
+  assert.equal(closing.open, false);
+  assert.equal(closing.elapsed, 0);
+  assert.equal(closing.factor, reversingFactor(progress, 1));
+  assert.equal(closing.seconds, FOCUS_SECONDS * closing.factor);
+  // A reversal of a reversal compounds, as CSS's factor does.
+  const partway = advanceSlide(closing, closing.seconds / 2);
+  const reopened = flipSlide(partway, true);
+  assert.equal(reopened.factor, reversingFactor(easeFocus(0.5), closing.factor));
+  // Flipped before it moved: a zero-length reversal.
+  assert.equal(flipSlide(flipSlide(settledSlide(false), true), false).seconds, 0);
+});
+
+test('advancing a slide runs its clock, capped at its length; a non-finite or negative step does not move it', () => {
+  const start = flipSlide(settledSlide(false), true);
+  assert.equal(advanceSlide(start, 0.25).elapsed, 0.25);
+  assert.equal(advanceSlide(advanceSlide(start, 0.25), 0.25).elapsed, 0.5);
+  assert.equal(advanceSlide(start, 10).elapsed, FOCUS_SECONDS, 'capped at its length');
+  for (const step of [-1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+    assert.equal(advanceSlide(start, step).elapsed, 0, `step ${step}`);
+  }
+  const advanced = advanceSlide(start, 0.25);
+  assert.equal(advanced.open, start.open);
+  assert.equal(advanced.seconds, start.seconds);
+  assert.equal(advanced.factor, start.factor);
 });
 
 function auditMotion(source: string): string[] {
