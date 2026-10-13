@@ -1291,7 +1291,7 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
     ['the slide never remembered', (s) => s.replace('panelSlide(slideMirror.current,', 'panelSlide(null,')],
     ['the mirror at full motion always', (s) => s.replace('performance.now(), pace)', 'performance.now(), 1)')],
     ['the mirror open on any Focus', (s) => s.replace('panelSlide(slideMirror.current, focusedProjectId !== null && panel !== null,', 'panelSlide(slideMirror.current, focusedProjectId !== null,')],
-    ['the mirror written twice', (s) => s.replace('slideMirror.current = slide;', 'slideMirror.current = slide;\n    slideMirror.current = null;')],
+    ['the mirror written twice', mirrorWrittenTwice],
     ['the mirror written during render', (s) => s.replace(/\r?\n\s*useLayoutEffect\(\(\) => \{\s*slideMirror\.current = slide;\s*\}, \[slide\]\);/, '').replace('const container = useRef', 'slideMirror.current = slide;\n  const container = useRef')],
     ['the mirror never recorded', (s) => s.replace(/\r?\n\s*useLayoutEffect\(\(\) => \{\s*slideMirror\.current = slide;\s*\}, \[slide\]\);/, '')],
     ['the mirror recorded after paint', (s) => s.replace(/useLayoutEffect\(\(\) => \{(\s*)slideMirror\.current = slide;/, 'useEffect(() => {$1slideMirror.current = slide;')],
@@ -1365,6 +1365,21 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
     assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
     assert.notDeepEqual(auditPanel(mutated), [], `"${name}" must be rejected`);
   }
+});
+
+/**
+ * A second write to the slide mirror, in the scroll listener: the layout effect
+ * that records it is untouched, so only the write count can see it.
+ */
+function mirrorWrittenTwice(source: string): string {
+  return source.replace('scrolled.current = element.scrollTop;', 'scrolled.current = element.scrollTop;\n      slideMirror.current = null;');
+}
+
+test('the mirror’s write count is red on its own: a second write breaks no other clause', () => {
+  const real = readFileSync(PANEL_TSX, 'utf8');
+  const mutated = mirrorWrittenTwice(real);
+  assert.notEqual(mutated, real, 'the mutation must apply');
+  assert.deepEqual(auditPanel(mutated), ['the slide mirror is written other than once, in its layout effect']);
 });
 
 // --- Index entries carry their ID; App mounts the panel -------------------------------

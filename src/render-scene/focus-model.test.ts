@@ -387,15 +387,18 @@ const farPoseOf = (id: string): RailPose => {
   return pose;
 };
 
-/** A focused and settled, then released, then `next` focused three frames into the slide-out. */
-function refocusMidRelease(next: string): { closing: FocusMotion; reopened: FocusMotion } {
-  let motion = stepFocus(null, null, railA, farPoseOf, DT);
-  for (let i = 0; i < settleFrames; i += 1) motion = stepFocus(motion, 'p-a', railA, farPoseOf, DT);
+/**
+ * A focused and settled, then released, then `next` focused `slideOutFrames`
+ * frames into the slide-out (three by default), every frame at `reduced`.
+ */
+function refocusMidRelease(next: string, slideOutFrames = 3, reduced = false): { closing: FocusMotion; reopened: FocusMotion } {
+  let motion = stepFocus(null, null, railA, farPoseOf, DT, reduced);
+  for (let i = 0; i < settleFrames / motionPace(reduced); i += 1) motion = stepFocus(motion, 'p-a', railA, farPoseOf, DT, reduced);
   assert.deepEqual(motion.pose, farPoseOf('p-a'), 'A at rest');
-  motion = stepFocus(motion, null, railA, farPoseOf, DT);
-  for (let i = 0; i < 3; i += 1) motion = stepFocus(motion, null, railA, farPoseOf, DT);
+  motion = stepFocus(motion, null, railA, farPoseOf, DT, reduced);
+  for (let i = 0; i < slideOutFrames; i += 1) motion = stepFocus(motion, null, railA, farPoseOf, DT, reduced);
   assert.ok(motion.slide.elapsed > 0 && motion.slide.elapsed < motion.slide.seconds, 'the slide-out is running');
-  return { closing: motion, reopened: stepFocus(motion, next, railA, farPoseOf, DT) };
+  return { closing: motion, reopened: stepFocus(motion, next, railA, farPoseOf, DT, reduced) };
 }
 
 test('focusing B during A’s release slide-out takes the full duration and never cuts; the slide still flips', () => {
@@ -407,7 +410,7 @@ test('focusing B during A’s release slide-out takes the full duration and neve
   assert.deepEqual(reopened.pose, closing.pose, 'the change frame holds the pose on screen');
   // Every frame of the journey — position and aim — is bounded by the full-length ease's steepest step.
   assert.ok(distance(reopened.from.position, farPoseOf('p-b').position) > 90, 'B is far from where the camera stands');
-  const rested = assertNoCut(reopened, 'p-b', FOCUS_SECONDS);
+  const { rested } = assertNoCut(reopened, 'p-b', FOCUS_SECONDS);
   assert.deepEqual(rested.pose, farPoseOf('p-b'), 'at rest on B exactly');
 });
 
@@ -420,36 +423,113 @@ function steepestSlope(): number {
 }
 
 /**
- * Steps `motion` toward `focused` until it rests, asserting no frame moves the
- * position or the aim further than an ease of `seconds` allows, and returns the
- * motion at rest.
+ * Steps `motion` toward `focused` at `reduced` until it rests, asserting no
+ * frame moves the position or the aim further than an ease of `seconds` allows
+ * (a frame covers `DT / pace` of it), and returns the motion at rest and the
+ * frames it took.
  */
-function assertNoCut(motion: FocusMotion, focused: string, seconds: number): FocusMotion {
+function assertNoCut(motion: FocusMotion, focused: string, seconds: number, reduced = false): { rested: FocusMotion; frames: number } {
   const goal = farPoseOf(focused);
   const steepest = steepestSlope();
+  const step = DT / motionPace(reduced);
   const bounds = {
-    position: (distance(motion.from.position, goal.position) * steepest * 1.05 * DT) / seconds,
-    target: (distance(motion.from.target, goal.target) * steepest * 1.05 * DT) / seconds,
+    position: (distance(motion.from.position, goal.position) * steepest * 1.05 * step) / seconds,
+    target: (distance(motion.from.target, goal.target) * steepest * 1.05 * step) / seconds,
   };
   let previous = motion;
-  for (let i = 0; i < 2 * settleFrames && previous.elapsed < previous.seconds; i += 1) {
-    const next = stepFocus(previous, focused, railA, farPoseOf, DT);
-    assert.ok(distance(previous.pose.position, next.pose.position) <= bounds.position + 1e-12, `frame ${i}: the position jumps`);
-    assert.ok(distance(previous.pose.target, next.pose.target) <= bounds.target + 1e-12, `frame ${i}: the aim jumps`);
+  let frames = 0;
+  for (; frames < (2 * settleFrames) / motionPace(reduced) && previous.elapsed < previous.seconds; frames += 1) {
+    const next = stepFocus(previous, focused, railA, farPoseOf, DT, reduced);
+    assert.ok(distance(previous.pose.position, next.pose.position) <= bounds.position + 1e-12, `frame ${frames}: the position jumps`);
+    assert.ok(distance(previous.pose.target, next.pose.target) <= bounds.target + 1e-12, `frame ${frames}: the aim jumps`);
     previous = next;
   }
   assert.ok(previous.elapsed >= previous.seconds, 'came to rest');
-  return previous;
+  return { rested: previous, frames };
 }
 
+/**
+ * `frames` is the first frame at or past `seconds` of wall time. On an exact frame
+ * boundary the paced clock, summed in floating point, may land one frame later.
+ */
+function assertRestsAt(frames: number, seconds: number, message: string): void {
+  assert.ok((frames - 1) * DT <= seconds + 1e-9 && frames * DT >= seconds - 1e-9, `${message}: ${frames} frames for ${seconds}s`);
+}
+
+/** Frames into the slide-out at which A is reopened partway, so the reversed move is long enough to cut. */
+const partwayOut = Math.round((0.4 * FOCUS_SECONDS) / DT);
+
 test('reopening the Project the slide closed from is still shortened to the reversed slide', () => {
-  const { closing, reopened } = refocusMidRelease('p-a');
+  const { closing, reopened } = refocusMidRelease('p-a', partwayOut);
   assert.equal(reopened.slide.open, true);
   assert.equal(reopened.seconds, reopened.slide.seconds, 'the same move reversed, ending with the panel');
-  assert.ok(reopened.seconds > 0 && reopened.seconds < FOCUS_SECONDS);
+  assert.ok(reopened.seconds > 0.2 * FOCUS_SECONDS && reopened.seconds < FOCUS_SECONDS, 'shortened, and long enough to bound');
   assert.deepEqual(reopened.pose, closing.pose, 'the change frame holds the pose on screen');
-  const rested = assertNoCut(reopened, 'p-a', reopened.seconds);
+  assert.ok(distance(reopened.from.position, farPoseOf('p-a').position) > 3, 'the camera had left A');
+  const { rested, frames } = assertNoCut(reopened, 'p-a', reopened.seconds);
+  assert.ok(frames > 5, 'the bound is checked over a real move, not one step');
+  assert.equal(frames, Math.ceil(reopened.seconds / DT - 1e-9), 'rests the frame the reversed slide ends');
   assert.deepEqual(rested.pose, farPoseOf('p-a'), 'at rest on A exactly');
+});
+
+test('closedFrom names the Project a release closed from, is carried across frames, and is cleared by any open', () => {
+  assert.equal(stepFocus(null, null, railA, farPoseOf, DT).closedFrom, null, 'the first frame, unfocused');
+  assert.equal(stepFocus(null, 'p-a', railA, farPoseOf, DT).closedFrom, null, 'the first frame, focused');
+  let motion = stepFocus(null, null, railA, farPoseOf, DT);
+  motion = stepFocus(motion, 'p-a', railA, farPoseOf, DT);
+  assert.equal(motion.closedFrom, null, 'an open');
+  motion = stepFocus(motion, 'p-b', railA, farPoseOf, DT);
+  assert.equal(motion.closedFrom, null, 'A → B is no release');
+  motion = stepFocus(motion, null, railA, farPoseOf, DT);
+  assert.equal(motion.closedFrom, 'p-b', 'the release names B');
+  for (let i = 0; i < 2 * settleFrames; i += 1) {
+    motion = stepFocus(motion, null, railA, farPoseOf, DT);
+    assert.equal(motion.closedFrom, 'p-b', `carried at frame ${i}, past the ease's end`);
+  }
+  assert.equal(stepFocus(motion, 'p-b', railA, farPoseOf, DT).closedFrom, null, 'a reopen clears it');
+});
+
+test('reopening A after its slide-out has settled is a fresh full-length move, though closedFrom still names A', () => {
+  let motion = stepFocus(null, null, railA, farPoseOf, DT);
+  for (let i = 0; i < settleFrames; i += 1) motion = stepFocus(motion, 'p-a', railA, farPoseOf, DT);
+  for (let i = 0; i < settleFrames; i += 1) motion = stepFocus(motion, null, railA, farPoseOf, DT);
+  assert.equal(motion.closedFrom, 'p-a');
+  assert.equal(motion.slide.elapsed, motion.slide.seconds, 'the slide-out has settled');
+  const reopened = stepFocus(motion, 'p-a', railA, farPoseOf, DT);
+  assert.equal(reopened.seconds, FOCUS_SECONDS);
+  assert.equal(reopened.slide.factor, 1);
+});
+
+test('A → null → B → null → A, each change mid-slide: only the release and a reopen of the Project last closed are shortened', () => {
+  const { reopened: onB } = refocusMidRelease('p-b');
+  assert.equal(onB.seconds, FOCUS_SECONDS, 'B is a new journey');
+  let motion = onB;
+  for (let i = 0; i < 3; i += 1) motion = stepFocus(motion, 'p-b', railA, farPoseOf, DT);
+  const releasedB = stepFocus(motion, null, railA, farPoseOf, DT);
+  assert.equal(releasedB.closedFrom, 'p-b');
+  assert.equal(releasedB.seconds, releasedB.slide.seconds, 'a release ends with its slide');
+  motion = releasedB;
+  for (let i = 0; i < 3; i += 1) motion = stepFocus(motion, null, railA, farPoseOf, DT);
+  assert.ok(motion.slide.elapsed < motion.slide.seconds, 'B’s slide-out is running');
+  const backToA = stepFocus(motion, 'p-a', railA, farPoseOf, DT);
+  assert.equal(backToA.slide.open, true, 'the slide flips');
+  assert.equal(backToA.seconds, FOCUS_SECONDS, 'A is not the Project this release closed from');
+  assert.deepEqual(assertNoCut(backToA, 'p-a', FOCUS_SECONDS).rested.pose, farPoseOf('p-a'));
+});
+
+test('reduced: refocus mid-release — B takes FOCUS_SECONDS × pace, and reopening A ends with the paced reversed slide', () => {
+  const pace = motionPace(true);
+  const { reopened: onB } = refocusMidRelease('p-b', 3, true);
+  assert.equal(onB.seconds, FOCUS_SECONDS);
+  const toB = assertNoCut(onB, 'p-b', FOCUS_SECONDS, true);
+  assertRestsAt(toB.frames, FOCUS_SECONDS * pace, 'B rests at FOCUS_SECONDS × pace');
+  assert.deepEqual(toB.rested.pose, farPoseOf('p-b'));
+  const { reopened: onA } = refocusMidRelease('p-a', Math.round(partwayOut * pace), true);
+  assert.equal(onA.seconds, onA.slide.seconds);
+  assert.ok(onA.seconds > 0.2 * FOCUS_SECONDS && onA.seconds < FOCUS_SECONDS);
+  const toA = assertNoCut(onA, 'p-a', onA.seconds, true);
+  assertRestsAt(toA.frames, onA.seconds * pace, 'A rests when the paced reversed slide ends');
+  assert.deepEqual(toA.rested.pose, farPoseOf('p-a'));
 });
 
 test('a release after the slide has settled, or a reversal on its first frame, is not a mid-flight reversal', () => {
