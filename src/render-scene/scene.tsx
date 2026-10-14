@@ -61,12 +61,15 @@
  * so the scene and the DOM agreed on source values only (AD-12). `flat` sets
  * `NoToneMapping` and leaves the sRGB output alone, so a token hex goes sRGB →
  * linear → sRGB and is drawn at its own value: token in equals pixel out. One prop
- * covers every material, drei's `LineMaterial` and any future one included. Two
- * alternatives are rejected, and `scene-model.test.ts` fails on either: a
- * per-material `toneMapped={false}` (a new material quietly comes back
- * tone-mapped) and `linear` (it drops the sRGB output transfer, so every hex draws
- * dark). Nor may a `gl` prop set `toneMapping` or `outputColorSpace` — a second
- * mechanism makes the first unauditable.
+ * covers every material, drei's `LineMaterial` and any future one included.
+ * `scene-model.test.ts` fails on every alternative: a per-material
+ * `toneMapped={false}` (a new material quietly comes back tone-mapped), `linear`
+ * (it drops the sRGB output transfer, so every hex draws dark), `legacy` (it turns
+ * `ColorManagement` off, so no hex is converted on the way in), a spread on the
+ * `<Canvas>`, and `toneMapping`, `outputColorSpace`, `outputEncoding` or
+ * `ColorManagement` set anywhere under `src/` — a second mechanism makes the first
+ * unauditable. `Canvas` is named only here, as this element and its plain import,
+ * so an alias cannot add a second, uncounted one.
  */
 
 import { Canvas } from '@react-three/fiber';
