@@ -99,6 +99,26 @@ The check lives on `CareerSchema`, not `ProjectSchema`, because the vocabulary i
 - [x] [Review][Patch] A story reference in a source comment header was removed [src/data/validate.test.ts:683]
 - [x] [Review][Defer] Aliases and technology words outside the vocabulary (`Cordova`, `MDM`, `UWP`) pass, while AC 3.6 reads "no technology name … anywhere". Logged in deferred-work.md for 3.19.
 
+2026-10-14, second pass. Four layers ran: blind, edge-case, verification-gap and acceptance. No intent_gap or bad_spec, and nothing was deferred. 24 were dismissed:
+- The spec/sprint status split and `review_loop_iteration: 0` follow the house convention (3.16 is the same).
+- The committed-file sweep is not vacuous: `the committed career.json passes validation` asserts `[]`.
+- CLI exit codes are already pinned by the CLI tests.
+- The mutant is cleaned by `scripts/mutant.ts`'s `after` hook.
+- The fixture duplication is already deferred.
+- `project` ("Chamilo paper-handling app") is the panel title, not the field table (UX-DR22).
+- The approved rewrite wording was not re-litigated.
+- `\p{Cf}` / zero-width characters in an authored file were judged out of scope.
+- Duplicates from whitespace-variant Skills are the same as two Skills.
+- `ASP.NET` / `.NET` follows the boundary rule.
+- The combining-mark and whitespace extensions are recorded above.
+- The 3.19 deferral is consistent with the Never list (3.19 owns docs).
+- The one-line drift in the review-order line references is cosmetic.
+
+- [x] [Review][Patch] The issue message says "a field value describes what was built" for `role` issues too, so make it field-specific [src/data/schema.ts:226]
+- [x] [Review][Patch] `[\s\u00a0]+` is redundant: JS `\s` already matches U+00A0, so join with `\s+` [src/data/schema.ts:221]
+- [x] [Review][Patch] The retro-item-3 resolution does not point at the deferred alias/out-of-vocabulary gap, so a reader of sprint-status alone sees AC 3.6 as fully met [_bmad-output/implementation-artifacts/sprint-status.yaml:388]
+- [x] [Review][Patch] Boundary cases not pinned: a Skill at the end of the string, a lower-case Skill against upper-case text, and `_` / `'` neighbours (`Java_8`, `Java's`), which match because they are neither letter, mark nor digit [src/data/validate.test.ts:458]
+
 ## Suggested Review Order
 
 **The check**

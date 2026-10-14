@@ -180,8 +180,14 @@ export const ProjectSchema = z.strictObject({
   weight: z.number().positive().default(1),
 });
 
-/** The Project fields a Skill name must not appear in (FR-10). `notable` is not one. */
-const SKILL_FREE_FIELDS = ['role', 'built'] as const;
+/**
+ * The Project fields a Skill name must not appear in (FR-10), each with what its
+ * value says instead. `notable` is not one.
+ */
+const SKILL_FREE_FIELDS = {
+  role: 'a role says what was done on the Project',
+  built: 'a Built value describes what was built',
+} as const;
 
 /** `value` with every regular-expression syntax character escaped, valid under the `u` flag. */
 function escapeRegExp(value: string): string {
@@ -218,21 +224,19 @@ export function skillNameIssues(projects: readonly unknown[]): { path: (string |
     }
   }
   const patterns = [...vocabulary.values()].map((skill) => {
-    const words = skill.split(/\s+/).map(escapeRegExp).join('[\\s\\u00a0]+');
+    const words = skill.split(/\s+/).map(escapeRegExp).join('\\s+');
     return [skill, new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${words}(?![\\p{L}\\p{M}\\p{N}])`, 'iu')] as const;
   });
   const issues: { path: (string | number)[]; message: string }[] = [];
   for (const [index, entry] of entries.entries()) {
-    for (const field of SKILL_FREE_FIELDS) {
+    for (const [field, says] of Object.entries(SKILL_FREE_FIELDS)) {
       const value = entry?.[field];
       if (typeof value !== 'string') continue;
       for (const [skill, pattern] of patterns) {
         if (!pattern.test(value)) continue;
         issues.push({
           path: ['projects', index, field],
-          message:
-            `names the Skill "${skill}"; a field value describes what was built and never names a Skill — ` +
-            'the Dust already shows it (FR-10)',
+          message: `names the Skill "${skill}"; ${says} and never names a Skill — the Dust already shows it (FR-10)`,
         });
       }
     }

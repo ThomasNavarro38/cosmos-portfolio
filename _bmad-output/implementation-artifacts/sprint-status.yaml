@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 10-14-2026 09:56
+last_updated: 10-14-2026 10:22
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -76,7 +76,7 @@ development_status:
   3-14-test-infrastructure: done
   3-15-navigation-and-panel-correctness-fixes: done
   3-16-scene-colour-management: done
-  3-17-no-technology-names-in-field-values: review
+  3-17-no-technology-names-in-field-values: done
   3-18-the-mote-label-pass-and-the-degradation-ruling: backlog
   3-19-spec-and-doc-reconciliation-and-housekeeping: backlog
   epic-3-retrospective: done
@@ -392,7 +392,9 @@ action_items:
       role or built value naming a Skill from the career-wide vocabulary (case-insensitive,
       whole word, one issue per Project/field/Skill), so validate, solve and gate fail;
       pinned by the matrix tests and a schema mutant in src/data/validate.test.ts;
-      artifact re-solved"
+      artifact re-solved. Partial against AC 3.6's wording: an alias or a technology
+      word outside the Skills vocabulary (Cordova, MDM, UWP) still passes; deferred to
+      3.19 in deferred-work.md (code review of spec-3-17)"
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
   - id: "epic-3-retro-item-4-mutants-to-tmpdir"
     epic: 3
