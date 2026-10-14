@@ -71,7 +71,7 @@ function baseEntry(): Record<string, unknown> {
     project: 'Client referential — MDM replacement',
     company: null,
     role: 'Technical lead',
-    built: 'Replaced a commercial Oracle MDM with a Spring Boot application.',
+    built: 'Replaced a commercial product with an in-house application.',
     team_size: 11,
     duration: { start: '2019-01', end: '2021-01' },
     notable: 'Problem stated. [[The constraint, in one sentence.]] The decision taken.',

@@ -6,7 +6,7 @@
       "project": "Chamilo paper-handling app",
       "company": null,
       "role": "Product owner and sole developer",
-      "built": "Android app bridging the Chamilo e-learning platform and a PDF annotation app already on teachers' tablets: it downloaded student papers from Chamilo, handed them to the annotation app for grading, and uploaded the corrected files back to the platform.",
+      "built": "Tablet app bridging the school's e-learning platform and a PDF annotation app already on teachers' tablets: it downloaded student papers from the platform, handed them to the annotation app for grading, and uploaded the corrected files back.",
       "team_size": 1,
       "duration": {
         "start": "2016-05",
@@ -79,7 +79,7 @@
       "project": "File aggregator-transcoder",
       "company": "Capgemini",
       "role": "Developer",
-      "built": "Developed a set of microservices that aggregate files from different sources, persist them, and transcode them for different consumers.",
+      "built": "Developed a set of services that aggregate files from different sources, persist them, and transcode them for different consumers.",
       "team_size": 5,
       "duration": {
         "start": "2019-03",
@@ -129,7 +129,7 @@
       "project": "Equipment tracking app",
       "company": "Capgemini",
       "role": "Lead developer",
-      "built": "Lead developer on a cross-platform Ionic / Angular / Cordova application for Windows (UWP) and iOS that tracks jet engine parts through their cleaning process after teardown, each part identified by an RFID tag scanned with a Bluetooth-connected reader.",
+      "built": "Lead developer on a cross-platform tablet application that tracks jet engine parts through their cleaning process after teardown, each part identified by an RFID tag scanned with a wireless handheld reader.",
       "team_size": 3,
       "duration": {
         "start": "2020-11",
@@ -159,7 +159,7 @@
       "project": "Client referential",
       "company": "Capgemini",
       "role": "Technical lead",
-      "built": "Led the group of applications forming SNCF's client referential: replaced its commercial Oracle MDM with a Spring Boot application, cleared technical obsolescence across the platform (Java 8 → 17, Spring 4 → 5, Cloudera 5 → 7), and moved its clusters to a new hosting site.",
+      "built": "Led the group of applications forming SNCF's client referential: replaced its commercial master-data product with an in-house application, cleared technical obsolescence across the platform with major upgrades of its language, framework and data platform, and moved its clusters to a new hosting site.",
       "team_size": 11,
       "duration": {
         "start": "2022-08",
