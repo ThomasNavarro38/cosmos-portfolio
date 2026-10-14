@@ -76,6 +76,18 @@ context: []
 - Given the ruling, when the label module is read, then its pass doc comment states 1a, 2a, 3a and the cap of 12, and the README and the retro item record it.
 - Given Projects of 7, 12 and 25 Skills, when the suite runs, then flicker, affordance overlap and reduced motion each have a passing test at all three sizes.
 
+## Spec Change Log
+
+- 2026-10-14, Thomas (after review): two departures accepted.
+  1. The split could not leave every test file byte-unmodified, because the purity audit in `mote-model.test.ts` allow-lists `mote-model.ts`'s imports. The one added `'./mote-label.ts'` line is accepted; no other test line changed before the behaviour change.
+  2. "Strictly fewer toggles wherever the stateless count is non-zero" is replaced by: never more toggles than the stateless rule, and strictly fewer at 25 Skills and wherever an overlap causes the toggle. The remaining toggles at 7 and 12 Skills × 390 (14 = 14, 20 = 20) are all edge crossings, which the ruling keeps instant.
+- Manual check (2026-10-14, Chrome, 1440×900 CSS, dev server, `sncf/client-referential` focused). Each frame's label visibility was recorded over one full orbit turn (64s, 10,561 frames):
+  - 12 labels shown on every frame, none clipped or overlapping.
+  - 2 toggles in the whole turn (`code review` and `legacy modernisation`), which matches the model's sweep count. No label came back within 500ms of hiding.
+  - Affordance: keyboard focus was moved to each of the other 7 Projects' index entries. None drew an affordance, because from this focus pose no other Planet is on the frame. So the 2a overlap cannot be reached in the committed artifact today; it is covered by the model tests only.
+  - Console: no new errors (a pre-existing 404 and a THREE.Clock deprecation warning).
+- Review extension (2026-10-14): an incumbent hidden by an affordance obstacle alone is *held*. It keeps its box, its place under the cap and its incumbency, so a passing hover never reshuffles the labels.
+
 ## Design Notes
 
 The incumbent set is last frame's `labelVisible`, which the field already carries, so the rule stays a pure function of `(previous, frame)` with no timers. Because incumbents are visited before newcomers, the cap never swaps a shown label out for a better-ranked newcomer. A shown label gives way only to a hard bound, a real overlap, or the affordance. The affordance state is read from the same `getState()` snapshot. The affordance's pointer re-pick runs in its own `useFrame`, so the obstacle can trail a hover by one frame, which is invisible.
