@@ -180,6 +180,66 @@ export const ProjectSchema = z.strictObject({
   weight: z.number().positive().default(1),
 });
 
+/** The Project fields a Skill name must not appear in (FR-10). `notable` is not one. */
+const SKILL_FREE_FIELDS = ['role', 'built'] as const;
+
+/** `value` with every regular-expression syntax character escaped, valid under the `u` flag. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+}
+
+/**
+ * One issue per (Project, field, Skill) where a `role` or `built` value names a
+ * Skill, any Skill listed by any Project in the career.
+ *
+ * Reads `projects` defensively: the refinement runs on a document whose other
+ * fields may already have failed, so an entry, its `skills` or a field value may
+ * be anything. A Skill matches case-insensitively and as a whole word — no
+ * Unicode letter, combining mark or digit directly before or after it, so a
+ * decomposed `Javá` is a longer word, as the precomposed one is. Lookarounds
+ * stand in for `\b`, which fails at a Skill that starts or ends with a non-word
+ * character (`C++`, `.NET`). The words of a multi-word Skill match across any
+ * run of whitespace, a no-break space or a line break included. No plural, stem
+ * or spelling variant matching (`SpringBoot`, `Spring-Boot`), and an alias
+ * (`Cordova` for `Apache Cordova`) is not caught: the check matches names.
+ */
+export function skillNameIssues(projects: readonly unknown[]): { path: (string | number)[]; message: string }[] {
+  const entries = projects.map((project) =>
+    project !== null && typeof project === 'object' ? (project as Record<string, unknown>) : undefined,
+  );
+  const vocabulary = new Map<string, string>();
+  for (const entry of entries) {
+    const skills = entry?.['skills'];
+    if (!Array.isArray(skills)) continue;
+    for (const skill of skills) {
+      if (typeof skill !== 'string') continue;
+      const name = skill.trim();
+      if (name !== '' && !vocabulary.has(name.toLowerCase())) vocabulary.set(name.toLowerCase(), name);
+    }
+  }
+  const patterns = [...vocabulary.values()].map((skill) => {
+    const words = skill.split(/\s+/).map(escapeRegExp).join('[\\s\\u00a0]+');
+    return [skill, new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${words}(?![\\p{L}\\p{M}\\p{N}])`, 'iu')] as const;
+  });
+  const issues: { path: (string | number)[]; message: string }[] = [];
+  for (const [index, entry] of entries.entries()) {
+    for (const field of SKILL_FREE_FIELDS) {
+      const value = entry?.[field];
+      if (typeof value !== 'string') continue;
+      for (const [skill, pattern] of patterns) {
+        if (!pattern.test(value)) continue;
+        issues.push({
+          path: ['projects', index, field],
+          message:
+            `names the Skill "${skill}"; a field value describes what was built and never names a Skill — ` +
+            'the Dust already shows it (FR-10)',
+        });
+      }
+    }
+  }
+  return issues;
+}
+
 /**
  * The whole authored file: one list of Projects, and the month they are measured
  * against.
@@ -206,11 +266,25 @@ export const ProjectSchema = z.strictObject({
  * `projects` must list at least one Project. An empty list derives no Body at
  * all, and every downstream count — the Rail, the destination set, the Skill
  * ranks — would certify an empty scene as correct.
+ *
+ * No `role` or `built` value may name a Skill (FR-10). The Dust is
+ * the display of a Project's Skills; a field value that names one duplicates it
+ * as prose and turns the field table into a stack list, which AC 3.6 forbids
+ * anywhere in the table. The vocabulary is the union of every Project's `skills`,
+ * practice Skills included, so the check lives here rather than on
+ * `ProjectSchema`: a value naming a Skill only another Project lists still
+ * duplicates the Dust. `notable` is not scanned — a technology may appear there
+ * as the term of a decision.
  */
 export const CareerSchema = z
   .strictObject({
     asOf: IsoYearMonth,
     projects: z.array(ProjectSchema).min(1, 'must list at least one Project — an empty career derives no Body'),
+  })
+  .superRefine((career, ctx) => {
+    if (Array.isArray(career.projects)) {
+      for (const issue of skillNameIssues(career.projects)) ctx.addIssue({ code: 'custom', ...issue });
+    }
   })
   .superRefine((career, ctx) => {
     // A refinement may run on a document whose other fields already failed, so

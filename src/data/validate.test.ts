@@ -19,13 +19,15 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
-import { fileURLToPath } from 'node:url';
-import { CareerSchema } from './schema.ts';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { CareerSchema, skillNameIssues } from './schema.ts';
 import { readCareerFile, validateCareer } from './validate.ts';
 import { stripComments } from '../../scripts/source-scan.ts';
+import { loadMutant, writeMutant } from '../../scripts/mutant.ts';
 
 const CAREER_JSON = fileURLToPath(new URL('./career.json', import.meta.url));
 const VALIDATE_TS = fileURLToPath(new URL('./validate.ts', import.meta.url));
+const SCHEMA_TS = fileURLToPath(new URL('./schema.ts', import.meta.url));
 
 /** A valid Notable: prose with its one constraint sentence marked for the lift. */
 const MARKED = 'Problem stated. [[The constraint, in one sentence.]] The decision taken.';
@@ -37,7 +39,7 @@ function baseEntry(): Record<string, unknown> {
     project: 'Client referential — MDM replacement',
     company: null,
     role: 'Technical lead',
-    built: 'Replaced a commercial Oracle MDM with a Spring Boot application.',
+    built: 'Replaced a commercial product with an in-house application.',
     team_size: 11,
     duration: { start: '2019-01', end: '2021-01' },
     notable: MARKED,
@@ -676,4 +678,146 @@ test('an early `asOf` and an unknown key are both reported in one run', () => {
   const failures = validateCareer({ asOf: '2018-06', projects: [{ ...baseEntry(), notabel: 'x' }] });
   assertFails(failures, /notabel/, 'the unknown key is reported');
   assertFails(failures, /^career\.json \[asOf\]: .*precedes/, 'and the early asOf too');
+});
+
+// --- No Skill named in a field value -----------------------------------------
+
+/** A failure line for `built` or `role` on the base entry, naming `skill`. */
+function namesSkill(field: 'built' | 'role', skill: string): RegExp {
+  const quoted = skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^SNCF — Client referential — MDM replacement \\[${field}\\]: .*"${quoted}"`);
+}
+
+/** The base entry with `skills` and one field value overridden. */
+function entryWith(field: 'built' | 'role', value: string, skills?: string[]): Record<string, unknown> {
+  const entry = baseEntry();
+  entry[field] = value;
+  if (skills !== undefined) entry['skills'] = skills;
+  return entry;
+}
+
+test('no `role` or `built` value in the committed career.json names any of its Skills', () => {
+  const read = readCareerFile(CAREER_JSON);
+  assert.ok(read.ok);
+  const failures = validateCareer(read.data).filter((line) => /\[(?:role|built)\]: names the Skill/.test(line));
+  assert.deepEqual(failures, []);
+});
+
+test('a `built` value naming its own Project\'s Skill fails, quoting the Skill', () => {
+  const failures = validateCareer(fileWith(entryWith('built', 'Replaced a commercial product with a Spring Boot application.')));
+  assertFails(failures, namesSkill('built', 'Spring Boot'), 'its own Skill must be named');
+});
+
+test('a `built` value naming a Skill only another Project lists fails', () => {
+  const other = { ...baseEntry(), project: 'Other', skills: ['Kafka'] };
+  const failures = validateCareer(fileWith(entryWith('built', 'Streamed events through Kafka.'), other));
+  assertFails(failures, namesSkill('built', 'Kafka'), 'the career-wide vocabulary applies');
+});
+
+test('a `role` value naming a Skill fails on `role`', () => {
+  assertFails(validateCareer(fileWith(entryWith('role', 'Java developer'))), namesSkill('role', 'Java'), 'role is scanned');
+});
+
+test('a Skill is matched case-insensitively', () => {
+  const failures = validateCareer(fileWith(entryWith('built', 'Rebuilt it as a spring boot service.')));
+  assertFails(failures, namesSkill('built', 'Spring Boot'), 'lower case must still match');
+});
+
+test('a Skill next to a hyphen or punctuation is a whole word', () => {
+  for (const [value, skill, skills] of [
+    ['Scanned with a Bluetooth-connected reader.', 'Bluetooth', ['Bluetooth']],
+    ['A backend service (Java).', 'Java', ['Java']],
+  ] as const) {
+    assertFails(validateCareer(fileWith(entryWith('built', value, [...skills]))), namesSkill('built', skill), JSON.stringify(value));
+  }
+});
+
+test('a Skill inside a longer word is not matched', () => {
+  assert.deepEqual(validateCareer(fileWith(entryWith('built', 'Rewrote the Javascript front end.', ['Java']))), []);
+  assert.deepEqual(validateCareer(fileWith(entryWith('built', 'Built 3Java2 and Javaé.', ['Java']))), []);
+});
+
+test('a value naming several Skills reports one issue per Skill', () => {
+  const failures = validateCareer(fileWith(entryWith('built', 'A Java and Spring service.', ['Java', 'Spring'])));
+  const built = failures.filter((line) => /\[built\]: names the Skill/.test(line));
+  assert.equal(built.length, 2, failures.join('\n'));
+  assertFails(built, namesSkill('built', 'Java'), 'Java is named');
+  assertFails(built, namesSkill('built', 'Spring'), 'Spring is named');
+});
+
+test('a Notable naming a Skill is accepted, and so are `client`, `project` and `company`', () => {
+  const entry = baseEntry();
+  entry['notable'] = 'Problem stated. [[I argued for Spring Boot over the house standard.]] Done.';
+  entry['client'] = 'Java Corp';
+  entry['project'] = 'Spring Boot migration';
+  entry['company'] = 'Java Consulting';
+  assert.deepEqual(validateCareer(fileWith(entry)), []);
+});
+
+test('a Skill with regular-expression metacharacters is escaped and matched', () => {
+  for (const [value, skill] of [
+    ['Wrote it in C++.', 'C++'],
+    ['Ported it to .NET today.', '.NET'],
+    ['Used (a|b) as a name.', '(a|b)'],
+  ] as const) {
+    const failures = validateCareer(fileWith(entryWith('built', value, [skill])));
+    assertFails(failures, namesSkill('built', skill), JSON.stringify(value));
+  }
+  // An escaped `.` does not match any character.
+  assert.deepEqual(validateCareer(fileWith(entryWith('built', 'Ported it to xNET today.', ['.NET']))), []);
+});
+
+test('the Skill pass runs beside an unknown key, and a type failure is still reported', () => {
+  // An unrecognized key does not stop the whole-file refinement, so both are reported.
+  const failures = validateCareer(fileWith({ ...entryWith('built', 'A Java service.'), notabel: 'x' }));
+  assertFails(failures, /notabel/, 'the unknown key is reported');
+  assertFails(failures, namesSkill('built', 'Java'), 'and the Skill named in built');
+  // A type failure aborts the refinements in Zod; the type issues are still reported.
+  const malformed = validateCareer({
+    asOf: AS_OF,
+    projects: [null, { ...baseEntry(), skills: 'Java', built: 7 }, entryWith('built', 'A Java service.')],
+  });
+  assertFails(malformed, /entry #0/, 'the null entry is reported');
+  assertFails(malformed, /\[skills\]/, 'the malformed skills are reported');
+});
+
+test('the Skill pass reads malformed entries defensively', () => {
+  assert.deepEqual(
+    skillNameIssues([null, { skills: 'Java', built: 7 }, { skills: ['Java', 3], built: 'A Java service.' }, 'x']).map(
+      (issue) => ({ path: issue.path, java: issue.message.includes('"Java"') }),
+    ),
+    [{ path: ['projects', 2, 'built'], java: true }],
+  );
+});
+
+test('a multi-word Skill matches across any run of whitespace, a no-break space included', () => {
+  for (const value of ['A Spring  Boot service.', 'A Spring\u00a0Boot service.', 'A Spring\nBoot service.']) {
+    assertFails(validateCareer(fileWith(entryWith('built', value))), namesSkill('built', 'Spring Boot'), JSON.stringify(value));
+  }
+});
+
+test('a combining mark after a Skill makes it part of a longer word, as the precomposed form does', () => {
+  for (const value of ['Built in Java\u0301.', 'Built in Jav\u00e1.']) {
+    assert.deepEqual(validateCareer(fileWith(entryWith('built', value, ['Java']))), [], JSON.stringify(value));
+  }
+});
+
+test('Skills differing only in case form one vocabulary entry, reported once', () => {
+  const failures = validateCareer(
+    fileWith(entryWith('built', 'A Java service.', ['Java']), { ...baseEntry(), project: 'Other', built: 'A service.', skills: ['java'] }),
+  );
+  const lines = failures.filter((line) => /^SNCF — Client referential — MDM replacement \[built\]: names the Skill/.test(line));
+  assert.equal(lines.length, 1, failures.join('\n'));
+});
+
+test('the Skill pass bites: a schema mutant without it accepts a value naming a Skill', async () => {
+  const fixture = fileWith(entryWith('built', 'Replaced a commercial product with a Spring Boot application.'));
+  assertFails(validateCareer(fixture), namesSkill('built', 'Spring Boot'), 'the real schema rejects the fixture');
+  const schemaMutant = writeMutant(SCHEMA_TS, 'skillNameIssues(career.projects)', '[]');
+  const mutant = await loadMutant<{ validateCareer: typeof validateCareer }>(
+    VALIDATE_TS,
+    "from './schema.ts'",
+    `from '${pathToFileURL(schemaMutant).href}'`,
+  );
+  assert.deepEqual(mutant.validateCareer(fixture), [], 'without the pass the fixture is accepted');
 });

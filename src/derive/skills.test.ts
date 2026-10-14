@@ -32,7 +32,7 @@ function entry(client: string, project: string, skills: string[]): Record<string
     project,
     company: null,
     role: 'Developer',
-    built: 'Built a thing.',
+    built: 'Built one thing.',
     team_size: 4,
     duration: { start: '2019-01', end: '2021-01' },
     notable: '',
