@@ -5,7 +5,10 @@
  * interruption, a blocked label re-slotted and gliding (and staying hidden when
  * no slot is free), a duplicate Skill, a zero-width canvas, an unknown ID — and
  * the projection through a real `three` camera, so the labels' NDC is the NDC
- * the screen uses. Plus `applyMoteDraw` over fakes and a purity audit.
+ * the screen uses. Plus `applyMoteDraw` over fakes and a purity audit. Since
+ * 3.18, the label ruling: the I/O matrix over `moteLabelPass` (incumbents,
+ * newcomers, edges, the cap, the affordance), and sweeps at 7, 12 and 25 Skills
+ * for flicker, affordance overlap and reduced motion.
  */
 
 import { strict as assert } from 'node:assert';
@@ -28,6 +31,7 @@ import {
   MOTE_LABEL_FONT_PX,
   MOTE_LABEL_GAP_PX,
   MOTE_LABEL_HEIGHT_PX,
+  MOTE_LABEL_HYSTERESIS_PX,
   MOTE_LABEL_LIMIT,
   MOTE_ORBIT_LINE_COLOR,
   MOTE_ORBIT_LINE_WIDTH_PX,
@@ -54,6 +58,7 @@ import {
   moteDotColor,
   moteDotScale,
   moteFrame,
+  moteLabelLayout,
   moteLabelPass,
   moteLabelStyle,
   moteOrbitLines,
@@ -68,6 +73,7 @@ import {
   slotAngle,
   sourceReach,
   stepMotes,
+  type LabelBounds,
   type LabelBox,
   type LabelCandidate,
   type Mote,
@@ -80,11 +86,13 @@ import {
   type NdcPoint,
 } from './mote-model.ts';
 import { RAIL_MAX_FRAME_SECONDS, buildRail } from './rail-model.ts';
-import { DEFAULT_FOV, DEFAULT_NEAR, buildScene, type SceneArtifact, type ScenePosition } from './scene-model.ts';
+import { affordanceBlockRect, affordanceObstacles, type AffordanceArtifact } from './affordance-model.ts';
+import { DEFAULT_FOV, DEFAULT_NEAR, buildScene, type Body, type SceneArtifact, type ScenePosition } from './scene-model.ts';
 import { worldPerPixel } from './notable-model.ts';
 import { stripComments } from '../../scripts/source-scan.ts';
 
 const MODEL_TS = fileURLToPath(new URL('./mote-model.ts', import.meta.url));
+const LABEL_TS = fileURLToPath(new URL('./mote-label.ts', import.meta.url));
 const RULES_TS = fileURLToPath(new URL('../derive/rules.ts', import.meta.url));
 const ARTIFACT_JSON = fileURLToPath(new URL('../../generated/layout.generated.json', import.meta.url));
 
@@ -818,6 +826,20 @@ test('moteFrame hands its reduced to the step', () => {
   assert.ok(Math.abs(moteNamed(reduced, 'Java').elapsed - moteNamed(full, 'Java').elapsed / motionPace(true)) < 1e-12);
 });
 
+test('moteFrame hands its obstacles to the step (3.18)', () => {
+  const scene = sceneOf(fixture());
+  const view = viewOf(cameraFor(scene.artifact as Artifact, 'project:a/1'));
+  const rest = last(run(null, scene, 'project:a/1', MOVE_FRAMES + 2, view));
+  const shown = rest.motes.find((mote) => mote.labelVisible && mote.labelBox !== null);
+  assert.ok(shown !== undefined && shown.labelBox !== null, 'a label is shown with no obstacle, or this proves nothing');
+  const obstacle = shown.labelBox;
+  const framed = moteFrame(rest, scene.artifact, scene.bodies, scene.media, 'project:a/1', view.view, view.projection, view.width, view.height, DT, false, [obstacle]);
+  const stepped = stepMotes(rest, scene, 'project:a/1', view, DT, false, [obstacle]);
+  assert.deepEqual(framed, stepped);
+  assert.equal(moteNamed(framed, shown.skill).labelVisible, false, 'the obstacle reached the pass');
+  assert.equal(moteNamed(stepMotes(rest, scene, 'project:a/1', view, DT), shown.skill).labelVisible, true, 'and only the obstacle hides it');
+});
+
 // --- Labels -------------------------------------------------------------------------
 
 const ndc = (x: number, front = true): NdcPoint => ({ x, y: 0, z: 0.5, front });
@@ -1180,14 +1202,19 @@ test('a draw’s scale and opacity follow the level, and its label shows only wh
 
 // --- Purity ------------------------------------------------------------------------
 
-function auditMoteModel(source: string): string[] {
+/** What `mote-label.ts` may import: the tokens, the panel's width and the scene model's types (README). */
+const LABEL_IMPORTS: ReadonlySet<string> = new Set(['../shell/panel-model.ts', '../tokens/tokens.ts', './scene-model.ts']);
+
+function auditMoteModel(source: string, only?: ReadonlySet<string>): string[] {
   const code = stripComments(source);
   const failures: string[] = [];
-  const allowed = new Set([
+  const allowed = only ?? new Set([
     '../shell/focus-motion.ts',
     '../shell/motion-preference.ts',
     '../shell/panel-model.ts',
     './dust-model.ts',
+    // 3.18: the label pass, split out and re-exported; audited on its own below.
+    './mote-label.ts',
     './notable-model.ts',
     './rail-model.ts',
     './scene-model.ts',
@@ -1240,6 +1267,24 @@ test('the mote model is pure: no Three, no React, no store, no clock, no Body pr
 });
 
 // --- Colour and size, from the tokens -----------------------------------------------
+
+test('the label module is pure too, and never imports the Mote model back (3.18: no cycle)', () => {
+  const source = readFileSync(LABEL_TS, 'utf8');
+  assert.deepEqual(auditMoteModel(source, LABEL_IMPORTS), []);
+  assert.doesNotMatch(stripComments(source), /mote-model/, 'mote-label.ts imports nothing from mote-model.ts');
+  assert.doesNotMatch(source, /ink-quiet|ink-faint|text-overflow|ellipsis|…/, 'no label below ink-label, and none truncated');
+  for (const form of [
+    "import { moteFrame } from './mote-model.ts';",
+    "import { motionPace } from '../shell/motion-preference.ts';",
+    "import type { DustMedium } from './dust-model.ts';",
+    "import { RAIL_MAX_FRAME_SECONDS } from './rail-model.ts';",
+    "import { worldPerPixel } from './notable-model.ts';",
+    "import { labelBox } from './mote-label.ts';",
+    "import { FOCUS_SECONDS } from '../shell/focus-motion.ts';",
+  ]) {
+    assert.notDeepEqual(auditMoteModel(form, LABEL_IMPORTS), [], `${form} must be rejected in the label module`);
+  }
+});
 
 test('a Mote dot is filled by tier: stroke-active innermost, ink-label beyond (DESIGN.md mote.fillTier1..3)', () => {
   assert.deepEqual([...MOTE_DOT_COLORS], [tokens.colors['stroke-active-dark'], tokens.colors['ink-label-dark'], tokens.colors['ink-label-dark']]);
@@ -1390,14 +1435,18 @@ test('over the cap: of 25 labels with room for all, the first 12 by rank are sho
   assert.deepEqual([...shown].sort(), all.slice(0, 12).map((entry) => entry.skill).sort());
 });
 
-test('collision: a lower-ranked label whose box meets a shown one is hidden; the focused Project wins first', () => {
+test('collision: a newcomer within clearance + hysteresis of a shown label is hidden; the focused Project wins first (3.5, re-pinned by 3.18)', () => {
   const a = candidate('Java', 0, boxAt(100, 100));
   const b = candidate('Kafka', 3, boxAt(130, 104));
   assert.deepEqual([...moteLabelPass([b, a], BOUNDS)], ['Java']);
-  // Clearance, not just contact: just inside the clearance collides, just outside it does not.
-  const near = candidate('Kafka', 3, boxAt(a.box.right + MOTE_LABEL_CLEARANCE_PX - 0.01, 100));
-  const clear = candidate('Kafka', 3, boxAt(a.box.right + MOTE_LABEL_CLEARANCE_PX, 100));
+  // With no incumbents every label is a newcomer: it needs clearance + hysteresis
+  // (4 + 8) from every shown label — 3.5's 4px clearance alone no longer admits it.
+  const need = MOTE_LABEL_CLEARANCE_PX + MOTE_LABEL_HYSTERESIS_PX;
+  const near = candidate('Kafka', 3, boxAt(a.box.right + need - 0.01, 100));
+  const clear = candidate('Kafka', 3, boxAt(a.box.right + need, 100));
+  const old = candidate('Kafka', 3, boxAt(a.box.right + MOTE_LABEL_CLEARANCE_PX, 100));
   assert.deepEqual([...moteLabelPass([a, near], BOUNDS)], ['Java']);
+  assert.deepEqual([...moteLabelPass([a, old], BOUNDS)], ['Java'], '3.5’s clearance is not enough for a newcomer');
   assert.deepEqual([...moteLabelPass([a, clear], BOUNDS)].sort(), ['Java', 'Kafka']);
   // A decaying Mote's label never beats the focused Project's, whatever its rank.
   assert.deepEqual([...moteLabelPass([{ ...a, focused: false }, b], BOUNDS)], ['Kafka']);
@@ -1498,38 +1547,91 @@ function inside(box: LabelBox, width: number, height: number, edge: number): boo
   return box.left >= 0 && box.top >= 0 && box.bottom <= height && box.right <= width && box.right <= edge;
 }
 
+/** Whether two label boxes come closer than `gap` on both axes; at 0 that is a real overlap. */
+function crowdsBy(a: LabelBox, b: LabelBox, gap: number): boolean {
+  return !(a.left >= b.right + gap || b.left >= a.right + gap || a.top >= b.bottom + gap || b.top >= a.bottom + gap);
+}
+
+/** How many hidden labels each reason explained. */
+interface HideTally {
+  bound: number;
+  obstacle: number;
+  cap: number;
+  overlap: number;
+}
+
 /**
- * Every placed label the pass hid, among `who`, is explained: out of bounds, past
- * the cap of better-ranked shown labels, or crowding a better-ranked shown one.
- * Only shown labels in `blockers` may explain a hidden one. Returns how many
- * hidden labels were explained by a collision rather than the bounds or the cap.
+ * Every placed label the pass hid on `field`, among `who`, is explained under the
+ * ruled order (3.18) — the focused Project's first, then last frame's shown labels
+ * (from `previous`), then rank: it crosses a bound (a canvas edge or the panel
+ * edge); or it comes within `MOTE_LABEL_CLEARANCE_PX` of an obstacle; or
+ * `MOTE_LABEL_LIMIT` shown labels come before it; or a shown label before it
+ * overlaps it (an incumbent) or comes within clearance + hysteresis of it (a
+ * newcomer). And every shown label is placed, inside the bounds and clear of every
+ * obstacle by the clearance. Written independently of the pass, from the ruling.
  */
-function assertRankWins(
+function explainHides(
   field: MoteField,
+  previous: MoteField | null,
   ranks: ReturnType<typeof moteRanks>,
   width: number,
   height: number,
-  who: (mote: Mote) => boolean,
-  blockers: (mote: Mote) => boolean,
-): number {
-  const edge = width * (1 - panelFraction(width));
-  const shown = field.motes.filter((mote) => mote.labelVisible && blockers(mote));
-  let collided = 0;
-  for (const hidden of field.motes.filter((mote) => who(mote) && mote.labelPlaced && !mote.labelVisible)) {
+  obstacles: readonly LabelBox[] = [],
+  who: (mote: Mote) => boolean = () => true,
+): HideTally {
+  const incumbents = new Set((previous?.motes ?? []).filter((mote) => mote.labelVisible || mote.labelHeld).map((mote) => mote.skill));
+  const edge = width * (1 - (field.focusedId !== null || field.motes.some((mote) => !mote.condensing) ? panelFraction(width) : 0));
+  const key = (mote: Mote): number[] => [
+    mote.condensing && mote.planetId === field.focusedId ? 0 : 1,
+    incumbents.has(mote.skill) ? 0 : 1,
+    moteRank(ranks, mote.skill).rank,
+  ];
+  const before = (a: Mote, b: Mote): boolean => {
+    const [ka, kb] = [key(a), key(b)];
+    for (let i = 0; i < ka.length; i += 1) if ((ka[i] ?? 0) !== (kb[i] ?? 0)) return (ka[i] ?? 0) < (kb[i] ?? 0);
+    return false;
+  };
+  const shown = field.motes.filter((mote) => mote.labelVisible);
+  // A held label (3.18) keeps its place: it blocks and counts under the cap as a shown one does.
+  const placed = field.motes.filter((mote) => mote.labelVisible || mote.labelHeld);
+  for (const mote of field.motes.filter((entry) => entry.labelHeld)) {
+    const box = mote.labelBox;
+    assert.ok(!mote.labelVisible && incumbents.has(mote.skill), `${mote.skill} is held without being an incumbent`);
+    assert.ok(box !== null && obstacles.some((obstacle) => crowdsBy(box, obstacle, MOTE_LABEL_CLEARANCE_PX)), `${mote.skill} is held with no obstacle over it`);
+  }
+  for (const mote of shown) {
+    assert.ok(mote.labelPlaced && mote.labelBox !== null, `${mote.skill} is shown unplaced`);
+    assert.ok(inside(mote.labelBox, width, height, edge), `${mote.skill} is shown across a bound`);
+    for (const obstacle of obstacles) {
+      assert.ok(!crowdsBy(mote.labelBox, obstacle, MOTE_LABEL_CLEARANCE_PX), `${mote.skill} is shown within clearance of the affordance`);
+    }
+  }
+  const tally: HideTally = { bound: 0, obstacle: 0, cap: 0, overlap: 0 };
+  for (const hidden of field.motes.filter((mote) => who(mote) && mote.labelPlaced && !mote.labelVisible && !mote.labelHeld)) {
     const box = hidden.labelBox;
     assert.ok(box !== null);
-    if (!inside(box, width, height, edge)) continue;
-    const rank = moteRank(ranks, hidden.skill).rank;
-    const better = shown.filter((mote) => moteRank(ranks, mote.skill).rank < rank);
-    if (better.length >= MOTE_LABEL_LIMIT) continue;
-    const blocked = better.some((mote) => mote.labelBox !== null && crowds(mote.labelBox, box));
-    assert.ok(blocked, `${hidden.skill} (rank ${rank}) is placeable, unblocked and under the cap, yet hidden while ${shown.length} show`);
-    collided += 1;
+    if (!inside(box, width, height, edge)) {
+      tally.bound += 1;
+      continue;
+    }
+    if (obstacles.some((obstacle) => crowdsBy(box, obstacle, MOTE_LABEL_CLEARANCE_PX))) {
+      tally.obstacle += 1;
+      continue;
+    }
+    const ahead = placed.filter((mote) => before(mote, hidden));
+    if (ahead.length >= MOTE_LABEL_LIMIT) {
+      tally.cap += 1;
+      continue;
+    }
+    const gap = incumbents.has(hidden.skill) ? 0 : MOTE_LABEL_CLEARANCE_PX + MOTE_LABEL_HYSTERESIS_PX;
+    const blocked = ahead.some((mote) => mote.labelBox !== null && crowdsBy(mote.labelBox, box, gap));
+    assert.ok(blocked, `${hidden.skill} (rank ${moteRank(ranks, hidden.skill).rank}${incumbents.has(hidden.skill) ? ', incumbent' : ''}) is hidden with no bound, obstacle, cap or overlap to explain it`);
+    tally.overlap += 1;
   }
-  return collided;
+  return tally;
 }
 
-test('stepped: on the committed 25-Skill Project at rest, the shown labels are the best-ranked placeable ones', () => {
+test('stepped: on the committed 25-Skill Project at rest, every hidden label is explained by the ruled order (3.18)', () => {
   const base = committed();
   const sncf = 'project:sncf/client-referential';
   const scene = sceneOf(base);
@@ -1541,10 +1643,11 @@ test('stepped: on the committed 25-Skill Project at rest, the shown labels are t
   const order = last(frames).motes.map((mote) => moteRank(ranks, mote.skill).rank);
   assert.notDeepEqual(order, [...order].sort((a, b) => a - b), 'the field order is not rank order, or this proves nothing');
   let shownMost = 0;
-  for (const field of frames.slice(MOVE_FRAMES)) {
-    assertRankWins(field, ranks, 1440, 900, () => true, () => true);
+  frames.forEach((field, i) => {
+    if (i < MOVE_FRAMES) return;
+    explainHides(field, frames[i - 1] ?? before, ranks, 1440, 900);
     shownMost = Math.max(shownMost, field.motes.filter((mote) => mote.labelVisible).length);
-  }
+  });
   assert.equal(shownMost, MOTE_LABEL_LIMIT, 'the cap is reached');
 });
 
@@ -1557,10 +1660,12 @@ test('stepped: A → B, a condensing B label wins a collision with a decaying A 
   const ranks = moteRanks(artifact);
   const onA = last(run(null, scene, 'project:a/1', MOVE_FRAMES + 2, view));
   let collided = 0;
-  for (const field of run(onA, scene, 'project:a/2', MOVE_FRAMES, view)) {
+  const frames = run(onA, scene, 'project:a/2', MOVE_FRAMES, view);
+  for (const [i, field] of frames.entries()) {
     const focusedB = (mote: Mote) => mote.condensing && mote.planetId === 'project:a/2';
-    // Only a better-ranked shown B label may explain a hidden B label: a decaying A label never does.
-    assertRankWins(field, ranks, 1440, 900, focusedB, focusedB);
+    // The focused Project comes first in the ruled order, so only a shown B label
+    // can explain a hidden B label: a decaying A label never does.
+    explainHides(field, frames[i - 1] ?? onA, ranks, 1440, 900, [], focusedB);
     const contested = field.motes.some(
       (b) => focusedB(b) && b.labelVisible && field.motes.some((a) => !a.condensing && a.labelPlaced && !a.labelVisible && a.labelBox !== null && crowds(a.labelBox, b.labelBox!)),
     );
@@ -1605,6 +1710,478 @@ test('after a release, decaying labels are still kept left of the panel while it
     }
   }
   assert.ok(crossing > 0, 'some decaying label reaches under the panel, or this proves nothing');
+});
+
+// --- The ruling (3.18): the I/O matrix over the pass --------------------------------------
+
+/** What a newcomer needs from every shown label: clearance plus hysteresis. */
+const NEED = MOTE_LABEL_CLEARANCE_PX + MOTE_LABEL_HYSTERESIS_PX;
+
+test('3.18 constants: the hysteresis is 8px on the 4px clearance, and the cap stays at 12', () => {
+  assert.equal(MOTE_LABEL_HYSTERESIS_PX, 8);
+  assert.equal(MOTE_LABEL_CLEARANCE_PX, 4);
+  assert.equal(NEED, 12);
+  assert.equal(MOTE_LABEL_LIMIT, 12);
+});
+
+test('3.18 incumbent drifts close: shown last frame and now 1px from a better-ranked shown label, it stays', () => {
+  const a = candidate('Java', 0, boxAt(100, 100));
+  const b = candidate('Kafka', 3, boxAt(a.box.right + 1, 100));
+  assert.deepEqual([...moteLabelPass([a, b], BOUNDS, new Set(['Java', 'Kafka']))].sort(), ['Java', 'Kafka']);
+  // Touching is not overlapping: an incumbent keeps its place down to a gap of 0.
+  const touching = candidate('Kafka', 3, boxAt(a.box.right, 100));
+  assert.deepEqual([...moteLabelPass([a, touching], BOUNDS, new Set(['Java', 'Kafka']))].sort(), ['Java', 'Kafka']);
+  // The same box as a newcomer is hidden: the hysteresis is what keeps it.
+  assert.deepEqual([...moteLabelPass([a, b], BOUNDS, new Set(['Java']))], ['Java']);
+});
+
+test('3.18 incumbent overlaps: its box overlaps a better-placed shown box, so it is hidden this frame', () => {
+  const a = candidate('Java', 0, boxAt(100, 100));
+  const b = candidate('Kafka', 3, boxAt(a.box.right - 0.5, 100));
+  assert.deepEqual([...moteLabelPass([a, b], BOUNDS, new Set(['Java', 'Kafka']))], ['Java']);
+  // Better placed is the ruled order, not rank alone: an incumbent comes before a
+  // better-ranked newcomer, so the incumbent keeps the place they both want.
+  const go = candidate('Go', 1, boxAt(400, 400));
+  const kafka = candidate('Kafka', 3, boxAt(410, 402));
+  assert.deepEqual([...moteLabelPass([go, kafka], BOUNDS, new Set(['Kafka']))], ['Kafka']);
+  assert.deepEqual([...moteLabelPass([go, kafka], BOUNDS)], ['Go'], 'with no incumbents, rank decides');
+  // The focused Project still comes first: a decaying incumbent gives way to a focused newcomer.
+  assert.deepEqual([...moteLabelPass([go, { ...kafka, focused: false }], BOUNDS, new Set(['Kafka']))], ['Go']);
+});
+
+test('3.18 newcomer: not shown last frame and 6px from a shown label, it is hidden — it needs 12px', () => {
+  const a = candidate('Java', 0, boxAt(100, 100));
+  const six = candidate('Kafka', 3, boxAt(a.box.right + 6, 100));
+  assert.deepEqual([...moteLabelPass([a, six], BOUNDS, new Set(['Java']))], ['Java']);
+  const below = candidate('Kafka', 3, boxAt(100, a.box.bottom + 6));
+  assert.deepEqual([...moteLabelPass([a, below], BOUNDS, new Set(['Java']))], ['Java'], 'on either axis');
+  const twelve = candidate('Kafka', 3, boxAt(a.box.right + NEED, 100));
+  assert.deepEqual([...moteLabelPass([a, twelve], BOUNDS, new Set(['Java']))].sort(), ['Java', 'Kafka']);
+  const under = candidate('Kafka', 3, boxAt(a.box.right + NEED - 0.01, 100));
+  assert.deepEqual([...moteLabelPass([a, under], BOUNDS, new Set(['Java']))], ['Java']);
+});
+
+test('3.18 incumbent hits an edge: shown last frame, its box now crosses a canvas edge or the panel edge, so it is hidden at once', () => {
+  const ok = boxAt(200, 200);
+  const w = ok.right - ok.left;
+  for (const [name, box] of [
+    ['top', boxAt(200, -1)],
+    ['bottom', boxAt(200, BOUNDS.height - MOTE_LABEL_HEIGHT_PX + 1)],
+    ['left', boxAt(-1, 200)],
+    ['right', boxAt(BOUNDS.width - w + 1, 200)],
+    ['panel', boxAt(BOUNDS.panelEdge - w + 1, 200)],
+    ['NaN', { ...ok, left: Number.NaN }],
+  ] as const) {
+    assert.deepEqual([...moteLabelPass([candidate(name, 0, box)], BOUNDS, new Set([name]))], [], `${name}: hidden, incumbent or not`);
+  }
+  assert.deepEqual([...moteLabelPass([candidate('in', 0, ok)], BOUNDS, new Set(['in']))], ['in']);
+});
+
+test('3.18 cap full: 12 incumbents shown and a better-ranked newcomer qualifies — the newcomer is hidden and the incumbents keep their places', () => {
+  const incumbents = Array.from({ length: 12 }, (_, i) => candidate(`s${String(i + 1)}`, i + 1, boxAt(20 + (i % 4) * 150, 20 + Math.floor(i / 4) * 60)));
+  const newcomer = candidate('s0', 0, boxAt(700, 600));
+  const held = new Set(incumbents.map((entry) => entry.skill));
+  const shown = moteLabelPass([newcomer, ...incumbents], BOUNDS, held);
+  assert.deepEqual([...shown].sort(), [...held].sort());
+  // Non-vacuous: with no memory, rank alone would have let the newcomer in and dropped s12.
+  const stateless = moteLabelPass([newcomer, ...incumbents], BOUNDS);
+  assert.ok(stateless.has('s0') && !stateless.has('s12'));
+});
+
+test('3.18 affordance shown: a Mote label over the block or the leader’s box, or within clearance of either, is hidden; the affordance is untouched and takes no place under the cap', () => {
+  const block: LabelBox = { left: 300, right: 420, top: 200, bottom: 230 };
+  const leader: LabelBox = { left: 240, right: 300, top: 214, bottom: 216 };
+  const obstacles = [block, leader];
+  const over = candidate('Java', 0, boxAt(320, 210));
+  assert.deepEqual([...moteLabelPass([over], BOUNDS, new Set(['Java']), obstacles)], [], 'over the block, incumbent or not');
+  const onLeader = candidate('Java', 0, boxAt(250, 210));
+  assert.deepEqual([...moteLabelPass([onLeader], BOUNDS, new Set(), obstacles)], [], 'over the leader’s box');
+  const close = candidate('Java', 0, boxAt(block.right + MOTE_LABEL_CLEARANCE_PX - 0.01, 210));
+  assert.deepEqual([...moteLabelPass([close], BOUNDS, new Set(['Java']), obstacles)], [], 'within clearance');
+  const clear = candidate('Java', 0, boxAt(block.right + MOTE_LABEL_CLEARANCE_PX, 210));
+  assert.deepEqual([...moteLabelPass([clear], BOUNDS, new Set(['Java']), obstacles)], ['Java'], 'at clearance, an incumbent stays');
+  assert.deepEqual(obstacles, [{ left: 300, right: 420, top: 200, bottom: 230 }, { left: 240, right: 300, top: 214, bottom: 216 }], 'the obstacles are not moved');
+  // The cap counts Mote labels only.
+  const twelve = Array.from({ length: 12 }, (_, i) => candidate(`s${String(i)}`, i, boxAt(20 + (i % 4) * 150, 400 + Math.floor(i / 4) * 60)));
+  assert.equal(moteLabelPass(twelve, BOUNDS, new Set(), obstacles).size, MOTE_LABEL_LIMIT);
+});
+
+test('3.18 keyboard affordance: a label 2px outside the block is hidden, and one 6px out is hidden only when the outline (3 + 1px) is drawn', () => {
+  const box = { width: 120, height: 30 };
+  const layout = { anchor: { x: 300, y: 215 }, direction: { x: 1, y: 0 } };
+  const pointer = affordanceBlockRect(layout, box, false);
+  const keyboard = affordanceBlockRect(layout, box, true);
+  const two = candidate('Java', 0, boxAt(pointer.right + 2, 205));
+  assert.deepEqual([...moteLabelPass([two], BOUNDS, new Set(['Java']), [keyboard])], [], 'inside the outline');
+  const six = candidate('Java', 0, boxAt(pointer.right + 6, 205));
+  assert.deepEqual([...moteLabelPass([six], BOUNDS, new Set(['Java']), [pointer])], ['Java'], 'the pointer draws no outline');
+  assert.deepEqual([...moteLabelPass([six], BOUNDS, new Set(['Java']), [keyboard])], [], 'within clearance of the outline');
+});
+
+test('3.18 an obstacle with a non-finite side is ignored, not a wall over every label', () => {
+  const labels = [candidate('Java', 0, boxAt(100, 100)), candidate('Kafka', 3, boxAt(400, 400))];
+  for (const side of ['left', 'right', 'top', 'bottom'] as const) {
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const broken = { left: 300, right: 420, top: 200, bottom: 230, [side]: bad };
+      assert.deepEqual([...moteLabelPass(labels, BOUNDS, new Set(), [broken])].sort(), ['Java', 'Kafka'], `${side} = ${String(bad)}`);
+    }
+  }
+  // A finite obstacle beside the broken one still counts.
+  const over = { left: 90, right: 200, top: 90, bottom: 120 };
+  assert.deepEqual([...moteLabelPass(labels, BOUNDS, new Set(), [{ ...over, top: Number.NaN }, over])], ['Kafka']);
+});
+
+test('3.18 held: an incumbent hidden by the affordance alone keeps its place and its incumbency; a newcomer takes neither', () => {
+  const a = candidate('Java', 1, boxAt(100, 100));
+  const b = candidate('Go', 0, boxAt(a.box.right + 2, 100));
+  const over = { left: 95, right: a.box.right - 5, top: 90, bottom: 120 };
+  // Java is the incumbent; Go, better ranked, crowds it and waits.
+  assert.deepEqual([...moteLabelPass([a, b], BOUNDS, new Set(['Java']))], ['Java']);
+  const covered = moteLabelLayout([a, b], BOUNDS, new Set(['Java']), [over]);
+  assert.deepEqual([...covered.shown], [], 'Java is hidden, and Go does not take its place');
+  assert.deepEqual([...covered.held], ['Java']);
+  // A held label counts under the cap.
+  const twelve = Array.from({ length: 12 }, (_, i) => candidate(`s${String(i + 1)}`, i + 1, boxAt(20 + (i % 4) * 150, 400 + Math.floor(i / 4) * 60)));
+  const first = twelve[0];
+  assert.ok(first !== undefined);
+  const capped = moteLabelLayout([candidate('s0', 0, boxAt(700, 700)), ...twelve], BOUNDS, new Set(twelve.map((entry) => entry.skill)), [first.box]);
+  assert.equal(capped.shown.size + capped.held.size, MOTE_LABEL_LIMIT);
+  assert.ok(capped.held.has('s1') && !capped.shown.has('s0'));
+  // A newcomer under the obstacle is simply hidden, never held.
+  assert.deepEqual(moteLabelLayout([a], BOUNDS, new Set(), [over]), { shown: new Set(), held: new Set() });
+  // Nor is an incumbent held across a bound.
+  assert.deepEqual(moteLabelLayout([candidate('Java', 1, boxAt(-1, 100))], BOUNDS, new Set(['Java']), [over]).held, new Set());
+});
+
+/** `id` focused and condensed under reduced motion, from nothing. */
+function condensedReduced(scene: MoteScene, id: string, view: MoteView): MoteField {
+  let field: MoteField | null = null;
+  for (let i = 0; i < Math.ceil((FOCUS_SECONDS * 4) / DT) + 4; i += 1) field = stepMotes(field, scene, id, view, DT, true);
+  assert.ok(field !== null && field.motes.every((mote) => mote.elapsed >= FOCUS_SECONDS), 'condensed');
+  return field;
+}
+
+const shownOf = (field: MoteField): string[] => field.motes.filter((mote) => mote.labelVisible).map((mote) => mote.skill).sort();
+
+/**
+ * A passing hover from `start`, under reduced motion: `obstacles` for `frames`
+ * frames, then none for as many again. Returns the shown set after. With `carry`
+ * false the held labels are dropped from the incumbents — the step without the
+ * 3.18 carry, replayed at the pass (under reduced motion nothing moves, so every
+ * frame's candidates are `start`'s).
+ */
+function afterHover(start: MoteField, scene: MoteScene, view: MoteView, obstacles: readonly LabelBox[], frames: number, carry = true): string[] {
+  if (carry) {
+    let field = start;
+    for (let i = 0; i < 2 * frames; i += 1) field = stepMotes(field, scene, start.focusedId, view, DT, true, i < frames ? obstacles : []);
+    return shownOf(field);
+  }
+  const ranks = moteRanks(scene.artifact);
+  const candidates = start.motes.flatMap((mote): LabelCandidate[] =>
+    mote.labelPlaced && mote.labelBox !== null ? [{ skill: mote.skill, rank: moteRank(ranks, mote.skill).rank, focused: true, box: mote.labelBox }] : [],
+  );
+  const bounds = { width: view.width, height: view.height, panelEdge: view.width * (1 - panelFraction(view.width)) };
+  let incumbents = new Set(shownOf(start));
+  for (let i = 0; i < 2 * frames; i += 1) incumbents = moteLabelLayout(candidates, bounds, incumbents, i < frames ? obstacles : []).shown;
+  return [...incumbents].sort();
+}
+
+test('3.18 a passing hover, under reduced motion at 25 Skills: the shown set returns exactly to what it was; without the carry it does not', () => {
+  const base = committed();
+  const sncf = 'project:sncf/client-referential';
+  const scene = sceneOf(base);
+  // The mutation row, over both canvases: at 390×844 the shown labels sit 12px or
+  // more apart, so an uncovered one returns even as a newcomer; at 1440×900 some do not.
+  let needed = 0;
+  for (const [width, height] of RULING_VIEWS) {
+    const view = viewOf(cameraFor(base, sncf, width, height), width, height);
+    const start = condensedReduced(scene, sncf, view);
+    const before = shownOf(start);
+    assert.ok(before.length > 0, `${String(width)}: labels are shown`);
+    // Each shown label in turn under the affordance, then uncovered.
+    for (const mote of start.motes.filter((entry) => entry.labelVisible && entry.labelBox !== null)) {
+      const obstacles = [mote.labelBox as LabelBox];
+      assert.deepEqual(afterHover(start, scene, view, obstacles, 3), before, `${String(width)}: ${mote.skill} covered, then uncovered`);
+      if (afterHover(start, scene, view, obstacles, 3, false).join('\n') !== before.join('\n')) needed += 1;
+    }
+  }
+  assert.ok(needed > 0, 'without the carry some passing hover leaves the labels reshuffled, or this proves nothing');
+});
+
+test('3.18 no affordance: nothing approached, or the focused Project approached, gives no obstacles, and the step is the step without them', () => {
+  const base = committed() as Artifact & AffordanceArtifact;
+  const sncf = 'project:sncf/client-referential';
+  const scene = sceneOf(base);
+  const view = viewOf(cameraFor(base, sncf, 1440, 900), 1440, 900);
+  for (const nav of [
+    { focusedProjectId: sncf, hoveredProjectId: null, keyboardProjectId: null },
+    { focusedProjectId: sncf, hoveredProjectId: sncf, keyboardProjectId: null },
+    { focusedProjectId: sncf, hoveredProjectId: null, keyboardProjectId: sncf },
+  ]) {
+    assert.deepEqual(affordanceObstacles(nav, base, scene.bodies, view.view, view.projection, view), []);
+  }
+  let plain: MoteField | null = null;
+  let given: MoteField | null = null;
+  for (let frame = 0; frame < MOVE_FRAMES + 30; frame += 1) {
+    plain = stepMotes(plain, scene, sncf, view, DT);
+    given = stepMotes(given, scene, sncf, view, DT, false, []);
+    assert.deepEqual(given, plain);
+  }
+  const candidates = [candidate('Java', 0, boxAt(100, 100)), candidate('Kafka', 3, boxAt(160, 100))];
+  assert.deepEqual(moteLabelPass(candidates, BOUNDS, new Set(), []), moteLabelPass(candidates, BOUNDS));
+});
+
+// --- The ruling (3.18), stepped at 7, 12 and 25 Skills --------------------------------------
+
+/** The acceptance sizes: the committed Projects of 7, 12 and 25 Skills. */
+const RULING_SIZES = [
+  [7, 'project:sncf/file-aggregator-transcoder'],
+  [12, 'project:transilien/stream-aggregator-compiler'],
+  [25, 'project:sncf/client-referential'],
+] as const;
+
+const RULING_VIEWS = [
+  [1440, 900],
+  [390, 844],
+] as const;
+
+/** One focused Project stepped through a full orbit turn, with what each frame handed the pass. */
+interface RulingSweep {
+  readonly name: string;
+  readonly size: number;
+  readonly id: string;
+  readonly width: number;
+  readonly height: number;
+  readonly scene: MoteScene;
+  readonly view: MoteView;
+  readonly frames: readonly MoteField[];
+  readonly candidates: readonly (readonly LabelCandidate[])[];
+  readonly bounds: readonly LabelBounds[];
+  /** Every Mote has condensed: from here the frames are the orbit turn. */
+  readonly settled: readonly boolean[];
+}
+
+function rulingSweep(
+  artifact: Artifact,
+  size: number,
+  id: string,
+  width: number,
+  height: number,
+  reduced = false,
+  obstacles: readonly LabelBox[] = [],
+): RulingSweep {
+  const scene = sceneOf(artifact);
+  const view = viewOf(cameraFor(artifact, id, width, height), width, height);
+  const ranks = moteRanks(artifact);
+  const turn = (2 * Math.PI) / MOTE_ORBIT_RADIANS_PER_SECOND;
+  const step = RAIL_MAX_FRAME_SECONDS;
+  const frames: MoteField[] = [];
+  const candidates: LabelCandidate[][] = [];
+  const bounds: LabelBounds[] = [];
+  const settled: boolean[] = [];
+  let field: MoteField | null = null;
+  for (let t = 0; t <= turn + MOVE_FRAMES * DT; t += step) {
+    field = stepMotes(field, scene, id, view, step, reduced, obstacles);
+    frames.push(field);
+    candidates.push(
+      field.motes.flatMap((mote): LabelCandidate[] =>
+        mote.labelPlaced && mote.labelBox !== null
+          ? [{ skill: mote.skill, rank: moteRank(ranks, mote.skill).rank, focused: mote.condensing && mote.planetId === id, box: mote.labelBox }]
+          : [],
+      ),
+    );
+    bounds.push({ width, height, panelEdge: width * (1 - panelFraction(width)) });
+    settled.push(field.motes.every((mote) => mote.elapsed >= FOCUS_SECONDS));
+  }
+  return { name: `${String(size)} Skills at ${String(width)}×${String(height)}`, size, id, width, height, scene, view, frames, candidates, bounds, settled };
+}
+
+const SWEEPS = new Map<string, readonly RulingSweep[]>();
+
+/** The six acceptance sweeps (three sizes, two canvases), built once per configuration. */
+function rulingSweeps(reduced = false): readonly RulingSweep[] {
+  const key = String(reduced);
+  const known = SWEEPS.get(key);
+  if (known !== undefined) return known;
+  const base = committed();
+  const sweeps = RULING_SIZES.flatMap(([size, id]) => RULING_VIEWS.map(([width, height]) => rulingSweep(base, size, id, width, height, reduced)));
+  SWEEPS.set(key, sweeps);
+  return sweeps;
+}
+
+type LabelPass = (candidates: readonly LabelCandidate[], bounds: LabelBounds, incumbents: ReadonlySet<string>, obstacles: readonly LabelBox[]) => Set<string>;
+
+/**
+ * The 3.5 rule as it shipped, kept as the reference the ruling is measured
+ * against: the focused Project's first, then rank; `MOTE_LABEL_CLEARANCE_PX`
+ * between every two labels; no memory of last frame.
+ */
+const stateless35: LabelPass = (candidates, bounds) => {
+  const ordered = [...candidates].sort((a, b) => Number(b.focused) - Number(a.focused) || a.rank - b.rank);
+  const shown: LabelBox[] = [];
+  const names = new Set<string>();
+  for (const entry of ordered) {
+    if (shown.length >= MOTE_LABEL_LIMIT) break;
+    const edge = Math.min(bounds.width, bounds.panelEdge);
+    if (!inside(entry.box, bounds.width, bounds.height, edge) || ![entry.box.left, entry.box.right, entry.box.top, entry.box.bottom].every(Number.isFinite)) continue;
+    if (shown.some((other) => crowdsBy(entry.box, other, MOTE_LABEL_CLEARANCE_PX))) continue;
+    shown.push(entry.box);
+    names.add(entry.skill);
+  }
+  return names;
+};
+
+/** `pass` run over a sweep's recorded frames, each frame's incumbents being its own result one frame back. */
+function replay(sweep: RulingSweep, pass: LabelPass, obstacles: readonly LabelBox[] = []): Set<string>[] {
+  let previous = new Set<string>();
+  return sweep.candidates.map((candidates, i) => {
+    previous = pass(candidates, sweep.bounds[i] ?? BOUNDS, previous, obstacles);
+    return previous;
+  });
+}
+
+/**
+ * Show/hide toggles across the orbit turn — every label that appears or
+ * disappears between two settled frames. With `collisions`, only those of a label
+ * placed and inside the bounds on both frames: what a bound did not cause.
+ */
+function toggles(sweep: RulingSweep, shown: readonly Set<string>[], collisions = false): number {
+  let total = 0;
+  for (let i = 1; i < shown.length; i += 1) {
+    if (!(sweep.settled[i - 1] ?? false)) continue;
+    const [was, now] = [shown[i - 1] ?? new Set<string>(), shown[i] ?? new Set<string>()];
+    const placeable = (at: number): Set<string> =>
+      new Set((sweep.candidates[at] ?? []).filter((entry) => inside(entry.box, sweep.width, sweep.height, sweep.bounds[at]?.panelEdge ?? sweep.width)).map((entry) => entry.skill));
+    const [before, after] = collisions ? [placeable(i - 1), placeable(i)] : [null, null];
+    for (const skill of new Set([...was, ...now])) {
+      if (was.has(skill) === now.has(skill)) continue;
+      if (before !== null && after !== null && !(before.has(skill) && after.has(skill))) continue;
+      total += 1;
+    }
+  }
+  return total;
+}
+
+/**
+ * The flicker bound, as findings: with `pass`, total toggles never exceed the
+ * stateless 3.5 rule's, and are strictly fewer at 25 Skills and wherever the
+ * stateless rule toggles a label no bound explains — the flicker the ruling is
+ * for. Toggles a canvas or panel edge causes are left alone by the ruling, so
+ * where they are all there is, equal is the bound.
+ */
+function flickerFindings(pass: LabelPass): string[] {
+  const findings: string[] = [];
+  for (const sweep of rulingSweeps()) {
+    const ruled = toggles(sweep, replay(sweep, pass));
+    const reference = replay(sweep, stateless35);
+    const stateless = toggles(sweep, reference);
+    const flicker = toggles(sweep, reference, true);
+    if (ruled > stateless) findings.push(`${sweep.name}: ${String(ruled)} toggles against the stateless ${String(stateless)}`);
+    if ((sweep.size === 25 || flicker > 0) && !(ruled < stateless)) {
+      findings.push(`${sweep.name}: ${String(ruled)} toggles, not fewer than the stateless ${String(stateless)} (${String(flicker)} not from a bound)`);
+    }
+  }
+  return findings;
+}
+
+test('3.18 sweeps at 7, 12 and 25 Skills, 1440×900 and 390×844, one full turn: ≤ 12 shown, none clipped, every hide explained', () => {
+  const sizes = new Set<number>();
+  for (const sweep of rulingSweeps()) {
+    assert.equal(new Set(projectSkills(sweep.scene.artifact, sweep.id)).size, sweep.size, `${sweep.id} carries ${String(sweep.size)} Skills`);
+    const ranks = moteRanks(sweep.scene.artifact);
+    // The step's pass is this pass, handed last frame's shown labels.
+    const replayed = replay(sweep, moteLabelPass);
+    let most = 0;
+    const tally: HideTally = { bound: 0, obstacle: 0, cap: 0, overlap: 0 };
+    sweep.frames.forEach((field, i) => {
+      const shown = field.motes.filter((mote) => mote.labelVisible).map((mote) => mote.skill);
+      assert.deepEqual(shown.sort(), [...(replayed[i] ?? [])].sort(), `${sweep.name}, frame ${String(i)}: the step is the pass over last frame’s shown set`);
+      assert.ok(shown.length <= MOTE_LABEL_LIMIT, `${sweep.name}, frame ${String(i)}: ${String(shown.length)} labels`);
+      most = Math.max(most, shown.length);
+      const found = explainHides(field, sweep.frames[i - 1] ?? null, ranks, sweep.width, sweep.height);
+      for (const reason of ['bound', 'obstacle', 'cap', 'overlap'] as const) tally[reason] += found[reason];
+    });
+    assert.ok(most > 0, `${sweep.name}: labels are shown, or this proves nothing`);
+    assert.equal(tally.obstacle, 0, `${sweep.name}: no affordance, no obstacle`);
+    sizes.add(sweep.size);
+  }
+  assert.deepEqual([...sizes], [7, 12, 25]);
+});
+
+test('3.18 flicker: with incumbents, show/hide toggles never exceed the stateless rule’s, and are strictly fewer at 25 Skills and wherever it flickers', () => {
+  assert.deepEqual(flickerFindings(moteLabelPass), []);
+  // Non-vacuous: the stateless rule does flicker at 25 Skills on both canvases.
+  for (const sweep of rulingSweeps().filter((entry) => entry.size === 25)) {
+    assert.ok(toggles(sweep, replay(sweep, stateless35), true) > 0, `${sweep.name}: the stateless rule flickers here, or this proves nothing`);
+  }
+});
+
+test('3.18 flicker, mutated: a pass that ignores its incumbents fails the toggle bound — the hysteresis is what bites', () => {
+  const forgetful: LabelPass = (candidates, bounds, _incumbents, obstacles) => moteLabelPass(candidates, bounds, new Set(), obstacles);
+  assert.notDeepEqual(flickerFindings(forgetful), []);
+});
+
+/**
+ * The approached Project whose affordance, drawn while `sweep`'s Project is
+ * focused, would crowd the most placed labels over the turn: the obstacle the
+ * sweep is re-run with. The keyboard's on the phone canvas, the pointer's on the
+ * desktop. Every other Planet is tried where it is; when none of them reaches the
+ * Motes on screen, each is tried again as a stand-in at the focused Planet's own
+ * position — the real `affordanceObstacles`, on a Planet that sits among the
+ * Motes. (On the committed artifact the focus pose frames one Planet, and at all
+ * six sweeps no neighbour's affordance reaches its Motes, so the stand-in is what
+ * these sweeps exercise; the matrix rows above hold the pass itself.)
+ */
+function busiestObstacles(sweep: RulingSweep): readonly LabelBox[] {
+  const keyboard = sweep.width < 1000;
+  const artifact = sweep.scene.artifact as Artifact & AffordanceArtifact;
+  const focused = sweep.scene.bodies.find((body) => body.id === sweep.id);
+  assert.ok(focused !== undefined);
+  const crowding = (bodies: readonly Body[], id: string): { obstacles: readonly LabelBox[]; crowded: number } => {
+    const nav = { focusedProjectId: sweep.id, hoveredProjectId: keyboard ? null : id, keyboardProjectId: keyboard ? id : null };
+    const obstacles = affordanceObstacles(nav, artifact, bodies, sweep.view.view, sweep.view.projection, sweep.view);
+    let crowded = 0;
+    for (const candidates of sweep.candidates) {
+      for (const entry of candidates) if (obstacles.some((obstacle) => crowdsBy(entry.box, obstacle, MOTE_LABEL_CLEARANCE_PX))) crowded += 1;
+    }
+    return { obstacles, crowded };
+  };
+  const others = sweep.scene.bodies.filter((body) => body.kind === 'planet' && body.id !== sweep.id);
+  const best = (tries: readonly { obstacles: readonly LabelBox[]; crowded: number }[]) =>
+    tries.reduce((top, next) => (next.crowded > top.crowded ? next : top), { obstacles: [] as readonly LabelBox[], crowded: 0 });
+  const real = best(others.map((body) => crowding(sweep.scene.bodies, body.id)));
+  if (real.crowded > 0) return real.obstacles;
+  return best(
+    others.map((body) => crowding(sweep.scene.bodies.map((entry) => (entry.id === body.id ? { ...entry, position: focused.position } : entry)), body.id)),
+  ).obstacles;
+}
+
+test('3.18 affordance overlap at 7, 12 and 25 Skills: with an affordance drawn, no shown label comes within clearance of it', () => {
+  const base = committed();
+  for (const plain of rulingSweeps()) {
+    const obstacles = busiestObstacles(plain);
+    assert.equal(obstacles.length, 2, `${plain.name}: an affordance is drawn over the turn, or this proves nothing`);
+    const sweep = rulingSweep(base, plain.size, plain.id, plain.width, plain.height, false, obstacles);
+    const ranks = moteRanks(base);
+    let yielded = 0;
+    sweep.frames.forEach((field, i) => {
+      assert.ok(field.motes.filter((mote) => mote.labelVisible).length <= MOTE_LABEL_LIMIT);
+      yielded += explainHides(field, sweep.frames[i - 1] ?? null, ranks, sweep.width, sweep.height, obstacles).obstacle;
+    });
+    assert.ok(yielded > 0, `${sweep.name}: some label yields to the affordance, or this proves nothing`);
+  }
+});
+
+test('3.18 reduced motion at 7, 12 and 25 Skills: once condensed, the shown set is the same on every frame, ≤ 12 (ruling 3a, accepted)', () => {
+  for (const sweep of rulingSweeps(true)) {
+    const settled = sweep.frames.filter((_, i) => sweep.settled[i] ?? false);
+    assert.ok(settled.length > 100, `${sweep.name}: the turn runs well past condensation`);
+    const sets = settled.map((field) => field.motes.filter((mote) => mote.labelVisible).map((mote) => mote.skill).sort().join('\n'));
+    const first = sets[0] ?? '';
+    assert.ok(sets.every((set) => set === first), `${sweep.name}: the shown set changes while the orbit clock holds`);
+    const shown = first === '' ? 0 : first.split('\n').length;
+    assert.ok(shown > 0 && shown <= MOTE_LABEL_LIMIT, `${sweep.name}: ${String(shown)} labels`);
+  }
 });
 
 // --- The lookup, the pool, the token parser ------------------------------------------------

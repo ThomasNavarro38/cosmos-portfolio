@@ -35,6 +35,12 @@
  * Planet; on a Deep one from beyond its Ring and Moon (3.3), so the leader never
  * cuts through the signal.
  *
+ * **The Mote labels yield to it** (3.18). The Mote labels draw at the same
+ * `zIndexRange [1, 1]`, so `affordanceObstacles` hands the Mote label pass the
+ * block's rectangle (its keyboard outline included) and the leader's bounding
+ * box, from the same placement `affordanceFrame` draws, and the pass hides any
+ * Mote label near them.
+ *
  * **It reads and never derives** (AD-3). The title, role and team size are the
  * authored content the artifact carries; the depth word is the artifact's
  * `isDeep`, worded by the index's own `DEPTH_LABELS`. Nothing here classifies.
@@ -411,6 +417,41 @@ export function onFrame(screen: ScreenXY, viewport: Viewport): boolean {
   return screen.x >= 0 && screen.x <= viewport.width && screen.y >= 0 && screen.y <= viewport.height;
 }
 
+/** Where this frame's affordance sits: the approach, its text, the label block's estimated size, and the layout. */
+interface AffordancePlacement {
+  readonly approach: Approach;
+  readonly text: AffordanceText;
+  readonly box: LabelBox;
+  readonly layout: AffordanceLayout;
+}
+
+/**
+ * The one placement both `affordanceFrame` (what is drawn) and
+ * `affordanceObstacles` (what the Mote labels yield to) read, so the two can
+ * never disagree: `null` at rest, on the Focused Project, behind the camera, or
+ * off the frame.
+ */
+function affordancePlacement(
+  nav: ApproachState,
+  artifact: AffordanceArtifact,
+  bodies: readonly Body[],
+  view: ArrayLike<number>,
+  projection: ArrayLike<number>,
+  viewport: Viewport,
+): AffordancePlacement | null {
+  const approach = approachedProject(nav);
+  if (approach === null) return null;
+  const planet = bodies.find((body) => body.kind === 'planet' && body.id === approach.id);
+  if (planet === undefined) throw new Error(`the affordance needs a Planet, but none carries ${JSON.stringify(approach.id)}.`);
+  const text = affordanceText(affordanceProject(artifact, approach.id));
+  const screen = projectToScreen(planet.position, view, projection, viewport);
+  if (screen === null || !onFrame(screen, viewport)) return null;
+  const startPx = markPx(planet, radiusPx(bodyRadius(planet), screen.depth, projection, viewport.height));
+  const box = labelBox(text);
+  const layout = affordanceLayout(screen, startPx, viewport, approach.keyboard, box, labelBounds(viewport, nav.focusedProjectId !== null));
+  return { approach, text, box, layout };
+}
+
 /**
  * This frame's affordance: hidden at rest, when the approached Project is the
  * Focused one, when its Planet is behind the camera, or when its projected centre
@@ -429,15 +470,9 @@ export function affordanceFrame(
   projection: ArrayLike<number>,
   viewport: Viewport,
 ): AffordanceDraw {
-  const approach = approachedProject(nav);
-  if (approach === null) return HIDDEN;
-  const planet = bodies.find((body) => body.kind === 'planet' && body.id === approach.id);
-  if (planet === undefined) throw new Error(`the affordance needs a Planet, but none carries ${JSON.stringify(approach.id)}.`);
-  const text = affordanceText(affordanceProject(artifact, approach.id));
-  const screen = projectToScreen(planet.position, view, projection, viewport);
-  if (screen === null || !onFrame(screen, viewport)) return HIDDEN;
-  const startPx = markPx(planet, radiusPx(bodyRadius(planet), screen.depth, projection, viewport.height));
-  const layout = affordanceLayout(screen, startPx, viewport, approach.keyboard, labelBox(text), labelBounds(viewport, nav.focusedProjectId !== null));
+  const placed = affordancePlacement(nav, artifact, bodies, view, projection, viewport);
+  if (placed === null) return HIDDEN;
+  const { approach, text, layout } = placed;
   return {
     visible: true,
     projectId: approach.id,
@@ -447,6 +482,61 @@ export function affordanceFrame(
     textAlign: layout.textAlign,
     outline: layout.outline,
   };
+}
+
+// --- What the Mote labels yield to (3.18) --------------------------------------------------
+
+/** A rectangle on screen, in CSS pixels from the canvas's top-left. The Mote label pass reads it as a label box. */
+export interface ScreenRect {
+  readonly left: number;
+  readonly right: number;
+  readonly top: number;
+  readonly bottom: number;
+}
+
+/**
+ * The label block's rectangle on screen for `layout`: the estimated `box` with
+ * its near edge at the anchor, on the side `labelTransform`'s shifts put it —
+ * left of the anchor when the leader runs left, below it when the leader runs
+ * down, above it when up, centred on it when level — grown on every side by
+ * `OUTLINE_OFFSET_PX + OUTLINE_PX` when the keyboard reached it, so the outline
+ * is covered too.
+ */
+export function affordanceBlockRect(layout: Pick<AffordanceLayout, 'anchor' | 'direction'>, box: LabelBox, keyboard: boolean): ScreenRect {
+  const { anchor, direction } = layout;
+  const left = direction.x < 0 ? anchor.x - box.width : anchor.x;
+  const top = direction.y > 0 ? anchor.y : direction.y < 0 ? anchor.y - box.height : anchor.y - box.height / 2;
+  const grow = keyboard ? OUTLINE_OFFSET_PX + OUTLINE_PX : 0;
+  return { left: left - grow, right: left + box.width + grow, top: top - grow, bottom: top + box.height + grow };
+}
+
+/**
+ * What the Mote labels yield to this frame (3.18, ruling 2a — the affordance
+ * wins): `[]` whenever `affordanceFrame` draws nothing; otherwise the label
+ * block's rectangle (`affordanceBlockRect`, its keyboard outline included) and
+ * the leader's bounding box. Read from the same placement `affordanceFrame`
+ * draws from, so an obstacle is exactly where the affordance is.
+ *
+ * @throws as `affordanceFrame` does.
+ */
+export function affordanceObstacles(
+  nav: ApproachState,
+  artifact: AffordanceArtifact,
+  bodies: readonly Body[],
+  view: ArrayLike<number>,
+  projection: ArrayLike<number>,
+  viewport: Viewport,
+): ScreenRect[] {
+  const placed = affordancePlacement(nav, artifact, bodies, view, projection, viewport);
+  if (placed === null) return [];
+  const { from, anchor } = placed.layout;
+  const leader = {
+    left: Math.min(from.x, anchor.x),
+    right: Math.max(from.x, anchor.x),
+    top: Math.min(from.y, anchor.y),
+    bottom: Math.max(from.y, anchor.y),
+  };
+  return [affordanceBlockRect(placed.layout, placed.box, placed.approach.keyboard), leader];
 }
 
 // --- The overlay's anchoring ------------------------------------------------------------------

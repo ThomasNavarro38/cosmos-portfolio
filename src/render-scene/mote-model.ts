@@ -38,28 +38,25 @@
  * one frame.
  * Nothing here reads `moteTier`.
  *
- * **Labels never sit under the panel.** A label is placed from NDC positions,
- * projected through the camera matrices the frame hands in: on the dot's left
- * when the dot is left of the Planet on screen, on its right otherwise. A
- * right-hand label whose estimated width crosses the panel edge `1 − 2w` while
- * a Project is focused is hidden that frame (never truncated). A condensing Mote
- * is *blocked* when its label would cross at its destination slot — judged there,
- * not at its in-flight pose — and once it has condensed, the next step glides it
+ * **Labels never sit under the panel.** A label's side, its panel blocking, its
+ * estimated box and the pass that decides which labels show live in
+ * `mote-label.ts` (3.18), and every name there is re-exported from here. What
+ * stays here is the field's use of them: a condensing Mote is *blocked* when its
+ * label would cross the panel edge at its destination slot — judged there, not
+ * at its in-flight pose — and once it has condensed, the next step glides it
  * over `MOTE_RESLOT_SECONDS` to the nearest free slot that keeps the
  * no-adjacency quota and would not be blocked. With no such slot the Mote stays
  * and its label stays hidden.
  *
- * **At most `MOTE_LABEL_LIMIT` labels, none colliding, none clipped** (3.5).
- * After placement, one pass per frame visits the labelled Motes — the focused
- * Project's first — in `skills` rank, and shows a label only while the pass is
- * under the limit, its estimated box lies inside the canvas on all four edges
- * and left of the panel edge, and it clears every label already shown by
- * `MOTE_LABEL_CLEARANCE_PX`. A label hidden by that pass is not re-slotted: the
- * cap and the ordering are `moteLabelPass`'s alone, so a later degradation rule
- * replaces one function.
+ * **At most `MOTE_LABEL_LIMIT` labels, none colliding, none clipped** (3.5,
+ * 3.18). After placement, `moteLabelPass` runs once per frame over every placed
+ * label; the step hands it last frame's shown and held labels and the affordance's boxes
+ * (`affordanceObstacles`), and the ruling it applies is recorded on the pass. A
+ * label hidden by that pass is not re-slotted. The label's ink and resting style
+ * (`MOTE_LABEL_COLOR`, `moteLabelStyle`) stay here.
  *
  * **Pure.** It imports the shell's timing and panel models and this
- * directory's Dust, Rail, scene, stroke and Notable models — no Three, no React, no store, no
+ * directory's Dust, Rail, scene, stroke, Notable and label models — no Three, no React, no store, no
  * clock — so every rule here runs under `node --test`, and `mote-field.tsx`
  * only binds it. The one exception to "returns, never mutates" is
  * `applyMoteDraw`, which writes a frame's result onto the handles it is given;
@@ -75,6 +72,48 @@ import { worldPerPixel } from './notable-model.ts';
 import { RAIL_MAX_FRAME_SECONDS } from './rail-model.ts';
 import type { Body, ScenePosition } from './scene-model.ts';
 import { strokeColor, strokeWidthPx, type LinePoint } from './stroke-model.ts';
+import {
+  MOTE_LABEL_TYPE,
+  labelBox,
+  labelChars,
+  labelPlacement,
+  labelTransform,
+  moteLabelLayout,
+  projectNdc,
+  type LabelBox,
+  type LabelCandidate,
+  type LabelSide,
+} from './mote-label.ts';
+
+// The label's placement, box and pass live in `mote-label.ts` (3.18); every name
+// is re-exported here, so the Mote model stays one surface for its readers.
+export {
+  MOTE_LABEL_CHAR_PX,
+  MOTE_LABEL_CLEARANCE_PX,
+  MOTE_LABEL_FONT_PX,
+  MOTE_LABEL_GAP_PX,
+  MOTE_LABEL_HEIGHT_PX,
+  MOTE_LABEL_HYSTERESIS_PX,
+  MOTE_LABEL_LIMIT,
+  MOTE_LABEL_TYPE,
+  cssNumber,
+  labelBox,
+  labelChars,
+  labelInside,
+  labelPlacement,
+  labelTransform,
+  labelsCrowd,
+  moteLabelLayout,
+  moteLabelPass,
+  projectNdc,
+  type LabelBounds,
+  type LabelBox,
+  type LabelCandidate,
+  type LabelLayout,
+  type LabelPlacement,
+  type LabelSide,
+  type NdcPoint,
+} from './mote-label.ts';
 
 // --- Tuning ------------------------------------------------------------------
 
@@ -149,52 +188,12 @@ export const MOTE_ORBIT_LINE_WIDTH_PX = strokeWidthPx('hairline');
 /** Segments in one drawn orbit line. */
 export const MOTE_ORBIT_LINE_SEGMENTS = 96;
 
-/** The label's type: the `mote-label` typography token (DESIGN.md `mote.label`). */
-export const MOTE_LABEL_TYPE = tokens.typography['mote-label'];
-
-/** The label's font size, in CSS pixels, read off the token. */
-export const MOTE_LABEL_FONT_PX = cssNumber(MOTE_LABEL_TYPE.fontSize, 'px');
-
-/**
- * The estimated width of one label character, in CSS pixels: a sans advance of
- * 0.6em plus the token's letter-spacing (0.16em) — about 7.2px at 9.5px.
- * Tunable, and conservative on average: a sans face's mean advance is under
- * 0.6em, so for typical strings the estimate errs wide — but not for every
- * string (a run of wide capitals such as `MW` can exceed it).
- */
-export const MOTE_LABEL_CHAR_PX = MOTE_LABEL_FONT_PX * (0.6 + cssNumber(MOTE_LABEL_TYPE.letterSpacing, 'em'));
-
-/** The estimated height of a label's box, in CSS pixels: one line at the token's line-height. */
-export const MOTE_LABEL_HEIGHT_PX = MOTE_LABEL_FONT_PX * MOTE_LABEL_TYPE.lineHeight;
-
-/** The gap between a dot and its label, in CSS pixels. */
-export const MOTE_LABEL_GAP_PX = 12;
-
-/** The most labels shown at once (3.5's degradation rule; DESIGN.md D-G3). */
-export const MOTE_LABEL_LIMIT = 12;
-
-/** The least gap between two shown labels' boxes, in CSS pixels. */
-export const MOTE_LABEL_CLEARANCE_PX = 4;
-
 /**
  * The Mote label's ink: `ink-label`, the floor every Mote label tier sits at
  * (DESIGN.md §2). A stroke token on a glyph is what 3.2 forbids — the two
  * ladders never borrow each other's tokens.
  */
 export const MOTE_LABEL_COLOR = tokens.colors['ink-label-dark'];
-
-/**
- * A token's numeric value in `unit`: `9.5px` → 9.5, `.16em` → 0.16, `-0.02em` →
- * −0.02, and a bare `0` (unitless, as CSS allows for zero) → 0. Throws on a token
- * in another unit: the estimate would silently be wrong.
- */
-export function cssNumber(value: string, unit: 'px' | 'em'): number {
-  if (/^[-+]?0*\.?0+$/.test(value.trim())) return 0;
-  const match = new RegExp(String.raw`^([-+]?(?:\d+(?:\.\d*)?|\.\d+))` + unit + '$').exec(value.trim());
-  const parsed = match === null ? Number.NaN : Number(match[1]);
-  if (!Number.isFinite(parsed)) throw new Error(`the mote-label token ${JSON.stringify(value)} is not in ${unit}.`);
-  return parsed;
-}
 
 // --- The artifact slice ------------------------------------------------------
 
@@ -442,76 +441,7 @@ export function blendMote(
   };
 }
 
-// --- Projection and labels -------------------------------------------------------
-
-/** A point in normalised device coordinates, and whether it is in front of the camera. */
-export interface NdcPoint {
-  readonly x: number;
-  readonly y: number;
-  readonly z: number;
-  readonly front: boolean;
-}
-
-/**
- * `point` projected to NDC through a view matrix and a projection matrix, each
- * given as 16 column-major elements — `camera.matrixWorldInverse.elements` and
- * `camera.projectionMatrix.elements`, exactly as `three` stores them. `front`
- * is whether the clip-space `w` is positive.
- */
-export function projectNdc(point: ScenePosition, view: ArrayLike<number>, projection: ArrayLike<number>): NdcPoint {
-  const v = (i: number): number => view[i] ?? Number.NaN;
-  const p = (i: number): number => projection[i] ?? Number.NaN;
-  const ex = v(0) * point.x + v(4) * point.y + v(8) * point.z + v(12);
-  const ey = v(1) * point.x + v(5) * point.y + v(9) * point.z + v(13);
-  const ez = v(2) * point.x + v(6) * point.y + v(10) * point.z + v(14);
-  const ew = v(3) * point.x + v(7) * point.y + v(11) * point.z + v(15);
-  const cx = p(0) * ex + p(4) * ey + p(8) * ez + p(12) * ew;
-  const cy = p(1) * ex + p(5) * ey + p(9) * ez + p(13) * ew;
-  const cz = p(2) * ex + p(6) * ey + p(10) * ez + p(14) * ew;
-  const cw = p(3) * ex + p(7) * ey + p(11) * ez + p(15) * ew;
-  return { x: cx / cw, y: cy / cw, z: cz / cw, front: cw > 0 };
-}
-
-/** Which side of its dot a label reads on. */
-export type LabelSide = 'left' | 'right';
-
-/** Where a label goes this frame, and whether it may be shown. */
-export interface LabelPlacement {
-  readonly side: LabelSide;
-  /** A right-hand label crossing the panel edge while focused: hidden, and its Mote re-slotted. */
-  readonly blocked: boolean;
-  /** Shown: not blocked, on a canvas with width, in front of the camera. */
-  readonly visible: boolean;
-}
-
-/**
- * A label's placement from NDC positions.
- *
- * **Side:** left of the dot when the dot is left of the Planet on screen, right
- * otherwise. **Blocked:** while a Project is focused, a right-hand label whose
- * estimated width — `chars × MOTE_LABEL_CHAR_PX` after a `MOTE_LABEL_GAP_PX`
- * gap, in a canvas `width` pixels wide — crosses the panel's edge at NDC
- * `1 − 2w`, `w = panelFraction(width)`. A blocked label is hidden, never
- * truncated. A canvas with no width, a non-finite position, or a dot behind the
- * camera hides the label without blocking it — there is nothing to re-slot for.
- */
-export function labelPlacement(dot: NdcPoint, planet: NdcPoint, chars: number, width: number, focused: boolean): LabelPlacement {
-  const side: LabelSide = dot.x < planet.x ? 'left' : 'right';
-  const measurable =
-    Number.isFinite(width) && width > 0 && dot.front && planet.front && Number.isFinite(dot.x) && Number.isFinite(planet.x);
-  if (!measurable) return { side, blocked: false, visible: false };
-  const edge = 1 - 2 * (focused ? panelFraction(width) : 0);
-  const reach = dot.x + (2 * (MOTE_LABEL_GAP_PX + Math.max(chars, 0) * MOTE_LABEL_CHAR_PX)) / width;
-  const blocked = focused && side === 'right' && reach > edge;
-  return { side, blocked, visible: !blocked };
-}
-
-/** The CSS transform that anchors a label on `side` of its dot, vertically centred. */
-export function labelTransform(side: LabelSide): string {
-  return side === 'left'
-    ? `translate(calc(-100% - ${MOTE_LABEL_GAP_PX}px), -50%)`
-    : `translate(${MOTE_LABEL_GAP_PX}px, -50%)`;
-}
+// --- The label's style -------------------------------------------------------------
 
 /** A label's resting inline style: the `mote-label` type in `ink-label`, one line, inert to the pointer, hidden until placed. */
 export interface MoteLabelStyle {
@@ -544,81 +474,6 @@ export function moteLabelStyle(): MoteLabelStyle {
     opacity: 0,
     transform: labelTransform('right'),
   };
-}
-
-/** A label's estimated box on the canvas, in CSS pixels from its top-left corner. */
-export interface LabelBox {
-  readonly left: number;
-  readonly right: number;
-  readonly top: number;
-  readonly bottom: number;
-}
-
-/**
- * Where a label's text sits on a `width` × `height` canvas: `MOTE_LABEL_GAP_PX`
- * to `side` of the dot, `chars × MOTE_LABEL_CHAR_PX` wide and
- * `MOTE_LABEL_HEIGHT_PX` tall, vertically centred on it — the box
- * `labelTransform` draws.
- */
-export function labelBox(dot: NdcPoint, side: LabelSide, chars: number, width: number, height: number): LabelBox {
-  const x = ((dot.x + 1) / 2) * width;
-  const y = ((1 - dot.y) / 2) * height;
-  const extent = Math.max(chars, 0) * MOTE_LABEL_CHAR_PX;
-  const left = side === 'right' ? x + MOTE_LABEL_GAP_PX : x - MOTE_LABEL_GAP_PX - extent;
-  const top = y - MOTE_LABEL_HEIGHT_PX / 2;
-  return { left, right: left + extent, top, bottom: top + MOTE_LABEL_HEIGHT_PX };
-}
-
-/** One label the pass may show: its Skill, its rank, whether it is the focused Project's, and its box. */
-export interface LabelCandidate {
-  readonly skill: string;
-  readonly rank: number;
-  readonly focused: boolean;
-  readonly box: LabelBox;
-}
-
-/** The region a shown label must lie in: the canvas, and left of `panelEdge` (the canvas width when nothing is focused). */
-export interface LabelBounds {
-  readonly width: number;
-  readonly height: number;
-  readonly panelEdge: number;
-}
-
-/**
- * Which labels are shown this frame — **the degradation rule, in one function**.
- *
- * Candidates are visited the focused Project's first, then by rank (most shared
- * first), so an inner-orbit, most-shared Skill always wins a collision. A label
- * is shown only while fewer than `MOTE_LABEL_LIMIT` are, its box lies inside the
- * canvas on all four edges and left of the panel edge, and it clears every label
- * already shown by `MOTE_LABEL_CLEARANCE_PX`. A label hidden here is hidden, not
- * re-slotted and never truncated. A later rule replaces this function whole.
- */
-export function moteLabelPass(candidates: readonly LabelCandidate[], bounds: LabelBounds): Set<string> {
-  const ordered = [...candidates].sort((a, b) => Number(b.focused) - Number(a.focused) || a.rank - b.rank);
-  const shown: LabelBox[] = [];
-  const names = new Set<string>();
-  const gap = MOTE_LABEL_CLEARANCE_PX;
-  for (const candidate of ordered) {
-    if (shown.length >= MOTE_LABEL_LIMIT) break;
-    const { box } = candidate;
-    const inside =
-      [box.left, box.right, box.top, box.bottom].every(Number.isFinite) &&
-      box.left >= 0 &&
-      box.top >= 0 &&
-      box.bottom <= bounds.height &&
-      box.right <= bounds.width &&
-      box.right <= bounds.panelEdge;
-    if (!inside) continue;
-    const clear = shown.every(
-      (other) =>
-        box.left >= other.right + gap || other.left >= box.right + gap || box.top >= other.bottom + gap || other.top >= box.bottom + gap,
-    );
-    if (!clear) continue;
-    shown.push(box);
-    names.add(candidate.skill);
-  }
-  return names;
 }
 
 // --- The step ------------------------------------------------------------------
@@ -655,6 +510,8 @@ export interface Mote {
   readonly labelBox: LabelBox | null;
   /** Placed, and kept by `moteLabelPass`: shown. */
   readonly labelVisible: boolean;
+  /** Placed and an incumbent, hidden this frame by the affordance alone: it keeps its place and stays an incumbent (3.18). */
+  readonly labelHeld: boolean;
   /** Its label was blocked this frame: the next step re-slots it. */
   readonly blocked: boolean;
 }
@@ -743,7 +600,10 @@ export interface MoteView {
  *     (condensing, level 1) or the fixed source (decaying, level 0).
  *   - **Labels:** `labelPlacement` over the projected dot and Planet for the
  *     side and the drawn crossing; over the destination slot for `blocked`.
- *     Then `moteLabelPass` over every placed label decides which are shown.
+ *     Then `moteLabelPass` over every placed label decides which are shown,
+ *     handed last frame's shown and held labels as its incumbents (from `previous`, so
+ *     the rule stays a pure function of the carried field and this frame) and
+ *     `obstacles` — the affordance's screen boxes, seeded as already shown.
  *   - **Draws:** each dot at its tier's screen radius times the level scale.
  *     Each orbit's line is drawn only while a Mote is on that orbit, at the
  *     highest level of any Mote on it, around that Mote's Planet — so on a
@@ -762,6 +622,7 @@ export function stepMotes(
   view: MoteView,
   dt: number,
   reduced = false,
+  obstacles: readonly LabelBox[] = [],
 ): MoteField {
   const step = (Number.isFinite(dt) ? Math.min(Math.max(dt, 0), RAIL_MAX_FRAME_SECONDS) : 0) / motionPace(reduced);
   // Reduced motion stops the orbits (WCAG 2.3.3, Animation from Interactions): an
@@ -786,7 +647,7 @@ export function stepMotes(
       : reslot(advanced, scene, view, clock);
 
   const placed = targeted.map((mote) => label(pose(mote, scene, clock), scene, view, focusedId !== null, clock));
-  const shown = moteLabelPass(
+  const { shown, held } = moteLabelLayout(
     placed.flatMap((mote): LabelCandidate[] =>
       mote.labelPlaced && mote.labelBox !== null
         ? [{ skill: mote.skill, rank: moteRank(ranks, mote.skill).rank, focused: mote.condensing && mote.planetId === focusedId, box: mote.labelBox }]
@@ -799,8 +660,10 @@ export function stepMotes(
       // still bounds the decaying labels until the last Mote has gone.
       panelEdge: view.width * (1 - (focusedId !== null || placed.some((mote) => !mote.condensing) ? panelFraction(view.width) : 0)),
     },
+    new Set((previous?.motes ?? []).flatMap((mote) => (mote.labelVisible || mote.labelHeld ? [mote.skill] : []))),
+    obstacles,
   );
-  const motes = placed.map((mote) => ({ ...mote, labelVisible: shown.has(mote.skill) }));
+  const motes = placed.map((mote) => ({ ...mote, labelVisible: shown.has(mote.skill), labelHeld: held.has(mote.skill) }));
   const byName = new Map(motes.map((mote) => [mote.skill, mote]));
   const draws = motePool(scene.artifact).map((skill) => drawOf(skill, byName.get(skill), view));
   return { focusedId, clock, motes, draws, orbits: orbitDraws(motes, scene) };
@@ -809,7 +672,8 @@ export function stepMotes(
 /**
  * The frame loop's step, as a pure function, so the binding in
  * `mote-field.tsx` is executed rather than read: the store's focused ID, the
- * camera's matrices after the rig has moved it, and R3F's canvas size.
+ * camera's matrices after the rig has moved it, R3F's canvas size, and the
+ * affordance's screen boxes (`affordanceObstacles`, 3.18) the label pass yields to.
  */
 export function moteFrame(
   previous: MoteField | null,
@@ -823,8 +687,9 @@ export function moteFrame(
   height: number,
   delta: number,
   reduced = false,
+  obstacles: readonly LabelBox[] = [],
 ): MoteField {
-  return stepMotes(previous, { artifact, bodies, media }, focusedId, { view, projection, width, height }, delta, reduced);
+  return stepMotes(previous, { artifact, bodies, media }, focusedId, { view, projection, width, height }, delta, reduced, obstacles);
 }
 
 function retarget(motes: readonly Mote[], scene: MoteScene, ranks: MoteRanks, focusedId: string | null, clock: number): Mote[] {
@@ -895,6 +760,7 @@ function retarget(motes: readonly Mote[], scene: MoteScene, ranks: MoteRanks, fo
         labelPlaced: false,
         labelBox: null,
         labelVisible: false,
+        labelHeld: false,
         blocked: false,
       };
     });
@@ -965,11 +831,6 @@ function label(mote: Mote, scene: MoteScene, view: MoteView, focused: boolean, c
     Number.isFinite(view.height) && view.height > 0 ? labelBox(dotNdc, drawn.side, chars, view.width, view.height) : null;
   // `labelVisible` is the placement until `moteLabelPass` decides; `stepMotes` overwrites it.
   return { ...mote, labelSide: drawn.side, labelPlaced, labelBox: box, labelVisible: labelPlaced, blocked };
-}
-
-/** A label's length for the width estimate: code points, so one astral character is one advance, not two. */
-export function labelChars(skill: string): number {
-  return [...skill].length;
 }
 
 function drawOf(skill: string, mote: Mote | undefined, view: MoteView): MoteDraw {

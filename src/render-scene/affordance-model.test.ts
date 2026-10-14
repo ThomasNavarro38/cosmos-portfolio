@@ -18,8 +18,10 @@ import {
   LEADER_PX,
   OUTLINE_OFFSET_PX,
   OUTLINE_PX,
+  affordanceBlockRect,
   affordanceBlockStyle,
   affordanceFrame,
+  affordanceObstacles,
   affordanceLayout,
   affordanceLeaderStyle,
   affordanceOutline,
@@ -43,6 +45,7 @@ import {
   type AffordanceArtifact,
   type AffordanceDraw,
   type ApproachState,
+  type ScreenRect,
 } from './affordance-model.ts';
 import { panelFraction } from '../shell/panel-model.ts';
 import {
@@ -564,6 +567,108 @@ test('a frame is written onto the handles, text only when it changes, and a hidd
   assert.equal(partial.block.style.transform, draw.labelTransform);
   assert.equal(partial.title.textContent, 'Alpha');
   assert.deepEqual(partial.written, ['title']);
+});
+
+// --- What the Mote labels yield to (3.18) ------------------------------------------------------
+
+/** The rectangle the drawn block occupies, read back off its transform at the block's estimated size. */
+function drawnBlock(transform: string, width: number, height: number): ScreenRect {
+  const match = /^translate\((-?[\d.]+)px, (-?[\d.]+)px\) translate\((-?\d+)%, (-?\d+)%\)$/.exec(transform);
+  assert.ok(match !== null, `an unexpected transform: ${transform}`);
+  const left = Number(match[1]) + (Number(match[3]) / 100) * width;
+  const top = Number(match[2]) + (Number(match[4]) / 100) * height;
+  return { left, right: left + width, top, bottom: top + height };
+}
+
+function near(a: ScreenRect, b: ScreenRect, tolerance: number): boolean {
+  return (['left', 'right', 'top', 'bottom'] as const).every((side) => Math.abs(a[side] - b[side]) <= tolerance);
+}
+
+test('obstacles: none at rest, none on the Focused Project, none behind the camera or off the frame', () => {
+  const camera = cameraAt(20);
+  const V = camera.matrixWorldInverse.elements;
+  const P = camera.projectionMatrix.elements;
+  const bodies = [planet('project:a', { x: 3, y: -2, z: 0 }), planet('project:b', { x: -4, y: 1, z: 2 }, true)];
+  assert.deepEqual(affordanceObstacles(REST, ARTIFACT, bodies, V, P, VIEWPORT), []);
+  assert.deepEqual(affordanceObstacles({ ...REST, focusedProjectId: 'project:a', hoveredProjectId: 'project:a' }, ARTIFACT, bodies, V, P, VIEWPORT), []);
+  assert.deepEqual(affordanceObstacles({ ...REST, focusedProjectId: 'project:a', keyboardProjectId: 'project:a' }, ARTIFACT, bodies, V, P, VIEWPORT), []);
+  const behind = [planet('project:a', { x: 0, y: 0, z: 40 })];
+  assert.deepEqual(affordanceObstacles({ ...REST, hoveredProjectId: 'project:a' }, ARTIFACT, behind, V, P, VIEWPORT), []);
+  const off = [planet('project:a', { x: 400, y: 0, z: 0 })];
+  assert.deepEqual(affordanceObstacles({ ...REST, hoveredProjectId: 'project:a' }, ARTIFACT, off, V, P, VIEWPORT), []);
+  assert.throws(() => affordanceObstacles({ ...REST, hoveredProjectId: 'project:z' }, ARTIFACT, bodies, V, P, VIEWPORT), /"project:z"/);
+});
+
+test('obstacles, pointer: the label block where the transform draws it, and the leader’s bounding box', () => {
+  const camera = cameraAt(20);
+  const V = camera.matrixWorldInverse.elements;
+  const P = camera.projectionMatrix.elements;
+  const bodies = [planet('project:a', { x: 3, y: -2, z: 0 }), planet('project:b', { x: -4, y: 1, z: 2 }, true)];
+  for (const id of ['project:a', 'project:b']) {
+    const nav = { ...REST, hoveredProjectId: id };
+    const draw = affordanceFrame(nav, ARTIFACT, bodies, V, P, VIEWPORT);
+    assert.ok(draw.visible);
+    const obstacles = affordanceObstacles(nav, ARTIFACT, bodies, V, P, VIEWPORT);
+    assert.equal(obstacles.length, 2, 'the block and the leader');
+    const [block, leader] = obstacles as [ScreenRect, ScreenRect];
+    const box = labelBox(draw);
+    assert.ok(near(block, drawnBlock(draw.labelTransform, box.width, box.height), 0.01), `${id}: the block is the drawn one`);
+    const { from, to } = segment(draw.leaderPath);
+    const bound = { left: Math.min(from[0], to[0]), right: Math.max(from[0], to[0]), top: Math.min(from[1], to[1]), bottom: Math.max(from[1], to[1]) };
+    assert.ok(near(leader, bound, 0.01), `${id}: the leader’s box spans its segment`);
+  }
+});
+
+test('obstacles, keyboard: the block grown by its outline (3px offset + 1px) on every side; the leader as the pointer’s', () => {
+  const camera = cameraAt(20);
+  const V = camera.matrixWorldInverse.elements;
+  const P = camera.projectionMatrix.elements;
+  const bodies = [planet('project:a', { x: 3, y: -2, z: 0 })];
+  const pointer = affordanceObstacles({ ...REST, hoveredProjectId: 'project:a' }, ARTIFACT, bodies, V, P, VIEWPORT);
+  const keyed = affordanceObstacles({ ...REST, keyboardProjectId: 'project:a' }, ARTIFACT, bodies, V, P, VIEWPORT);
+  const grow = OUTLINE_OFFSET_PX + OUTLINE_PX;
+  assert.equal(grow, 4);
+  const [block, leader] = pointer as [ScreenRect, ScreenRect];
+  assert.deepEqual(keyed[0], { left: block.left - grow, right: block.right + grow, top: block.top - grow, bottom: block.bottom + grow });
+  assert.deepEqual(keyed[1], leader);
+});
+
+test('obstacles over the committed artifact: every drawn block, pointer or keyboard, is where its transform puts it, whichever way it is placed', () => {
+  const { artifact, bodies } = committed();
+  const placements = new Set<string>();
+  for (const [distance, focused] of [[80, null], [120, null], [40, null], [80, 'project:sncf/client-referential']] as const) {
+    const camera = cameraAt(distance);
+    const V = camera.matrixWorldInverse.elements;
+    const P = camera.projectionMatrix.elements;
+    for (const body of bodies) {
+      if (body.kind !== 'planet') continue;
+      for (const keyboard of [false, true]) {
+        const nav: ApproachState = { focusedProjectId: focused, hoveredProjectId: keyboard ? null : body.id, keyboardProjectId: keyboard ? body.id : null };
+        const draw = affordanceFrame(nav, artifact, bodies, V, P, VIEWPORT);
+        const obstacles = affordanceObstacles(nav, artifact, bodies, V, P, VIEWPORT);
+        if (!draw.visible) {
+          assert.deepEqual(obstacles, [], `${body.id}: nothing drawn, nothing to yield to`);
+          continue;
+        }
+        const box = labelBox(draw);
+        const grow = keyboard ? OUTLINE_OFFSET_PX + OUTLINE_PX : 0;
+        const drawn = drawnBlock(draw.labelTransform, box.width, box.height);
+        const outlined = { left: drawn.left - grow, right: drawn.right + grow, top: drawn.top - grow, bottom: drawn.bottom + grow };
+        assert.ok(near(obstacles[0] as ScreenRect, outlined, 0.01), `${body.id}: the block obstacle is the drawn block`);
+        placements.add(/translate\((-?\d+)%, (-?\d+)%\)$/.exec(draw.labelTransform)?.slice(1).join(',') ?? '');
+      }
+    }
+  }
+  assert.ok(placements.size >= 2, `the blocks are placed more than one way, or this proves little (${[...placements].join(' ')})`);
+});
+
+test('affordanceBlockRect follows the transform’s shifts on each direction', () => {
+  const box = { width: 100, height: 20 };
+  const anchor = { x: 500, y: 300 };
+  assert.deepEqual(affordanceBlockRect({ anchor, direction: { x: 1, y: 0 } }, box, false), { left: 500, right: 600, top: 290, bottom: 310 });
+  assert.deepEqual(affordanceBlockRect({ anchor, direction: { x: -1, y: 0 } }, box, false), { left: 400, right: 500, top: 290, bottom: 310 });
+  assert.deepEqual(affordanceBlockRect({ anchor, direction: { x: 1, y: 1 } }, box, false), { left: 500, right: 600, top: 300, bottom: 320 });
+  assert.deepEqual(affordanceBlockRect({ anchor, direction: { x: -1, y: -1 } }, box, true), { left: 396, right: 504, top: 276, bottom: 304 });
 });
 
 // --- Purity -------------------------------------------------------------------------------------
