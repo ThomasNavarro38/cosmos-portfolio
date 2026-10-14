@@ -919,9 +919,16 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-18-the-mote-label-pass-and-the-degradation-ruling.md`
   summary: The manual check (1440×900, focus `sncf/client-referential`, one turn, hover another Planet) has not been run in a browser.
   evidence: implementation verified by `npm test`, `npm run typecheck` and `npm run gate` only.
+  resolution: closed 2026-10-14 (commit 14e0951) — run in Chrome at 1440×900 and recorded in the spec's Change Log: 12 labels on every frame, 2 toggles over one turn, no return within 500ms; the hover step is unreachable from that pose (no other Planet on the frame).
 
 ## Deferred from: code review of spec-3-18-the-mote-label-pass-and-the-degradation-ruling (2026-10-14)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-18-the-mote-label-pass-and-the-degradation-ruling.md`
   summary: Affordance obstacles carry no hysteresis — every Mote label clears them at a flat `MOTE_LABEL_CLEARANCE_PX` (4px) — so a newcomer orbiting near the affordance's edge can still toggle while a Planet is hovered.
   evidence: The frozen spec fixes the obstacle clearance at 4px for every label (ruling 2a); `moteLabelLayout` checks obstacles with that one gap. Brief (only while hovering) and a ruling change, so not patched in 3.18.
+
+## Deferred from: code review of spec-3-18-the-mote-label-pass-and-the-degradation-ruling (2026-10-14, second pass)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-18-the-mote-label-pass-and-the-degradation-ruling.md`
+  summary: The affordance obstacle is sized by the character-count estimate (`labelBox(text)`, erring wide) rather than by the drawn text, so a string of wide capitals could draw past its obstacle and let a Mote label sit under the edge of the affordance.
+  evidence: `affordance-model.ts:296` `labelBox`; the drawn layout and the obstacle share the estimate, and the house rule forbids measuring the DOM. The same estimate already sizes the affordance and the Mote labels.

@@ -76,6 +76,15 @@ context: []
 - Given the ruling, when the label module is read, then its pass doc comment states 1a, 2a, 3a and the cap of 12, and the README and the retro item record it.
 - Given Projects of 7, 12 and 25 Skills, when the suite runs, then flicker, affordance overlap and reduced motion each have a passing test at all three sizes.
 
+### Review Findings
+
+- [x] [Review][Decision] Held labels keep their place for as long as the obstacle lasts — resolved: Thomas accepted the hold as is (Change Log) — An incumbent hidden by the affordance alone keeps its box and its slot under the cap (`mote-label.ts:276-278`). The Change Log calls this a "Review extension"; unlike the two departures, it has no "Thomas: accepted". No limit applies while the obstacle stays. Example: keyboard focus parked on an index entry whose affordance covers labels. For the whole Focus, those held labels block newcomers and count toward the 12, so fewer than 12 labels show even when free room exists. Ask First covers "the margins' meaning" and the cap.
+- [x] [Review][Patch] The ruling's doc comment is on `moteLabelLayout`, but six places point at `moteLabelPass` (AC 2's "its pass doc comment"): the README, both module headers, three comments in `mote-model.ts`, and the sprint-status resolution. Retarget them to `moteLabelLayout`, and point `moteLabelPass`'s one-line comment at the ruling [src/render-scene/README.md:83, src/render-scene/mote-label.ts:22, src/render-scene/mote-model.ts:52,511,603,818,832, sprint-status.yaml:424]
+- [x] [Review][Patch] A stale deferral says the manual check was never run; the Change Log records it run on 2026-10-14. Close it [deferred-work.md:920]
+- [x] [Review][Patch] The README's 3.5 label paragraph is in the present tense ("clears every shown label by `MOTE_LABEL_CLEARANCE_PX`", "in rank order"), which is no longer true since 3.18. Put it in the past tense [src/render-scene/README.md:79]
+- [x] [Review][Patch] Commit 8549ec4 does not name the 3.5 tests it rewrote, which the ruling task required. Record them in the Change Log: the `collision` row, `stepped: on the committed 25-Skill Project at rest…`, `stepped: A → B…`, and `assertRankWins` → `explainHides` [spec-3-18:Spec Change Log]
+- [x] [Review][Defer] The affordance obstacle's size comes from the character-count estimate (`labelBox(text)`, which errs wide), not the drawn text. A string of wide capitals could still draw past it [src/render-scene/affordance-model.ts:296] — deferred, pre-existing
+
 ## Spec Change Log
 
 - 2026-10-14, Thomas (after review): two departures accepted.
@@ -86,7 +95,12 @@ context: []
   - 2 toggles in the whole turn (`code review` and `legacy modernisation`), which matches the model's sweep count. No label came back within 500ms of hiding.
   - Affordance: keyboard focus was moved to each of the other 7 Projects' index entries. None drew an affordance, because from this focus pose no other Planet is on the frame. So the 2a overlap cannot be reached in the committed artifact today; it is covered by the model tests only.
   - Console: no new errors (a pre-existing 404 and a THREE.Clock deprecation warning).
-- Review extension (2026-10-14): an incumbent hidden by an affordance obstacle alone is *held*. It keeps its box, its place under the cap and its incumbency, so a passing hover never reshuffles the labels.
+- The 3.5 tests that pinned the stateless rule, rewritten by the ruling task (commit 8549ec4 did not name them):
+  - `collision: a lower-ranked label whose box meets a shown one is hidden; the focused Project wins first` → `collision: a newcomer within clearance + hysteresis of a shown label is hidden; the focused Project wins first (3.5, re-pinned by 3.18)`.
+  - `stepped: on the committed 25-Skill Project at rest, the shown labels are the best-ranked placeable ones` → `stepped: on the committed 25-Skill Project at rest, every hidden label is explained by the ruled order (3.18)`.
+  - `stepped: A → B, a condensing B label wins a collision with a decaying A label, whatever their ranks`: same name, now checked with `explainHides` against the previous frame.
+  - The helper `assertRankWins` was replaced by `explainHides`, which explains every hide by a bound, the cap, an overlap or an obstacle, given last frame's incumbents.
+- Review extension (2026-10-14): an incumbent hidden by an affordance obstacle alone is *held*. It keeps its box, its place under the cap and its incumbency, so a passing hover never reshuffles the labels. Thomas (after the second review, 2026-10-14): accepted as is. There is no time limit: while an obstacle lasts (a parked keyboard focus, say), its held labels keep their places under the cap.
 
 ## Design Notes
 
