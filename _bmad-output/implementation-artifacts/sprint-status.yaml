@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 10-13-2026 09:54
+last_updated: 10-14-2026 08:26
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -75,7 +75,7 @@ development_status:
   3-13-boundary-table-and-boundary-parser-hardening: done
   3-14-test-infrastructure: done
   3-15-navigation-and-panel-correctness-fixes: done
-  3-16-scene-colour-management: backlog
+  3-16-scene-colour-management: review
   3-17-no-technology-names-in-field-values: backlog
   3-18-the-mote-label-pass-and-the-degradation-ruling: backlog
   3-19-spec-and-doc-reconciliation-and-housekeeping: backlog
@@ -372,7 +372,13 @@ action_items:
       ACES tone mapping draws stroke-focus 242 at 222; re-look at the M1/M2 frames
       and assert drawn white"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-14 (story 3.16): <Canvas flat> (NoToneMapping, sRGB output kept)
+      in scene.tsx, pinned by auditColourManagement in scene-model.test.ts (no flat,
+      flat={false}, linear, gl toneMapping/outputColorSpace and any toneMapped fail,
+      each with a fixture or mutation row); drawn at 1440x900: Client Star 242,242,244,
+      stroke-active 182,182,190, ground 8,8,10, all exact; M1 and M2 re-look recorded
+      in spec-3-16"
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
   - id: "epic-3-retro-item-3-no-tech-names-in-built"
     epic: 3

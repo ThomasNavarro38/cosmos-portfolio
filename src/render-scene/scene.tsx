@@ -54,6 +54,19 @@
  * **No lights.** Every material in the scene is unlit: a Body is a stroke, not a
  * shaded solid, and depth is carried by the stroke ladder and the vignette —
  * never by shading, shadow, glow or bloom (DESIGN.md §5).
+ *
+ * **Colour management is decided once, on the `<Canvas>`: `flat`** (3.16). R3F's
+ * default renderer tone-maps every material with ACES Filmic, which drew the
+ * Client Star's `stroke-focus-dark` (242) at 222 and compressed the stroke ladder,
+ * so the scene and the DOM agreed on source values only (AD-12). `flat` sets
+ * `NoToneMapping` and leaves the sRGB output alone, so a token hex goes sRGB →
+ * linear → sRGB and is drawn at its own value: token in equals pixel out. One prop
+ * covers every material, drei's `LineMaterial` and any future one included. Two
+ * alternatives are rejected, and `scene-model.test.ts` fails on either: a
+ * per-material `toneMapped={false}` (a new material quietly comes back
+ * tone-mapped) and `linear` (it drops the sRGB output transfer, so every hex draws
+ * dark). Nor may a `gl` prop set `toneMapping` or `outputColorSpace` — a second
+ * mechanism makes the first unauditable.
  */
 
 import { Canvas } from '@react-three/fiber';
@@ -128,6 +141,9 @@ export function Scene({ artifact }: SceneProps) {
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <Canvas
         aria-hidden="true"
+        // Colour management, decided once (3.16): no tone mapping, sRGB output kept,
+        // so a token hex is drawn at its own value. See the header.
+        flat
         // The page (3.9): the scene host is fixed to the viewport (`page.css`), so
         // `100%` by `100%` here — on this wrapper and on the Canvas — fills the
         // frame edge to edge. R3F's own wrapper is `height: 100%` of this.

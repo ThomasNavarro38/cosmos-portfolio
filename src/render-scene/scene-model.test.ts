@@ -27,9 +27,9 @@
  */
 
 import { strict as assert } from 'node:assert';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative, sep } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { SOURCE_MODULE, filesUnder, isTestFile, sourceFilesUnder, stripComments, stripCommentsAndStrings } from '../../scripts/source-scan.ts';
@@ -2145,6 +2145,302 @@ test('the surface audit rejects a canvas with no size, no camera, or no rotation
     [],
     'a sized canvas with a framed, oriented camera must pass',
   );
+});
+
+// --- Colour management: one mechanism, on the Canvas (3.16) ----------------
+
+/** One `<Canvas>` opening tag, read at brace depth 0. */
+interface CanvasTag {
+  /** Each top-level attribute: its name, and its value as written (`{…}` with the expression, `"…"`, or none). */
+  readonly attributes: readonly { readonly name: string; readonly value: string | undefined }[];
+  /** Top-level `{…}` that is no attribute's value: a spread (`{...props}`) or a JSX comment's residue. */
+  readonly bare: readonly string[];
+  /** Why the tag could not be read, when it could not. */
+  readonly error?: string;
+}
+
+/**
+ * Each `<Canvas>` opening tag in `code`, parsed into its **top-level** attributes.
+ *
+ * Only what stands at brace depth 0 is an attribute: an identifier inside a prop's
+ * expression (`style={{ flat }}`, `dpr={a ? linear : 1}`) is not one, and an arrow
+ * (`=>`) or a comparison inside an expression does not end the tag. Each `{…}` at
+ * depth 0 is cut out whole and replaced by a placeholder, then the depth-0 text is
+ * read as `name`, `name=value` or a bare `{…}`. A tag with no `>` at depth 0, or a
+ * `}` with no open `{`, is reported rather than read to the end of the file.
+ * `code` has comments and strings blanked already — quotes are kept, contents are
+ * not, so `flat="true"` still reads as a string value.
+ */
+function canvasTags(code: string): CanvasTag[] {
+  const tags: CanvasTag[] = [];
+  for (const start of code.matchAll(/<Canvas\b/g)) {
+    const expressions: string[] = [];
+    let top = '';
+    let depth = 0;
+    let open = 0;
+    let closed = false;
+    let error: string | undefined;
+    for (let index = start.index + start[0].length; index < code.length; index += 1) {
+      const character = code[index] as string;
+      if (character === '{') {
+        if (depth === 0) open = index;
+        depth += 1;
+        continue;
+      }
+      if (character === '}') {
+        depth -= 1;
+        if (depth < 0) {
+          error = 'a } with no open { in the <Canvas> tag';
+          break;
+        }
+        if (depth === 0) {
+          top += ` {#${expressions.length}} `;
+          expressions.push(code.slice(open + 1, index));
+        }
+        continue;
+      }
+      if (depth > 0) continue;
+      if (character === '>') {
+        closed = true;
+        break;
+      }
+      top += character;
+    }
+    if (error === undefined && !closed) error = 'the <Canvas> tag never closes at brace depth 0';
+    if (error !== undefined) {
+      tags.push({ attributes: [], bare: [], error });
+      continue;
+    }
+
+    const attributes: { name: string; value: string | undefined }[] = [];
+    const bare: string[] = [];
+    const tokens = /\{#(\d+)\}|([A-Za-z_$][\w$-]*)(?:\s*=\s*(?:\{#(\d+)\}|("[^"]*"|'[^']*')|(\S*)))?/g;
+    for (const token of top.replace(/\/\s*$/, '').matchAll(tokens)) {
+      const [, bareIndex, name, valueIndex, quoted, other] = token;
+      if (bareIndex !== undefined) {
+        bare.push(expressions[Number(bareIndex)] as string);
+      } else if (name !== undefined) {
+        const value =
+          valueIndex !== undefined
+            ? `{${expressions[Number(valueIndex)] as string}}`
+            : quoted ?? (other !== undefined && token[0].includes('=') ? other : undefined);
+        attributes.push({ name, value });
+      }
+    }
+    tags.push({ attributes, bare });
+  }
+  return tags;
+}
+
+/** The second mechanisms: anything that sets or reads tone mapping or colour space other than `<Canvas flat>`. */
+const COLOUR_MECHANISMS: readonly (readonly [string, RegExp])[] = [
+  ['toneMapped', /\btoneMapped\b/],
+  ['toneMapping', /\btoneMapping\w*/],
+  ['outputColorSpace', /\boutputColorSpace\b/],
+  ['outputEncoding', /\boutputEncoding\b/],
+  ['ColorManagement', /\bColorManagement\b/],
+];
+
+/**
+ * The scene's colour management, as a pure function over every shipped renderer
+ * module, `.ts` and `.tsx`.
+ *
+ * R3F's default renderer tone-maps every material with ACES Filmic, which drew
+ * `stroke-focus-dark` 242 at 222 and compressed the stroke ladder (retro AV-2), so
+ * the scene and the DOM drifted for every value but the clear colour. The decision
+ * is made once, on the `<Canvas>`: `flat` (`NoToneMapping`), the sRGB output kept,
+ * so a token hex goes sRGB → linear → sRGB and is drawn at its own value.
+ *
+ * Positive and exclusive. Exactly one `<Canvas>` across the renderer — never
+ * imported under an alias nor reached as `<X.Canvas>`, either of which would dodge
+ * the count — carrying exactly one top-level `flat`, bare or `={true}`; no top-level
+ * `linear` in any form (it drops the sRGB output transfer, so every hex draws
+ * dark); no spread, which could carry either unseen; and no second mechanism
+ * anywhere — `toneMapping`, `outputColorSpace`, `outputEncoding`,
+ * `ColorManagement` or a per-material `toneMapped`. A second mechanism makes the
+ * first unauditable: a `toneMapped` opt-out on six sites lets the seventh material
+ * come back tone-mapped quietly.
+ *
+ * The mechanism patterns read code with comments blanked and **strings kept**, so a
+ * quoted or computed key (`gl={{ ['toneMapping']: x }}`) is caught, while prose
+ * naming a mechanism is not a use of it. The `<Canvas>` tag is read with strings
+ * blanked as well, so a quoted `>` cannot end it.
+ */
+function auditColourManagement(sources: readonly { path: string; source: string }[]): string[] {
+  const failures: string[] = [];
+  const canvases: CanvasTag[] = [];
+
+  for (const { path, source } of sources) {
+    const quoted = stripComments(source);
+    const code = stripCommentsAndStrings(source);
+    canvases.push(...canvasTags(code));
+    for (const [name, pattern] of COLOUR_MECHANISMS) {
+      if (pattern.test(quoted)) {
+        failures.push(`${path} sets or reads ${name} — colour management is decided once, by <Canvas flat>, and nowhere else`);
+      }
+    }
+    if (/import\s*(?:type\s+)?\{[^}]*\bCanvas\s+as\s+[\w$]+[^}]*\}\s*from\s*['"]@react-three\/fiber['"]/.test(quoted)) {
+      failures.push(`${path} imports Canvas under another name — the one <Canvas> could not be counted`);
+    }
+    if (/<\s*[\w$]+\s*\.\s*Canvas\b/.test(code)) {
+      failures.push(`${path} draws a namespaced <X.Canvas> — the one <Canvas> could not be counted`);
+    }
+  }
+
+  if (canvases.length !== 1) {
+    failures.push(`${canvases.length} <Canvas> elements across the renderer — exactly one decides colour management`);
+  }
+  for (const tag of canvases) {
+    if (tag.error !== undefined) {
+      failures.push(`${tag.error} — its attributes cannot be read`);
+      continue;
+    }
+    const flats = tag.attributes.filter(({ name }) => name === 'flat');
+    if (flats.length === 0) {
+      failures.push('the <Canvas> is not flat — R3F then tone-maps every material with ACES Filmic, and 242 draws at 222');
+    } else if (flats.length > 1) {
+      failures.push(`the <Canvas> carries flat ${flats.length} times — exactly one, bare or flat={true}`);
+    }
+    for (const { value } of flats) {
+      if (value !== undefined && value.replace(/\s/g, '') !== '{true}') {
+        failures.push(`the <Canvas> is flat=${/^["']/.test(value) ? '"…" (a string)' : value} — only a bare flat (or flat={true}) disables tone mapping`);
+      }
+    }
+    if (tag.attributes.some(({ name }) => name === 'linear')) {
+      failures.push('the <Canvas> carries linear — that drops the sRGB output transfer, so every token hex draws dark');
+    }
+    for (const expression of tag.bare) {
+      if (expression.trim() !== '') {
+        failures.push(`the <Canvas> carries a spread {${expression.trim()}} — it could set flat, linear or gl unseen`);
+      }
+    }
+  }
+  return failures;
+}
+
+/** Every shipped module in the renderer, `.ts` and `.tsx`, by the shared walk, with its source. */
+function rendererModules(): { path: string; source: string }[] {
+  return sceneModules().map((path) => ({ path: srcPath(path), source: readFileSync(path, 'utf8') }));
+}
+
+test('colour management is decided once: the one <Canvas> is flat, and nothing else touches it', () => {
+  const sources = rendererModules();
+  const paths = sources.map(({ path }) => path);
+  for (const name of ['scene.tsx', 'body-field.tsx', 'moon-field.tsx', 'mote-field.tsx', 'scene-model.ts']) {
+    assert.ok(paths.includes(`src/render-scene/${name}`), `the walk reaches ${name}`);
+  }
+  assert.deepEqual(auditColourManagement(sources), []);
+});
+
+test('the colour-management audit rejects every second mechanism and every missing, falsed or hidden flat', () => {
+  const camera = 'camera={{ position: [framing.position.x, 0, 0], rotation: [framing.rotation.x, 0, 0] }}';
+  const canvas = (props: string) => ({
+    path: 'src/render-scene/scene.tsx',
+    source: `<Canvas aria-hidden="true" ${props} ${camera}>\n</Canvas>`,
+  });
+  const material = (props: string) => ({
+    path: 'src/render-scene/body-field.tsx',
+    source: `export const X = () => <mesh><meshBasicMaterial color={C} ${props} /></mesh>;`,
+  });
+  const module = (source: string) => ({ path: 'src/render-scene/some-model.ts', source });
+  const rejected: readonly (readonly [string, readonly { path: string; source: string }[]])[] = [
+    ['no flat', [canvas('')]],
+    ['flat={false}', [canvas('flat={false}')]],
+    ['flat={dark}', [canvas('flat={dark}')]],
+    ['flat="true", a string', [canvas('flat="true"')]],
+    ['flat twice, the second falsed', [canvas('flat flat={false}')]],
+    ['flat only inside style', [canvas('style={{ flat }}')]],
+    ['flat only inside an expression', [canvas('dpr={a ? flat : 1}')]],
+    ['linear', [canvas('flat linear')]],
+    ['linear alone', [canvas('linear')]],
+    ['linear={true}', [canvas('flat linear={true}')]],
+    ['linear={false}', [canvas('flat linear={false}')]],
+    ['a spread on the Canvas', [canvas('flat {...props}')]],
+    ['an unterminated Canvas', [{ path: 'src/render-scene/scene.tsx', source: '<Canvas flat style={{ width: 1 }}' }]],
+    ['an unbalanced brace in the Canvas', [{ path: 'src/render-scene/scene.tsx', source: '<Canvas flat style={{ width: 1 }}}>\n</Canvas>' }]],
+    ['gl={{ toneMapping: … }}', [canvas('flat gl={{ toneMapping: NoToneMapping }}')]],
+    ['gl={{ outputColorSpace: … }}', [canvas('flat gl={{ outputColorSpace: SRGBColorSpace }}')]],
+    ["gl={{ ['toneMapping']: … }}, a quoted key", [canvas("flat gl={{ ['toneMapping']: NoToneMapping }}")]],
+    ['a gl callback writing toneMapping', [canvas('flat gl={(props) => { const r = new WebGLRenderer(props); r.toneMapping = NoToneMapping; return r; }}')]],
+    ['a .ts module writing gl.toneMapping', [canvas('flat'), module('export function setUp(gl) { gl.toneMapping = 0; }')]],
+    ['a .ts module turning ColorManagement off', [canvas('flat'), module("import { ColorManagement } from 'three';\nColorManagement.enabled = false;")]],
+    ['a .ts module setting outputEncoding', [canvas('flat'), module('export function setUp(gl) { gl.outputEncoding = 3000; }')]],
+    ['toneMapped={false} on a material', [canvas('flat'), material('toneMapped={false}')]],
+    ['a bare toneMapped on a material', [canvas('flat'), material('toneMapped')]],
+    ['no <Canvas>', [material('')]],
+    ['two <Canvas>', [canvas('flat'), canvas('flat')]],
+    [
+      'an aliased Canvas import',
+      [canvas('flat'), { path: 'src/render-scene/other.tsx', source: "import { Canvas as Stage } from '@react-three/fiber';\nexport const O = () => <Stage />;" }],
+    ],
+    [
+      'a namespaced <X.Canvas>',
+      [canvas('flat'), { path: 'src/render-scene/other.tsx', source: "import * as Fiber from '@react-three/fiber';\nexport const O = () => <Fiber.Canvas />;" }],
+    ],
+  ];
+  for (const [name, sources] of rejected) {
+    assert.notDeepEqual(auditColourManagement(sources), [], `${name} must be rejected`);
+  }
+
+  assert.deepEqual(auditColourManagement([canvas('flat'), material('')]), [], 'a bare flat with plain materials must pass');
+  assert.deepEqual(auditColourManagement([canvas('flat={true}'), material('')]), [], 'flat={true} is the same switch');
+  assert.deepEqual(
+    auditColourManagement([canvas('flat dpr={a ? linear : 1} gl={(c) => c.antialias > 0}')]),
+    [],
+    'a linear identifier inside an expression is not the linear attribute, and an arrow does not end the tag',
+  );
+  assert.deepEqual(
+    auditColourManagement([
+      { path: 'src/render-scene/scene.tsx', source: '// toneMapped={false} would be wrong\n<Canvas flat style={{ width: "100%" }}>' },
+      module('/** gl.toneMapping and ColorManagement are decided by <Canvas flat>. */\nexport const X = 1;'),
+    ]),
+    [],
+    'a mechanism named in a comment is not a use of it',
+  );
+});
+
+test('the colour-management audit rejects the real renderer with any one mutation applied', () => {
+  const sources = rendererModules();
+  const scene = 'src/render-scene/scene.tsx';
+  const bodyField = 'src/render-scene/body-field.tsx';
+  const mutations: readonly (readonly [string, string, (source: string) => string])[] = [
+    ['flat deleted', scene, (s) => s.replace(/\n\s*flat\n/, '\n')],
+    ['flat falsed', scene, (s) => s.replace(/\n(\s*)flat\n/, '\n$1flat={false}\n')],
+    ['linear added', scene, (s) => s.replace(/\n(\s*)flat\n/, '\n$1flat\n$1linear\n')],
+    ['gl sets toneMapping', scene, (s) => s.replace(/\n(\s*)flat\n/, '\n$1flat\n$1gl={{ toneMapping: ACESFilmicToneMapping }}\n')],
+    ['gl sets outputColorSpace', scene, (s) => s.replace(/\n(\s*)flat\n/, '\n$1flat\n$1gl={{ outputColorSpace: LinearSRGBColorSpace }}\n')],
+    ['a spread added to the Canvas', scene, (s) => s.replace(/\n(\s*)flat\n/, '\n$1flat\n$1{...props}\n')],
+    ['a second <Canvas flat>', scene, (s) => s.replace('<BodyField bodies', '<Canvas flat>\n        </Canvas>\n        <BodyField bodies')],
+    ['toneMapped={false} on the first material', bodyField, (s) => s.replace(/<(\w+Material)\b/, '<$1 toneMapped={false}')],
+  ];
+  for (const [name, target, mutate] of mutations) {
+    const entry = sources.find(({ path }) => path === target);
+    assert.ok(entry !== undefined, `the walk reaches ${target}`);
+    const mutated = mutate(entry.source);
+    assert.notEqual(mutated, entry.source, `the mutation "${name}" must apply to the shipped ${target}`);
+    const mutatedSources = sources.map((source) => (source === entry ? { ...source, source: mutated } : source));
+    assert.notDeepEqual(auditColourManagement(mutatedSources), [], `"${name}" must be rejected`);
+  }
+});
+
+/**
+ * The dependency half of the decision. The audit pins `flat` in source; this pins
+ * what `flat` means. R3F's renderer setup is the whole of the mechanism —
+ * `flat` alone chooses `NoToneMapping`, and `linear` alone chooses a non-sRGB
+ * output — so an R3F bump that changes either line fails here, instead of
+ * silently bringing ACES back under a still-green audit. The file is found by its
+ * content in the package's `dist/`, not by its hashed name.
+ */
+test('R3F still maps flat to NoToneMapping and keeps the sRGB output unless linear', () => {
+  const dist = dirname(fileURLToPath(import.meta.resolve('@react-three/fiber')));
+  const setups = readdirSync(dist)
+    .filter((name) => name.endsWith('.esm.js'))
+    .map((name) => readFileSync(join(dist, name), 'utf8'))
+    .filter((source) => /\bgl\.toneMapping\s*=/.test(source));
+  assert.equal(setups.length, 1, 'exactly one ESM file in @react-three/fiber/dist holds the renderer setup');
+  const setup = setups[0] as string;
+  assert.match(setup, /\bgl\.toneMapping\s*=\s*flat\s*\?\s*THREE\.NoToneMapping\s*:\s*THREE\.ACESFilmicToneMapping\b/);
+  assert.match(setup, /\bgl\.outputColorSpace\s*=\s*linear\s*\?\s*THREE\.LinearSRGBColorSpace\s*:\s*THREE\.SRGBColorSpace\b/);
 });
 
 // --- The lazy edge and the error boundary ----------------------------------
