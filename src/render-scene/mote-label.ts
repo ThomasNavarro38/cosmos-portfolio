@@ -19,10 +19,11 @@
  * MOTE_LABEL_CHAR_PX` wide and `MOTE_LABEL_HEIGHT_PX` tall, from the `mote-label`
  * typography token; the DOM is never read.
  *
- * **The pass** (`moteLabelPass`) decides, over every placed label, which are
+ * **The pass** (`moteLabelLayout`) decides, over every placed label, which are
  * shown this frame — the degradation rule, in one function, and Thomas's
  * 2026-10-14 ruling recorded on it (3.18): sticky priority with hysteresis, the
  * affordance wins, reduced motion accepted as it is, the cap at 12.
+ * `moteLabelPass` is its shown set.
  *
  * **Pure.** It imports the tokens, the shell's panel width and the scene model's
  * types — no Three, no React, no store, no clock — so every rule here runs under
@@ -280,7 +281,7 @@ export function moteLabelLayout(
   return { shown, held };
 }
 
-/** The labels shown this frame: `moteLabelLayout`'s `shown`. */
+/** The labels shown this frame: `moteLabelLayout`'s `shown`. The ruling is recorded on `moteLabelLayout`. */
 export function moteLabelPass(
   candidates: readonly LabelCandidate[],
   bounds: LabelBounds,

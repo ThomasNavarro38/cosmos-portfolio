@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 10-14-2026 12:00
+last_updated: 10-14-2026 13:55
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -77,7 +77,7 @@ development_status:
   3-15-navigation-and-panel-correctness-fixes: done
   3-16-scene-colour-management: done
   3-17-no-technology-names-in-field-values: done
-  3-18-the-mote-label-pass-and-the-degradation-ruling: review
+  3-18-the-mote-label-pass-and-the-degradation-ruling: done
   3-19-spec-and-doc-reconciliation-and-housekeeping: backlog
   epic-3-retrospective: done
 
@@ -421,7 +421,7 @@ action_items:
     status: done
     resolution: "2026-10-14 (story 3.18): the label pass split into src/render-scene/mote-label.ts
       (re-exported from mote-model.ts) before any behaviour change; Thomas's ruling recorded on
-      moteLabelPass and in src/render-scene/README.md: 1a sticky priority with hysteresis
+      moteLabelLayout (moteLabelPass is its shown set) and in src/render-scene/README.md: 1a sticky priority with hysteresis
       (focused first, last frame's shown labels before newcomers, then rank; an incumbent
       stays down to a gap of 0, a newcomer needs 4 + 8px; canvas and panel edges hide at
       once), 2a the affordance wins (affordanceObstacles: the label block, grown by the

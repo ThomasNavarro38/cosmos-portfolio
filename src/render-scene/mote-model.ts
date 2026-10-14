@@ -49,7 +49,7 @@
  * and its label stays hidden.
  *
  * **At most `MOTE_LABEL_LIMIT` labels, none colliding, none clipped** (3.5,
- * 3.18). After placement, `moteLabelPass` runs once per frame over every placed
+ * 3.18). After placement, `moteLabelLayout` runs once per frame over every placed
  * label; the step hands it last frame's shown and held labels and the affordance's boxes
  * (`affordanceObstacles`), and the ruling it applies is recorded on the pass. A
  * label hidden by that pass is not re-slotted. The label's ink and resting style
@@ -508,7 +508,7 @@ export interface Mote {
   readonly labelPlaced: boolean;
   /** Its label's estimated box this frame, or `null` when it cannot be measured. */
   readonly labelBox: LabelBox | null;
-  /** Placed, and kept by `moteLabelPass`: shown. */
+  /** Placed, and kept by `moteLabelLayout`: shown. */
   readonly labelVisible: boolean;
   /** Placed and an incumbent, hidden this frame by the affordance alone: it keeps its place and stays an incumbent (3.18). */
   readonly labelHeld: boolean;
@@ -600,7 +600,7 @@ export interface MoteView {
  *     (condensing, level 1) or the fixed source (decaying, level 0).
  *   - **Labels:** `labelPlacement` over the projected dot and Planet for the
  *     side and the drawn crossing; over the destination slot for `blocked`.
- *     Then `moteLabelPass` over every placed label decides which are shown,
+ *     Then `moteLabelLayout` over every placed label decides which are shown,
  *     handed last frame's shown and held labels as its incumbents (from `previous`, so
  *     the rule stays a pure function of the carried field and this frame) and
  *     `obstacles` — the affordance's screen boxes, seeded as already shown.
@@ -815,7 +815,7 @@ function pose(mote: Mote, scene: MoteScene, clock: number): Mote {
  * re-slotted on the next step — is judged at its destination: the slot it rests
  * on (a condensing Mote only; a decaying one has no slot to be moved from). A
  * label is *placed* when neither the drawn pose nor the destination crosses;
- * whether a placed label is shown is `moteLabelPass`'s.
+ * whether a placed label is shown is `moteLabelLayout`'s.
  */
 function label(mote: Mote, scene: MoteScene, view: MoteView, focused: boolean, clock: number): Mote {
   const planet = planetOf(scene.bodies, mote.planetId);
@@ -829,7 +829,7 @@ function label(mote: Mote, scene: MoteScene, view: MoteView, focused: boolean, c
   const labelPlaced = drawn.visible && !blocked && mote.level > 0;
   const box =
     Number.isFinite(view.height) && view.height > 0 ? labelBox(dotNdc, drawn.side, chars, view.width, view.height) : null;
-  // `labelVisible` is the placement until `moteLabelPass` decides; `stepMotes` overwrites it.
+  // `labelVisible` is the placement until `moteLabelLayout` decides; `stepMotes` overwrites it.
   return { ...mote, labelSide: drawn.side, labelPlaced, labelBox: box, labelVisible: labelPlaced, blocked };
 }
 
