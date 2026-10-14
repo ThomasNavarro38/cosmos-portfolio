@@ -96,37 +96,52 @@ Antialiased strokes: in every box the brightest value equals the token and every
 - M1 (opening): passes. The one white subject reads as the brightest thing on the frame and the ladder steps are distinct (242 / 182 / 44 on 8); nothing reads worse than under ACES.
 - M2 (SNCF stop, one Deep and one Shallow Project): passes. The Deep Planet's Ring and Moon still read, and read more clearly than before against the Shallow Planet, which carries neither; the Star is the single white subject. The ladder is brighter than it was under ACES, as expected; no token change is proposed (Ask First), so none was made.
 
+### Review Findings
+
+2026-10-14. Four layers ran: blind, edge-case, verification-gap and acceptance. The acceptance layer found no blocking violation: the fix, the header, the three named mutation rows, the contract test and the recorded pixel reads all match the spec. 14 findings were dismissed. Among them, CRLF breaking the mutation regexes is ruled out by `.gitattributes` `eol=lf`, and the spec/sprint status mismatch is settled by this review's status sync. All nine patches were applied test-first: each new row was recorded red before the audit changed. Each new clause (`legacy`, the depth-0 `<`, the case-insensitive `toneMapping`, the `src/` walk, the `Canvas` reference check, the paths in messages, the `legacy` contract line) was then reverted once in a mutant copy and turned its row red. `npm test` 1228 pass, 0 fail, 1 skipped (the symlink row, an environment skip that predates this review); `npm run typecheck` and `npm run gate` exit 0.
+
+- [x] [Review][Patch] `<Canvas legacy>` sets `THREE.ColorManagement.enabled = false` in R3F 9.7.0 (`events-156d8d12.esm.js:15898`). That switches off the sRGB → linear input conversion, so every hex draws wrong, and the audit passes it: `legacy` is not a banned attribute, and the word `ColorManagement` never appears in source. The contract test does not pin the `ColorManagement.enabled = !legacy` line either. Ban a top-level `legacy`, add a fixture and a mutation row, and pin the line [src/render-scene/scene-model.test.ts:2269, src/render-scene/scene-model.test.ts:2434]
+- [x] [Review][Patch] Several audit clauses have no mutation row against the real sources, against the Always rule "every audit clause gets a mutation row". Missing: `flat="true"`, `flat` twice, `flat={expr}`, `ColorManagement` and `outputEncoding` in a real `.ts` module, a bare `toneMapped`, an aliased import, `<X.Canvas>`, `<Canvas>` deleted, `linear={false}`, and an unterminated or unbalanced tag [src/render-scene/scene-model.test.ts:2406]
+- [x] [Review][Patch] Every fixture and mutation row asserts only that the failure list is non-empty, never that the intended clause fired. A row can stay green through an unrelated clause after a regression. Assert a per-row message fragment [src/render-scene/scene-model.test.ts:2382, src/render-scene/scene-model.test.ts:2422]
+- [x] [Review][Patch] The mechanism scan reads only `src/render-scene/`. `three` is banned by the boundary gate in `derive`, `shell`, `render-fallback` and the root, but not in `data`, `tokens`, `colophon` or `types`. `ColorManagement` is a global singleton, so `ColorManagement.enabled = false` in `src/colophon/` passes both gates, while the docs say "nowhere else". Run `COLOUR_MECHANISMS` over every shipped `src/` module [src/render-scene/scene-model.test.ts:2324]
+- [x] [Review][Patch] Aliased-Canvas detection catches only `import { Canvas as X } from '@react-three/fiber'`. It misses a default-plus-named import, a subpath specifier, `const S = Canvas`, `const C = Fiber.Canvas`, a destructured dynamic import and `export { Canvas as S }`. Flag any reference to `Canvas` other than `<Canvas`, `</Canvas>` and the one import specifier [src/render-scene/scene-model.test.ts:2280]
+- [x] [Review][Patch] A JSX element written as a bare attribute value at depth 0 (`fallback=<div/>`) ends the tag at its inner `>`, so any `linear` or spread after it goes unread. Report a depth-0 `<` as an unreadable tag [src/render-scene/scene-model.test.ts:2203]
+- [x] [Review][Patch] `/\btoneMapping\w*/` is case-sensitive, so a `<ToneMapping />` postprocessing effect, a second tone-mapping pass, is not caught. Match `ToneMapping` as a word too [src/render-scene/scene-model.test.ts:2236]
+- [x] [Review][Patch] Failure messages from an unreadable tag and from the Canvas count give no path, so a red run cannot be traced. Carry the path on `CanvasTag` and name the files in the count message [src/render-scene/scene-model.test.ts:2290]
+- [x] [Review][Patch] The docs drift from the audit. The `scene.tsx` header names only the `gl` `toneMapping`/`outputColorSpace`, `toneMapped` and `linear` bans, and leaves out `outputEncoding`, `ColorManagement`, spreads, aliases and (after the first patch) `legacy`. The audit doc says a "computed key" is caught, but only a string-literal key is [src/render-scene/scene.tsx:68, src/render-scene/scene-model.test.ts:2265]
+- [x] [Review][Defer] No automated check renders a frame and reads a pixel. "Token in equals pixel out" rests on the source audit, the R3F text contract and the manual 1440×900 read. A three/R3F change outside the two matched lines (for example `LineMaterial`'s fragment chunks) would drift the drawn colour under a green run [src/render-scene/scene.tsx:146] — deferred, pre-existing: project-wide source-audit policy (same call as the 3.15 DOM-harness deferral), and a headless WebGL pixel harness is new infrastructure.
+
 ## Suggested Review Order
 
 **The fix: one mechanism on the Canvas**
 
 - `flat` sets NoToneMapping and keeps the sRGB output, so the token value is the drawn value.
-  [`scene.tsx:146`](../../src/render-scene/scene.tsx#L146)
+  [`scene.tsx:149`](../../src/render-scene/scene.tsx#L149)
 
 - Header records the decision and both rejected alternatives.
   [`scene.tsx:58`](../../src/render-scene/scene.tsx#L58)
 
 **The audit that pins it**
 
-- Positive `flat` plus an exclusive ban on second mechanisms across every renderer module.
-  [`scene-model.test.ts:2269`](../../src/render-scene/scene-model.test.ts#L2269)
+- Positive `flat` plus an exclusive ban on second mechanisms across every shipped `src/` module.
+  [`scene-model.test.ts:2286`](../../src/render-scene/scene-model.test.ts#L2286)
 
 - Top-level attribute parse: braces cut whole, spreads and unterminated tags fail.
-  [`scene-model.test.ts:2174`](../../src/render-scene/scene-model.test.ts#L2174)
+  [`scene-model.test.ts:2178`](../../src/render-scene/scene-model.test.ts#L2178)
 
 - The R3F contract: pins what `flat` means, so a version bump cannot quietly bring ACES back.
-  [`scene-model.test.ts:2434`](../../src/render-scene/scene-model.test.ts#L2434)
+  [`scene-model.test.ts:2517`](../../src/render-scene/scene-model.test.ts#L2517)
 
 **Tests and tracking**
 
 - Real files pass, and the walk reaches every material file by name.
-  [`scene-model.test.ts:2326`](../../src/render-scene/scene-model.test.ts#L2326)
+  [`scene-model.test.ts:2350`](../../src/render-scene/scene-model.test.ts#L2350)
 
 - Fixture table of rejected and accepted forms.
-  [`scene-model.test.ts:2335`](../../src/render-scene/scene-model.test.ts#L2335)
+  [`scene-model.test.ts:2367`](../../src/render-scene/scene-model.test.ts#L2367)
 
 - Mutation rows against the real renderer sources.
-  [`scene-model.test.ts:2402`](../../src/render-scene/scene-model.test.ts#L2402)
+  [`scene-model.test.ts:2460`](../../src/render-scene/scene-model.test.ts#L2460)
 
 - Retro item 2 closed, with the pixel read cited.
   [`sprint-status.yaml:369`](sprint-status.yaml#L369)
