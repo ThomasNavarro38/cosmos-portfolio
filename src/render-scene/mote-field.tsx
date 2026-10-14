@@ -11,8 +11,10 @@
  * camera's matrices (the rig, mounted before this, has just moved it), read
  * `navigationStore.getState()` once, hand `moteFrame` the carried field, the
  * artifact, the Bodies, the Dust media, the focused ID, the camera's matrices
- * and R3F's canvas width and height, the frame `delta` and the reduced-motion
- * preference (`reducedMotion()`, read once per frame — 2.10), keep the result,
+ * and R3F's canvas width and height, the frame `delta`, the reduced-motion
+ * preference (`reducedMotion()`, read once per frame — 2.10) and the
+ * affordance's screen boxes (`affordanceObstacles` over the same `getState()`
+ * snapshot, the artifact, the Bodies, the matrices and `size` — 3.18), keep the result,
  * apply each draw with `applyMoteDraw` and each orbit draw with
  * `applyMoteOrbitDraw`. It writes no store field and subscribes to nothing.
  *
@@ -37,6 +39,16 @@
  * events. The labels land inside the canvas root, which is `aria-hidden`, so
  * the Motes are not narrated and no live region exists: the panel's Skills list
  * and the index are the interface. No connector, no hover, no click.
+ *
+ * **Under the affordance, never over it** (3.18). The affordance's label and
+ * leader share `zIndexRange [1, 1]`, so the label pass is handed their boxes and
+ * hides any Mote label near them. The leader's obstacle is its bounding box, so
+ * around a diagonal leader it hides more than the line covers — by design (the
+ * spec's ruling 2a). The affordance re-picks the pointer in its own `useFrame`,
+ * so an obstacle can trail a hover by one frame — invisible. `affordanceObstacles`
+ * throws, naming the ID, for an approached Project with no Planet, as
+ * `affordanceFrame` does — so that fault, a bug since both are built from the one
+ * artifact, now stops the Motes' frame too.
  */
 
 import { Html, Line } from '@react-three/drei';
@@ -45,6 +57,7 @@ import { useRef } from 'react';
 import type { Mesh, MeshBasicMaterial, SphereGeometry } from 'three';
 import { reducedMotion } from '../shell/motion-preference.ts';
 import { navigationStore } from '../shell/state.ts';
+import { affordanceObstacles, type AffordanceArtifact } from './affordance-model.ts';
 import type { DustMedium } from './dust-model.ts';
 import {
   MOTE_RADIUS,
@@ -62,7 +75,7 @@ import {
 import { BODY_RENDER_ORDER, type Body } from './scene-model.ts';
 
 export interface MoteFieldProps {
-  readonly artifact: MoteArtifact;
+  readonly artifact: MoteArtifact & AffordanceArtifact;
   readonly bodies: readonly Body[];
   readonly media: readonly DustMedium[];
 }
@@ -77,7 +90,7 @@ export function MoteField({ artifact, bodies, media }: MoteFieldProps) {
   useFrame(({ camera, size }, delta) => {
     camera.updateMatrixWorld();
     const state = navigationStore.getState();
-    field.current = moteFrame(field.current, artifact, bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.width, size.height, delta, reducedMotion());
+    field.current = moteFrame(field.current, artifact, bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.width, size.height, delta, reducedMotion(), affordanceObstacles(state, artifact, bodies, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size));
     field.current.draws.forEach((draw, index) => applyMoteDraw(dots.current[index], labels.current[index], draw));
     field.current.orbits.forEach((draw) => applyMoteOrbitDraw(orbits.current[draw.orbit], draw));
   });

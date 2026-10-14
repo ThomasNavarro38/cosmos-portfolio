@@ -733,7 +733,7 @@ These 2.8 and 3.1 Mote items are closed by 3.5. The entries above are left as th
 
 Still open after 3.5:
 
-- 2.8 review: a label at a threshold still switches visibility instantly. 3.5 adds new thresholds (the cap, overlap, and the four edges), so a label may flicker as the orbits turn. There is no fade and no hysteresis. Judge this in a browser.
+- ~~2.8 review: a label at a threshold still switches visibility instantly. 3.5 adds new thresholds (the cap, overlap, and the four edges), so a label may flicker as the orbits turn. There is no fade and no hysteresis. Judge this in a browser.~~ — **closed by 3.18** (Thomas's ruling 1a, 2026-10-14): `moteLabelPass` visits last frame's shown labels before newcomers; an incumbent keeps its place down to a gap of 0, a newcomer needs `MOTE_LABEL_CLEARANCE_PX + MOTE_LABEL_HYSTERESIS_PX` (4 + 8). Still no fade (Never). The canvas and panel edges still hide at once, by ruling. Sweeps at 7, 12 and 25 Skills (`mote-model.test.ts`) hold the toggles at or below the stateless rule's, strictly fewer at 25 Skills and wherever the stateless rule toggles a label no bound explains.
 - The width estimate assumes Latin text (`labelChars`). It is conservative: a sans face averages under 0.6em, so the estimate can hide a label that would have fitted. Tune it by looking.
 - `MOTE_RADIUS` (the mesh radius) is still what the `FOCUS_REACH` and innermost-orbit-clearance assertions use. The drawn dot is now screen-constant (2.6 / 2.1 / 1.8px), so its world size depends on depth. Those assertions no longer bound the drawn dot exactly.
 - `SceneArtifact` (`scene-model.ts`) does not restate `skills`. The slice is `MoteArtifact`'s, which the scene's prop already intersects. Adding it to `SceneArtifact` would have forced every unrelated scene fixture to carry it.
@@ -757,7 +757,7 @@ Still open after 3.5:
   summary: The label pass visits decaying Motes too, after the focused Project's, and holds the panel edge until the last one has gone. The spec names only "the focused Project's Motes". This is kept so a decaying label fades with its dot rather than vanishing on release.
   evidence: `stepMotes` hands every placed Mote to `moteLabelPass` (`focused: false` for decaying ones). The review (2026-10-10) brought the orbit lines back to the spec, but left this as it was.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-5-mote-tiering-and-label-legibility.md`
-  summary: `moteLabelPass` checks Mote labels against each other, the canvas and the panel, but not against the 3.4 hover/keyboard-focus label and leader. Both sit at `zIndexRange={[1, 1]}`, so they can overlap.
+  summary: `moteLabelPass` checks Mote labels against each other, the canvas and the panel, but not against the 3.4 hover/keyboard-focus label and leader. Both sit at `zIndexRange={[1, 1]}`, so they can overlap. — **closed by 3.18** (ruling 2a, the affordance wins): `affordanceObstacles` (`affordance-model.ts`) hands the pass the label block, grown by the keyboard outline (3 + 1px), and the leader's bounding box, seeded as already shown; any Mote label within `MOTE_LABEL_CLEARANCE_PX` of them is hidden. `mote-field.tsx` binds it from the same `getState()` snapshot (`auditMoteField`).
   evidence: The pass's `LabelBounds` carries no affordance box; no test hovers a Planet while a Project is focused.
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-5-mote-tiering-and-label-legibility.md`
   summary: `reslot` accepts a free slot by the panel test alone. The pass now also checks the top, bottom and left edges, so a Mote can glide to a slot where its label is still hidden.
@@ -900,3 +900,28 @@ Still open after 3.5:
 ## Deferred from: code review of spec-3-17-no-technology-names-in-field-values.md (2026-10-14)
 
 - The field-value check catches only names that appear verbatim in the Skills vocabulary. A technology written under another spelling (`Cordova` for `Apache Cordova`, `Spring-Boot`, `SpringBoot`) or not listed as a Skill at all (`MDM`, `UWP`, `PDF`, `RFID`) passes, while AC 3.6 reads "no technology name appears in the field table anywhere". Today's shipped `role`/`built` values were swept by hand and are clean of Skill names; the residual words (`PDF`, `RFID`) describe the product, not its stack. Fix if it recurs: an authored alias list beside `skills` (schema change — Ask First), or reconcile AC 3.6's wording to "names no Skill" in 3.19.
+
+## Closed by 3.18, and deferred from it (2026-10-14)
+
+- Epic 2 F-6 (`epic-2-retro-09-30-2026.md:120`, "under reduced motion a blocked Mote label is hidden for the entire Focus"), routed to 3.5 and never given an AC there: **closed by 3.18** as an accepted case (ruling 3a). While the orbit clock holds, a label the pass hides stays hidden; the panel's Skills `<ul>` lists every Skill, so nothing is lost. No new behaviour; the sweeps at 7, 12 and 25 Skills under `reduced = true` pin the shown set constant after condensation, at most 12.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-18-the-mote-label-pass-and-the-degradation-ruling.md`
+  summary: The split could not leave every test file byte-unmodified: `mote-model.test.ts`'s purity audit allow-lists `mote-model.ts`'s imports, and the required re-export from `./mote-label.ts` is an import it rejected. One line was added to that allow-list (no other test changed for the split; `npm test` was otherwise green before any behaviour change).
+  evidence: `auditMoteModel` matches every `from '…'` specifier, so no re-export form passes it unchanged.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-18-the-mote-label-pass-and-the-degradation-ruling.md`
+  summary: "Strictly fewer toggles wherever the stateless count is non-zero" does not hold on the raw total at 7 Skills × 390×844 (14 = 14) and 12 Skills × 390×844 (20 = 20): every stateless toggle there is a canvas- or panel-edge crossing, which the ruling leaves instant. The test asserts ≤ at every size and strictly fewer at 25 Skills and wherever the stateless rule toggles a label that stays placed and inside the bounds on both frames.
+  evidence: measured over one turn after condensation; 25 Skills: 2 vs 20 (1440×900), 66 vs 101 (390×844); 12 Skills × 1440×900: 14 vs 16. Edge toggles would need an edge hysteresis, which the ruling rejects (Ask First).
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-18-the-mote-label-pass-and-the-degradation-ruling.md`
+  summary: From every committed focus pose no neighbouring Planet's affordance reaches the focused Project's Motes on screen, so the affordance sweeps hover a stand-in: another Project's Planet moved to the focused Planet's position, run through the real `affordanceObstacles`. The real-neighbour case is exercised by the pass's matrix rows only.
+  evidence: `busiestObstacles` in `mote-model.test.ts` tries every real Planet first; all six sweeps found none crowding.
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-18-the-mote-label-pass-and-the-degradation-ruling.md`
+  summary: Review fix (3.18): an incumbent hidden by the affordance alone is *held* — it keeps its incumbency and also its box and slot under the cap, so no other label takes its place while the hover lasts. Keeping incumbency alone was not enough for the shown set to return exactly: a better-ranked newcomer could take the freed place and then win as an incumbent by rank. The reservation is an addition to the frozen wording ("seeded as already shown", "hidden"); a held label is never drawn.
+  evidence: `moteLabelLayout` in `mote-label.ts`; `mote-model.test.ts` "a passing hover, under reduced motion at 25 Skills"; the no-carry mutation reshuffles at 1440×900 only (at 390×844 the shown labels sit 12px or more apart).
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-18-the-mote-label-pass-and-the-degradation-ruling.md`
+  summary: The manual check (1440×900, focus `sncf/client-referential`, one turn, hover another Planet) has not been run in a browser.
+  evidence: implementation verified by `npm test`, `npm run typecheck` and `npm run gate` only.
+
+## Deferred from: code review of spec-3-18-the-mote-label-pass-and-the-degradation-ruling (2026-10-14)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-3-18-the-mote-label-pass-and-the-degradation-ruling.md`
+  summary: Affordance obstacles carry no hysteresis — every Mote label clears them at a flat `MOTE_LABEL_CLEARANCE_PX` (4px) — so a newcomer orbiting near the affordance's edge can still toggle while a Planet is hovered.
+  evidence: The frozen spec fixes the obstacle clearance at 4px for every label (ruling 2a); `moteLabelLayout` checks obstacles with that one gap. Brief (only while hovering) and a ruling change, so not patched in 3.18.

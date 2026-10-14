@@ -2966,7 +2966,9 @@ test('the Rail-importer scan rejects every edge form from outside, and ignores p
  * no coordinate literal, no live region. Positively: a frame loop that is
  * *exactly* — update the camera's matrices, one `getState()` read, `moteFrame`
  * handed the carried field, the artifact, the Bodies, the media, the focused ID,
- * both matrices and the canvas width and height and written back, each draw
+ * both matrices, the canvas width and height, the frame delta, the reduced-motion
+ * preference and (3.18) `affordanceObstacles` over the same `getState()`
+ * snapshot, the artifact, the Bodies, both matrices and `size`, and written back, each draw
  * applied with `applyMoteDraw` to its own pooled handles and each orbit draw with
  * `applyMoteOrbitDraw` to its own line; one mesh per `motePool` entry keyed by
  * Skill, filled by `moteDotColor`, drawn at `BODY_RENDER_ORDER` in the
@@ -3029,7 +3031,7 @@ function auditMoteField(source: string): string[] {
     const expected = [
       'camera.updateMatrixWorld()',
       'conststate=navigationStore.getState()',
-      'field.current=moteFrame(field.current,artifact,bodies,media,state.focusedProjectId,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size.width,size.height,delta,reducedMotion())',
+      'field.current=moteFrame(field.current,artifact,bodies,media,state.focusedProjectId,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size.width,size.height,delta,reducedMotion(),affordanceObstacles(state,artifact,bodies,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size))',
       'field.current.draws.forEach((draw,index)=>applyMoteDraw(dots.current[index],labels.current[index],draw))',
       'field.current.orbits.forEach((draw)=>applyMoteOrbitDraw(orbits.current[draw.orbit],draw))',
     ];
@@ -3037,7 +3039,8 @@ function auditMoteField(source: string): string[] {
       failures.push(
         'the frame loop is not exactly: camera.updateMatrixWorld(), one getState() read, moteFrame(field.current, artifact, ' +
           'bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, ' +
-          'size.width, size.height, delta, reducedMotion()) written back, every draw applied to its own handles and every orbit draw to its own line',
+          'size.width, size.height, delta, reducedMotion(), affordanceObstacles(state, artifact, bodies, camera.matrixWorldInverse.elements, ' +
+          'camera.projectionMatrix.elements, size)) written back, every draw applied to its own handles and every orbit draw to its own line',
       );
     }
   }
@@ -3105,7 +3108,9 @@ test('the Motes’ renderer binds the model and holds no rule of its own', () =>
 test('the Mote audit rejects the real renderer with any one guarantee broken', () => {
   const real = readFileSync(MOTE_FIELD_TSX, 'utf8');
   const CALL =
-    'moteFrame(field.current, artifact, bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.width, size.height, delta, reducedMotion())';
+    'moteFrame(field.current, artifact, bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.width, size.height, delta, reducedMotion(), ' +
+    'affordanceObstacles(state, artifact, bodies, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size))';
+  const OBSTACLES = ', affordanceObstacles(state, artifact, bodies, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size))';
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
     ['a store write', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    navigationStore.setState({ focusedProjectId: null });')],
     ['a named event', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    releaseFocus();')],
@@ -3113,16 +3118,23 @@ test('the Mote audit rejects the real renderer with any one guarantee broken', (
     ['a hook binding', (s) => s.replace('state = navigationStore.getState()', 'state = useStore(navigationStore, (value) => value)')],
     ['reactive state', (s) => s.replace('const field = useRef', 'const [, force] = useState(0);\n  const field = useRef')],
     ['useThree', (s) => s.replace('const field = useRef', 'const { size } = useThree();\n  const field = useRef')],
-    ['a DOM read', (s) => s.replace('size.width, size.height, delta, reducedMotion())', 'window.innerWidth, size.height, delta, reducedMotion())')],
+    ['a DOM read', (s) => s.replace('size.width, size.height, delta, reducedMotion(),', 'window.innerWidth, size.height, delta, reducedMotion(),')],
     ['stale matrices', (s) => s.replace('camera.updateMatrixWorld();', '')],
     ['the matrices swapped', (s) => s.replace('camera.matrixWorldInverse.elements, camera.projectionMatrix.elements', 'camera.projectionMatrix.elements, camera.matrixWorldInverse.elements')],
     ['the world matrix for the view', (s) => s.replace('camera.matrixWorldInverse.elements', 'camera.matrixWorld.elements')],
-    ['a constant width', (s) => s.replace('size.width, size.height, delta, reducedMotion())', '1600, size.height, delta, reducedMotion())')],
-    ['a constant height', (s) => s.replace('size.width, size.height, delta, reducedMotion())', 'size.width, 900, delta, reducedMotion())')],
-    ['no time', (s) => s.replace('size.width, size.height, delta, reducedMotion())', 'size.width, size.height, 0, reducedMotion())')],
+    ['a constant width', (s) => s.replace('size.width, size.height, delta, reducedMotion(),', '1600, size.height, delta, reducedMotion(),')],
+    ['a constant height', (s) => s.replace('size.width, size.height, delta, reducedMotion(),', 'size.width, 900, delta, reducedMotion(),')],
+    ['no time', (s) => s.replace('size.width, size.height, delta, reducedMotion(),', 'size.width, size.height, 0, reducedMotion(),')],
     // Reduced motion (2.10).
-    ['the orbits spin always', (s) => s.replace('size.height, delta, reducedMotion())', 'size.height, delta)')],
-    ['a constant preference', (s) => s.replace('size.height, delta, reducedMotion())', 'size.height, delta, false)')],
+    ['the orbits spin always', (s) => s.replace('size.height, delta, reducedMotion(),', 'size.height, delta,')],
+    ['a constant preference', (s) => s.replace('size.height, delta, reducedMotion(),', 'size.height, delta, false,')],
+    // 3.18: the affordance's boxes, which the label pass yields to.
+    ['the 3.5 call shape, with no obstacles', (s) => s.replace(OBSTACLES, ')')],
+    ['no obstacles at all', (s) => s.replace(OBSTACLES, ', [])')],
+    ['the obstacles from a second store read', (s) => s.replace('affordanceObstacles(state,', 'affordanceObstacles(navigationStore.getState(),')],
+    ['the obstacles through swapped matrices', (s) => s.replace('affordanceObstacles(state, artifact, bodies, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements', 'affordanceObstacles(state, artifact, bodies, camera.projectionMatrix.elements, camera.matrixWorldInverse.elements')],
+    ['the obstacles on a constant canvas', (s) => s.replace('camera.projectionMatrix.elements, size))', 'camera.projectionMatrix.elements, { width: 1600, height: 900 }))')],
+    ['the obstacles of nothing approached', (s) => s.replace('affordanceObstacles(state,', 'affordanceObstacles({ ...state, hoveredProjectId: null, keyboardProjectId: null },')],
     ['the preference subscribed', (s) => s.replace('const field = useRef', 'const reduced = useSyncExternalStore(subscribeReducedMotion, reducedMotion);\n  const field = useRef')],
     ['Focus ignored', (s) => s.replace('state.focusedProjectId', 'null')],
     ['no Dust to condense from', (s) => s.replace('artifact, bodies, media, state', 'artifact, bodies, [], state')],
