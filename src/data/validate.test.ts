@@ -732,6 +732,29 @@ test('a Skill next to a hyphen or punctuation is a whole word', () => {
   }
 });
 
+test('a Skill at the end of the value, or under another case in `skills`, is matched', () => {
+  for (const [value, skills] of [
+    ['Built in Java', ['Java']],
+    ['A JAVA service.', ['java']],
+  ] as const) {
+    assertFails(validateCareer(fileWith(entryWith('built', value, [...skills]))), /\[built\]: names the Skill "java"/i, JSON.stringify(value));
+  }
+});
+
+test('an underscore or an apostrophe next to a Skill is a boundary: neither is a letter, mark or digit', () => {
+  for (const value of ['Moved Java_8 code.', "Kept Java's runtime."]) {
+    assertFails(validateCareer(fileWith(entryWith('built', value, ['Java']))), namesSkill('built', 'Java'), JSON.stringify(value));
+  }
+});
+
+test('the issue message is worded for its field', () => {
+  const [role] = validateCareer(fileWith(entryWith('role', 'Java developer', ['Java'])));
+  const [built] = validateCareer(fileWith(entryWith('built', 'A Java service.', ['Java'])));
+  assert.match(role ?? '', /\[role\]: names the Skill "Java"; a role says what was done on the Project/);
+  assert.doesNotMatch(role ?? '', /what was built/);
+  assert.match(built ?? '', /\[built\]: names the Skill "Java"; a Built value describes what was built/);
+});
+
 test('a Skill inside a longer word is not matched', () => {
   assert.deepEqual(validateCareer(fileWith(entryWith('built', 'Rewrote the Javascript front end.', ['Java']))), []);
   assert.deepEqual(validateCareer(fileWith(entryWith('built', 'Built 3Java2 and Javaé.', ['Java']))), []);
