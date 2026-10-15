@@ -399,7 +399,7 @@ function auditChrome(source: string): string[] {
     failures.push('the pace is not motionPace of the preference, read through useSyncExternalStore');
   }
   if ((code.match(/\buseSyncExternalStore\s*\(/g) ?? []).length !== 1) failures.push('the preference is read other than once');
-  if (/\bsetReducedMotion\b/.test(code)) failures.push('the chrome writes the preference — scene-host.tsx is its one writer');
+  if (/\bsetReducedMotion\b/.test(code)) failures.push('the chrome writes the preference — mount.tsx is its one writer');
   if (!/const\s+slot\s*=\s*chromeSlot\(\s*mode\s*,\s*focusedProjectId\s*\)\s*;/.test(code)) failures.push('the slot is not chromeSlot(mode, focusedProjectId)');
   if (!/const\s+style\s*=\s*slotStyle\(\s*focusedProjectId\s*!==\s*null\s*,\s*pace\s*\)\s*;/.test(code)) failures.push('the style is not slotStyle(focused, pace)');
   if ((code.match(/\bchromeSlot\(/g) ?? []).length !== 1 || (code.match(/\bslotStyle\(/g) ?? []).length !== 1) failures.push('the model is asked other than once');

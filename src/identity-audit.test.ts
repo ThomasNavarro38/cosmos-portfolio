@@ -20,7 +20,7 @@
  * - **Page** and **Index** — the full-viewport page (ruling 7a) and the index
  *   hidden until keyboard focus (ruling 8a), as exact declaration sets.
  *
- * This file sits directly in `src/`, so the entry stub's boundary row governs it:
+ * This file sits directly in `src/`, so the root-file boundary row governs it:
  * `src/render-scene/` and `src/data/` are read here as text, never imported.
  */
 
@@ -950,14 +950,17 @@ const PAGE_RULES: readonly CssRule[] = [
 ];
 
 /**
- * The full-viewport page: `page.css` exactly, imported once by `App.tsx`, the
- * host carrying its class beside the wheel listener's ref, and the scene's
- * wrapper and Canvas at `100%` by `100%`.
+ * The full-viewport page: `page.css` exactly, imported once by the thin entry
+ * (`shell/entry.ts`, since 4.1, so the first frame is the ground before React
+ * arrives) and not by `App.tsx`, the host carrying its class beside the wheel
+ * listener's ref, and the scene's wrapper and Canvas at `100%` by `100%`.
  */
-function auditPage(files: { readonly css: string; readonly app: string; readonly host: string; readonly scene: string }): string[] {
+function auditPage(files: { readonly css: string; readonly entry: string; readonly app: string; readonly host: string; readonly scene: string }): string[] {
   const failures = [...auditBans('page', files.css), ...auditDeclarations('page', files.css, PAGE_RULES)];
+  const entry = codeOf(files.entry, 'script');
+  if ((entry.match(/^import\s+'\.\/page\.css'\s*;/gm) ?? []).length !== 1) failures.push('page: shell/entry.ts does not import ./page.css, once');
   const app = codeOf(files.app, 'script');
-  if ((app.match(/^import\s+'\.\/shell\/page\.css'\s*;/gm) ?? []).length !== 1) failures.push('page: App.tsx does not import ./shell/page.css, once');
+  if (/^import\s+'[^']*page\.css'/m.test(app)) failures.push('page: App.tsx imports page.css — the entry carries it');
   const host = codeOf(files.host, 'script');
   if ((host.match(/<div ref=\{host\} className="scene-host">/g) ?? []).length !== 1) failures.push('page: the scene host is not the one <div ref={host} className="scene-host">');
   const scene = codeOf(files.scene, 'script');
@@ -968,7 +971,7 @@ function auditPage(files: { readonly css: string; readonly app: string; readonly
 }
 
 function pageFiles() {
-  return { css: read(`./${PAGE_CSS}`), app: read('./App.tsx'), host: read('./shell/scene-host.tsx'), scene: read('./render-scene/scene.tsx') };
+  return { css: read(`./${PAGE_CSS}`), entry: read('./shell/entry.ts'), app: read('./App.tsx'), host: read('./shell/scene-host.tsx'), scene: read('./render-scene/scene.tsx') };
 }
 
 test('page: surface-base edge to edge, no page scroll, the scene host fixed and the canvas filling it', () => {
@@ -987,7 +990,9 @@ test('page: each guarantee removed fails with its own line', () => {
     ['css', (s) => s.replace('  color: var(--color-ink-label-dark);\n', ''), /^page: `body` lacks `color: var\(--color-ink-label-dark\)`$/],
     // A later rule with a listed selector is checked too, not shadowed by the first.
     ['css', (s) => `${s}\n.scene-host {\n  position: static;\n}\n`, /^page: the rule `\.scene-host` appears 2 times — one rule per selector$/],
-    ['app', (s) => s.replace("import './shell/page.css';\n", ''), /^page: App\.tsx does not import \.\/shell\/page\.css, once$/],
+    ['entry', (s) => s.replace("import './page.css';\n", ''), /^page: shell\/entry\.ts does not import \.\/page\.css, once$/],
+    ['entry', (s) => s.replace("import './page.css';\n", "import './page.css';\nimport './page.css';\n"), /^page: shell\/entry\.ts does not import \.\/page\.css, once$/],
+    ['app', (s) => s.replace("import { SceneHost } from './shell/scene-host.tsx';\n", "import { SceneHost } from './shell/scene-host.tsx';\nimport './shell/page.css';\n"), /^page: App\.tsx imports page\.css — the entry carries it$/],
     ['host', (s) => s.replace('<div ref={host} className="scene-host">', '<div ref={host}>'), /^page: the scene host is not the one/],
     ['scene', (s) => s.replace("style={{ width: '100%', height: '100%' }}", "style={{ width: '100%', height: '70vh' }}"), /^page: the Canvas is not 100% by 100%/],
     // Every viewport unit, not only `vh`.

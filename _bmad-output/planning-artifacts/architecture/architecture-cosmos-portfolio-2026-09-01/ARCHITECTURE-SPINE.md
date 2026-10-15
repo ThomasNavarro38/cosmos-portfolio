@@ -80,7 +80,7 @@ graph LR
 
 - **Binds:** FR-19, FR-22, EXPERIENCE.md §11, §11.1 P1–P4
 - **Prevents:** Focusable elements sliding under the user during continuous camera motion, and off-screen Bodies having no valid focus position — the failure that makes "the camera is presentational, the index is the interface" aspirational rather than true.
-- **Rule:** A persistent DOM navigation lists every destination, generated from the layout artifact. It never reads render state, never re-projects, never moves with the camera. The canvas is `aria-hidden`. Focus lives in the DOM; **the camera reacts to DOM focus, never the reverse.** Enforceably: no module outside `render-scene/` may import camera state, and no state field is written by the camera. Pointer raycasting (AD-15) is the one accepted read of scene geometry, and it resolves to an emitted destination ID rather than to a camera-dependent position.
+- **Rule:** A persistent DOM navigation lists every destination, generated from the layout artifact. It never reads render state, never re-projects, never moves with the camera. The canvas is `aria-hidden`. Focus lives in the DOM; **the camera reacts to DOM focus, never the reverse.** Enforceably: no module outside `render-scene/` may import camera state, and no state field is written by the camera. Pointer raycasting (AD-15) is the one accepted read of scene geometry, and it resolves to an emitted destination ID rather than to a camera-dependent position. *[amended 2026-10-15 by ruling Q2 (story 4.1): the DOM index renders from the mount chunk, the one dynamic import after the thin entry, and still before any renderer chunk is requested; it is no longer on the entry chunk itself.]*
 
 ### AD-4a — The Rail is Client-granular; Projects are never Rail stops [ADOPTED]
 

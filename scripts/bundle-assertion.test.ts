@@ -27,7 +27,7 @@ function viewOf(chunks: readonly ChunkView[], edges: Record<string, readonly str
   return { chunks, importedIds: (id) => edges[id] ?? [] };
 }
 
-const MAIN = `${ROOT}/src/main.tsx`;
+const MAIN = `${ROOT}/src/shell/entry.ts`;
 const THREE_MODULE = `${ROOT}/node_modules/three/build/three.module.js`;
 const THREE_CORE = `${ROOT}/node_modules/three/build/three.core.js`;
 
@@ -36,7 +36,7 @@ function entry(moduleIds: readonly string[], extra: Partial<ChunkView> = {}): Ch
 }
 
 test('a clean entry graph under budget passes', () => {
-  const view = viewOf([entry([`${ROOT}/node_modules/react/index.js`, `${ROOT}/src/shell/state.ts`])]);
+  const view = viewOf([entry([`${ROOT}/src/shell/detect.ts`, `${ROOT}/src/tokens/tokens.css`])]);
   assert.deepEqual(checkBundle(view, ROOT), []);
 });
 
@@ -46,16 +46,16 @@ test('a banned package fails, naming the module and the import chain to it', () 
   assert.equal(failures.length, 2, failures.join('\n'));
   const core = failures.find((line) => line.includes('three.core.js')) as string;
   assert.match(core, /reaches three: node_modules\/three\/build\/three\.core\.js/);
-  assert.match(core, /src\/main\.tsx → node_modules\/three\/build\/three\.module\.js → node_modules\/three\/build\/three\.core\.js/);
+  assert.match(core, /src\/shell\/entry\.ts → node_modules\/three\/build\/three\.module\.js → node_modules\/three\/build\/three\.core\.js/);
 });
 
 test('each banned directory fails, with its chain', () => {
-  for (const dir of ['data', 'derive', 'render-scene']) {
+  for (const dir of ['data', 'derive', 'render-scene', 'render-fallback', 'colophon']) {
     const id = `${ROOT}/src/${dir}/x.ts`;
     const failures = checkBundle(viewOf([entry([id])], { [MAIN]: [id] }), ROOT);
     assert.equal(failures.length, 1, `${dir}: ${failures.join('\n')}`);
     assert.match(failures[0] as string, new RegExp(`reaches src/${dir}/: src/${dir}/x\\.ts`));
-    assert.match(failures[0] as string, new RegExp(`src/main\\.tsx → src/${dir}/x\\.ts`));
+    assert.match(failures[0] as string, new RegExp(`src/shell/entry\\.ts → src/${dir}/x\\.ts`));
   }
 });
 
@@ -66,6 +66,12 @@ test('every banned package is caught, scoped and nested included', () => {
     `${ROOT}/node_modules/d3-force-3d/src/index.js`,
     `${ROOT}/node_modules/zod/index.js`,
     `${ROOT}/node_modules/foo/node_modules/three/build/three.module.js`,
+    // 4.1: the thin entry carries no React — the package, its DOM renderer and
+    // the scheduler react-dom brings with it.
+    `${ROOT}/node_modules/react/index.js`,
+    `${ROOT}/node_modules/react/jsx-runtime.js`,
+    `${ROOT}/node_modules/react-dom/client.js`,
+    `${ROOT}/node_modules/scheduler/index.js`,
   ];
   for (const id of banned) assert.equal(checkBundle(viewOf([entry([id])]), ROOT).length, 1, id);
 });
@@ -75,7 +81,10 @@ test('a package merely named like a banned one passes', () => {
     `${ROOT}/node_modules/three-stdlib/index.js`,
     `${ROOT}/node_modules/@react-threeish/x/index.js`,
     `${ROOT}/node_modules/zodiac/index.js`,
-    `${ROOT}/node_modules/three/node_modules/react/index.js`,
+    `${ROOT}/node_modules/three/node_modules/zustand/index.js`,
+    `${ROOT}/node_modules/react-is/index.js`,
+    `${ROOT}/node_modules/@reactfoo/react/index.js`,
+    `${ROOT}/src/render-fallbacks/x.ts`,
     `${ROOT}/src/derived/x.ts`,
     `${ROOT}/src/shell/data/x.ts`,
   ]) {
@@ -126,8 +135,8 @@ test('an entry graph over budget fails naming the measured size and the budget',
   assert.equal(entryBytes(view), ENTRY_BUDGET_BYTES + 1);
   const failures = checkBundle(view, ROOT);
   assert.equal(failures.length, 1, failures.join('\n'));
-  assert.match(failures[0] as string, /240,001 bytes/);
-  assert.match(failures[0] as string, /budget of 240,000 bytes/);
+  assert.ok((failures[0] as string).includes(`${(ENTRY_BUDGET_BYTES + 1).toLocaleString('en-US')} bytes`), failures[0]);
+  assert.ok((failures[0] as string).includes(`budget of ${ENTRY_BUDGET_BYTES.toLocaleString('en-US')} bytes`), failures[0]);
   assert.deepEqual(checkBundle(viewOf([entry([], { bytes: ENTRY_BUDGET_BYTES })]), ROOT), [], 'exactly at budget passes');
 });
 
@@ -146,11 +155,12 @@ test('a banned module with no traceable static chain still fails, without crashi
 test('a cycle in the module graph does not hang the chain search', () => {
   const a = `${ROOT}/src/shell/a.ts`;
   const view = viewOf([entry([a, THREE_MODULE])], { [MAIN]: [a], [a]: [MAIN, THREE_MODULE] });
-  assert.match(checkBundle(view, ROOT)[0] as string, /src\/main\.tsx → src\/shell\/a\.ts → node_modules\/three/);
+  assert.match(checkBundle(view, ROOT)[0] as string, /src\/shell\/entry\.ts → src\/shell\/a\.ts → node_modules\/three/);
 });
 
 test('the pass line names the measured size against the budget', () => {
-  assert.equal(passLine(219_157), 'the entry graph reaches no banned module and is 219,157 of 240,000 bytes.');
+  assert.equal(passLine(2_704), 'the entry graph reaches no banned module and is 2,704 of 4,000 bytes.');
+  assert.equal(ENTRY_BUDGET_BYTES, 4_000, 'about 1.48× the measured 2,704 (4.1)');
 });
 
 /** A logger that keeps what the plugin reports, so a passing build proves the assertion ran. */
@@ -228,11 +238,44 @@ test('the plugin measures real chunk bytes against its budget', async () => {
   );
 });
 
+/** A path with forward slashes, as Windows ids are not. */
+const forward = (id: string): string => id.replace(/\\/g, '/');
+
 test('the shipped app builds under the assertion, measured within its budget', async () => {
   const { logger, lines } = capturing();
   const chunks = chunksOf(await build({ configFile: CONFIG, root: REPO, logLevel: 'silent', customLogger: logger, build: { write: false } }));
   const bytes = passedBytes(lines);
-  assert.ok(bytes > 100_000 && bytes <= ENTRY_BUDGET_BYTES, `the app's entry measured ${bytes}`);
+  assert.ok(bytes > 0 && bytes <= ENTRY_BUDGET_BYTES, `the app's entry measured ${bytes}`);
+  // The app, not a fixture, was measured: its one entry facade is the thin entry.
+  const entries = chunks.filter((out) => out.isEntry);
+  // Vite's facade is `index.html`; what it reaches in `src/` is the thin entry and
+  // what the entry imports statically — nothing more.
+  const local = (id: string): string => forward(id).slice(forward(REPO).length);
+  assert.deepEqual(entries.map((out) => local(out.facadeModuleId ?? '')), ['index.html'], 'one entry, the page');
+  assert.deepEqual(
+    entries.flatMap((out) => Object.keys(out.modules).map(local).filter((id) => id.startsWith('src/'))).sort(),
+    ['src/shell/detect.ts', 'src/shell/entry.ts', 'src/shell/page.css', 'src/tokens/tokens.css'],
+    'the entry is src/shell/entry.ts, with the stylesheets and detection',
+  );
+  // No module on the entry graph is React (4.1, AD-7): the entry chunks and every
+  // chunk they reach statically, read module by module.
+  const byName = new Map(chunks.map((out) => [out.fileName, out]));
+  const graph = new Set<string>();
+  const queue = entries.map((out) => out.fileName);
+  for (let i = 0; i < queue.length; i += 1) {
+    const name = queue[i] as string;
+    if (graph.has(name)) continue;
+    graph.add(name);
+    queue.push(...(byName.get(name)?.imports ?? []));
+  }
+  const reactModules = [...graph].flatMap((name) => Object.keys(byName.get(name)?.modules ?? {}))
+    .filter((id) => /\/node_modules\/(?:react|react-dom|scheduler)\//.test(forward(id)));
+  assert.deepEqual(reactModules, [], 'the entry graph holds no React module');
+  // And React was emitted, behind the mount's dynamic import — so the scan above is not vacuous.
+  assert.ok(
+    chunks.some((out) => !graph.has(out.fileName) && Object.keys(out.modules).some((id) => /\/node_modules\/react-dom\//.test(forward(id)))),
+    'react-dom sits off the entry graph',
+  );
   const view: BundleView = {
     chunks: chunks.map((out) => chunk(out.fileName, [], { isEntry: out.isEntry, imports: out.imports, bytes: Buffer.byteLength(out.code) })),
     importedIds: () => [],

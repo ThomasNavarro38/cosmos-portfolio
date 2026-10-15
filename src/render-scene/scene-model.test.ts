@@ -2604,6 +2604,9 @@ test('App.tsx imports the scene host and renders it after the index', () => {
   const code = quotedCodeOf(APP_TSX);
   assert.match(code, /import\s*\{\s*SceneHost\s*\}\s*from\s*'\.\/shell\/scene-host\.tsx'/, 'the host is imported');
   assert.match(code, /<SceneHost\b/, 'and rendered');
+  // 4.1: on the scene surface alone — the fallback never requests render-scene.
+  assert.match(code, /\{\s*surface\s*===\s*'scene'\s*&&\s*<SceneHost\b/, 'gated on surface === \'scene\'');
+  assert.equal((code.match(/<SceneHost\b/g) ?? []).length, 1, 'once');
   assert.match(code, /<DestinationNav\b/, 'beside the index, which still renders synchronously');
   assert.ok(
     code.indexOf('<DestinationNav') < code.indexOf('<SceneHost'),
@@ -2612,7 +2615,7 @@ test('App.tsx imports the scene host and renders it after the index', () => {
   assert.doesNotMatch(
     code,
     /from\s*['"](?:three|@react-three\/)|from\s*['"]\.\/render-scene\//,
-    'and the entry stub reaches no renderer and no 3D package statically',
+    'and App.tsx, a root file, reaches no renderer and no 3D package statically',
   );
 });
 
@@ -3710,7 +3713,8 @@ test('the renderer scans walk the whole directory, and every exemption names a f
 
 /** The files that may reference the preference, by role. Everything else is a finding. */
 const PREFERENCE_ROLES: Readonly<Record<string, 'writer' | 'reader' | 'model'>> = {
-  'src/shell/scene-host.tsx': 'writer',
+  // 4.1: the writer moved from the scene host to the mount, page-wide.
+  'src/shell/mount.tsx': 'writer',
   'src/render-scene/rail-camera.tsx': 'reader',
   'src/render-scene/mote-field.tsx': 'reader',
   'src/shell/focus-panel.tsx': 'reader',
@@ -3751,7 +3755,7 @@ function preferenceReaders(files: readonly { readonly path: string; readonly sou
     }
     const writes = /\b(?:setReducedMotion|REDUCED_MOTION_QUERY)\b/.test(code);
     const reads = /\b(?:reducedMotion|subscribeReducedMotion)\b/.test(code);
-    if (role !== 'writer' && writes) failures.push(`${file.path} writes the preference — scene-host.tsx is its one writer`);
+    if (role !== 'writer' && writes) failures.push(`${file.path} writes the preference — mount.tsx is its one writer`);
     if (role !== 'reader' && reads) failures.push(`${file.path} reads the preference — a ${role} takes what a reader hands it`);
     if (role === 'model' && !/\breduced\s*=\s*false\b/.test(code)) failures.push(`${file.path} takes no trailing reduced = false`);
   }
@@ -3783,7 +3787,9 @@ test('the preference-reader audit rejects each bad form, and ignores prose, test
     ['src/render-scene/rail-camera.tsx', "import { setReducedMotion } from '../shell/motion-preference.ts';\nsetReducedMotion(true);"],
     ['src/shell/focus-panel.tsx', 'window.matchMedia(REDUCED_MOTION_QUERY);'],
     ['src/render-scene/flight-model.ts', 'export function stepFlight(dt: number, reduced = false) { return dt / motionPace(reducedMotion()); }'],
-    ['src/shell/scene-host.tsx', 'setReducedMotion(true); const r = reducedMotion();'],
+    ['src/shell/mount.tsx', 'setReducedMotion(true); const r = reducedMotion();'],
+    ['src/shell/scene-host.tsx', "import { REDUCED_MOTION_QUERY, setReducedMotion } from './motion-preference.ts';"],
+    ['src/shell/detect.ts', "const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches && REDUCED_MOTION_QUERY;"],
     ['src/render-scene/mote-model.ts', 'const pace = motionPace(true);'],
   ] as const) {
     assert.notDeepEqual(preferenceReaders(at(path, source)), [], `${path}: ${source} must be rejected`);
@@ -3795,7 +3801,7 @@ test('the preference-reader audit rejects each bad form, and ignores prose, test
       { path: 'src/shell/scene-host.test.tsx', source: 'const reduced = reducedMotion();' },
       { path: 'src/shell/state.ts', source: '// reducedMotion() is read by the rig, not here.' },
       { path: 'src/render-scene/rail-model.ts', source: "import { motionPace } from '../shell/motion-preference.ts';\nfunction f(dt: number, reduced = false) { return motionPace(reduced); }" },
-      { path: 'src/shell/scene-host.tsx', source: "import { REDUCED_MOTION_QUERY, setReducedMotion } from './motion-preference.ts';" },
+      { path: 'src/shell/mount.tsx', source: "import { REDUCED_MOTION_QUERY, setReducedMotion } from './motion-preference.ts';" },
     ]),
     [],
   );

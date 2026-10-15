@@ -75,7 +75,7 @@ function auditPreference(source: string): string[] {
   const code = stripComments(source);
   const failures: string[] = [];
   if (/^\s*import\b|\bimport\s*\(|\brequire\s*\(/m.test(code)) failures.push('imports something');
-  if (/\bwindow\b|\bdocument\b|\bnavigator\b|\bmatchMedia\b/.test(code)) failures.push('reads the DOM — the writer is scene-host.tsx');
+  if (/\bwindow\b|\bdocument\b|\bnavigator\b|\bmatchMedia\b/.test(code)) failures.push('reads the DOM — the writer is mount.tsx');
   if (/\bcreateStore\b|\bzustand\b|\bnavigationStore\b/.test(code)) failures.push('a second store, or the navigation store');
   if (!/export\s+const\s+REDUCED_MOTION_PACE\s*=\s*0\.25\s*;/.test(code)) failures.push('the pace is not 0.25');
   if (!/if\s*\(\s*value\s*===\s*reduced\s*\)\s*return\s*;/.test(code)) failures.push('notifies without a change');
