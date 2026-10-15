@@ -132,7 +132,7 @@ Technical requirements extracted from ARCHITECTURE-SPINE.md that impact epic and
 
 **AD-4 — The DOM index is the source of truth for destinations.** A persistent DOM navigation lists every destination, generated from the layout artifact. It never reads render state, never re-projects, never moves with the camera. The canvas is `aria-hidden`. **The camera reacts to DOM focus, never the reverse.** No module outside `render-scene/` may import camera state; no state field is written by the camera.
 
-**AD-4a — The Rail is Client-granular; Projects are never Rail stops. [ADOPTED — STRUCTURAL DEVIATION FROM THE PRD]** The Rail has one stop per **Client** (~5–6), never per Project. A Client stop frames that Client's entire system so every one of its Projects is on screen and selectable at once. **Dwell derives at Client granularity** (from the count of Deep Projects in that system), never per Project. The **default Shot template operates on Clients** and must frame the Client's full system including its widest-orbit Project. `railPosition` indexes Clients. Projects are reached only by deliberate selection, never by the Rail arriving at one. *This is flagged as the single largest divergence available to anyone building from the spine — a unit built from the PRD alone produces ~15–16 Rail stops, per-Project Dwell, and a per-Project default Shot, and none of it surfaces until the camera exists.*
+**AD-4a — The Rail is Client-granular; Projects are never Rail stops. [ADOPTED — STRUCTURAL DEVIATION FROM THE PRD]** The Rail has one stop per **Client** (~5–6), never per Project. A Client stop frames that Client's entire system so every one of its Projects is on screen and selectable at once. **Dwell derives at Client granularity** (from the count of Deep Projects in that system), never per Project. The **default Shot template operates on Clients** and must frame the Client's full system including its widest-orbit Project. ~~`railPosition` indexes Clients.~~ *[superseded 2026-10-14 by ruling R1 (story 3.19): the field is dropped, with `selectClient`; `scrollProgress` alone says where the Rail is, and an integer `k` is the `k`-th Client stop. The rule that the Rail's stops are Clients stands.]* Projects are reached only by deliberate selection, never by the Rail arriving at one. *This is flagged as the single largest divergence available to anyone building from the spine — a unit built from the PRD alone produces ~15–16 Rail stops, per-Project Dwell, and a per-Project default Shot, and none of it surfaces until the camera exists.*
 
 **AD-5 — Destinations are addressed by stable entity ID.** Every destination reference — index entry, Shot subject, raycast hit, focus target, URL fragment — names an entity ID. Never a screen position, render-order index, or array offset.
 
@@ -142,7 +142,7 @@ Technical requirements extracted from ARCHITECTURE-SPINE.md that impact epic and
 
 **AD-8 — Capability routes; performance offers.** `detect()` tests WebGL2 context creation only — no performance probe in the First Paint path. Mobile always routes to the Fallback, where **mobile means a coarse primary pointer, never viewport width**. If the running scene later fails the NFR-2a floor, the Fallback is **offered** through the persistent one-click affordance, never forced. Reduced-motion is an independent axis — a `prefers-reduced-motion` visitor on a capable machine keeps the scene with adapted motion and is never rerouted.
 
-**AD-9 — One state machine owns navigation.** A single store holds `{ mode: rail | freeflight, focusedProjectId: ProjectId | null, railPosition: ClientId }`. Camera and index are both subscribers; neither owns state nor mutates it directly. All transitions are named events. Focus is exclusive. Escape releases exactly one layer, innermost first.
+**AD-9 — One state machine owns navigation.** A single store holds ~~`{ mode: rail | freeflight, focusedProjectId: ProjectId | null, railPosition: ClientId }`~~ *[superseded 2026-10-14 by ruling R1 (story 3.19): `railPosition` and `selectClient` are dropped. `scrollProgress` already says where the Rail is — an integer `k` is the `k`-th Client stop — and a discrete twin with no writer invites the two-writer fight AD-16 forbids. Free flight keeps `scrollProgress`, so the Rail is re-entered where it was left.]*. Camera and index are both subscribers; neither owns state nor mutates it directly. All transitions are named events. Focus is exclusive. Escape releases exactly one layer, innermost first.
 
 **AD-10 — Scroll meaning is resolved by mode alone.** Scroll's two meanings are selected **solely** by reading the state machine's mode, never by event-target inspection or DOM hit testing. While `focusedProjectId` is non-null, scroll belongs to the panel and the camera subscribes to nothing.
 
@@ -194,7 +194,7 @@ Extracted from the DESIGN.md / EXPERIENCE.md spine pair. Both are `status: final
 
 UX-DR1: Generate the token layer from DESIGN.md frontmatter as the single source (AD-12) — CSS custom properties for DOM surfaces and a typed JS object for scene materials, neither hand-transcribed. Every colour is a semantic light/dark pair; the bare key is light, the `-dark` key is the shipped M2 value. **M2 ships dark only**; light values are real and retained so the theme is later a token swap, not a redesign. A build that hardcodes `#08080A` has broken the light theme before it exists.
 
-UX-DR2: Implement the **five-step stroke ladder** (`stroke-dust`, `stroke-rest`, `stroke-near`, `stroke-active`, `stroke-focus`) as the primary depth channel. The step encodes **distance and state, never category**. Data-derived brightness (FR-3) modulates only within the resting band (`stroke-dust`…`stroke-near`); `stroke-active` and `stroke-focus` are reserved for camera state and applied on top. A recent Shallow Project never reaches white while unfocused.
+UX-DR2: Implement the **five-step stroke ladder** (`stroke-dust`, `stroke-rest`, `stroke-near`, `stroke-active`, `stroke-focus`) as the primary depth channel. The step encodes **distance and state, never category**. Data-derived brightness (FR-3) modulates only within the resting band (~~`stroke-dust`…`stroke-near`~~ the two steps `stroke-rest`, `stroke-near` — *superseded 2026-10-14 by ruling 4b-i, story 3.9, `identity-audit-3-9.md` F5*); `stroke-active` and `stroke-focus` are reserved for camera state and applied on top. A recent Shallow Project never reaches white while unfocused.
 
 UX-DR3: Implement the **five-step ink ladder** (`ink-faint`, `ink-quiet`, `ink-label`, `ink-prose`, `ink-lift`). Type never borrows a stroke token and a stroke never borrows an ink token, even where the hex is identical — the ladders are separately tunable and diverge at M3. **`ink-quiet-dark` (`#5E5E68`) is not used for text anywhere in the product** (2.92:1 / 3.12:1 — below floor); it survives only for the Dust medium and non-meaningful strokes. Any future use of it on a glyph is a defect.
 
@@ -226,7 +226,7 @@ UX-DR14: A Mote carries its label **automatically on Condensation — no hover, 
 
 UX-DR15: Implement Mote tiering by **dot radius and orbit distance, never by ink below the contrast floor** — three tiers at 2.6px / 2.1px / 1.8px on three distinct orbits, all labels at `ink-label` or above. `[ASSUMPTION D-A4: tier derives from how many Projects share the Skill — the most-shared sit on the inner orbit. Derivable with no new authored field. Not ratified; the alternative is JSON array order, which is authored and therefore rots.]`
 
-UX-DR16: Implement the Mote **angular quota** — the orbit ring is divided into slots and no two labels occupy adjacent slots on the same orbit. With three orbits and nine Skills this is comfortable. `[GAP D-G3/E-G6: degradation above ~12 simultaneous labels is unspecified. No entry exceeds nine today.]`
+UX-DR16: Implement the Mote **angular quota** — the orbit ring is divided into slots and no two labels occupy adjacent slots on the same orbit. With three orbits and nine Skills this is comfortable. `[GAP D-G3/E-G6: degradation above ~12 simultaneous labels is unspecified. No entry exceeds nine today.]` *["Nine" superseded 2026-10-14 (story 3.19): Projects carry 7–25 Skills. The degradation above ~12 labels is ruled in story 3.18 and tested by its sweeps at 7, 12 and 25 Skills.]*
 
 UX-DR17: Implement Mote **label side-flip and radial anchoring** — a label anchors outward from the Body (left of the dot on the left half of the orbit, right on the right half) so no label crosses the Focused Body or the panel edge. A label that would land under the panel column is **suppressed and its Mote re-slotted on the next frame, never truncated with an ellipsis.**
 
@@ -252,7 +252,7 @@ UX-DR26: Implement the **panel release affordance** — the word `release` in `{
 
 **Chrome, motion, and interaction**
 
-UX-DR27: Implement **exactly two corner chrome lines per frame**, inset 40px, in opposite corners, at `chrome` in `ink-label-dark`. Left-top carries identity plus the Colophon route: `THOMAS NAVARRO · the model`. Right-bottom is the **stateful instruction slot**: on-Rail `scroll ↓ — time runs backward`; free flight `↩ resume the journey`; Focused `esc — release`. **Never three lines. Never a persistent HUD, minimap, or nav bar.** The free-flight return does not add a third line — it replaces the second. The affordance is a real focusable control in free-flight and Focused states, not decorative text.
+UX-DR27: Implement **exactly two corner chrome lines per frame**, inset 40px, in opposite corners, at `chrome` in `ink-label-dark`. Left-top carries identity plus the Colophon route: `THOMAS NAVARRO · the model`. Right-bottom is the **stateful instruction slot**: on-Rail `scroll ↓ — time runs backward`; free flight `↩ resume the journey`; Focused `esc — release`. **Never three lines. Never a persistent HUD, minimap, or nav bar.** *[Except, reconciled 2026-10-14 (story 3.19): the DOM index entry revealed by `:focus-visible` (ruling 8a, story 3.9) draws while it holds keyboard focus. It is not chrome: the index is visually hidden otherwise, and only the one focused entry shows.]* The free-flight return does not add a third line — it replaces the second. The affordance is a real focusable control in free-flight and Focused states, not decorative text.
 
 UX-DR28: **"It does not jump; it flies."** There are **no cuts anywhere in the product** — not between Shots, not snapping to a destination in free flight, not the panel appearing while the camera is stationary, not instant re-framing on window resize, and not a transition that begins after the previous one has stopped.
 
@@ -762,14 +762,14 @@ So that the camera and the index never disagree about where I am.
 
 **Given** one store owns navigation (AD-9)
 **When** `shell/state.ts` is implemented with zustand
-**Then** it holds `mode` (`rail` | `freeflight`), `focusedProjectId` (`ProjectId | null`), and `railPosition` (a **ClientId**, per AD-4a)
+**Then** it holds `mode` (`rail` | `freeflight`), `focusedProjectId` (`ProjectId | null`)~~, and `railPosition` (a **ClientId**, per AD-4a)~~ *[superseded 2026-10-14 by ruling R1 (story 3.19): `railPosition` and `selectClient` are dropped; the Rail's position is `scrollProgress`, whose integer `k` is the `k`-th Client stop (AD-4a)]*
 **And** it holds `focusOrigin` (`rail` | `freeflight`), stored at Focus entry rather than inferred at release (AD-16)
-**And** continuous scroll progress and the discrete current Client are **separate fields**
+**And** ~~continuous scroll progress and the discrete current Client are **separate fields**~~ *[superseded 2026-10-14 by ruling R1 (story 3.19): there is no discrete current-Client field; scroll progress is the one record of where the Rail is]*
 
 **Given** every field has exactly one writer (AD-16)
 **When** the store is implemented
 **Then** each field's single writer is documented and enforced
-**And** the camera reads progress and writes nothing; the index reads the discrete Client and writes nothing the camera owns
+**And** the camera reads progress and writes nothing; ~~the index reads the discrete Client and~~ *[superseded 2026-10-14 by ruling R1 (story 3.19): no discrete Client field exists to read]* the index writes nothing the camera owns
 
 **Given** all transitions are named events (AD-9)
 **When** state changes
@@ -863,7 +863,7 @@ So that I am taken somewhere without having to decide where to go.
 **Given** the Rail stops at Clients, never at Projects (AD-4a)
 **When** the Rail is constructed
 **Then** it is a continuous trajectory through ~5–6 **Client** stops
-**And** `railPosition` indexes Clients
+**And** ~~`railPosition` indexes Clients~~ *[superseded 2026-10-14 by ruling R1 (story 3.19): the field is dropped; an integer `scrollProgress` `k` is the `k`-th Client stop]*
 **And** no Rail stop exists for any Project
 
 **Given** Shots name entities, never coordinates (FR-17)
@@ -1191,7 +1191,7 @@ So that the scene reads as a deep-field plate rather than as an untextured 3D mo
 
 **Given** FR-3 binds brightness to recency and the ladder carries state (UX-DR2)
 **When** a Body's stroke is computed
-**Then** its data-derived `luminanceBand` modulates only within the resting band (`stroke-dust` … `stroke-near`)
+**Then** its data-derived `luminanceBand` modulates only within the resting band (~~`stroke-dust` … `stroke-near`~~ the two steps `stroke-rest`, `stroke-near` — *superseded 2026-10-14 by ruling 4b-i, story 3.9, `identity-audit-3-9.md` F5*)
 **And** `stroke-active` and `stroke-focus` are applied on top, reserved for camera state
 **And** a recent Shallow Project is bright *for a resting Body* but **never reaches white while unfocused**
 
@@ -1316,7 +1316,7 @@ So that I learn something from the approach rather than merely learning that it 
 ### Story 3.5: Mote tiering and label legibility
 
 As a visitor reading a Notable,
-I want nine orbiting Skill labels to be readable without competing with the prose,
+I want nine orbiting Skill labels to be readable without competing with the prose, *["nine" superseded 2026-10-14 (story 3.19): 7–25 Skills per Project]*
 So that the stack is visible and the paragraph is still readable.
 
 **Acceptance Criteria:**
@@ -1342,6 +1342,8 @@ So that the stack is visible and the paragraph is still readable.
 **And** they are not baked into a canvas texture
 **And** **no live region is used** — the Skills are static content arriving with the panel, not an event to announce
 
+*[The next two criteria are superseded 2026-10-14 (story 3.19): Projects carry 7–25 Skills, and the tested cases are story 3.18's sweeps at 7, 12 and 25 Skills under its degradation ruling.]*
+
 **Given** the SNCF entry carries nine Skills (UX-DR16)
 **When** it is focused
 **Then** all nine labels render legibly and simultaneously without overlapping each other or the panel
@@ -1349,7 +1351,7 @@ So that the stack is visible and the paragraph is still readable.
 **Given** degradation above ~12 labels is unspecified (D-G3, E-G6)
 **When** the implementation is written
 **Then** the angular-quota system is structured so a degradation rule can be added without redesign
-**And** the current inventory maximum of nine is recorded as the tested case
+**And** ~~the current inventory maximum of nine is recorded as the tested case~~ *[superseded 2026-10-14 (story 3.19): the tested cases are 7, 12 and 25 Skills (story 3.18)]*
 
 ### Story 3.6: The information panel
 
@@ -1376,7 +1378,7 @@ So that I read the reasoning rather than scanning a table.
 **Given** the Dust is the display (FR-10, UX-DR22)
 **When** the field table renders
 **Then** it carries `Role`, `Team`, and `Built` — and **no `Skills` row**
-**And** no technology name appears in the field table anywhere
+**And** ~~no technology name appears in the field table anywhere~~ no field value names a Skill from the Skills vocabulary *[superseded 2026-10-14 by ruling R2 (story 3.19): the wording is reconciled to what story 3.17's check enforces — `CareerSchema` rejects a `role` or `built` value naming a Skill from the career-wide vocabulary]*
 
 **Given** Company is displayed but never positioned (FR-6)
 **When** the panel renders
@@ -1457,7 +1459,7 @@ So that the frame stays quiet and I always know what to do next.
 **Given** there are exactly two chrome lines per frame (UX-DR27)
 **When** any state of the scene renders
 **Then** two lines appear in opposite corners, inset 40px, at `chrome` in `ink-label`
-**And** **never a third line, never a persistent HUD, never a minimap, never a nav bar**
+**And** **never a third line, never a persistent HUD, never a minimap, never a nav bar** *[except, reconciled 2026-10-14 (story 3.19): the index entry revealed by `:focus-visible` while it holds keyboard focus (ruling 8a, story 3.9)]*
 
 **Given** left-top carries authorship and the Colophon route (UX-DR27, UX-DR54)
 **When** it renders
@@ -1744,6 +1746,7 @@ Closes `epic-1-retro-item-14`, `epic-2-retro-item-7`, `-8`, `epic-3-retro-item-5
 **Given** `railPosition` is undecided (AC 2.2 / AD-4a)
 **When** Thomas rules
 **Then** either the Rail follows a Client flown to, or the field is dropped from AC 2.2 and AD-4a, and the code matches
+*[Ruled 2026-10-14 (R1): the field is dropped, with `selectClient`, from AC 2.2, AD-4a and AD-9, and from the code.]*
 
 **Given** the Epic 3 reconciliations
 **When** the specs are edited
@@ -1752,6 +1755,7 @@ Closes `epic-1-retro-item-14`, `epic-2-retro-item-7`, `-8`, `epic-3-retro-item-5
 **Given** the Epic 2 doc drift
 **When** the docs are edited
 **Then** the release goal reads "the pose beneath Focus", Home is the `goHome` door, and `render-scene/README.md` lists the five `shell/` modules it imports
+*[As found 2026-10-14: six modules — `state.ts`, `activate.ts`, `focus-motion.ts`, `panel-model.ts`, `motion-preference.ts`, `index-model.ts`.]*
 
 **Given** the Epic 1 housekeeping
 **When** it lands

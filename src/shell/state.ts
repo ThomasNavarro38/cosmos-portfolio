@@ -30,20 +30,19 @@
  * | --- | --- | --- |
  * | `mode` | `enterRail` / `enterFreeFlight` | Rail travel or free flight |
  * | `flightTarget` | `enterFreeFlight`, with `mode` as one transition | What free flight frames: a Client, or `null` for the whole universe |
- * | `railPosition` | `selectClient` — no caller since 2.9 (the index's Client button flies instead) | The discrete Client the Rail stops at, never a ProjectId (AD-4a) |
- * | `scrollProgress` | `advanceScroll` — the scroll input's handlers in `scene-host.tsx` (rules in `rail-input.ts`) and the `goHome` door (`activate.ts`) | Continuous progress along the Rail, in stops: 0 is the opening frame, `k` the `k`-th Client stop, present first |
+ * | `scrollProgress` | `advanceScroll` — the scroll input's handlers in `scene-host.tsx` (rules in `rail-input.ts`) and the `goHome` door (`activate.ts`) | Continuous progress along the Rail, in stops: 0 is the opening frame, `k` the `k`-th Client stop, present first — the one record of where the Rail is (AD-4a, AD-9) |
  * | `focusedProjectId` | `focusProject` / `releaseFocus` | The one Project focused, or none |
  * | `focusOrigin` | `focusProject`, at entry | The mode Focus was entered from |
  * | `hoveredProjectId` | `hoverProject` — the scene's pointer over/out on a Planet's hit sphere (`scene-pick.ts`) | The Planet the pointer is over, or none (3.4) |
  * | `keyboardProjectId` | `keyboardApproach` — the index's Project button focus/blur, through the doors `approachByKeyboard` / `leaveByKeyboard` (`activate.ts`) | The Project whose index entry holds `:focus-visible`, or none (3.4) |
  *
- * No event writes two writers' fields. The scroll input advancing
- * `scrollProgress` must not move `railPosition`, and selecting a Client must not
- * invent a scroll value. Collapsing them into one field would make "the
- * Rail is between two Clients" and "the Rail stops at this Client" the same
- * statement, and the two writers would fight over it every frame. The camera
- * writes neither: it reads `scrollProgress` and moves the Three camera, nothing
- * else.
+ * No event writes two writers' fields. Where the Rail is has one field,
+ * `scrollProgress`: an integer `k` is the `k`-th Client stop, so a discrete
+ * "stop" field beside it would be a second record of the same position, and two
+ * writers would fight over it every frame. Thomas ruled on 2026-10-14 (3.19, R1)
+ * to drop the discrete twin and its event, which had had no caller since 2.9. The
+ * camera writes nothing: it reads `scrollProgress` and moves the Three camera,
+ * nothing else.
  *
  * **`focusOrigin` is stored at entry, never inferred at release** (AD-16). The
  * releasing consumer needs to know where to return the visitor *to*, and by then
@@ -72,7 +71,7 @@
  * loop, and `getState` is on the store API for exactly it.
  *
  * **A redundant transition still notifies.** No event compares before writing, so
- * `selectClient` at the Client already selected notifies every subscriber. That is
+ * `enterRail` while already on the Rail notifies every subscriber. That is
  * chosen, not overlooked: short-circuiting means a per-field comparison in every
  * event, in the module whose whole virtue is holding no logic, to save work the two
  * real consumers already discard — a React subscriber's `useStore(store, selector)`
@@ -140,18 +139,10 @@ export interface NavigationState {
    * It is not cleared by `enterRail`: on the Rail nothing reads it, and the next
    * `enterFreeFlight` names a target anyway. Keeping `enterRail` a one-field
    * write is what keeps the return to the Rail from touching anything else —
-   * and `scrollProgress` and `railPosition` are never written by flight at all,
-   * so the return lands where the Rail was left.
+   * and `scrollProgress` is never written by flight at all, so the return lands
+   * where the Rail was left.
    */
   readonly flightTarget: ClientId | null;
-  /**
-   * The discrete Client the Rail stops at. Written by `selectClient` only.
-   *
-   * Never a ProjectId (AD-4a): the Rail's stops are Clients, and a Project is
-   * reached by focusing it, not by travelling to it. Retained across free flight
-   * so the Rail is re-enterable where it was left.
-   */
-  readonly railPosition: ClientId | null;
   /**
    * Continuous progress along the Rail, **in stops**. Written by
    * `advanceScroll` only. Its callers are the Rail's scroll input — the wheel
@@ -162,8 +153,8 @@ export interface NavigationState {
    * so a Rail of `N` Client stops runs over `[0, N]`. The camera rig reads it
    * with `getState()` each frame and writes nothing back.
    *
-   * Separate from `railPosition` because it is a different quantity with a
-   * different writer. Unclamped here: the range is the scroll input's to enforce
+   * It is the only record of where the Rail is: the stops are Clients (AD-4a),
+   * never Projects, and an integer value names one. Unclamped here: the range is the scroll input's to enforce
    * — `wheelProgress` clamps to `[0, N]` — and what a value means in world space
    * is the Rail model's. The store checks only that it is a finite number.
    */
@@ -199,15 +190,13 @@ export interface NavigationState {
  * The state a visitor arrives in: on the Rail, nowhere in particular, nothing
  * focused.
  *
- * `railPosition: null` rather than the first Client, because "which Client is
- * first" is an ordering question and the shell answers none of those (AD-3). The
- * Rail's order is known only to consumers reading the artifact. Since 2.9 no
- * shipped path selects a stop: the index's Client button flies instead.
+ * `scrollProgress: 0` is the opening frame, not the first Client: "which Client
+ * is first" is an ordering question and the shell answers none of those (AD-3).
+ * The Rail's order is known only to consumers reading the artifact.
  */
 const INITIAL_STATE: NavigationState = {
   mode: 'rail',
   flightTarget: null,
-  railPosition: null,
   scrollProgress: 0,
   focusedProjectId: null,
   focusOrigin: null,
@@ -278,20 +267,6 @@ function requireProgress(field: string, progress: number): number {
 }
 
 /**
- * The Rail stops at this Client.
- *
- * Writes `railPosition` and nothing else. `focusedProjectId` survives on
- * purpose: selecting a Client is travel, and travel does not close what the
- * visitor was reading — 2.7 owns the panel and decides whether it should.
- *
- * @throws if the ID is empty or not a string, naming the field and the value.
- */
-export function selectClient(clientId: ClientId): void {
-  const id = requireId('selectClient', clientId);
-  navigationStore.setState({ railPosition: id });
-}
-
-/**
  * Focus this Project, recording the mode it was entered from.
  *
  * Both writes happen together because they are one transition: the origin is
@@ -337,11 +312,9 @@ export function releaseFocus(): void {
 /**
  * The Rail's scroll input advances along the Rail.
  *
- * Writes `scrollProgress` and nothing else — in particular not `railPosition`,
- * which keeps `selectClient` as its one writer. Scrolling does not select a Client:
- * the continuous position and the discrete stop stay two quantities, and if one
- * should ever follow the other that is two named transitions rather than one
- * event quietly writing two writers' fields.
+ * Writes `scrollProgress` and nothing else: scrolling neither changes mode nor
+ * touches Focus. An integer value is a Client stop, so there is no discrete stop
+ * field for scrolling to keep in step with (3.19, R1).
  *
  * @throws if the value is not a finite number, naming the field and the value.
  * A `NaN` written here would propagate to a camera as "nowhere" with no error
@@ -360,8 +333,8 @@ export function advanceScroll(progress: number): void {
  * subscriber ever sees free flight with a stale target or a target with no
  * flight. Retargeting while already in free flight is the same event.
  *
- * `railPosition` and `scrollProgress` are retained, so the Rail is re-enterable
- * exactly where it was left. Clearing either would make free flight a one-way
+ * `scrollProgress` is retained, so the Rail is re-enterable exactly where it was
+ * left. Clearing it would make free flight a one-way
  * door: a visitor who drifted off and came back would land wherever the default
  * is rather than where they were.
  *
@@ -374,7 +347,7 @@ export function enterFreeFlight(target: ClientId | null): void {
 }
 
 /**
- * Return to the Rail, at the stop and progress it was left at.
+ * Return to the Rail, at the progress it was left at.
  *
  * Writes `mode` only: `flightTarget` is left standing because nothing on the
  * Rail reads it.

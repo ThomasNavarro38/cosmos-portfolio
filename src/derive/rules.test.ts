@@ -34,32 +34,9 @@ import {
   recencyOf,
   type LuminanceBand,
 } from './rules.ts';
+import { allProjects, AS_OF, baseEntry, graphOf as derive } from './fixtures.test.ts';
 
-const AS_OF = '2026-09';
 const RULES_TS = fileURLToPath(new URL('./rules.ts', import.meta.url));
-
-function baseEntry(): Record<string, unknown> {
-  return {
-    client: 'SNCF',
-    project: 'Client referential — MDM replacement',
-    company: null,
-    role: 'Technical lead',
-    built: 'Replaced a commercial product with an in-house application.',
-    team_size: 11,
-    duration: { start: '2019-01', end: '2021-01' },
-    notable: 'Problem stated. [[The constraint, in one sentence.]] The decision taken.',
-    skills: ['Java', 'Spring Boot'],
-  };
-}
-
-function derive(...entries: Record<string, unknown>[]) {
-  return deriveEntities(CareerSchema.parse({ asOf: AS_OF, projects: entries }), { asOf: AS_OF });
-}
-
-/** Every Project entity, flattened, in authored order. */
-function allProjects(graph: ReturnType<typeof derive>) {
-  return graph.clients.flatMap((c) => c.projects);
-}
 
 /** Position of a band in the resting ladder, dimmest 0. */
 function brightness(band: LuminanceBand): number {

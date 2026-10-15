@@ -451,7 +451,9 @@ and the step encodes **distance and state**, never category.
 **On the collision between the stroke ladder and FR-3.** FR-3 binds brightness
 to recency. The ladder above is *state*, not data. These two must not be
 conflated in implementation: a Body's data-derived brightness modulates within
-the resting band (`stroke-dust` … `stroke-near`); `stroke-active` and
+the resting band (~~`stroke-dust` … `stroke-near`~~ the two steps `stroke-rest`,
+`stroke-near` — *superseded 2026-10-14 by ruling 4b-i, story 3.9: `stroke-dust`
+is used for no Body, as its row above says*); `stroke-active` and
 `stroke-focus` are reserved for camera state and are applied on top. A recent
 Shallow Project is bright *for a resting Body*; it never reaches white while
 unfocused. This is the discipline that stops the mock's misleading composition
@@ -935,7 +937,10 @@ instruction, stateful per the table below.
 
 **Never three lines. Never a persistent HUD.** If a third piece of chrome is
 needed, something in the scene has failed to communicate and the fix is in the
-scene.
+scene. *[Except, reconciled 2026-10-14 (story 3.19): the DOM index entry revealed
+by `:focus-visible` (ruling 8a, story 3.9) draws while it holds keyboard focus. It
+is not chrome: the index is visually hidden otherwise, and only the one focused
+entry shows.]*
 
 **The free-flight return does not add a third line — it replaces the second.**
 EXPERIENCE.md requires an always-present return affordance while off-Rail, and
@@ -1060,6 +1065,8 @@ Genuine gap.]`
 - **No connector lines between a Project and its Motes** (FR-14).
 - **No Skills row in the field table.** The Dust is the display.
 - **No third line of corner chrome, no HUD, no minimap, no persistent nav bar.**
+  *[Except the index entry revealed by `:focus-visible` while it holds keyboard
+  focus — ruling 8a, story 3.9; reconciled 2026-10-14, story 3.19.]*
 - **No scrim, modal, or dimmed backdrop behind the panel.** The scene is never
   occluded.
 - **No "work in progress" disclaimer, badge, beta tag, or apologetic microcopy**

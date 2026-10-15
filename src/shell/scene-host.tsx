@@ -270,7 +270,7 @@ export function SceneHost({ artifact }: SceneHostProps) {
       if (key === null) return;
       event.preventDefault();
       if ('inert' in key) return;
-      // Home is a door: `enterRail()` then the opening frame, executed in `activate.test.ts`.
+      // Home is a door: `goHome` (`activate.ts`), the return then the opening frame, executed in `activate.test.ts`.
       if ('home' in key) {
         goHome();
         return;

@@ -22,7 +22,7 @@ import {
   releaseLayer,
   returnToRail,
 } from './activate.ts';
-import { advanceScroll, enterRail, hoverProject, navigationStore, releaseFocus, resetNavigation, selectClient } from './state.ts';
+import { advanceScroll, enterRail, hoverProject, navigationStore, releaseFocus, resetNavigation } from './state.ts';
 
 const ACTIVATE_TS = fileURLToPath(new URL('./activate.ts', import.meta.url));
 
@@ -30,14 +30,12 @@ const ACTIVATE_TS = fileURLToPath(new URL('./activate.ts', import.meta.url));
 
 test('a Client activated on the Rail enters free flight aimed at it, and moves nothing of the Rail', () => {
   resetNavigation();
-  selectClient('client:a');
   advanceScroll(1.5);
   activateClient('client:c');
 
   assert.deepEqual(navigationStore.getState(), {
     mode: 'freeflight',
     flightTarget: 'client:c',
-    railPosition: 'client:a',
     scrollProgress: 1.5,
     focusedProjectId: null,
     focusOrigin: null,
@@ -76,7 +74,6 @@ test('a Project activated on the Rail is Focus alone, entered from the Rail', ()
   assert.deepEqual(navigationStore.getState(), {
     mode: 'rail',
     flightTarget: null,
-    railPosition: null,
     scrollProgress: 1,
     focusedProjectId: 'project:p',
     focusOrigin: 'rail',
@@ -118,7 +115,6 @@ test('a Client or the overview activated while focused releases Focus, then flie
   for (const [doorName, door, target] of doors) {
     for (const [originName, enter] of origins) {
       resetNavigation();
-      selectClient('client:stop');
       advanceScroll(2.3);
       enter();
       activateProject('project:p', 'client:a');
@@ -131,7 +127,6 @@ test('a Client or the overview activated while focused releases Focus, then flie
       assert.equal(state.mode, 'freeflight', `${where}: in free flight`);
       assert.equal(state.flightTarget, target, `${where}: aimed at the destination`);
       assert.equal(state.scrollProgress, 2.3, `${where}: progress untouched`);
-      assert.equal(state.railPosition, 'client:stop', `${where}: the stop untouched`);
     }
   }
 });
@@ -149,7 +144,6 @@ test('a Client or the overview activated with nothing focused writes no release'
 test('home returns to the Rail’s opening frame, from free flight or from the Rail at 3, releasing Focus first', () => {
   for (const enter of [() => activateClient('client:c'), () => pullBack(), () => undefined]) {
     resetNavigation();
-    selectClient('client:stop');
     advanceScroll(3);
     enter();
     activateProject('project:p', 'client:c');
@@ -162,7 +156,6 @@ test('home returns to the Rail’s opening frame, from free flight or from the R
     assert.equal(state.flightTarget, before.flightTarget, 'flightTarget untouched');
     assert.equal(state.focusedProjectId, null, 'Focus released — home changes the layer');
     assert.equal(state.focusOrigin, before.focusOrigin, 'the origin stands, as a release leaves it');
-    assert.equal(state.railPosition, 'client:stop', 'the stop untouched');
   }
 });
 
@@ -227,7 +220,6 @@ test('Escape, Focused on the Rail: Focus released, the Rail at 2.3 — one write
 test('Escape, in flight unfocused: back to the Rail, progress as left — one write', () => {
   for (const enter of [() => activateClient('client:c'), () => pullBack()]) {
     resetNavigation();
-    selectClient('client:stop');
     advanceScroll(2.3);
     enter();
     const before = navigationStore.getState();
@@ -384,7 +376,7 @@ test('the keyboard doors activate nothing: no Focus, no flight, no Rail move', (
  * release before travel, and `releaseLayer`'s Focus branch; `enterRail` in
  * exactly two — the return, after the release, and `releaseLayer`'s flight
  * branch. Every door that changes `mode` (a Client, the overview, the return,
- * home) releases first. `selectClient` in none.
+ * home) releases first. `resetNavigation` in none.
  */
 function auditActivatePurity(source: string): string[] {
   const code = stripComments(source);
@@ -394,7 +386,7 @@ function auditActivatePurity(source: string): string[] {
   if (/\bimport\s*\(|\brequire\s*\(/.test(code)) failures.push('a dynamic import');
   if (/\bwindow\b|\bdocument\b|\bnavigator\b/.test(code)) failures.push('reads a DOM global');
   if (/\bsetState\b/.test(code)) failures.push('writes the store other than through a named event');
-  if (/\bselectClient\b/.test(code)) failures.push('a door writes the Rail’s stop');
+  if (/\bresetNavigation\b/.test(code)) failures.push('a door resets the store');
   if ((code.match(/\badvanceScroll\(/g) ?? []).length !== 1) failures.push('advanceScroll is called other than once');
   if (!/export\s+function\s+goHome\(\)\s*:\s*void\s*\{\s*returnToRail\(\)\s*;\s*advanceScroll\(\s*0\s*\)\s*;\s*\}/.test(code)) {
     failures.push('goHome is not exactly returnToRail() then advanceScroll(0) — the one door that writes progress');
@@ -455,7 +447,7 @@ test('the purity audit rejects the real module with any one impurity added', () 
     ['home keeps Focus', (s) => s.replace(/(export function goHome\(\): void \{\s*)returnToRail\(\);/, '$1enterRail();')],
     ['a Client flies under the panel', (s) => s.replace(/(const id = requireId\('activateClient', clientId\);)\s*releaseForTravel\(\);/, '$1')],
     ['the overview flies under the panel', (s) => s.replace(/(export function pullBack\(\): void \{)\s*releaseForTravel\(\);/, '$1')],
-    ['a door that selects a Client', (s) => s.replace('enterFreeFlight(id);', 'enterFreeFlight(id);\n  selectClient(id);')],
+    ['a door that resets the store', (s) => s.replace('enterFreeFlight(id);', 'enterFreeFlight(id);\n  resetNavigation();')],
     ['an unguarded release', (s) => s.replace('if (navigationStore.getState().focusedProjectId !== null) releaseFocus();', 'releaseFocus();')],
     ['a second release', (s) => s.replace(/(export function returnToRail\(\): void \{)/, '$1\n  releaseFocus();')],
     // Escape's door.

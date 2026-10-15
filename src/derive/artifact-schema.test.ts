@@ -23,30 +23,9 @@ import { DWELL_TEMPOS } from './dwell.ts';
 import { deriveEntities } from './entities.ts';
 import { solveLayout } from './solve.ts';
 import { stripComments } from '../../scripts/source-scan.ts';
+import { AS_OF, baseEntry, FIXTURE_DIGEST, seededRandom } from './fixtures.test.ts';
 
-const AS_OF = '2026-09';
-/** A well-formed sourceDigest for fixtures built in memory, with no career.json behind them. */
-const FIXTURE_DIGEST = 'f'.repeat(64);
 const SCHEMA_TS = fileURLToPath(new URL('./artifact-schema.ts', import.meta.url));
-
-function seededRandom(seed = 1): () => number {
-  let state = seed;
-  return () => (state = (1664525 * state + 1013904223) % 4294967296) / 4294967296;
-}
-
-function baseEntry(): Record<string, unknown> {
-  return {
-    client: 'SNCF',
-    project: 'Client referential — MDM replacement',
-    company: null,
-    role: 'Technical lead',
-    built: 'Replaced a commercial product with an in-house application.',
-    team_size: 11,
-    duration: { start: '2019-01', end: '2021-01' },
-    notable: 'Problem stated. [[The constraint, in one sentence.]] The decision taken.',
-    skills: ['Java', 'Spring Boot'],
-  };
-}
 
 /** A real artifact, built through the real pipeline. */
 function valid(...entries: Record<string, unknown>[]): Artifact {

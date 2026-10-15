@@ -172,8 +172,8 @@ export function wheelIntent(
  *   - `{ inert: true }` — `ArrowDown` / `ArrowUp` in free flight, unfocused:
  *     swallowed, nothing written, as the wheel is.
  *   - `{ home: 0 }` — `Home`, from the Rail or from free flight: the handler
- *     returns to the Rail (`enterRail()`) and to its opening frame
- *     (`advanceScroll(0)`).
+ *     calls the `goHome` door (`activate.ts`), which returns to the Rail
+ *     (`returnToRail()`) and to its opening frame (`advanceScroll(0)`).
  *
  * Pure: the key, whether a modifier is held, and the store's values are passed
  * in, and the event's target is never read.

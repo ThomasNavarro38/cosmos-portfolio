@@ -33,6 +33,7 @@ Pure pipeline: validate → derive → solve. No DOM, no React, no Three. The si
 | `artifact.test.ts` | Content parity field-by-field, the `timeAxis`↔`luminanceBand` binding, and the AD-1 script-graph walk. |
 | `boundaries.test.ts` | One fixture tree per declared rule, each pinned by mutation: break the check and the suite goes red. |
 | `maintenance.test.ts` | NFR-5 (an entry costs one object plus one number) and FR-5 (promotion is free), plus the no-network ratchet. |
+| `fixtures.test.ts` | The suites' one shared fixture (3.19): `AS_OF`, `FIXTURE_DIGEST`, `seededRandom`, `baseEntry`, `entry`, `careerOf`, `graphOf`, `allProjects`. Holds no test; the `.test.ts` suffix keeps it a test module, so the boundary gate refuses any shipped import of it. `skills.test.ts` keeps its own `entry` and `graphOf`, whose signatures differ. |
 
 ```sh
 npm test        # every *.test.ts under src/, this suite included
@@ -43,7 +44,7 @@ Node 24 strips TypeScript types natively, so the tests run straight from source 
 
 ## Entity IDs
 
-`clientIdOf(client)` and `projectIdOf(client, project)` produce every ID in the graph, prefixed `client:` and `project:` respectively, with the Project's ID nesting under its Client's slug (`project:sncf/referential-api`). Both derive from authored content alone — no array index, no authored order — so a re-ordered `career.json` yields byte-identical IDs (AD-5).
+`clientIdOf(client)` and `projectIdOf(client, project)` produce every ID in the graph, prefixed `client:` and `project:` respectively, with the Project's ID nesting under its Client's slug (`project:sncf/referential-api`). Both derive from authored content alone — no array index, no authored order — so a re-ordered `career.json` yields byte-identical IDs (AD-5). `byId`, exported beside them, is the one ID comparator: destinations, Dwell, Shots, the artifact's Projects and the tiebreak of its Client order all sort with it rather than with a copy of it (3.19).
 
 Slugging lowercases and collapses non-alphanumeric runs to hyphens. A name written entirely in a non-Latin script slugs to nothing, so it falls back to base-36 codepoint encoding rather than to a positional index: still content-derived, still stable under a re-order, at the cost of an unreadable segment.
 

@@ -23,7 +23,7 @@
 
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { readCareerFile, validateCareer } from '../data/validate.ts';
@@ -37,6 +37,9 @@ import { solveLayout } from './solve.ts';
 
 /** The one authored source, read by the solve and held against the artifact by the gate. */
 export const CAREER_JSON = fileURLToPath(new URL('../data/career.json', import.meta.url));
+
+/** The repository root, against which the gate names the files it checked. */
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 /** The one path the artifact lives at, named once and used by both modes. */
 export const ARTIFACT_PATH = fileURLToPath(
@@ -89,7 +92,7 @@ export type PipelineResult =
   | { readonly ok: false; readonly failures: readonly string[]; readonly warnings: readonly string[] };
 
 /**
- * Every check an assembled artifact must pass **before its bytes are written**.
+ * The checks an assembled artifact must pass **before its bytes are written**.
  * Returns the failure lines, empty on success.
  *
  * Five of them: the document against its own declared schema, the destination
@@ -100,6 +103,14 @@ export type PipelineResult =
  * gate — without them the *first* bad emission would be the one committed, and
  * the gate would only ever reject it afterwards, when the artifact on disk is
  * already wrong.
+ *
+ * **Not every check the gate runs.** The import boundaries over `src/`
+ * (`checkImportBoundaries`) are checked at the gate only, inside
+ * `checkArtifact`: they are a property of the source tree, not of the artifact.
+ * So `npm run solve` on a tree that breaks a boundary still writes the artifact,
+ * and `npm run gate` — which `build` runs — is what fails. Thomas ruled this the
+ * correct header rather than a second boundary walk in the emitter (2026-10-14,
+ * story 3.19, ruling R3).
  *
  * Extracted from `runPipeline` rather than inlined there because of what it
  * costs to test. Both branches are unreachable from `runPipeline` with any
@@ -888,6 +899,17 @@ export function checkGate(
 }
 
 /**
+ * A path as the gate prints it: repo-relative with `/` inside the repository, so
+ * `npm run gate` names `generated/layout.generated.json` on every OS; as given
+ * outside it, so a seam run names the scratch file it checked.
+ */
+function display(path: string): string {
+  const rel = relative(REPO_ROOT, resolve(path));
+  const outside = rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+  return outside ? path : rel.split(sep).join('/');
+}
+
+/**
  * The CLI's path arguments, or exit 1 naming every argument it refuses: any
  * flag, an empty string, and any path past `max`. A path never starts with `-`
  * here, so a mistyped flag cannot be read as a file to read or write.
@@ -939,7 +961,11 @@ function main(): void {
       for (const line of failures) console.error(line);
       process.exit(1);
     }
-    console.log('the layout artifact is present, valid, and solved from the current career.json.');
+    // Named as checked: a seam run must not print a line that reads as a verdict
+    // on the committed files.
+    console.log(
+      `the layout artifact ${display(artifactPath ?? ARTIFACT_PATH)} is present, valid, and solved from the current ${display(careerPath ?? CAREER_JSON)}.`,
+    );
     return;
   }
 

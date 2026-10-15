@@ -19,8 +19,10 @@
  * change of the focused ID — entering (`null → A`), moving (`A → B`) or releasing
  * (`A → null`) — captures the pose on screen at that instant and eases from it to
  * the new goal over `FOCUS_SECONDS` on `easeFocus`, the same duration and curve
- * the panel slides on in CSS. The goal on release is the *live* Rail pose, so
- * the camera lands wherever the Rail is now, not where it was. An interruption
+ * the panel slides on in CSS. The goal on release is the *live* pose beneath
+ * Focus — the Rail's on the Rail, the flight pose in free flight, as
+ * `flightFrame` composes it — so the camera lands wherever that pose is now, not
+ * where it was. An interruption
  * restarts from the captured pose, so nothing ever cuts, and a release while the
  * panel is still sliding in is shortened exactly as CSS shortens the panel's
  * reversed slide, so the two still end together — as is a reopen of the Project

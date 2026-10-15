@@ -20,10 +20,8 @@ import { SKILL_TIERS } from './rules.ts';
 import { ARTIFACT_PATH, checkEmittedArtifact, checkSkills } from './index.ts';
 import { buildSkills, rankSkills, shareCounts } from './skills.ts';
 import { solveLayout } from './solve.ts';
+import { AS_OF, FIXTURE_DIGEST, seededRandom } from './fixtures.test.ts';
 
-const AS_OF = '2026-09';
-/** A well-formed sourceDigest for fixtures built in memory, with no career.json behind them. */
-const FIXTURE_DIGEST = 'f'.repeat(64);
 const INDEX_TS = fileURLToPath(new URL('./index.ts', import.meta.url));
 
 function entry(client: string, project: string, skills: string[]): Record<string, unknown> {
@@ -38,11 +36,6 @@ function entry(client: string, project: string, skills: string[]): Record<string
     notable: '',
     skills,
   };
-}
-
-function seededRandom(): () => number {
-  let state = 1;
-  return () => (state = (1664525 * state + 1013904223) % 4294967296) / 4294967296;
 }
 
 /** Four Projects: Java ×4, Kafka ×2 (one Project listing it twice), the rest once. */

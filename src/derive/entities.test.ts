@@ -19,36 +19,10 @@ import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { RESTING_BANDS } from './rules.ts';
 import { clientFoldWarnings, clientIdOf, deriveEntities, isDeepProject, projectIdOf } from './entities.ts';
+import { allProjects, AS_OF, baseEntry, graphOf as derive } from './fixtures.test.ts';
 
 /** The real authored file, resolved the way `src/data/validate.test.ts` does. */
 const CAREER_JSON = fileURLToPath(new URL('../data/career.json', import.meta.url));
-
-const AS_OF = '2026-09';
-
-/** A minimal valid entry. Tests clone and mutate it one field at a time. */
-function baseEntry(): Record<string, unknown> {
-  return {
-    client: 'SNCF',
-    project: 'Client referential — MDM replacement',
-    company: null,
-    role: 'Technical lead',
-    built: 'Replaced a commercial product with an in-house application.',
-    team_size: 11,
-    duration: { start: '2019-01', end: '2021-01' },
-    notable: 'Problem stated. [[The constraint, in one sentence.]] The decision taken.',
-    skills: ['Java', 'Spring Boot'],
-  };
-}
-
-/** Parses fixtures through the real schema, then derives. */
-function derive(...entries: Record<string, unknown>[]) {
-  return deriveEntities(CareerSchema.parse({ asOf: AS_OF, projects: entries }), { asOf: AS_OF });
-}
-
-/** Every Project entity in the graph, flattened. */
-function allProjects(graph: ReturnType<typeof derive>) {
-  return graph.clients.flatMap((client) => client.projects);
-}
 
 // --- Matrix row: Deep classification ----------------------------------------
 

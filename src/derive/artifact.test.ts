@@ -28,12 +28,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { CareerSchema, type Career } from '../data/schema.ts';
+import { CareerSchema } from '../data/schema.ts';
 import { validateCareer } from '../data/validate.ts';
 import { BANNER, buildArtifact, serializeArtifact, stripBanner } from './artifact.ts';
 import { SCHEMA_VERSION, validateArtifact, type Artifact } from './artifact-schema.ts';
 import { DWELL_TEMPOS } from './dwell.ts';
-import { deriveEntities, type EntityGraph } from './entities.ts';
+import type { EntityGraph } from './entities.ts';
 import { BOUNDARY_RULES, SRC_ROOT } from './boundaries.ts';
 import {
   ARTIFACT_PATH,
@@ -49,35 +49,14 @@ import {
 } from './index.ts';
 import { solveLayout, type SolvedLayout } from './solve.ts';
 import { stripComments } from '../../scripts/source-scan.ts';
+import { allProjects, AS_OF, baseEntry, careerOf, FIXTURE_DIGEST, graphOf, seededRandom } from './fixtures.test.ts';
 
-const AS_OF = '2026-09';
-/** A well-formed sourceDigest for fixtures built in memory, with no career.json behind them. */
-const FIXTURE_DIGEST = 'f'.repeat(64);
 const INDEX_TS = fileURLToPath(new URL('./index.ts', import.meta.url));
 const ARTIFACT_TS = fileURLToPath(new URL('./artifact.ts', import.meta.url));
 const CAREER_JSON = fileURLToPath(new URL('../data/career.json', import.meta.url));
 const PACKAGE_JSON = fileURLToPath(new URL('../../package.json', import.meta.url));
 
 // --- Fixtures ---------------------------------------------------------------
-
-function seededRandom(seed = 1): () => number {
-  let state = seed;
-  return () => (state = (1664525 * state + 1013904223) % 4294967296) / 4294967296;
-}
-
-function baseEntry(): Record<string, unknown> {
-  return {
-    client: 'SNCF',
-    project: 'Client referential — MDM replacement',
-    company: null,
-    role: 'Technical lead',
-    built: 'Replaced a commercial product with an in-house application.',
-    team_size: 11,
-    duration: { start: '2019-01', end: '2021-01' },
-    notable: 'Problem stated. [[The constraint, in one sentence.]] The decision taken.',
-    skills: ['Java', 'Spring Boot'],
-  };
-}
 
 /**
  * A set whose `duration.start` order **deliberately opposes** its recency order.
@@ -94,14 +73,6 @@ function opposedEntries(): Record<string, unknown>[] {
   ];
 }
 
-function careerOf(...entries: Record<string, unknown>[]): Career {
-  return CareerSchema.parse({ asOf: AS_OF, projects: entries });
-}
-
-function graphOf(...entries: Record<string, unknown>[]): EntityGraph {
-  return deriveEntities(careerOf(...entries), { asOf: AS_OF });
-}
-
 function solve(graph: EntityGraph): SolvedLayout {
   return solveLayout(graph, { randomSource: seededRandom() });
 }
@@ -109,11 +80,6 @@ function solve(graph: EntityGraph): SolvedLayout {
 function artifactOf(...entries: Record<string, unknown>[]): Artifact {
   const graph = graphOf(...entries);
   return buildArtifact(graph, solve(graph), AS_OF, FIXTURE_DIGEST);
-}
-
-/** Every Project in the artifact, flattened, in document order. */
-function allProjects(artifact: Artifact) {
-  return artifact.clients.flatMap((client) => client.projects);
 }
 
 const BAND_ORDER = ['stroke-rest', 'stroke-near'];
@@ -1754,6 +1720,27 @@ test('the CLI exits 1 and writes nothing on invalid data', () => {
 test('the --check branch exits 0 against the committed artifact', () => {
   const result = runIndex('--check');
   assert.equal(result.status, 0, `expected exit 0, got ${result.status}\n${result.stderr}`);
+  // The success line names the files it judged (epic-1 retro L-10): the
+  // defaults here, repo-relative with `/` on every OS.
+  assert.equal(
+    result.stdout.trim(),
+    'the layout artifact generated/layout.generated.json is present, valid, and solved from the current src/data/career.json.',
+  );
+});
+
+test('the --check success line names the seam paths it was given, not the committed files', () => {
+  // A scratch-copy gate run used to print a line that could not be told apart
+  // from one about the committed artifact. Through the seam, the paths named are
+  // the ones checked.
+  const { careerPath, write } = sourcePair();
+  const artifact = write();
+  const result = runIndex('--check', artifact, careerPath);
+  assert.equal(result.status, 0, `expected exit 0, got ${result.status}\n${result.stderr}`);
+  assert.ok(result.stdout.includes(artifact), `the seam artifact is named: ${result.stdout}`);
+  assert.ok(result.stdout.includes(careerPath), `and the seam career.json: ${result.stdout}`);
+  // The gate prints committed paths repo-relative, so that is the form to refuse.
+  assert.ok(!result.stdout.includes('generated/layout.generated.json'), 'the committed artifact is not named');
+  assert.ok(!result.stdout.includes('src/data/career.json'), 'nor the committed career.json');
 });
 
 test('importing the module does not run it', () => {

@@ -28,7 +28,7 @@
  */
 
 import type { Dwell } from './artifact-schema.ts';
-import type { ClientEntity, EntityGraph } from './entities.ts';
+import { byId, type ClientEntity, type EntityGraph } from './entities.ts';
 
 /**
  * The entry shape, re-exported from the schema rather than restated here — the
@@ -104,9 +104,6 @@ export function deriveDwell(client: ClientEntity): DwellTempo {
  * tempo by looking its ID up rather than by trusting two lists to stay aligned.
  */
 export function buildDwell(graph: EntityGraph): readonly Dwell[] {
-  const byId = (a: { id: string }, b: { id: string }): number =>
-    a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-
   return [...graph.clients].sort(byId).map((client) => ({
     // The ID `entities.ts` minted, never re-slugified here.
     subject: client.id,

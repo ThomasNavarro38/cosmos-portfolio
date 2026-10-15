@@ -34,8 +34,8 @@ import {
   releaseFocus,
   requireId,
   resetNavigation,
-  selectClient,
 } from './state.ts';
+import * as stateModule from './state.ts';
 
 const STATE_TS = fileURLToPath(new URL('./state.ts', import.meta.url));
 const README_MD = fileURLToPath(new URL('./README.md', import.meta.url));
@@ -49,15 +49,15 @@ function sourceOf(path: string): string {
 
 // --- Arrival ----------------------------------------------------------------
 
-test('a visitor arrives on the Rail, at no stop, with nothing focused', () => {
-  // `railPosition: null` rather than the first Client, because "which Client is
-  // first" is an ordering question and the shell answers none of those (AD-3).
+test('a visitor arrives on the Rail, at the opening frame, with nothing focused', () => {
+  // `scrollProgress: 0` is the opening frame rather than the first Client, because
+  // "which Client is first" is an ordering question and the shell answers none of
+  // those (AD-3).
   resetNavigation();
 
   assert.deepEqual(navigationStore.getState(), {
     mode: 'rail',
     flightTarget: null,
-    railPosition: null,
     scrollProgress: 0,
     focusedProjectId: null,
     focusOrigin: null,
@@ -66,27 +66,44 @@ test('a visitor arrives on the Rail, at no stop, with nothing focused', () => {
   });
 });
 
-// --- Selecting a Client -----------------------------------------------------
+// --- No discrete stop (3.19, R1) -------------------------------------------
 
-test('selecting a Client moves the Rail to it and leaves Focus alone', () => {
-  // The matrix's first row. Selecting a Client is travel, and travel does not
-  // close what the visitor was reading — 2.7 owns the panel and decides that.
+test('the store holds no discrete Rail stop and exports no event to write one', () => {
+  // Thomas's ruling R1 (2026-10-14): `scrollProgress` already says where the Rail
+  // is — an integer `k` is the `k`-th Client stop — so the discrete twin and its
+  // event, which had had no caller since 2.9, are gone. Pinned as exact sets in
+  // both places a revival would land, the state's keys and the module's runtime
+  // exports, so neither name has to be spelled here for a grep to find.
   resetNavigation();
-  focusProject('project-a');
-  selectClient('client-zulu');
-
-  assert.equal(navigationStore.getState().railPosition, 'client-zulu');
-  assert.equal(navigationStore.getState().focusedProjectId, 'project-a', 'Focus survives travel');
-});
-
-test('selecting a second Client replaces the stop rather than accumulating', () => {
-  // The Rail stops at one Client at a time. A field rather than a list is what
-  // makes that structural instead of enforced.
-  resetNavigation();
-  selectClient('client-alpha');
-  selectClient('client-mid');
-
-  assert.equal(navigationStore.getState().railPosition, 'client-mid');
+  assert.deepEqual(
+    Object.keys(navigationStore.getState()).sort(),
+    [
+      'flightTarget',
+      'focusOrigin',
+      'focusedProjectId',
+      'hoveredProjectId',
+      'keyboardProjectId',
+      'mode',
+      'scrollProgress',
+    ],
+    'where the Rail is has one field, scrollProgress',
+  );
+  assert.deepEqual(
+    Object.keys(stateModule).sort(),
+    [
+      'advanceScroll',
+      'enterFreeFlight',
+      'enterRail',
+      'focusProject',
+      'hoverProject',
+      'keyboardApproach',
+      'navigationStore',
+      'releaseFocus',
+      'requireId',
+      'resetNavigation',
+    ],
+    'no event writes a discrete stop',
+  );
 });
 
 // --- Focus ------------------------------------------------------------------
@@ -197,20 +214,20 @@ test('releasing Focus with nothing focused is not an error', () => {
 
 // --- Mode -------------------------------------------------------------------
 
-test('leaving the Rail for free flight retains the stop, so the Rail is re-enterable', () => {
-  // Clearing `railPosition` would make free flight a one-way door: a visitor who
+test('leaving the Rail for free flight retains the progress, so the Rail is re-enterable', () => {
+  // Clearing `scrollProgress` would make free flight a one-way door: a visitor who
   // drifted off and came back would land at the default rather than where they
   // were.
   resetNavigation();
-  selectClient('client-mid');
+  advanceScroll(2);
   enterFreeFlight(null);
 
   assert.equal(navigationStore.getState().mode, 'freeflight');
-  assert.equal(navigationStore.getState().railPosition, 'client-mid', 'the stop is retained');
+  assert.equal(navigationStore.getState().scrollProgress, 2, 'the progress is retained');
 
   enterRail();
   assert.equal(navigationStore.getState().mode, 'rail');
-  assert.equal(navigationStore.getState().railPosition, 'client-mid');
+  assert.equal(navigationStore.getState().scrollProgress, 2);
 });
 
 test('entering free flight names what it frames, in one transition with the mode', () => {
@@ -231,11 +248,10 @@ test('entering free flight names what it frames, in one transition with the mode
   ]);
 });
 
-test('flight never writes the Rail’s progress or stop, so the return lands where the Rail was left', () => {
+test('flight never writes the Rail’s progress, so the return lands where the Rail was left', () => {
   // The matrix's Return row, at the store: progress 2.3 survives a flight and
   // the return, and `enterRail` writes `mode` alone.
   resetNavigation();
-  selectClient('client-mid');
   advanceScroll(2.3);
   enterFreeFlight('client-zulu');
   enterFreeFlight(null);
@@ -244,7 +260,6 @@ test('flight never writes the Rail’s progress or stop, so the return lands whe
   const state = navigationStore.getState();
   assert.equal(state.mode, 'rail');
   assert.equal(state.scrollProgress, 2.3);
-  assert.equal(state.railPosition, 'client-mid');
 });
 
 test('a malformed flight target is rejected naming the field and the value, with no partial write', () => {
@@ -269,22 +284,21 @@ test('a malformed flight target is rejected naming the field and the value, with
 
 // --- Writer separation ------------------------------------------------------
 
-test('the Rail’s scroll input advancing progress does not move the discrete stop', () => {
-  // Continuous progress and the discrete Client are different quantities with
-  // different writers. Collapsing them would make "between two Clients" and
-  // "stopped at this Client" the same statement.
+test('the Rail’s scroll input advancing progress leaves Focus alone', () => {
+  // Scrolling is travel, and travel does not close what the visitor was reading —
+  // 2.7 owns the panel and decides that.
   resetNavigation();
-  selectClient('client-zulu');
+  focusProject('project-a');
   advanceScroll(0.42);
 
   assert.equal(navigationStore.getState().scrollProgress, 0.42);
-  assert.equal(navigationStore.getState().railPosition, 'client-zulu', 'untouched by the scroll input');
+  assert.equal(navigationStore.getState().focusedProjectId, 'project-a', 'untouched by the scroll input');
 });
 
-test('the index selecting a Client does not invent a scroll value', () => {
+test('the index flying to a Client does not invent a scroll value', () => {
   resetNavigation();
   advanceScroll(0.42);
-  selectClient('client-zulu');
+  enterFreeFlight('client-zulu');
 
   assert.equal(navigationStore.getState().scrollProgress, 0.42, 'untouched by the index');
 });
@@ -292,7 +306,7 @@ test('the index selecting a Client does not invent a scroll value', () => {
 /**
  * Every event, the one writer it is, and the probe that makes its write visible.
  *
- * All seven, `enterRail` included: an event absent from this table is an event
+ * Every one, `enterRail` included: an event absent from this table is an event
  * with no declared owner, which is exactly how a second writer arrives at a field
  * nobody is watching. `resetNavigation` is here too — it writes every field by
  * design, and stating that is better than exempting it silently.
@@ -309,12 +323,6 @@ const WRITERS: ReadonlyArray<{
   readonly fire: () => void;
   readonly writes: readonly string[];
 }> = [
-  {
-    name: 'selectClient',
-    prime: () => populate(),
-    fire: () => selectClient('client-next'),
-    writes: ['railPosition'],
-  },
   {
     name: 'advanceScroll',
     prime: () => populate(),
@@ -335,10 +343,11 @@ const WRITERS: ReadonlyArray<{
   {
     // The *other* branch of `focusProject`. Re-focusing the Project already focused
     // writes nothing, and a branch that writes nothing still has to be audited for
-    // what it does not write: putting `{ railPosition: 'HACKED-PROJECT-ID' }` in that
-    // branch passed 448/448, because every other row fires `focusProject` with a
-    // *different* ID and so never reaches it. A ProjectId in `railPosition` is the one
-    // thing AD-4a forbids, and it is unbranded `string`, so `tsc` cannot see it either.
+    // what it does not write: putting a ProjectId into a Client field in that branch
+    // (the discrete Rail stop then; `flightTarget` since 3.19 dropped that field) passed
+    // 448/448, because every other row fires `focusProject` with a *different* ID and
+    // so never reaches it. A ProjectId where a Client belongs is what AD-4a forbids,
+    // and it is unbranded `string`, so `tsc` cannot see it either.
     //
     // `writes: []` is the assertion: primed from a fully populated state, this event
     // must leave every field exactly as it found it.
@@ -415,7 +424,6 @@ const WRITERS: ReadonlyArray<{
     writes: [
       'mode',
       'flightTarget',
-      'railPosition',
       'scrollProgress',
       'focusedProjectId',
       'focusOrigin',
@@ -429,14 +437,13 @@ const WRITERS: ReadonlyArray<{
  * A state in which **every** field differs from its arrival value.
  *
  * Each row primes from this rather than setting only the field it expects to
- * change. A row that left `railPosition` at its initial `null` could not see
+ * change. A row that left `flightTarget` at its initial `null` could not see
  * `enterRail` wander onto it with another `null` — the write would land, differ
  * from nothing, and read as a clean pass. Distinguishing "did not write" from
  * "wrote the value already there" is the whole job of this probe, and it is only
  * possible from a state where no field holds its default.
  */
 function populate(): void {
-  selectClient('client-start');
   advanceScroll(0.1);
   focusProject('project-start');
   enterFreeFlight('client-flight');
@@ -479,8 +486,8 @@ test('no event writes a field belonging to another writer, and every event write
       // field as it found it. This is the inverse of the guard below — there, an event
       // that wrote nothing would be a handler that silently stopped working; here,
       // writing anything at all is the failure. `focusProject`'s same-ID branch is the
-      // one such path, and it went unaudited until a `railPosition` write was proven
-      // green through it.
+      // one such path, and it went unaudited until a write into a Client field was
+      // proven green through it.
       assert.deepEqual(changed, [], `${name} declares no writes but changed ${changed.join(', ')}`);
     } else {
       assert.ok(changed.length > 0, `${name} wrote nothing — the probe cannot see the write it audits`);
@@ -497,7 +504,6 @@ test('the writer table names every event the store exports, so none escapes the 
   // `enterRail` came to be missing from the first version of this loop.
   const audited = new Set(WRITERS.map((writer) => writer.name));
   const exported = [
-    'selectClient',
     'focusProject',
     'releaseFocus',
     'advanceScroll',
@@ -579,14 +585,14 @@ test('an empty ID is rejected naming the field and the value, with no partial wr
   // than parking the visitor at a destination that does not exist. The same
   // posture `startsAt` takes in the derive layer.
   resetNavigation();
-  selectClient('client-zulu');
+  focusProject('project-a');
   const before = navigationStore.getState();
 
   assert.throws(
-    () => selectClient(''),
+    () => focusProject(''),
     (error: unknown) => {
       assert.ok(error instanceof Error);
-      assert.match(error.message, /selectClient/, 'the failure names the field');
+      assert.match(error.message, /focusProject/, 'the failure names the field');
       assert.match(error.message, /""/, 'and the offending value');
       return true;
     },
@@ -594,13 +600,13 @@ test('an empty ID is rejected naming the field and the value, with no partial wr
   assert.deepEqual(navigationStore.getState(), before, 'state is unchanged — no partial write');
 });
 
-test('a whitespace-only or non-string ID is rejected too, for both events', () => {
+test('a whitespace-only or non-string ID is rejected too', () => {
   // A `' '` ID is malformed in exactly the way an empty one is, and a caller
   // handing over an untyped value from a DOM attribute is the realistic route in.
   resetNavigation();
   const before = navigationStore.getState();
 
-  assert.throws(() => selectClient('   '), /selectClient/);
+  assert.throws(() => focusProject('   '), /focusProject/);
   assert.throws(() => focusProject(''), /focusProject/);
   assert.throws(() => focusProject(undefined as unknown as string), /focusProject/);
 
@@ -613,8 +619,8 @@ test('a padded ID is stored trimmed, so the value checked is the value kept', ()
   // a destination that does not exist, reached through the guard written to
   // prevent exactly that. The check and the stored value must be one string.
   resetNavigation();
-  selectClient('  client-zulu  ');
-  assert.equal(navigationStore.getState().railPosition, 'client-zulu');
+  enterFreeFlight('  client-zulu  ');
+  assert.equal(navigationStore.getState().flightTarget, 'client-zulu');
 
   focusProject('\tproject-a\n');
   assert.equal(navigationStore.getState().focusedProjectId, 'project-a');
@@ -640,8 +646,8 @@ test('an unpadded ID round-trips identically, which is what the renderer compare
   for (const id of ['project-a', 'client-zulu', 'p-1', 'a.b_c-d~e']) {
     focusProject(id);
     assert.equal(navigationStore.getState().focusedProjectId, id, `${id} must round-trip unchanged`);
-    selectClient(id);
-    assert.equal(navigationStore.getState().railPosition, id, `${id} must round-trip unchanged`);
+    enterFreeFlight(id);
+    assert.equal(navigationStore.getState().flightTarget, id, `${id} must round-trip unchanged`);
   }
 });
 
@@ -700,14 +706,14 @@ test('a subscriber is notified once per transition and reads the new state', () 
   // `useStore` takes and the path the camera's `subscribe` will take.
   resetNavigation();
   const seen: (string | null)[] = [];
-  const unsubscribe = navigationStore.subscribe((state) => seen.push(state.railPosition));
+  const unsubscribe = navigationStore.subscribe((state) => seen.push(state.hoveredProjectId));
 
-  selectClient('client-alpha');
-  selectClient('client-mid');
+  hoverProject('project-alpha');
+  hoverProject('project-mid');
   unsubscribe();
-  selectClient('client-zulu');
+  hoverProject('project-zulu');
 
-  assert.deepEqual(seen, ['client-alpha', 'client-mid'], 'one notification per transition, none after unsubscribe');
+  assert.deepEqual(seen, ['project-alpha', 'project-mid'], 'one notification per transition, none after unsubscribe');
 });
 
 test('a redundant transition still notifies, and the selector is what absorbs it', () => {
@@ -727,11 +733,11 @@ test('a redundant transition still notifies, and the selector is what absorbs it
   // event starts short-circuiting, this fails and the header's claim gets revisited
   // with it.
   resetNavigation();
-  selectClient('client-alpha');
+  hoverProject('project-alpha');
 
   let notifications = 0;
   const unsubscribe = navigationStore.subscribe(() => notifications++);
-  selectClient('client-alpha');
+  hoverProject('project-alpha');
   enterRail();
   releaseFocus();
   advanceScroll(0);
@@ -751,11 +757,11 @@ test('a redundant transition still notifies, and the selector is what absorbs it
   // differs. That is what a consumer's `Object.is`-based memoisation sees, and it is
   // the honest statement of what this store guarantees.
   resetNavigation();
-  selectClient('client-alpha');
+  hoverProject('project-alpha');
   const seen: unknown[] = [];
   const stopIdentity = navigationStore.subscribe((state) => seen.push(state));
   const first = navigationStore.getState();
-  selectClient('client-alpha');
+  hoverProject('project-alpha');
   enterRail();
   stopIdentity();
 
@@ -769,11 +775,10 @@ test('a redundant transition still notifies, and the selector is what absorbs it
     {
       mode: 'rail',
       flightTarget: null,
-      railPosition: 'client-alpha',
       scrollProgress: 0,
       focusedProjectId: null,
       focusOrigin: null,
-      hoveredProjectId: null,
+      hoveredProjectId: 'project-alpha',
       keyboardProjectId: null,
     },
     'and none of them changed anything',
@@ -826,7 +831,6 @@ test('the store derives nothing and knows nothing of the artifact', () => {
 
 test('every transition is reachable as a named export', () => {
   for (const event of [
-    selectClient,
     focusProject,
     releaseFocus,
     advanceScroll,
@@ -939,7 +943,7 @@ test('the setState audit rejects a call from any consumer, naming file and line'
     'src/render-scene/rail-camera.tsx',
   ];
   for (const path of cases) {
-    const source = `const a = 1;\nnavigationStore.setState({ railPosition: 'x', scrollProgress: 0.5 });\n`;
+    const source = `const a = 1;\nnavigationStore.setState({ flightTarget: 'x', scrollProgress: 0.5 });\n`;
     const failures = auditSetState([{ path, source }]);
     assert.equal(failures.length, 1, `a setState call in ${path} must produce exactly one finding`);
     const only = failures[0];
@@ -1024,7 +1028,9 @@ test('the one-writer table in the module header names every field the store hold
   for (const field of Object.keys(navigationStore.getState())) {
     assert.match(
       header,
-      new RegExp(`\\|\\s*\`${field}\`\\s*\\|`),
+      // Anchored to a row start: a field named anywhere else, or a row mangled by
+      // an edit, is not a row.
+      new RegExp(`^ \\* \\| \`${field}\` \\|`, 'm'),
       `${field} has no row in the one-writer table`,
     );
   }
