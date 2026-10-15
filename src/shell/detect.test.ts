@@ -28,6 +28,8 @@ interface Probe {
  * `null`, or by throwing, and whose `matchMedia` answers coarse or fine — or is
  * absent, or throwing, altogether. A narrow window or a reduced-motion preference is given as
  * queries that would match if asked, so a detector that asked would be caught.
+ * The release extension can be missing (`getExtension` answers `null`, as some
+ * drivers do) or throw on `loseContext()`.
  */
 function probe(options: {
   readonly webgl2: boolean | 'throws';
@@ -35,6 +37,7 @@ function probe(options: {
   readonly matchMedia?: false | 'throws';
   readonly reducedMotion?: boolean;
   readonly narrow?: boolean;
+  readonly release?: 'absent' | 'throws';
 }): Probe {
   const queries: string[] = [];
   const contexts = { created: 0, released: 0 };
@@ -52,7 +55,13 @@ function probe(options: {
         return {
           getExtension: (name: 'WEBGL_lose_context') => {
             assert.equal(name, 'WEBGL_lose_context');
-            return { loseContext: () => void (contexts.released += 1) };
+            if (options.release === 'absent') return null;
+            return {
+              loseContext: () => {
+                if (options.release === 'throws') throw new Error('context already lost');
+                contexts.released += 1;
+              },
+            };
           },
         };
       },
@@ -75,6 +84,22 @@ test('a capable desktop gets the scene, and its one context is released', () => 
   assert.deepEqual(capabilities, { webgl2: true, coarsePointer: false });
   assert.equal(chooseSurface(capabilities), 'scene');
   assert.deepEqual(contexts, { created: 1, released: 1 }, 'one context, created and released');
+});
+
+test('a context without the release extension is still WebGL2: the release is a courtesy', () => {
+  const { env, contexts } = probe({ webgl2: true, release: 'absent' });
+  const capabilities = detect(env);
+  assert.deepEqual(capabilities, { webgl2: true, coarsePointer: false });
+  assert.equal(chooseSurface(capabilities), 'scene');
+  assert.deepEqual(contexts, { created: 1, released: 0 }, 'created, and left to the collector');
+});
+
+test('a release that throws is swallowed, and the context still answers yes', () => {
+  const { env, contexts } = probe({ webgl2: true, release: 'throws' });
+  const capabilities = detect(env);
+  assert.deepEqual(capabilities, { webgl2: true, coarsePointer: false });
+  assert.equal(chooseSurface(capabilities), 'scene');
+  assert.deepEqual(contexts, { created: 1, released: 0 });
 });
 
 test('no WebGL2 gets the fallback', () => {

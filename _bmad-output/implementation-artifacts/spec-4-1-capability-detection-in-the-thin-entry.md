@@ -65,7 +65,7 @@ context:
 **Execution:**
 - [x] `src/shell/detect.test.ts` -- RED first: every I/O row against an injected env, plus a source scan of `detect.ts` and `entry.ts` (no `react`, `three`, `render-`, `data/`, `reduced-motion`, `performance`, `requestAnimationFrame`, `innerWidth`, `any-pointer`; `entry.ts` holds exactly one `import(` and it targets `./mount.tsx`) -- pins AD-6/7/8.
 - [x] `src/shell/detect.ts` -- `detect(env)` returns `{ webgl2, coarsePointer }`; `chooseSurface` returns `'scene' | 'fallback'`; also `browserEnv()` and the `Surface` type -- pure and injectable.
-- [x] `src/shell/entry.ts` -- import `tokens.css` then `page.css`, then detect and choose, then `import('./mount.tsx')` and `mount(surface)`, with a `.catch` that logs -- the thin entry.
+- [x] `src/shell/entry.ts` -- import `tokens.css` then `page.css`, start `import('./mount.tsx')`, then detect and choose, then `mount(surface)`, with a `.catch` that logs -- the thin entry.
 - [x] `src/shell/mount.tsx` -- the reduced-motion writer (set from `matches`, then a `change` listener) before `createRoot(#root).render(<StrictMode><App surface/></StrictMode>)` -- closes `deferred-work.md:654`.
 - [x] `src/App.tsx`, `src/shell/scene-host.tsx`, `index.html`, delete `src/main.tsx` -- re-wire as mapped. App drops its `page.css` import.
 - [x] `scripts/bundle-assertion.ts` -- ban `react`, `react-dom`, `scheduler`, `src/render-fallback/`, `src/colophon/`; set the budget to the measured entry × ~1.5, recording the measurement -- AD-7.
@@ -77,6 +77,18 @@ context:
 - Given the fallback surface, when it mounts, then the index, chrome and panel render and no `render-scene` chunk is requested.
 - Given a capable machine with reduced motion, when it loads, then the scene renders and `reducedMotion()` reads true.
 
+### Review Findings
+
+- [x] [Review][Patch] The mount's reduced-motion writer throws where `detect()` tolerates: a throwing or null `matchMedia`, or a `MediaQueryList` with neither `addEventListener` nor `addListener`, throws before `createRoot`, so nothing renders [src/shell/mount.tsx:27]
+- [x] [Review][Patch] The writer's surface-independence is unverified: `if (surface === 'scene') writeReducedMotion();` passes every audit, which reopens deferred-work 654; pin the call as unconditional, with a mutation row [src/shell/rail-input.test.ts:716]
+- [x] [Review][Patch] Spec Design Notes and the entry.ts task show the rejected form (detect before the import, two-argument `.then`), which the entry audit now bans; show what shipped [spec-4-1-capability-detection-in-the-thin-entry.md:115]
+- [x] [Review][Patch] The entry measurement is recorded as 2,704 in some places and 2,777 in others; the header's "about 1.44× under it" is garbled [scripts/bundle-assertion.test.ts:162]
+- [x] [Review][Patch] `detect.test.ts` has no row where `getExtension` returns null or `loseContext()` throws [src/shell/detect.test.ts:53]
+- [x] [Review][Patch] Root README still calls `src/App.tsx` "the entry stub" [README.md:45]
+- [x] [Review][Patch] The positive-control fixture still uses the deleted `main.tsx`, importing a non-existent `boot` from the thin entry [src/derive/boundaries.test.ts:591]
+- [x] [Review][Patch] Ruling Q2 is not carried into the epic records: epic-4-context says the entry imports "exactly one renderer chunk" and that boundaries are enforced "by ESLint"; UX-DR38 ("in the document from First Paint") has no Q2 amendment [_bmad-output/implementation-artifacts/epic-4-context.md:34]
+- [x] [Review][Patch] The interim-fallback deferral is framed around phones; it omits a desktop visitor without WebGL2 losing ↑/↓/Home/Escape and the wheel, and the chrome still advertising "scroll ↓" and "esc — release" [_bmad-output/implementation-artifacts/deferred-work.md:939]
+
 ## Design Notes
 
 ```ts
@@ -84,9 +96,14 @@ context:
 import '../tokens/tokens.css';
 import './page.css';
 import { browserEnv, chooseSurface, detect } from './detect.ts';
+const mounting = import('./mount.tsx');
 const surface = chooseSurface(detect(browserEnv()));
-import('./mount.tsx').then((m) => m.mount(surface), (error) => console.error('the surface failed to load', error));
+mounting
+  .then((module) => module.mount(surface))
+  .catch((error: unknown) => console.error('the surface failed to load; the page keeps its ground.', error));
 ```
+
+The import starts before detection, so the chunk request is not held behind WebGL2 context creation; detection is synchronous, so the surface is known before the import can resolve. `.then().catch()` rather than `.then(ok, err)`, so a throwing `mount` is logged too, not left an unhandled rejection (review patches; the entry audit in `detect.test.ts` bans both earlier forms).
 
 The index now renders from the mount chunk, one dynamic import after the entry, and still before any renderer is requested (ruling Q2).
 

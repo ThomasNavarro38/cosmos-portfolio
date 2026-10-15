@@ -37,7 +37,8 @@ import type { Plugin } from 'vite';
  * 4.1 took both off the entry (`src/shell/entry.ts`: the stylesheets, detection,
  * and one dynamic import) and measured 2,704; the budget of 4,000 is about 1.48×
  * that measurement. 4.1's review patches (the `.then().catch()` chain, the import
- * started before detection) brought the entry to 2,777, about 1.44× under it.
+ * started before detection) brought the entry to 2,777; the budget is about 1.44×
+ * that, the figure of record.
  */
 export const ENTRY_BUDGET_BYTES = 4_000;
 
