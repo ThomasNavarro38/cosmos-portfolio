@@ -932,7 +932,7 @@ function auditRenderer(source: string): string[] {
   if (/\bactivateBody\b/.test(code)) {
     failures.push('reaches activateBody — the Bodies’ binding owns the click');
   }
-  if (/\bfocusProject\b|\breleaseFocus\b|\bselectClient\b|\badvanceScroll\b/.test(code)) {
+  if (/\bfocusProject\b|\breleaseFocus\b|\benterFreeFlight\b|\badvanceScroll\b/.test(code)) {
     failures.push('names a navigation event — the click reaches the store through activateBody alone');
   }
   if (/\bduration\b|\bnotable\b|\bweight\b|\btimeAxis\b/.test(code)) {
@@ -1118,7 +1118,7 @@ function auditBodyField(source: string): string[] {
   const squash = (text: string) => text.replace(/\s+/g, ' ');
 
   if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) failures.push('writes the store with setState');
-  if (/\b(?:advanceScroll|selectClient|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation|activateClient|activateProject|hoverProject|keyboardApproach)\b/.test(code)) {
+  if (/\b(?:advanceScroll|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation|activateClient|activateProject|hoverProject|keyboardApproach)\b/.test(code)) {
     failures.push('names a navigation event — a Body reaches the store through activateBody, hoverBody and leaveBody alone');
   }
   if (/\buseFrame\b|\buseThree\b|\buseState\b|\buseReducer\b|\buseEffect\b|\buseLayoutEffect\b|\buseMemo\b|\buseRef\b|\buseStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {
@@ -2694,8 +2694,8 @@ test('the coordinate-literal scan rejects each shape, and passes entity-derived 
  *
  * It **reads** progress with `getState()` inside `useFrame`, damps through the
  * model and writes the Three camera — and does nothing else. No store write and
- * no named event (the scroll input owns `scrollProgress`, the index owns
- * `railPosition`), no subscription or reactive hook (a re-render per frame to
+ * no named event (the scroll input owns `scrollProgress`, the doors own `mode`
+ * and `flightTarget`), no subscription or reactive hook (a re-render per frame to
  * read a value it is about to read anyway), no DOM (the viewport arrives as R3F's
  * `size`), no coordinate literal, no interaction. The positive half pins that it
  * still does the one thing it is for.
@@ -2706,7 +2706,7 @@ function auditRig(source: string): string[] {
   const failures: string[] = [];
 
   if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) failures.push('writes the store with setState');
-  if (/\b(?:advanceScroll|selectClient|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation)\b/.test(code)) {
+  if (/\b(?:advanceScroll|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation)\b/.test(code)) {
     failures.push('names a navigation event — the rig reads the store and writes only the camera');
   }
   if (/\buseStore\b|\bsubscribe\b|\buseSyncExternalStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {
@@ -2788,8 +2788,8 @@ test('the rig audit rejects the real rig with any one guarantee broken', () => {
     ],
     ['a named event', (s) => s.replace('motion.current = frame.motion;', 'motion.current = frame.motion;\n    advanceScroll(frame.motion.progress.value);')],
     [
-      'selecting a Client from scroll',
-      (s) => s.replace('motion.current = frame.motion;', "motion.current = frame.motion;\n    selectClient('client:sncf');"),
+      'flying to a Client from the loop',
+      (s) => s.replace('motion.current = frame.motion;', "motion.current = frame.motion;\n    enterFreeFlight('client:sncf');"),
     ],
     ['releasing Focus from the loop', (s) => s.replace('motion.current = frame.motion;', 'motion.current = frame.motion;\n    releaseFocus();')],
     ['a subscription', (s) => s.replace('return null;', 'navigationStore.subscribe(() => {});\n  return null;')],
@@ -2996,7 +2996,7 @@ function auditMoteField(source: string): string[] {
   if ((code.match(/<Line\b/g) ?? []).length !== 1) failures.push('a drei Line outside the one orbit-line element');
 
   if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) failures.push('writes the store with setState');
-  if (/\b(?:advanceScroll|selectClient|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation)\b/.test(code)) {
+  if (/\b(?:advanceScroll|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation)\b/.test(code)) {
     failures.push('names a navigation event — the Motes read the store and write only their own handles');
   }
   if (/\buseStore\b|\bsubscribe\b|\buseSyncExternalStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {
@@ -3255,7 +3255,7 @@ function auditMoonField(source: string): string[] {
   const failures: string[] = [];
 
   if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) failures.push('writes the store with setState');
-  if (/\b(?:advanceScroll|selectClient|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation|activateClient|activateProject|activateBody)\b/.test(code)) {
+  if (/\b(?:advanceScroll|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation|activateClient|activateProject|activateBody)\b/.test(code)) {
     failures.push('names a navigation event — a Moon writes only its own mesh');
   }
   if (/\bnavigationStore\b|\bgetState\b|\buseStore\b|\bsubscribe\b|\buseSyncExternalStore\b|\buseShallow\b|\bsceneSubject\b|\bsubject\b/.test(code) || /['"]zustand(?:\/react)?|shell\/state/.test(quoted)) {
@@ -3437,7 +3437,7 @@ function auditAffordanceField(source: string): string[] {
   const failures: string[] = [];
 
   if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) failures.push('writes the store with setState');
-  if (/\b(?:advanceScroll|selectClient|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation|hoverProject|keyboardApproach|activate\w*|approachByKeyboard|leaveByKeyboard|hoverBody|leaveBody)\b/.test(code)) {
+  if (/\b(?:advanceScroll|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation|hoverProject|keyboardApproach|activate\w*|approachByKeyboard|leaveByKeyboard|hoverBody|leaveBody)\b/.test(code)) {
     failures.push('names a navigation event or a door — the affordance reads the store and writes only its own handles');
   }
   if (/\buseStore\b|\bsubscribe\b|\buseSyncExternalStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {

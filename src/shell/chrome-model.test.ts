@@ -427,7 +427,7 @@ function auditChrome(source: string): string[] {
   if (/<a\b|\bhref=/.test(code)) failures.push('a link — the model’s route is 5.1’s');
   if (/\btabIndex=/.test(code)) failures.push('a tabIndex — the instruction is text, the button focusable by default');
   // No store event, and only the two doors.
-  if (/\b(?:selectClient|focusProject|enterFreeFlight|enterRail|releaseFocus|advanceScroll|hoverProject|keyboardApproach|resetNavigation)\b|\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) {
+  if (/\b(?:focusProject|enterFreeFlight|enterRail|releaseFocus|advanceScroll|hoverProject|keyboardApproach|resetNavigation)\b|\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) {
     failures.push('a store event called directly — the slot opens a door in activate.ts');
   }
   if (/\b(?:pullBack|goHome|activateClient|activateProject|approachByKeyboard|leaveByKeyboard)\b/.test(code)) failures.push('a door other than return and release');

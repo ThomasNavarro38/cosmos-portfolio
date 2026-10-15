@@ -598,9 +598,9 @@ test('the ARIA ban rejects a label on a button whether the value is a model fiel
 
 test('each handler is tied to its own element, so a transposition cannot pass', () => {
   // This is the mutation that passed the entire verification path green: swap the
-  // two handlers and `selectClient(project.id)` writes a ProjectId into
-  // `railPosition` — the one thing AD-4a forbids. Both IDs are unbranded `string`,
-  // so `tsc` cannot see it either, and every negative scan in this file stays
+  // two handlers and the Client button's event wrote a ProjectId into the Rail's
+  // discrete stop (a field 3.19 dropped) — the one thing AD-4a forbids. Both IDs
+  // are unbranded `string`, so `tsc` cannot see it either, and every negative scan in this file stays
   // happy because nothing bad was *added*.
   //
   // A negative scan cannot observe a correct form going missing, so the correct
@@ -611,8 +611,8 @@ test('each handler is tied to its own element, so a transposition cannot pass', 
   // Since 2.9 every button is a door in `activate.ts`, so the pins are on the
   // doors: `auditDoors` below, driven over the transpositions as well as the file.
   // Since 3.8 there are three: the return is the corner chrome's.
-  // `selectClient` is no longer called from here — or anywhere: the Client button
-  // flies (`activateClient`), so `railPosition` has no shipped writer.
+  // The Client button flies (`activateClient`); since 3.19 (ruling R1) the store
+  // has no discrete-stop event for it to call instead.
   assert.deepEqual(auditDoors(readFileSync(NAV_TSX, 'utf8')), []);
 });
 
@@ -673,7 +673,7 @@ function auditDoors(source: string): string[] {
   if (!/activateProject\(\s*project\.id\s*,\s*client\.id\s*\)\}\s*onFocus=/.test(code)) {
     failures.push('the focus handler is not on the Project button');
   }
-  if (/\b(?:selectClient|focusProject|enterFreeFlight|enterRail|releaseFocus|advanceScroll|hoverProject|keyboardApproach|releaseLayer|goHome)\b/.test(code)) {
+  if (/\b(?:resetNavigation|focusProject|enterFreeFlight|enterRail|releaseFocus|advanceScroll|hoverProject|keyboardApproach|releaseLayer|goHome)\b/.test(code)) {
     failures.push('a store event or a chrome door called — every index button is one of its own doors in activate.ts');
   }
   const clicks = (code.match(/onClick=\{/g) ?? []).length;
@@ -689,7 +689,7 @@ test('the door audit rejects the real renderer with any one door miswired', () =
     ['the Client door handed a Project', (s) => s.replace('activateClient(client.id)', 'activateClient(project.id)')],
     ['the Project door handed a Client', (s) => s.replace('activateProject(project.id, client.id)', 'activateProject(client.id, client.id)')],
     ['the Project’s Client dropped', (s) => s.replace('activateProject(project.id, client.id)', 'activateProject(project.id, project.id)')],
-    ['the store called directly', (s) => s.replace('activateClient(client.id)', 'selectClient(client.id)')],
+    ['the store called directly', (s) => s.replace('activateClient(client.id)', 'enterFreeFlight(client.id)')],
     ['Focus called directly', (s) => s.replace('activateProject(project.id, client.id)', 'focusProject(project.id)')],
     ['the overview dropped', (s) => s.replace('onClick={() => pullBack()}', '')],
     ['the overview returns instead', (s) => s.replace('onClick={() => pullBack()}', 'onClick={() => returnToRail()}')],
@@ -769,8 +769,8 @@ test('the renderer subscribes with a selector rather than the whole store', () =
 
   // And the selector must read the field the binding is named for. The pattern above
   // stops at the arrow, so it accepts a selector reading *any* field: binding
-  // `focusedProjectId` to `(state) => state.railPosition` passed this test, the
-  // `aria-pressed` equality pin, and the whole suite — while making
+  // `focusedProjectId` to the store's Client field (since dropped) passed this
+  // test, the `aria-pressed` equality pin, and the whole suite — while making
   // `project.id === focusedProjectId` compare a ProjectId against a ClientId, so it
   // is always false and no Project can ever announce itself pressed. AC 6 fails at
   // runtime with every check green. The two pins agreed with each other and with

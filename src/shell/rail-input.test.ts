@@ -482,7 +482,7 @@ function auditWheelWiring(source: string): string[] {
   if (/\.target\b|\bcurrentTarget\b|\bcomposedPath\b|\belementsFromPoint\b|\belementFromPoint\b|\.contains\(|\.closest\(|\bactiveElement\b/.test(code)) {
     failures.push('inspects the event target or hit-tests — the meaning is the store’s alone');
   }
-  if (/\bselectClient\s*\(/.test(code)) failures.push('scroll selects a Client — railPosition is not the input’s');
+  if (/\benterFreeFlight\s*\(/.test(code)) failures.push('scroll enters free flight — mode is not the input’s');
   if (/\bonWheel\s*=\s*\{/.test(code)) failures.push('a React onWheel prop — React attaches wheel passively');
   failures.push(...auditSceneMounted(code));
   return failures;
@@ -593,7 +593,7 @@ test('the wiring audits reject the real host with any one guarantee removed', ()
           .replace(/(if \(intent === null\) return;\s*)event\.preventDefault\(\);/, '$1')
           .replace(/(const\s+intent\s*=)/, 'event.preventDefault();\n      $1'),
     ],
-    ['scroll selects a Client', (s) => s.replace("if ('inert' in intent) return;", "if ('inert' in intent) return;\n      selectClient('client:sncf');")],
+    ['scroll enters free flight', (s) => s.replace("if ('inert' in intent) return;", "if ('inert' in intent) return;\n      enterFreeFlight('client:sncf');")],
     ['a React onWheel prop', (s) => s.replace('<div ref={host} className="scene-host">', '<div ref={host} className="scene-host" onWheel={() => undefined}>')],
     ['a listener on window', (s) => s.replace("element.addEventListener('wheel'", "window.addEventListener('wheel'")],
     ['a listener on document', (s) => s.replace('const element = host.current;', 'const element = document.body;')],

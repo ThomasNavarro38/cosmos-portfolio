@@ -12,7 +12,7 @@
  * the document rather than of the data.
  */
 
-import type { ClientEntity, EntityGraph, ProjectEntity } from './entities.ts';
+import { byId, type ClientEntity, type EntityGraph, type ProjectEntity } from './entities.ts';
 import type { Position, SolvedLayout } from './solve.ts';
 import { SCHEMA_VERSION, type Artifact, type ArtifactClient, type ArtifactProject } from './artifact-schema.ts';
 import { buildDestinations } from './destinations.ts';
@@ -89,7 +89,7 @@ function clientOf(client: ClientEntity, layout: SolvedLayout): ArtifactClient {
     // and a re-ordered `career.json` emits byte-identical bytes. This is the
     // same ordering `solve.ts` assigns orbit slots from.
     projects: [...client.projects]
-      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .sort(byId)
       .map((entity) => projectOf(entity, layout)),
   };
 }
@@ -132,7 +132,7 @@ export function buildArtifact(
   const clients = [...graph.clients]
     .sort((a, b) => {
       const byTime = a.timeAxis - b.timeAxis;
-      return byTime !== 0 ? byTime : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      return byTime !== 0 ? byTime : byId(a, b);
     })
     .map((client) => clientOf(client, layout));
 

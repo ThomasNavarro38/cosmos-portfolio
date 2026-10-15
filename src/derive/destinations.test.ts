@@ -16,41 +16,15 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { CareerSchema, type Career } from '../data/schema.ts';
+import { CareerSchema } from '../data/schema.ts';
 import { buildDestinations, type Destination } from './destinations.ts';
 import { clientIdOf, deriveEntities, projectIdOf, type EntityGraph } from './entities.ts';
 import { stripComments } from '../../scripts/source-scan.ts';
+import { entry, graphOf } from './fixtures.test.ts';
 
-const AS_OF = '2026-09';
 const DESTINATIONS_TS = fileURLToPath(new URL('./destinations.ts', import.meta.url));
 
 // --- Fixtures ---------------------------------------------------------------
-
-function baseEntry(): Record<string, unknown> {
-  return {
-    client: 'SNCF',
-    project: 'Client referential — MDM replacement',
-    company: null,
-    role: 'Technical lead',
-    built: 'Replaced a commercial product with an in-house application.',
-    team_size: 11,
-    duration: { start: '2019-01', end: '2021-01' },
-    notable: 'Problem stated. [[The constraint, in one sentence.]] The decision taken.',
-    skills: ['Java', 'Spring Boot'],
-  };
-}
-
-function entry(client: string, project: string, extra: Record<string, unknown> = {}) {
-  return { ...baseEntry(), client, project, ...extra };
-}
-
-function careerOf(...entries: Record<string, unknown>[]): Career {
-  return CareerSchema.parse({ asOf: AS_OF, projects: entries });
-}
-
-function graphOf(...entries: Record<string, unknown>[]): EntityGraph {
-  return deriveEntities(careerOf(...entries), { asOf: AS_OF });
-}
 
 function destinationsOf(...entries: Record<string, unknown>[]): readonly Destination[] {
   return buildDestinations(graphOf(...entries));

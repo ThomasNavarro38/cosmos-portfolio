@@ -16,8 +16,9 @@
  *
  * Decisions ratified for 2.9:
  *
- *   - Activating a Client flies to it: `enterFreeFlight(id)`. It does not select
- *     the Client — `railPosition` is the Rail's stop, and flying is not the Rail.
+ *   - Activating a Client flies to it: `enterFreeFlight(id)`. It does not move
+ *     the Rail — `scrollProgress` is where the Rail is, and flying is not the Rail
+ *     (the discrete stop field and its event were dropped in 3.19, ruling R1).
  *     While a Project is focused, Focus is released first: a new destination is
  *     explicit navigation, and flying under an open panel would look inert and
  *     leave the later release landing somewhere the reader did not choose.

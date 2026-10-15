@@ -986,7 +986,7 @@ function auditPanel(source: string): string[] {
   if (/\bisDeep\b|\bnotable\b|\bteam_size\b|\bcontent\s*\./.test(code)) failures.push('reads the artifact directly — the model owns the blocks');
   if (/\bwindow\b|innerWidth|innerHeight|getBoundingClientRect|matchMedia/.test(code)) failures.push('reads the viewport');
   if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) failures.push('writes the store with setState');
-  if (/\b(?:focusProject|selectClient|advanceScroll|enterRail|enterFreeFlight|resetNavigation)\b/.test(code)) {
+  if (/\b(?:focusProject|advanceScroll|enterRail|enterFreeFlight|resetNavigation)\b/.test(code)) {
     failures.push('names a navigation event other than releaseFocus');
   }
   if (!/<button\b[^>]*\bonClick=\{\s*releaseFocus\s*\}[^>]*>\s*\{\s*block\.label\s*\}\s*<\/button>/.test(code)) {
@@ -1210,7 +1210,7 @@ test('the panel audit rejects the real renderer with any one guarantee broken', 
   const real = readFileSync(PANEL_TSX, 'utf8');
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
     ['a whole-store subscription', (s) => s.replace('useStore(navigationStore, (state) => state.focusedProjectId)', 'useStore(navigationStore).focusedProjectId')],
-    ['the wrong field selected', (s) => s.replace('(state) => state.focusedProjectId', '(state) => state.railPosition')],
+    ['the wrong field selected', (s) => s.replace('(state) => state.focusedProjectId', '(state) => state.hoveredProjectId')],
     ['local state', (s) => s.replace('const shown = useRef', 'const [open, setOpen] = useState(false);\n  const shown = useRef')],
     ['a branch on depth', (s) => s.replace("case 'reading':", "case 'reading':\n            if (!artifact.clients[0]?.projects[0]?.isDeep) return null;")],
     ['a Skills row read', (s) => s.replace('<td>{row.value}</td>', '<td>{row.value}</td><td>{String(content.skills)}</td>')],

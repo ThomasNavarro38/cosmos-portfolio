@@ -168,6 +168,19 @@ export function projectIdOf(client: string, project: string): string {
 }
 
 /**
+ * The one ID comparator: ascending by entity ID, by UTF-16 code unit (`<`, not
+ * `localeCompare`, so the order never depends on the machine's locale).
+ *
+ * Beside the minters because it orders what they mint. Every content-derived
+ * ordering in this directory — destinations, Dwell, Shots, the artifact's
+ * Projects, and the tiebreak of its `timeAxis` order — sorts with this one
+ * function rather than a hand-copied arrow (3.19), so the five cannot drift apart.
+ */
+export function byId(a: { readonly id: string }, b: { readonly id: string }): number {
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
  * Deep where `notable` carries prose; Shallow otherwise.
  *
  * The three Shallow forms — absent, `null`, `""` — differ in parsed shape but

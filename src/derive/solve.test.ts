@@ -35,47 +35,14 @@ import { deriveEntities, type EntityGraph } from './entities.ts';
 import { buildRail } from './rail.ts';
 import { ORBIT_PLANE_TOLERANCE } from './artifact-schema.ts';
 import { MIN_ORBIT_RADIUS, solveLayout, type Position, type SolvedLayout } from './solve.ts';
+import { AS_OF, baseEntry, graphOf, seededRandom } from './fixtures.test.ts';
 
 const SOLVE_TS = fileURLToPath(new URL('./solve.ts', import.meta.url));
 const RAIL_TS = fileURLToPath(new URL('./rail.ts', import.meta.url));
 const CAREER_JSON = fileURLToPath(new URL('../data/career.json', import.meta.url));
 const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
-const AS_OF = '2026-09';
-
 // --- Fixtures ---------------------------------------------------------------
-
-/**
- * A seeded generator, fresh on every call.
- *
- * The same LCG `d3-force-3d` uses internally, written out here so a test can
- * hold two independent generators at once — which is the whole point of the
- * fresh-generator row of the matrix.
- */
-function seededRandom(seed = 1): () => number {
-  let state = seed;
-  return () => (state = (1664525 * state + 1013904223) % 4294967296) / 4294967296;
-}
-
-/** A minimal valid entry. Tests clone and mutate it one field at a time. */
-function baseEntry(): Record<string, unknown> {
-  return {
-    client: 'SNCF',
-    project: 'Client referential — MDM replacement',
-    company: null,
-    role: 'Technical lead',
-    built: 'Replaced a commercial product with an in-house application.',
-    team_size: 11,
-    duration: { start: '2019-01', end: '2021-01' },
-    notable: 'Problem stated. [[The constraint, in one sentence.]] The decision taken.',
-    skills: ['Java', 'Spring Boot'],
-  };
-}
-
-/** Parses fixtures through the real schema, then derives the graph. */
-function graphOf(...entries: Record<string, unknown>[]): EntityGraph {
-  return deriveEntities(CareerSchema.parse({ asOf: AS_OF, projects: entries }), { asOf: AS_OF });
-}
 
 /** A graph with several Clients, several Projects, and a spread of weights. */
 function multiClientEntries(): Record<string, unknown>[] {

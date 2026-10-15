@@ -8,9 +8,8 @@
  * the model, steps flight and then Focus over it, and writes the pose to the Three camera. It
  * writes **no store field** and calls no named event: `scrollProgress` is
  * written by the shell's input handlers in `src/shell/scene-host.tsx` (rules in
- * `rail-input.ts`) and the `goHome` door, `railPosition` by `selectClient` alone
- * (which has no caller since 2.9), and `mode`, `flightTarget` and Focus by the
- * doors in `src/shell/activate.ts`.
+ * `rail-input.ts`) and the `goHome` door, and `mode`, `flightTarget` and Focus by
+ * the doors in `src/shell/activate.ts`.
  *
  * **Rail, then flight, then Focus, every frame.** `railFrame` keeps the Rail's
  * springs running whatever the mode and whether or not a Project is focused.

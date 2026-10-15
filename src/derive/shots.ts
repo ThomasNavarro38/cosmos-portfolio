@@ -23,7 +23,7 @@
  */
 
 import type { Shot } from './artifact-schema.ts';
-import type { ClientEntity, EntityGraph } from './entities.ts';
+import { byId, type ClientEntity, type EntityGraph } from './entities.ts';
 
 /**
  * The entry shape, re-exported from the schema rather than restated here.
@@ -144,9 +144,6 @@ function widestOrbitOf(client: ClientEntity): number {
  * by its index.
  */
 export function buildShots(graph: EntityGraph): readonly Shot[] {
-  const byId = (a: { id: string }, b: { id: string }): number =>
-    a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-
   return [...graph.clients].sort(byId).map((client) => ({
     // The ID `entities.ts` minted, never re-slugified here: a second ID
     // derivation is a second place for the contract to drift.

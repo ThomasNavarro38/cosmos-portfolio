@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 10-14-2026 13:55
+last_updated: 10-15-2026 08:48
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -78,7 +78,7 @@ development_status:
   3-16-scene-colour-management: done
   3-17-no-technology-names-in-field-values: done
   3-18-the-mote-label-pass-and-the-degradation-ruling: done
-  3-19-spec-and-doc-reconciliation-and-housekeeping: backlog
+  3-19-spec-and-doc-reconciliation-and-housekeeping: done
   epic-3-retrospective: done
 
   epic-4: backlog
@@ -235,7 +235,14 @@ action_items:
     action: "Housekeeping: extract byId comparator and derive test fixture; fix checkEmittedArtifact
       header; name the path in the gate success message; correct the Story 1.7+ comments"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-14 (story 3.19): one byId exported from src/derive/entities.ts
+      beside the ID minters, used by destinations.ts, dwell.ts, shots.ts and artifact.ts
+      (the tiebreak included); the derive suites' fixture moved to src/derive/fixtures.test.ts
+      (skills.test.ts keeps its differing entry/graphOf); checkEmittedArtifact's header
+      states that the import boundaries are checked at the gate only (Thomas's ruling R3);
+      the gate's success line names the artifact and career.json paths it checked, as
+      passed (seam paths pinned by a CLI test); the Story 1.7+ comments were already gone"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "story-2-1-review-item-1-rail-sequence-ungated"
     epic: 2
@@ -340,14 +347,25 @@ action_items:
       render-scene/README.md), Home is the goHome door (scene-host.tsx:219, rail-input.ts:160-162,
       shell/README.md:81), render-scene/README.md:5 lists its five shell imports"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-14 (story 3.19): focus-model.ts and render-scene/README.md give
+      the release goal as the pose beneath Focus (flightFrame's); scene-host.tsx,
+      rail-input.ts and shell/README.md name the goHome door (returnToRail() then
+      advanceScroll(0)); render-scene/README.md:5 lists its shell imports - six as
+      found, not five: state, activate, focus-motion, panel-model, motion-preference,
+      index-model"
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
   - id: "epic-2-retro-item-8-decide-railposition"
     epic: 2
     action: "Decide railPosition: the Rail follows a Client flown to, or drop the
       field from AC 2.2 / AD-4a (spec reconciliation)"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-14 (story 3.19): Thomas's ruling R1 - railPosition and selectClient
+      dropped from src/shell/state.ts and from AC 2.2, AD-4a and AD-9 (epics.md and the
+      architecture spine, dated supersession notes); scrollProgress alone says where the
+      Rail is; every audit and mutation row that used selectClient re-pointed to another
+      real event and verified red-then-green; no aria-current added"
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
   - id: "epic-2-retro-item-9-test-support-home"
     epic: 2
@@ -410,7 +428,14 @@ action_items:
       entry; AC 3.2 and DESIGN.md to the two-step band (4b-i); AC 3.5 nine-Skill tested
       case superseded (7-25 per Project)"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-14 (story 3.19): dated notes in epics.md - UX-DR27 and AC 3.8
+      carry the exception for the index entry revealed by :focus-visible (ruling 8a);
+      UX-DR2 and AC 3.2 name the two-step band stroke-rest, stroke-near (4b-i); UX-DR16
+      and AC 3.5 mark nine as superseded (7-25 Skills per Project, tested by 3.18's sweeps
+      at 7, 12 and 25); AC 3.6 reconciled to 'no field value names a Skill from the Skills
+      vocabulary' (ruling R2). DESIGN.md prose (not its frontmatter) follows for the band
+      and the no-third-line rule"
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
   - id: "epic-3-retro-item-6-mote-degradation-ruling"
     epic: 3

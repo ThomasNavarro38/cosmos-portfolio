@@ -16,29 +16,14 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { CareerSchema, type Career } from '../data/schema.ts';
 import { DWELL_TEMPOS, buildDwell, deriveDwell, type DwellTempo } from './dwell.ts';
-import { clientIdOf, deriveEntities, projectIdOf, type ClientEntity, type EntityGraph } from './entities.ts';
+import { clientIdOf, projectIdOf, type ClientEntity, type EntityGraph } from './entities.ts';
 import { stripComments } from '../../scripts/source-scan.ts';
+import { baseEntry, graphOf } from './fixtures.test.ts';
 
-const AS_OF = '2026-09';
 const DWELL_TS = fileURLToPath(new URL('./dwell.ts', import.meta.url));
 
 // --- Fixtures ---------------------------------------------------------------
-
-function baseEntry(): Record<string, unknown> {
-  return {
-    client: 'SNCF',
-    project: 'Client referential — MDM replacement',
-    company: null,
-    role: 'Technical lead',
-    built: 'Replaced a commercial product with an in-house application.',
-    team_size: 11,
-    duration: { start: '2019-01', end: '2021-01' },
-    notable: 'Problem stated. [[The constraint, in one sentence.]] The decision taken.',
-    skills: ['Java', 'Spring Boot'],
-  };
-}
 
 /** A Deep entry: `notable` carries prose. */
 function deep(client: string, project: string): Record<string, unknown> {
@@ -48,14 +33,6 @@ function deep(client: string, project: string): Record<string, unknown> {
 /** A Shallow entry: `notable` is empty, which is one of the three Shallow forms. */
 function shallow(client: string, project: string): Record<string, unknown> {
   return { ...baseEntry(), client, project, notable: '' };
-}
-
-function careerOf(...entries: Record<string, unknown>[]): Career {
-  return CareerSchema.parse({ asOf: AS_OF, projects: entries });
-}
-
-function graphOf(...entries: Record<string, unknown>[]): EntityGraph {
-  return deriveEntities(careerOf(...entries), { asOf: AS_OF });
 }
 
 /** The Client the given name resolves to, or a failure naming it. */

@@ -21,7 +21,7 @@
  */
 
 import type { Destination } from './artifact-schema.ts';
-import type { EntityGraph } from './entities.ts';
+import { byId, type EntityGraph } from './entities.ts';
 
 /**
  * The entry shape, re-exported from the schema rather than restated here.
@@ -65,9 +65,6 @@ export type { Destination };
  * make a solver tuning change re-order the reachable set.
  */
 export function buildDestinations(graph: EntityGraph): readonly Destination[] {
-  const byId = (a: { id: string }, b: { id: string }): number =>
-    a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-
   return [...graph.clients].sort(byId).flatMap((client) => [
     { id: client.id, kind: 'client' as const },
     ...[...client.projects]

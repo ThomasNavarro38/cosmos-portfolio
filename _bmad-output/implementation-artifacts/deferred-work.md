@@ -250,7 +250,7 @@ become live as the inventory grows.
 
 ## Derive module hygiene
 
-- **The `byId` comparator is now written out five times.** The same six-token
+- ~~**The `byId` comparator is now written out five times.**~~ — **closed by story 3.19**: one `byId` is exported from `src/derive/entities.ts`, beside the ID minters, and `destinations.ts`, `dwell.ts`, `shots.ts` and `artifact.ts` (both sorts, the tiebreak included) use it; the ordering tests are unchanged and green. As it read before the fix: The same six-token
   comparator — `(a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0` — appears in
   `destinations.ts:59`, `dwell.ts:108`, `shots.ts:148` and twice in
   `artifact.ts` (`:73`, and as the tiebreak at `:107`). All exist for one
@@ -260,7 +260,7 @@ become live as the inventory grows.
   recorded and is five now — the growth this entry predicted. A shared `byId`
   in a small module, or on `entities.ts` beside the ID minters that define the
   ordering, closes it without adding a dependency any of them lacks.
-- **The shared derive test fixture is duplicated across eight suites.**
+- ~~**The shared derive test fixture is duplicated across eight suites.**~~ — **closed by story 3.19**: `src/derive/fixtures.test.ts` holds the one copy (`AS_OF`, `FIXTURE_DIGEST`, `seededRandom`, `baseEntry`, `entry`, `careerOf`, `graphOf`, `allProjects`), imported by ten suites (nine held the full copy; `skills.test.ts` imports `AS_OF`, `FIXTURE_DIGEST` and `seededRandom`); `skills.test.ts` keeps its own `entry` and `graphOf`, whose signatures differ. The `.test.ts` suffix keeps it out of every bundle (the boundary gate refuses a shipped import of a test module). As it read before the fix:
   `baseEntry` and its companions (`derive`, `allProjects`, `AS_OF`) are
   redefined in all eight `src/derive/*.test.ts` files; the `built` strings had
   already drifted between the first two copies when this was recorded, and the
@@ -365,7 +365,7 @@ this file.
   evidence: The source scan cannot catch it because it is a named event, which is what the scan permits. A scan asserting `resetNavigation` appears in no non-test file under `src/` would close it in one line. Left alone here because KEEP-1 forbade redesigning the store and the amendments did not name it.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
-  summary: `railPosition` has no DOM representation, so a screen-reader user cannot tell which Client the Rail stopped at after activating a Client entry.
+  summary: ~~`railPosition` has no DOM representation, so a screen-reader user cannot tell which Client the Rail stopped at after activating a Client entry.~~ — **reframed by story 3.19** (Thomas's ruling R1, 2026-10-14): the field and `selectClient` are dropped, so there is no discrete stop to represent. **Still open:** a screen-reader user still cannot tell which Client the scene flew to — no `aria-current` on the flown-to Client or `overview`, and no announcement on mode change (`epic-2-retro-09-30-2026.md:129`). 3.19 does not add it.
   evidence: `selectClient` writes `railPosition` on every Client click and `index-nav.tsx` reflects only `aria-pressed` on Projects. `aria-current` on the selected Client is the standard answer and the new `auditAria` fixture already treats it as permitted state. Story 2.6 owns Client-stop framing and is the natural home; flagged by two review layers.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-2-the-navigation-state-machine.md`
@@ -629,7 +629,7 @@ leaves open.
 
 ## Deferred from: spec-2-9-free-flight-in-three-layers (2026-09-29)
 
-- `selectClient` has no caller now. The index's Client button flies (`activateClient` → `enterFreeFlight`) instead of selecting a stop, and nothing else wrote `railPosition`, so the field stays at `null` in every shipped path. The event stays exported and in the writer audit. Whether the Rail should follow a Client flown to, or `railPosition` should go, is an open question for the story that next reads it.
+- ~~`selectClient` has no caller now.~~ — **closed by story 3.19** (Thomas's ruling R1, 2026-10-14): `railPosition` and `selectClient` are dropped from the code, AC 2.2, AD-4a and AD-9; `scrollProgress` alone says where the Rail is, and every audit and mutation row that used `selectClient` now uses another real event. As it read before: The index's Client button flies (`activateClient` → `enterFreeFlight`) instead of selecting a stop, and nothing else wrote `railPosition`, so the field stays at `null` in every shipped path. The event stays exported and in the writer audit. Whether the Rail should follow a Client flown to, or `railPosition` should go, is an open question for the story that next reads it.
 - ~~`↩ resume the journey` renders while a Project is focused too, and pressing it calls `enterRail()` without releasing Focus. `focusOrigin` then still says `freeflight` while `mode` is `rail`, and releasing lands on the Rail (the goal beneath Focus is the live Rail pose). The stale origin is 2.10's to settle with Escape precedence.~~ — **closed by 2.10**: `returnToRail()` releases Focus first, then enters the Rail. `goHome()` goes through it, defensively — the keyboard never reaches Home while focused.
 - `flightPose` throws inside the frame loop for a `flightTarget` the Rail has no stop for, like `focusPose`. No shipped door writes such an ID: the index and `activateBody` only hand over artifact Client IDs, and the store rejects an empty one.
 - The flight move blends position and aim linearly and separately, as the focus ease does. Only the rest poses are proven to frame their systems; nothing asserts containment mid-flight, e.g. between the opening frame and a close stop.
@@ -899,7 +899,7 @@ Still open after 3.5:
 
 ## Deferred from: code review of spec-3-17-no-technology-names-in-field-values.md (2026-10-14)
 
-- The field-value check catches only names that appear verbatim in the Skills vocabulary. A technology written under another spelling (`Cordova` for `Apache Cordova`, `Spring-Boot`, `SpringBoot`) or not listed as a Skill at all (`MDM`, `UWP`, `PDF`, `RFID`) passes, while AC 3.6 reads "no technology name appears in the field table anywhere". Today's shipped `role`/`built` values were swept by hand and are clean of Skill names; the residual words (`PDF`, `RFID`) describe the product, not its stack. Fix if it recurs: an authored alias list beside `skills` (schema change — Ask First), or reconcile AC 3.6's wording to "names no Skill" in 3.19.
+- The field-value check catches only names that appear verbatim in the Skills vocabulary. A technology written under another spelling (`Cordova` for `Apache Cordova`, `Spring-Boot`, `SpringBoot`) or not listed as a Skill at all (`MDM`, `UWP`, `PDF`, `RFID`) passes, while AC 3.6 reads "no technology name appears in the field table anywhere". Today's shipped `role`/`built` values were swept by hand and are clean of Skill names; the residual words (`PDF`, `RFID`) describe the product, not its stack. Fix if it recurs: an authored alias list beside `skills` (schema change — Ask First), or reconcile AC 3.6's wording to "names no Skill" in 3.19. — **Closed by story 3.19** (Thomas's ruling R2, 2026-10-14): AC 3.6 now reads "no field value names a Skill from the Skills vocabulary", which is what the 3.17 check enforces; no alias list.
 
 ## Closed by 3.18, and deferred from it (2026-10-14)
 

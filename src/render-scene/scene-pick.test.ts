@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { beforeEach, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { activateClient, pullBack } from '../shell/activate.ts';
-import { advanceScroll, navigationStore, resetNavigation, selectClient } from '../shell/state.ts';
+import { advanceScroll, navigationStore, resetNavigation } from '../shell/state.ts';
 import { PICK_DRAG_PX, activateBody, hoverBody, leaveBody, repickPointer } from './scene-pick.ts';
 import { buildScene, type Body } from './scene-model.ts';
 import { stripComments } from '../../scripts/source-scan.ts';
@@ -53,15 +53,13 @@ beforeEach(() => resetNavigation());
 
 // --- The matrix ---------------------------------------------------------------
 
-test('a Star click on the Rail flies to its Client, and leaves the Rail’s progress and stop where they were', () => {
-  selectClient('client:stop');
+test('a Star click on the Rail flies to its Client, and leaves the Rail’s progress where it was', () => {
   advanceScroll(1.5);
   activateBody(star, click());
   const state = navigationStore.getState();
   assert.equal(state.mode, 'freeflight');
   assert.equal(state.flightTarget, 'client:a');
   assert.equal(state.scrollProgress, 1.5);
-  assert.equal(state.railPosition, 'client:stop', 'the stop untouched');
   assert.equal(state.focusedProjectId, null, 'a Star focuses nothing');
 });
 
@@ -264,7 +262,7 @@ test('the re-pick re-dispatches R3F’s last pointer only while the pointer is i
 function auditPickRule(source: string): string[] {
   const code = stripComments(source);
   const failures: string[] = [];
-  if (/\b(?:releaseFocus|selectClient|advanceScroll|enterRail|enterFreeFlight|focusProject|keyboardApproach|pullBack|returnToRail|setState)\b/.test(code)) {
+  if (/\b(?:releaseFocus|resetNavigation|advanceScroll|enterRail|enterFreeFlight|focusProject|keyboardApproach|pullBack|returnToRail|setState)\b/.test(code)) {
     failures.push('names a store event or a door other than activateClient / activateProject / hoverProject');
   }
   // 3.4: the store is read in one place — the stale-leave guard — and written by
@@ -321,7 +319,7 @@ test('the rule calls the two doors and nothing else, drops drags, and reads no D
   const real = readFileSync(PICK_TS, 'utf8');
   assert.deepEqual(auditPickRule(real), []);
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
-    ['a second event', (s) => s.replace("if (body.kind === 'star') activateClient(body.id);", "if (body.kind === 'star') activateClient(body.id);\n  selectClient(body.id);")],
+    ['a second event', (s) => s.replace("if (body.kind === 'star') activateClient(body.id);", "if (body.kind === 'star') activateClient(body.id);\n  resetNavigation();")],
     ['Focus composed by hand', (s) => s.replace("else activateProject(body.id, body.clientId ?? '');", 'else focusProject(body.id);')],
     ['a raw store write', (s) => s.replace("'star') activateClient(body.id);", "'star') navigationStore.setState({ mode: 'freeflight' });")],
     ['a Star does nothing', (s) => s.replace("if (body.kind === 'star') activateClient(body.id);", "if (body.kind === 'star') return;")],
