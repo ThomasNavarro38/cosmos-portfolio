@@ -702,12 +702,13 @@ test('the marker count is red on its own: a second marker breaks no other clause
 
 /**
  * The reduced-motion preference's one writer (2.10), page-wide in the mount since
- * 4.1: a function that returns early when `matchMedia` is absent, asks
+ * 4.1: a function that returns early when `matchMedia` is absent, throws, or
+ * answers `null` — the browsers `detect()` already reads as fine — asks
  * `window.matchMedia(REDUCED_MOTION_QUERY)`, writes `setReducedMotion` with the
- * query's `matches` once and on every `change`, and is called by `mount` before
- * `createRoot(...).render` — so the first render already reads the preference, on
- * either surface. Exactly one `setReducedMotion` write path, and the scene host
- * holds none.
+ * query's `matches` once and on every `change`, and is called first and
+ * unconditionally by `mount`, before `createRoot(...).render` — so the first
+ * render already reads the preference, on either surface. Exactly one
+ * `setReducedMotion` write path, and the scene host holds none.
  */
 function auditPreferenceWriter(source: string): string[] {
   const code = stripComments(source);
@@ -719,18 +720,23 @@ function auditPreferenceWriter(source: string): string[] {
   if (writer === null) return [...failures, 'no writeReducedMotion function for the media query'];
   const body = writer[1] ?? '';
   const guard = /if\s*\(\s*typeof\s+window\.matchMedia\s*!==\s*'function'\s*\)\s*return\s*;/.exec(body);
-  const query = /const\s+query\s*=\s*window\.matchMedia\(\s*REDUCED_MOTION_QUERY\s*\)\s*;/.exec(body);
+  // A throwing `matchMedia`, or one answering `null`, would otherwise throw
+  // before `createRoot` and leave the page with its ground alone.
+  const query = /try\s*\{\s*found\s*=\s*window\.matchMedia\(\s*REDUCED_MOTION_QUERY\s*\)\s*;\s*\}\s*catch\s*\{\s*return\s*;\s*\}/.exec(body);
+  const present = /if\s*\(\s*found\s*===\s*null\s*\)\s*return\s*;\s*const\s+query\s*=\s*found\s*;/.exec(body);
   const write = /const\s+onChange\s*=\s*\(\s*\)\s*:\s*void\s*=>\s*setReducedMotion\(\s*query\.matches\s*\)\s*;/.exec(body);
   const initial = /(?:^|;)\s*onChange\(\s*\)\s*;/.exec(body);
   // `addEventListener` where the MediaQueryList has it, else the legacy
-  // `addListener` (Safari before 14), which would otherwise throw before the render.
+  // `addListener` (Safari before 14), which would otherwise throw before the render,
+  // and neither where the list has neither.
   const listen =
-    /if\s*\(\s*typeof\s+query\.addEventListener\s*===\s*'function'\s*\)\s*query\.addEventListener\(\s*'change'\s*,\s*onChange\s*\)\s*;\s*else\s+query\.addListener\(\s*onChange\s*\)\s*;/.exec(body);
+    /if\s*\(\s*typeof\s+query\.addEventListener\s*===\s*'function'\s*\)\s*query\.addEventListener\(\s*'change'\s*,\s*onChange\s*\)\s*;\s*else\s+if\s*\(\s*typeof\s+query\.addListener\s*===\s*'function'\s*\)\s*query\.addListener\(\s*onChange\s*\)\s*;/.exec(body);
   if (guard === null) failures.push('matchMedia is not guarded — a browser without it would throw before the first render');
-  if (query === null) failures.push('the media query is not window.matchMedia(REDUCED_MOTION_QUERY)');
+  if (query === null) failures.push('the media query is not window.matchMedia(REDUCED_MOTION_QUERY), asked inside a try that returns');
+  if (present === null) failures.push('a null MediaQueryList is not guarded');
   if (write === null) failures.push('the preference is not written as setReducedMotion(query.matches)');
   if (initial === null) failures.push('the preference is not read at mount — a visitor who already prefers it gets full motion');
-  if (listen === null) failures.push('a change of the preference is not heard, through addEventListener where it exists and addListener where it does not');
+  if (listen === null) failures.push('a change of the preference is not heard, through addEventListener where it exists and a guarded addListener where it does not');
   if (guard !== null && query !== null && guard.index > query.index) failures.push('the guard comes after the query');
   if ((code.match(/\bsetReducedMotion\(/g) ?? []).length !== 1) failures.push('setReducedMotion is written other than once, in onChange');
   if (/\breducedMotion\(|\bsubscribeReducedMotion\b|\bmotionPace\b/.test(code)) failures.push('the writer reads the preference too');
@@ -739,6 +745,9 @@ function auditPreferenceWriter(source: string): string[] {
   const called = body2.search(/\bwriteReducedMotion\(\s*\)\s*;/);
   const render = body2.search(/\bcreateRoot\(/);
   if (mount === null || called === -1) failures.push('mount does not write the preference');
+  // First and unconditional: the writer exists for the surface without the scene
+  // (deferred-work 654), so no `surface` test may stand in front of it.
+  else if (!/^\s*writeReducedMotion\(\s*\)\s*;/.test(body2)) failures.push('the preference is not written first, on every surface');
   else if (render === -1 || called > render) failures.push('the preference is written after the first render');
   if ((code.match(/\bwriteReducedMotion\(\s*\)\s*;/g) ?? []).length !== 1) failures.push('the writer is called other than once');
   // The surface the entry chose reaches App unchanged, and App is rendered once.
@@ -762,14 +771,18 @@ test('the writer audit rejects the real mount with any one guarantee removed', (
     ['always reduced', (s) => s.replace('setReducedMotion(query.matches)', 'setReducedMotion(true)')],
     ['inverted', (s) => s.replace('setReducedMotion(query.matches)', 'setReducedMotion(!query.matches)')],
     ['not read at mount', (s) => s.replace(/(=> setReducedMotion\(query\.matches\);)\s*onChange\(\);/, '$1')],
-    ['never listening', (s) => s.replace(/\s*if \(typeof query\.addEventListener === 'function'\) query\.addEventListener\('change', onChange\);\n\s*else query\.addListener\(onChange\);/, '')],
-    ['the addListener fallback removed', (s) => s.replace(/if \(typeof query\.addEventListener === 'function'\) (query\.addEventListener\('change', onChange\);)\n\s*else query\.addListener\(onChange\);/, '$1')],
+    ['a throwing matchMedia uncaught', (s) => s.replace(/try \{ (found = window\.matchMedia\(REDUCED_MOTION_QUERY\);) \} catch \{ return; \}/, '$1')],
+    ['a null list unguarded', (s) => s.replace(/\s*if \(found === null\) return;/, '')],
+    ['never listening', (s) => s.replace(/\s*if \(typeof query\.addEventListener === 'function'\) query\.addEventListener\('change', onChange\);\n\s*else if \(typeof query\.addListener === 'function'\) query\.addListener\(onChange\);/, '')],
+    ['the addListener fallback removed', (s) => s.replace(/if \(typeof query\.addEventListener === 'function'\) (query\.addEventListener\('change', onChange\);)\n\s*else if \(typeof query\.addListener === 'function'\) query\.addListener\(onChange\);/, '$1')],
+    ['addListener called unguarded', (s) => s.replace("else if (typeof query.addListener === 'function') query.addListener", 'else query.addListener')],
     ['addEventListener called unguarded', (s) => s.replace("if (typeof query.addEventListener === 'function') query.addEventListener", 'query.addEventListener')],
     ['a fixed surface', (s) => s.replace('<App surface={surface} />', '<App surface="scene" />')],
     ['App rendered twice', (s) => s.replace('<App surface={surface} />', '<App surface={surface} />\n      <App surface={surface} />')],
     ['a second writer', (s) => s.replace('onChange();', 'onChange();\n  setReducedMotion(false);')],
     ['the writer reads too', (s) => s.replace('onChange();', 'onChange();\n  void reducedMotion();')],
     ['never called', (s) => s.replace(/(\{\n)\s*writeReducedMotion\(\);\n/, '$1')],
+    ['only on the scene surface', (s) => s.replace(/(\{\n\s*)writeReducedMotion\(\);/, "$1if (surface === 'scene') writeReducedMotion();")],
     ['written after the render', (s) => s.replace(/\s*writeReducedMotion\(\);\n/, '\n').replace(/(\n {2}\);\n)(\})/, '$1  writeReducedMotion();\n$2')],
   ];
   for (const [name, mutate] of mutations) {

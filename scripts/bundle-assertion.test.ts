@@ -159,8 +159,8 @@ test('a cycle in the module graph does not hang the chain search', () => {
 });
 
 test('the pass line names the measured size against the budget', () => {
-  assert.equal(passLine(2_704), 'the entry graph reaches no banned module and is 2,704 of 4,000 bytes.');
-  assert.equal(ENTRY_BUDGET_BYTES, 4_000, 'about 1.48× the measured 2,704 (4.1)');
+  assert.equal(passLine(2_777), 'the entry graph reaches no banned module and is 2,777 of 4,000 bytes.');
+  assert.equal(ENTRY_BUDGET_BYTES, 4_000, 'about 1.44× the measured 2,777 (4.1)');
 });
 
 /** A logger that keeps what the plugin reports, so a passing build proves the assertion ran. */

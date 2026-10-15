@@ -585,10 +585,10 @@ test('a file sitting directly in src/ may not import src/data/ or src/derive/', 
 
 test('a root file may still import what the app path legitimately reaches', () => {
   // The other direction: inventing prohibitions no prose declares is the drift
-  // the rule table exists to prevent. The entry reaches the shell by design, and
+  // the rule table exists to prevent. `App.tsx` reaches the shell by design, and
   // that is not a violation.
   assertAccepts(
-    { 'main.tsx': "import { boot } from './shell/entry.ts';\n" },
+    { 'App.tsx': "import { DestinationNav } from './shell/index-nav.tsx';\n" },
     'a root file reaches the shell by design',
   );
 });

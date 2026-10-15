@@ -276,7 +276,7 @@ UX-DR37: Implement streaming without visible popping — Bodies arriving after F
 
 **Accessibility floor (behavioural)**
 
-UX-DR38: **P1 — the index is a real DOM tree, independent of render state.** A persistent `<nav>` containing a nested list, one item per Client, each with a nested list of its Projects. It exists in the document from First Paint, is populated from the layout artifact, and **never derives its structure, order, or focusability from camera state, viewport position, or canvas hit-testing.**
+UX-DR38: **P1 — the index is a real DOM tree, independent of render state.** A persistent `<nav>` containing a nested list, one item per Client, each with a nested list of its Projects. It exists in the document from First Paint, is populated from the layout artifact, and **never derives its structure, order, or focusability from camera state, viewport position, or canvas hit-testing.** *[amended 2026-10-15 by ruling Q2 (story 4.1): "from First Paint" now means from the mount chunk, the one dynamic import after the thin entry, ahead of any renderer chunk; the first frame itself is the ground. See AD-4.]*
 
 UX-DR39: **P2 — every Body has a DOM proxy carrying its accessible name.** Each index entry is a `<button>` whose accessible name is the Client name or Project title, and **whose Deep/Shallow state is exposed as text within the entry** — not as an ARIA attribute and not as a visual marker alone, because only text lets a screen-reader user answer *which entries are worth reading*. `aria-pressed` reflects Focus. The canvas root is `aria-hidden="true"`.
 

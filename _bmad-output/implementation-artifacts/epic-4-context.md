@@ -31,7 +31,7 @@ A visitor on a phone, a locked-down corporate laptop, or any machine without Web
 
 ## Technical Decisions
 
-- **Thin entry (`src/shell/entry.ts`).** No React and no Three. Its module graph must not reach the scene, the solver or `src/data/`. `detect()` is plain JS, not a React component. It runs before any dynamic import resolves and tests **WebGL2 context creation only**: no performance probe runs on the First Paint path. The entry then dynamically imports **exactly one** renderer chunk.
+- **Thin entry (`src/shell/entry.ts`).** No React and no Three. Its module graph must not reach the scene, the solver or `src/data/`. `detect()` is plain JS, not a React component. It runs before any dynamic import resolves and tests **WebGL2 context creation only**: no performance probe runs on the First Paint path. The entry then dynamically imports **exactly one** module, the mount (`src/shell/mount.tsx`: React, `App` and the DOM index), which requests at most one renderer chunk for the chosen surface (ruling Q2, recorded on AD-4).
 - **Four independent lazy chunks:** `render-scene`, `render-fallback`, `colophon` and `solver` (the solver is for the Colophon's live re-run only). The thin-entry property is asserted against **bundler output** in CI, which fails the build on a size-budget breach or a forbidden reach, because a stray re-export can silently pull a chunk into the entry. The existing bundle assertion must cover the Epic 4 entry.
 - **Router (`src/shell/router.ts`).** It owns exactly three addressable routes: scene, Fallback and Colophon, resolved by the entry before any chunk loads.
   - Every route change is a real history entry, so Back works.
@@ -44,7 +44,7 @@ A visitor on a phone, a locked-down corporate laptop, or any machine without Web
   - It must not import from `src/data/` or contain any classification test, mapping-rule computation or conditional on a raw content field.
   - It reads `isDeep` and every other derived value from the artifact, so the scene and the Fallback cannot disagree about a Project's class.
   - If a needed value is missing, the fix is a change to the artifact schema and derivation in `src/derive/`, never a local computation.
-  - It shares no rendering code with the scene. Import boundaries are enforced by ESLint and fail the build.
+  - It shares no rendering code with the scene. Import boundaries are enforced by the repo's boundary gate (`npm run gate`, `src/derive/boundaries.ts`) and the bundle assertion, and fail the build.
 
 ## UX & Interaction Patterns
 
