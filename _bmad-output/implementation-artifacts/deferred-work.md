@@ -441,7 +441,7 @@ entries below are real but not caused by this story.
   evidence: This story's own reasoning for banning Three by package name on `ROOT_RULE` and the `shell` row — that a `dynamicOnly` row stops a reach into a directory and stops nothing about a bare package specifier — applies unchanged to the solver's dependency, which the same diff banned one row below. An `import { forceSimulation } from 'd3-force-3d'` in `App.tsx` passes the gate today.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
-  summary: The scene is mounted with no capability gate in front of it, and nothing records that `src/render-fallback/` is unreachable.
+  summary: ~~The scene is mounted with no capability gate in front of it, and nothing records that `src/render-fallback/` is unreachable.~~ — **closed by story 4.1** (`src/shell/entry.ts` runs `detect()` — WebGL2 context creation and a coarse primary pointer — before React loads, and `App` renders `SceneHost` only on the `scene` surface; the `fallback` surface is the index, chrome and panel with no scene host, so `render-scene` is never requested. Story 4.3 swaps that surface for the `render-fallback/` star chart.)
   evidence: `src/shell/scene-host.tsx` renders the scene unconditionally. `src/render-fallback/README.md` describes a no-WebGL surface with absolute content parity, and `scene-host.tsx`'s own header names capability detection as a shell responsibility, but no code routes to it. Story 4.1 owns capability detection in the thin entry; until it lands, a visitor without WebGL reaches a surface that cannot initialise.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
@@ -472,7 +472,7 @@ real but not caused by this story.
   evidence: Probed directly — appending `import { z } from 'zod';` to `src/App.tsx` passes `npm run gate` clean. `zod` 4.5.4 is a runtime dependency used by `artifact-schema.ts` under `src/derive/`; the `never: ['derive']` row stops the module edge while nothing stops the bare package specifier. Same one-line fix as the Three ban this story added, one package short. Neither round-1 layer found this.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
-  summary: The scene error boundary never resets and logs nothing, so a transient chunk-fetch failure blanks the scene for the whole session with no diagnosable cause.
+  summary: ~~The scene error boundary never resets and logs nothing, so a transient chunk-fetch failure blanks the scene for the whole session with no diagnosable cause.~~ — **closed by story 4.1** (`componentDidCatch` logs the cause; the capability gate landed and answers *no WebGL2*, a different question from a stale chunk hash, so there is still no reset, by decision — stated in `scene-host.tsx`'s header. The thin entry's own mount import follows the same rule: logged, no retry.)
   evidence: `SceneBoundary` implements `getDerivedStateFromError` only — no `componentDidCatch`, so in a production build the distinction between "malformed artifact threw in `buildScene`" and "chunk 404'd after a deploy" is swallowed, and the two have opposite operator responses. `failed: true` is never cleared and no retry is exposed. This may be the intended posture — the index alone is a legitimate terminal state — but neither the code nor the README says "no retry, deliberately", and story 4.1's capability gate answers *no WebGL*, not a stale chunk hash. Decide and state it, or add a retry keyed on remount.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-3-bodies-at-rest-in-the-3d-scene.md`
@@ -651,7 +651,7 @@ leaves open.
 - WCAG 2.2.2 (Pause, Stop, Hide) is not met: at full motion the Motes still orbit with no pause control, and 2.2.2 asks for one on auto-playing motion over 5s. Reduced motion stops them (2.3.3), which is not the same thing; a visible pause for everyone is not in 2.10's scope.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-2-10-escape-precedence-and-reduced-motion.md`
-  summary: The reduced-motion preference's one writer is the `matchMedia` effect in `SceneHost`, so a surface that renders the panel without the 3D host (story 4.1's Fallback) would read `reducedMotion()` as `false` forever.
+  summary: ~~The reduced-motion preference's one writer is the `matchMedia` effect in `SceneHost`, so a surface that renders the panel without the 3D host (story 4.1's Fallback) would read `reducedMotion()` as `false` forever.~~ — **closed by story 4.1** (the writer moved to `src/shell/mount.tsx`, page-wide, and runs before the first render on both surfaces; `PREFERENCE_ROLES` names `mount.tsx` the writer.)
   evidence: `focus-panel.tsx` reads the preference through `useSyncExternalStore`, but only `scene-host.tsx` calls `setReducedMotion`; the preference is page-wide, not the scene's. Move the writer to the app root when 4.1 lands a second surface.
 
 ## Deferred from: M1 pacing judgement (2026-09-30)
@@ -843,7 +843,7 @@ Still open after 3.5:
 
 ## Deferred from: code review of spec-3-11-the-bundle-assertion-over-bundler-output.md (2026-10-12)
 
-- `scripts/bundle-assertion.test.ts:223` asserts the shipped app's entry measures over 100,000 bytes, to prove the app rather than a fixture was measured. Story 4.1 takes React off the entry and will break that floor for the wrong reason; retune it with the budget in 4.1.
+- ~~`scripts/bundle-assertion.test.ts:223` asserts the shipped app's entry measures over 100,000 bytes, to prove the app rather than a fixture was measured. Story 4.1 takes React off the entry and will break that floor for the wrong reason; retune it with the budget in 4.1.~~ — **closed by story 4.1** (the floor is replaced by asserting the entry is `index.html` reaching exactly `src/shell/entry.ts`, `detect.ts`, `page.css` and `tokens.css`, and that no entry-graph module is React; the budget is 4,000 bytes over a measured 2,704.)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-12-data-validation-on-the-build-path-and-the-gate-s-content-checks.md`
   summary: Bound a closed engagement's `duration.end` against `asOf` in `CareerSchema`, as story 3.12 bound `duration.start`.
@@ -932,3 +932,13 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-3-18-the-mote-label-pass-and-the-degradation-ruling.md`
   summary: The affordance obstacle is sized by the character-count estimate (`labelBox(text)`, erring wide) rather than by the drawn text, so a string of wide capitals could draw past its obstacle and let a Mote label sit under the edge of the affordance.
   evidence: `affordance-model.ts:296` `labelBox`; the drawn layout and the obstacle share the estimate, and the house rule forbids measuring the DOM. The same estimate already sizes the affordance and the Mote labels.
+
+## Deferred from: code review of spec-4-1-capability-detection-in-the-thin-entry.md (2026-10-15)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-1-capability-detection-in-the-thin-entry.md`
+  summary: Until story 4.3 lands, the fallback surface is the scene's DOM surface without the scene host, and it is unusable on a phone — Thomas accepted the interim (review ruling A, 2026-10-15) on the condition that `main` is not published between 4.1 and 4.3.
+  evidence: `src/shell/index-nav.css` clips every index entry except the one holding `:focus-visible`, so a touch visitor sees only the ground and the corner chrome with nothing to tap; `src/shell/page.css:22` keeps `overflow: hidden` on both surfaces, so the page cannot scroll; ↑/↓/Home/Escape and the wheel listener live in `src/shell/scene-host.tsx`, so on the fallback Escape no longer releases Focus; the panel's `min(560px, 46vw)` width is a narrow column on a phone. Before 4.1 a WebGL2 phone got a working scene. 4.3 replaces this surface with the `render-fallback/` star chart and must leave none of these behind.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-1-capability-detection-in-the-thin-entry.md`
+  summary: Rule whether `getContext('webgl2', { failIfMajorPerformanceCaveat: true })` belongs in `detect()` — a software-only WebGL2 (SwiftShader, a blocklisted GPU) currently counts as capable and gets the scene.
+  evidence: The flag is a context-creation attribute, not a timing probe, so it does not breach AC 4.1's "no performance probe"; but AD-8 says capability routes and performance offers, and a software renderer is arguably a performance case for 4.6's offer rather than a capability case for the entry. A ruling for Thomas; story 4.6 is the natural home.

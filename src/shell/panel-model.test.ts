@@ -851,30 +851,33 @@ function auditStylesheet(css: string, tokensCss: string): string[] {
   return failures;
 }
 
-const MAIN_TSX = fileURLToPath(new URL('../main.tsx', import.meta.url));
+const ENTRY_TS = fileURLToPath(new URL('./entry.ts', import.meta.url));
 
 /**
- * `src/main.tsx` loads `tokens.css`, once, ahead of `App`. Every colour, size and
- * padding the panel draws is a `var()` of it; without the import each one is
- * invalid at computed-value time and the panel is a transparent column with no
- * padding — while every other test here stays green.
+ * `src/shell/entry.ts` loads `tokens.css`, once, ahead of `page.css` (4.1). Every
+ * colour, size and padding the panel draws is a `var()` of it; without the import
+ * each one is invalid at computed-value time and the panel is a transparent column
+ * with no padding — while every other test here stays green. The stylesheets `App`
+ * brings follow it necessarily: they arrive with the mount, a dynamic import, and
+ * a static import is hoisted ahead of any dynamic one wherever it is written.
  */
 function auditTokensImport(source: string): string[] {
   const code = stripComments(source);
-  const imports = [...code.matchAll(/^import\s+'\.\/tokens\/tokens\.css'\s*;/gm)];
-  if (imports.length !== 1) return ['src/main.tsx does not import ./tokens/tokens.css exactly once'];
-  const app = code.search(/^import\s*\{\s*App\s*\}/m);
-  return app === -1 || (imports[0]?.index ?? Infinity) > app ? ['the tokens are imported after App — its stylesheets would precede them'] : [];
+  const imports = [...code.matchAll(/^import\s+'\.\.\/tokens\/tokens\.css'\s*;/gm)];
+  if (imports.length !== 1) return ['src/shell/entry.ts does not import ../tokens/tokens.css exactly once'];
+  const at = imports[0]?.index ?? Infinity;
+  const page = code.search(/^import\s+'\.\/page\.css'\s*;/m);
+  return page === -1 || at > page ? ['the tokens are imported after page.css — it would precede them'] : [];
 }
 
-test('the entry loads the design tokens once, ahead of the app', () => {
-  const real = readFileSync(MAIN_TSX, 'utf8');
+test('the entry loads the design tokens once, ahead of the page', () => {
+  const real = readFileSync(ENTRY_TS, 'utf8').replace(/\r\n/g, '\n');
   assert.deepEqual(auditTokensImport(real), []);
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
-    ['the import dropped', (s) => s.replace("import './tokens/tokens.css';", '')],
-    ['the import commented out', (s) => s.replace("import './tokens/tokens.css';", "// import './tokens/tokens.css';")],
-    ['the import twice', (s) => s.replace("import './tokens/tokens.css';", "import './tokens/tokens.css';\nimport './tokens/tokens.css';")],
-    ['the import after App', (s) => s.replace("import './tokens/tokens.css';", '').replace("import { App } from './App';", "import { App } from './App';\nimport './tokens/tokens.css';")],
+    ['the import dropped', (s) => s.replace("import '../tokens/tokens.css';", '')],
+    ['the import commented out', (s) => s.replace("import '../tokens/tokens.css';", "// import '../tokens/tokens.css';")],
+    ['the import twice', (s) => s.replace("import '../tokens/tokens.css';", "import '../tokens/tokens.css';\nimport '../tokens/tokens.css';")],
+    ['the import after the page', (s) => s.replace("import '../tokens/tokens.css';\n", '').replace("import './page.css';", "import './page.css';\nimport '../tokens/tokens.css';")],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);
@@ -973,7 +976,7 @@ function auditPanel(source: string): string[] {
   }
   if ((code.match(/\buseSyncExternalStore\s*\(/g) ?? []).length !== 1) failures.push('the preference is read other than once');
   if ((code.match(/\bpace\b/g) ?? []).length !== 4) failures.push('the pace is used other than by the slide mirror, the slide and the cross-fade');
-  if (/\bsetReducedMotion\b/.test(code)) failures.push('the panel writes the preference — scene-host.tsx is its one writer');
+  if (/\bsetReducedMotion\b/.test(code)) failures.push('the panel writes the preference — mount.tsx is its one writer');
   if (!/const\s+previousFlight\s*=\s*useRef\(\s*flight\s*\)/.test(code)) failures.push('the flight key last seen is not a ref seeded at mount');
   if (/\buseState\b|\buseReducer\b|\buseMemo\b|\bsubscribe\s*\(/.test(code)) {
     failures.push('keeps state of its own — the store is the one authority');
@@ -1436,6 +1439,17 @@ function auditMount(source: string): string[] {
   if (order.some((at) => at === -1) || order.some((at, i) => i > 0 && at < (order[i - 1] ?? 0))) {
     failures.push('the document order is not index, chrome, scene host, panel');
   }
+  // 4.1: the surface the entry chose is App's one prop, and it gates the scene host
+  // alone — once, on `scene`. Every other element renders on both surfaces.
+  if (!/export\s+function\s+App\(\s*\{\s*surface\s*\}\s*:\s*\{\s*readonly\s+surface\s*:\s*Surface\s*\}\s*\)\s*\{/.test(code)) {
+    failures.push('App does not take the surface as its one prop');
+  }
+  if (!/import\s+type\s*\{\s*Surface\s*\}\s*from\s*'\.\/shell\/detect\.ts'/.test(code)) failures.push('the Surface type is not detection’s');
+  if ((code.match(/<SceneHost\b/g) ?? []).length !== 1 || !/\{\s*surface\s*===\s*'scene'\s*&&\s*<SceneHost\s+artifact=\{\s*artifact\s*\}\s*\/>\s*\}/.test(code)) {
+    failures.push('the scene host is not rendered once, gated on surface === \'scene\'');
+  }
+  if ((code.match(/\bsurface\b/g) ?? []).length !== 3) failures.push('the surface is read other than by the scene host’s gate');
+  if (/^import\s+'[^']*\.css'/m.test(code)) failures.push('App.tsx imports a stylesheet — the page is the entry’s since 4.1');
   return failures;
 }
 
@@ -1444,8 +1458,15 @@ test('App.tsx mounts index, chrome, scene host and panel, in that order', () => 
   assert.deepEqual(auditMount(real), []);
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
     ['the panel not mounted', (s) => s.replace(/^\s*<FocusPanel artifact=\{artifact\} \/>\r?\n/m, '')],
-    ['the panel before the scene', (s) => s.replace('<SceneHost artifact={artifact} />', '<FocusPanel artifact={artifact} />\n      <SceneHost artifact={artifact} />').replace(/(<SceneHost artifact=\{artifact\} \/>\s*)<FocusPanel artifact=\{artifact\} \/>/, '$1')],
-    ['the scene removed', (s) => s.replace(/^\s*<SceneHost artifact=\{artifact\} \/>\r?\n/m, '')],
+    ['the panel before the scene', (s) => s.replace(/^(\s*\{surface === 'scene' && <SceneHost artifact=\{artifact\} \/>\}\n)(\s*<FocusPanel artifact=\{artifact\} \/>\n)/m, '$2$1')],
+    ['the scene removed', (s) => s.replace(/^\s*\{surface === 'scene' && <SceneHost artifact=\{artifact\} \/>\}\n/m, '')],
+    // 4.1: the scene host renders on the scene surface alone, so the fallback never requests render-scene.
+    ['the scene ungated', (s) => s.replace("{surface === 'scene' && <SceneHost artifact={artifact} />}", '<SceneHost artifact={artifact} />')],
+    ['the gate inverted', (s) => s.replace("{surface === 'scene' && <SceneHost", "{surface !== 'scene' && <SceneHost")],
+    ['gated on the fallback', (s) => s.replace("{surface === 'scene' && <SceneHost", "{surface === 'fallback' && <SceneHost")],
+    ['the panel gated too', (s) => s.replace('<FocusPanel artifact={artifact} />', "{surface === 'scene' && <FocusPanel artifact={artifact} />}")],
+    ['the surface not a prop', (s) => s.replace('export function App({ surface }: { readonly surface: Surface })', "export function App() {\n  const surface: Surface = 'scene';\n  return null;\n}\nfunction Unused({ surface }: { readonly surface: Surface })")],
+    ['the page imported here again', (s) => s.replace("import { SceneHost } from './shell/scene-host.tsx';", "import { SceneHost } from './shell/scene-host.tsx';\nimport './shell/page.css';")],
     ['mounted twice', (s) => s.replace('<FocusPanel artifact={artifact} />', '<FocusPanel artifact={artifact} />\n      <FocusPanel artifact={artifact} />')],
     ['no artifact', (s) => s.replace('<FocusPanel artifact={artifact} />', '<FocusPanel artifact={{ clients: [] }} />')],
     ['imported from elsewhere', (s) => s.replace("from './shell/focus-panel.tsx'", "from './panel.tsx'")],

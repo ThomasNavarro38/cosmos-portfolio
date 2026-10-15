@@ -169,7 +169,11 @@ export const BOUNDARY_RULES: readonly BoundaryRule[] = [
     // Three and not React: this directory renders the DOM destination index, so a
     // directory-wide React ban would reject `index-nav.tsx`. The README's sentence
     // is about `entry.ts`; what is enforceable per directory is the half that
-    // holds for every file in it.
+    // holds for every file in it. Since story 4.1 the React half is held for
+    // `entry.ts` where it is observable: on the emitted entry graph by
+    // `scripts/bundle-assertion.ts` (React, `react-dom` and `scheduler` banned
+    // there), and in source by `detect.test.ts`. `mount.tsx` imports `../App.tsx`,
+    // a file at the root, which this row leaves open on purpose.
     //
     // `d3-force-3d` for the same reason, one package over: the README's AD-7
     // sentence keeps the solver off the entry path, and a bare import of the
@@ -240,23 +244,25 @@ const TEST_SPECIFIER = /\.test(?:\.(?:[mc]?[jt]s|[jt]sx))?(?:\?.*)?$/;
 const AMBIENT_DECLARATION = /\.d\.[mc]?ts$/;
 
 /**
- * The rule for a file sitting directly in `src/` — `main.tsx`, `App.tsx`.
+ * The rule for a file sitting directly in `src/` — `App.tsx` (and `main.tsx`,
+ * until story 4.1 moved the entry to `src/shell/entry.ts`).
  *
- * No README governs the entry stub, which is why these files were skipped
- * entirely until review iteration 1 caught it. But "no README" is not "no rule":
- * these are the two modules Vite actually builds from, so they are precisely
- * where a `src/data/` import would hoist the raw career JSON onto the entry
- * chunk (AD-7) — the failure AD-3 exists to prevent, in the one place the gate
- * was not looking.
+ * No README governs a root file, which is why these files were skipped entirely
+ * until review iteration 1 caught it. But "no README" is not "no rule": they were
+ * the two modules Vite built from, so they were precisely where a `src/data/`
+ * import would hoist the raw career JSON onto the entry chunk (AD-7) — the
+ * failure AD-3 exists to prevent, in the one place the gate was not looking.
+ * Since 4.1 `App.tsx` is off the entry chunk, a root file the mount reaches, and
+ * the same import would still put the raw JSON on the app's path.
  *
  * The bans are the ones the root README states for the entry path rather than the
  * full consumer set: the entry legitimately reaches `src/shell/` and the
  * generated artifact, and inventing prohibitions no prose declares is the drift
  * this table exists to prevent.
  *
- * The renderer rules land here now because `src/main.tsx:12-17` said they belonged
- * "with the story that introduces the first one, together with the README sentence
- * that would license it" — story 2.3 introduced `src/render-scene/scene.tsx` and
+ * The renderer rules land here now because the former `src/main.tsx:12-17` said
+ * they belonged "with the story that introduces the first one, together with the
+ * README sentence that would license it" — story 2.3 introduced `src/render-scene/scene.tsx` and
  * added that sentence. Until then the row would have had no subject: there was no
  * renderer to import, so the hoist it forbids was unreachable.
  */
@@ -266,7 +272,7 @@ export const ROOT_RULE: BoundaryRule = {
   never: ['data', 'derive'],
   // A static `import { Scene } from './render-scene/scene.tsx'` in `App.tsx` puts
   // Three on the entry chunk (AD-7) and passed the gate clean before this row. The
-  // entry stub reaches a renderer the same way `src/shell/` does, or not at all.
+  // root file reaches a renderer the same way `src/shell/` does, or not at all.
   dynamicOnly: ['render-scene', 'render-fallback', 'colophon'],
   // And by package name, for the reason the `shell` row states: a `dynamicOnly` row
   // stops a reach into a directory and stops nothing about a bare specifier. Three
@@ -469,9 +475,9 @@ export function findImports(source: string): FoundImport[] {
  *
  * Resolution is textual and relative to the importing file — `moduleResolution:
  * "bundler"` means a specifier may or may not carry its extension, and both
- * conventions are live in this repo (`src/derive/` writes `./x.ts`,
- * `src/main.tsx:3` writes `./App`). Neither matters here: only the directory the
- * path lands in does.
+ * conventions have been live in this repo (`src/derive/` writes `./x.ts`; the
+ * former `src/main.tsx` wrote `./App` until story 4.1). Neither matters here:
+ * only the directory the path lands in does.
  */
 export function targetDirectoryOf(fromFile: string, specifier: string, root: string): string | undefined {
   if (!specifier.startsWith('.')) return undefined;
@@ -565,10 +571,10 @@ export function checkImportBoundaries(root: string = SRC_ROOT): string[] {
   for (const file of sourceFilesUnder(root)) {
     const rel = relative(root, file);
     const [segment] = rel.split(sep);
-    // A file sitting directly in `src/` (`main.tsx`, `App.tsx`) is the entry
-    // stub. No README governs it, but it is on the entry path, so `ROOT_RULE`
+    // A file sitting directly in `src/` (`App.tsx`; `main.tsx` until 4.1) is a
+    // root file. No README governs it, but it is on the app's path, so `ROOT_RULE`
     // carries the two bans that path must hold rather than the file being
-    // skipped — which is what let AD-3 miss the modules Vite builds from.
+    // skipped — which is what let AD-3 miss the modules Vite built from.
     const atRoot = !rel.includes(sep);
     const directory = atRoot ? '' : segment;
     if (directory === undefined) continue;
@@ -592,7 +598,7 @@ export function checkImportBoundaries(root: string = SRC_ROOT): string[] {
 
     scanned += 1;
     const where = displayPath(root, file);
-    // `src/shell/` for a directory rule, but plain `src/` for the entry stub —
+    // `src/shell/` for a directory rule, but plain `src/` for a root file —
     // `src//` would read as a typo in the one failure a reader is least likely
     // to have seen before.
     const governed = atRoot ? 'src/' : `src/${directory}/`;

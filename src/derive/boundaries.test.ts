@@ -318,10 +318,10 @@ test('src/render-fallback/ importing three fails, and a deep import does not esc
 
 // --- Matrix rows: the renderer rules story 2.3 added ------------------------
 
-test('a static renderer import from the entry stub fails, and the dynamic form is accepted', () => {
-  // `src/main.tsx:12-17` said the renderer `dynamicOnly` rule "belongs with the story
-  // that introduces the first one, together with the README sentence that would
-  // license it" — story 2.3 introduced `src/render-scene/scene.tsx` and added the
+test('a static renderer import from a root file fails, and the dynamic form is accepted', () => {
+  // The former `src/main.tsx:12-17` said the renderer `dynamicOnly` rule "belongs
+  // with the story that introduces the first one, together with the README
+  // sentence that would license it" — story 2.3 introduced `src/render-scene/scene.tsx` and added the
   // sentence to `README.md:45`. Before this row, a static
   // `import { Scene } from './render-scene/scene.tsx'` in `App.tsx` put Three on the
   // entry chunk and passed the gate clean: the DOM index would then wait on the whole
@@ -330,7 +330,7 @@ test('a static renderer import from the entry stub fails, and the dynamic form i
     const failures = assertRejects(
       { 'App.tsx': `import { X } from './${target}/x.tsx';\n` },
       /App\.tsx:1/,
-      `the entry stub must reach src/${target}/ only dynamically`,
+      `a root file must reach src/${target}/ only dynamically`,
     );
     assert.ok(
       failures.some((line) => /dynamic/i.test(line)),
@@ -371,9 +371,9 @@ test('three and its React bindings are banned by name on the entry path and in t
 
 test('the entry path keeps React, and src/render-scene/ keeps Three', () => {
   // The negative control, and it is what stops these rows from over-banning. The
-  // entry stub and the shell both render React — a directory-wide React ban would
+  // root file and the shell both render React — a directory-wide React ban would
   // reject `index-nav.tsx` — and the 3D surface is where Three belongs.
-  assertAccepts({ 'App.tsx': "import { StrictMode } from 'react';\n" }, 'the entry stub renders React by design');
+  assertAccepts({ 'App.tsx': "import { StrictMode } from 'react';\n" }, 'a root file renders React by design');
   assertAccepts(
     { 'shell/index-nav.tsx': "import { useStore } from 'zustand/react';\n" },
     'the shell subscribes to its own store',
@@ -563,17 +563,18 @@ test('a specifier is resolved relative to the importing file, extension or not',
   assert.equal(targetDirectoryOf(from, 'node:fs', root), undefined, 'nor is a builtin');
 });
 
-// --- Matrix row: the entry stub ----------------------------------------------
+// --- Matrix row: a root file ------------------------------------------------
 
 test('a file sitting directly in src/ may not import src/data/ or src/derive/', () => {
-  // `main.tsx` and `App.tsx` are real, are what Vite builds from, and were
-  // skipped outright until review iteration 1 — so AD-3's hole sat exactly where
-  // a bundle would hoist the raw career JSON onto the entry chunk. No README
-  // governs the entry stub, but "no README" is not "no rule".
+  // `main.tsx` (the entry until story 4.1 moved it to `src/shell/entry.ts`) and
+  // `App.tsx` were real, were what Vite built from, and were skipped outright
+  // until review iteration 1 — so AD-3's hole sat exactly where a bundle would
+  // hoist the raw career JSON onto the entry chunk. No README governs a root
+  // file, but "no README" is not "no rule".
   assertRejects(
     { 'main.tsx': "import { CareerSchema } from './data/schema.ts';\n" },
     /main\.tsx:1/,
-    'the entry stub must be governed, not skipped',
+    'a root file must be governed, not skipped',
   );
   assertRejects(
     { 'App.tsx': "import { runPipeline } from './derive/index.ts';\n" },
@@ -582,13 +583,13 @@ test('a file sitting directly in src/ may not import src/data/ or src/derive/', 
   );
 });
 
-test('the entry stub may still import what the entry path legitimately reaches', () => {
+test('a root file may still import what the app path legitimately reaches', () => {
   // The other direction: inventing prohibitions no prose declares is the drift
   // the rule table exists to prevent. The entry reaches the shell by design, and
   // that is not a violation.
   assertAccepts(
     { 'main.tsx': "import { boot } from './shell/entry.ts';\n" },
-    'the entry stub reaches the shell by design',
+    'a root file reaches the shell by design',
   );
 });
 

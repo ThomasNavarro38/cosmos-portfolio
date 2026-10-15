@@ -30,9 +30,10 @@
  * **No retry, and that is a decision rather than an omission.** The index alone is
  * a legitimate terminal state, and the two failure causes have opposite operator
  * responses; `componentDidCatch` is implemented so a production build can tell them
- * apart in the console rather than swallowing the distinction. A reset keyed on
- * remount belongs with story 4.1's capability gate, which answers *no WebGL* — a
- * different question from a stale chunk hash.
+ * apart in the console rather than swallowing the distinction. Story 4.1's
+ * capability gate (`detect.ts`) answers a different question — *no WebGL2*, or a
+ * coarse primary pointer — before this host is rendered at all, and a stale chunk
+ * hash is not one it can answer; so there is still no reset, by decision.
  *
  * **The Rail's scroll input is here too** (2.5): a non-passive `wheel` listener on
  * a `<div>` wrapping the boundary asks `wheelIntent(...)` what the event means.
@@ -61,21 +62,20 @@
  * `false` they drop every Rail answer, and the handlers leave the event alone.
  * `Escape` and the wheel's panel answer are kept — they are not Rail input.
  *
- * **The reduced-motion preference's one writer is here too** (2.10): a
- * `matchMedia(REDUCED_MOTION_QUERY)` listener calling `setReducedMotion`, so the
- * rig, the Mote field and the panel read the visitor's preference and nothing
- * else writes it (`motion-preference.ts`).
+ * **The reduced-motion preference's writer is not here** (4.1). It moved to
+ * `mount.tsx`, page-wide and ahead of the first render, because the preference is
+ * the page's and not the scene's: the fallback surface renders the panel and the
+ * chrome without this host, and they still read the visitor's preference.
  *
- * **Capability detection is not here yet.** `src/render-fallback/` describes the
- * no-WebGL surface with absolute content parity and holds no code; story 4.1 owns
- * the gate that routes to it. Until then a visitor without WebGL reaches this
- * surface, fails to initialise, and keeps the index — recorded in `deferred-work.md`.
+ * **Capability detection is not here either.** The thin entry (`entry.ts`,
+ * `detect.ts`) chooses the surface before React loads, and `App` renders this host
+ * only on the `scene` surface — so a visitor without WebGL2, or on a coarse
+ * primary pointer, never reaches it and never requests `render-scene`.
  */
 
 import { Component, Suspense, lazy, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { FOCUS_PANEL_ID } from './panel-model.ts';
 import { goHome, releaseLayer } from './activate.ts';
-import { REDUCED_MOTION_QUERY, setReducedMotion } from './motion-preference.ts';
 import { keyAction, railStopCount, wheelIntent } from './rail-input.ts';
 import { advanceScroll, navigationStore } from './state.ts';
 
@@ -290,18 +290,6 @@ export function SceneHost({ artifact }: SceneHostProps) {
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [stopCount, sceneMounted]);
-
-  // The reduced-motion preference's one writer (2.10): the media query, read on
-  // mount and on every change. Guarded where `matchMedia` is absent, which then
-  // leaves the preference at its default, full motion.
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return undefined;
-    const query = window.matchMedia(REDUCED_MOTION_QUERY);
-    const onChange = (): void => setReducedMotion(query.matches);
-    onChange();
-    query.addEventListener('change', onChange);
-    return () => query.removeEventListener('change', onChange);
-  }, []);
 
   return (
     <div ref={host} className="scene-host">

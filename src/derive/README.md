@@ -310,11 +310,11 @@ Five kinds of rule are declared, one row per README:
 | `src/derive/` from the Colophon is dynamic-only | `src/colophon/README.md:5` | A static import of the solver for the live re-run. |
 | `src/tokens/` is a leaf, and `src/derive/` never reads it | `src/tokens/README.md:5-6` | Any token import outside the directory; any `src/derive/` import of tokens. |
 | No Three in the Fallback | `src/render-fallback/README.md:5` | `three` and any subpath of it, on the no-WebGL surface. |
-| The entry stub reaches neither the data nor the solver | `README.md:45` | A `src/data/` or `src/derive/` import from a file sitting directly in `src/` — `main.tsx`, `App.tsx`. |
+| A root file reaches neither the data nor the solver | `README.md:45` | A `src/data/` or `src/derive/` import from a file sitting directly in `src/` — `App.tsx`, the root file the mount reaches since 4.1 moved the entry to `src/shell/entry.ts`. |
 
 **A dynamic import does not escape a `never` rule.** `import('../data/career.json')` is exactly how a renderer would reach the authored source without appearing to, so the ban covers both kinds; only a `dynamicOnly` edge distinguishes them, and there the dynamic form is what AD-7 *requires*.
 
-**The entry stub is governed too.** `main.tsx` and `App.tsx` sit directly in `src/`, carry no README of their own, and are what Vite actually builds from — so they are precisely where a `src/data/` import would hoist the raw career JSON onto the entry chunk. They were skipped outright until review iteration 1 of this story caught it. No README does not mean no rule.
+**A root file is governed too.** A file sitting directly in `src/` carries no README of its own. Until 4.1 there were two, `main.tsx` (the entry) and `App.tsx`, and both were skipped outright until review iteration 1 of this story caught it — though they were exactly where a `src/data/` import would hoist the raw career JSON onto the entry chunk. Since 4.1 the entry is `src/shell/entry.ts` and `App.tsx` is the one root file, reached by the mount; a `src/data/` import there would still put the raw career JSON on the app's path. No README does not mean no rule.
 
 **A directory with no rule fails the gate.** Adding `src/audio/` without a row in `BOUNDARY_RULES` is a failure naming the directory, not a directory the ban silently does not reach. A permissive default would make an unreviewed new layer the one place the boundary does not hold, with the gate still green — which reads as coverage and is worse than no gate.
 

@@ -14,10 +14,12 @@
  * `checkBundle(view, root)` fails on
  * - a bundle with no entry chunk, which would otherwise pass by vacuity;
  * - any module in the entry graph from a banned package (`three`,
- *   `@react-three/*`, `d3-force-3d`, `zod`), matched on its last
+ *   `@react-three/*`, `d3-force-3d`, `zod`, and since 4.1 `react`, `react-dom`
+ *   and `scheduler`: the thin entry carries no React), matched on its last
  *   `node_modules/<name>` segment, or under a banned directory (`src/derive/`,
- *   `src/data/`, `src/render-scene/`, compared case-insensitively, as Windows
- *   resolves paths) — each named with the static import chain to it;
+ *   `src/data/`, `src/render-scene/`, `src/render-fallback/`, `src/colophon/`,
+ *   compared case-insensitively, as Windows resolves paths) — each named with
+ *   the static import chain to it;
  * - an entry graph whose summed chunk code exceeds the budget.
  *
  * Every check runs whatever the others found. `bundleAssertion()` is the Vite
@@ -30,14 +32,18 @@
 import type { Plugin } from 'vite';
 
 /**
- * Minified bytes, not gzip: exact and deterministic. Measured at 219,157 when
- * declared; story 4.1, which takes React off the entry, is the one to tighten it.
+ * Minified bytes, not gzip: exact and deterministic. Declared at 240,000 over a
+ * measured 219,157 while `src/main.tsx` carried React and the whole `App`; story
+ * 4.1 took both off the entry (`src/shell/entry.ts`: the stylesheets, detection,
+ * and one dynamic import) and measured 2,704; the budget of 4,000 is about 1.48×
+ * that measurement. 4.1's review patches (the `.then().catch()` chain, the import
+ * started before detection) brought the entry to 2,777, about 1.44× under it.
  */
-export const ENTRY_BUDGET_BYTES = 240_000;
+export const ENTRY_BUDGET_BYTES = 4_000;
 
-const BANNED_PACKAGES = ['three', 'd3-force-3d', 'zod'] as const;
+const BANNED_PACKAGES = ['three', 'd3-force-3d', 'zod', 'react', 'react-dom', 'scheduler'] as const;
 const BANNED_SCOPES = ['@react-three/'] as const;
-const BANNED_DIRS = ['src/derive/', 'src/data/', 'src/render-scene/'] as const;
+const BANNED_DIRS = ['src/derive/', 'src/data/', 'src/render-scene/', 'src/render-fallback/', 'src/colophon/'] as const;
 
 export interface ChunkView {
   readonly fileName: string;

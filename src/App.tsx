@@ -1,9 +1,10 @@
 /**
- * The app root.
+ * The app root, rendered by `./shell/mount.tsx` with the surface the thin entry
+ * chose (4.1).
  *
  * It renders the DOM destination index from the committed artifact, statically
- * imported — so the index is in the document at First Paint, before any 3D chunk
- * has been asked for, let alone loaded. That ordering is the story's point (AD-4):
+ * imported — so the index is in the document as soon as the mount chunk runs,
+ * before any 3D chunk has been asked for, let alone loaded. That ordering is the story's point (AD-4):
  * an accessible surface retrofitted after the canvas produces an inverted
  * architecture, and the inversion stays invisible until assistive technology meets
  * it. The index is therefore written **first** here, and the scene host after it:
@@ -11,8 +12,11 @@
  *
  * The 3D surface arrives beside it through `./shell/scene-host.tsx`, which holds
  * the `lazy(() => import('../render-scene/scene.tsx'))` edge and the error boundary
- * that keeps the index in the document when the renderer cannot. One element here,
- * no responsibility — the rule below is unchanged. The Focus panel (2.7) is one
+ * that keeps the index in the document when the renderer cannot — and only on the
+ * `scene` surface. On `fallback` (no WebGL2, or a coarse primary pointer) the host
+ * is not rendered, so `render-scene` is never requested; story 4.3 replaces that
+ * surface with the `render-fallback/` star chart. One element here, no
+ * responsibility — the rule below is unchanged. The Focus panel (2.7) is one
  * more element after it, for the same reason: `./shell/focus-panel.tsx` holds the
  * responsibility, and it comes last in document order because it is read after a
  * destination is chosen.
@@ -24,13 +28,16 @@
  * index, chrome, scene host, panel.
  *
  * The page itself (3.9) is `./shell/page.css`: the ground edge to edge, no page
- * scroll, and the scene host fixed to the viewport. It styles `html`, `body` and
- * the host's class only, so it is imported once, here, where the page is mounted.
+ * scroll, and the scene host fixed to the viewport. Since 4.1 it is imported by
+ * the thin entry (`./shell/entry.ts`), beside the tokens, so the first frame is
+ * the ground before React has arrived.
  *
  * `generated/layout.generated.json` resolves outside `src/`, so importing it
  * crosses no declared boundary — `src/shell/` names it explicitly as a permitted
- * static import, and the entry stub's own rule bans only `src/data/` and
- * `src/derive/`. Nothing here reaches either.
+ * static import, and the rule for a root file (`ROOT_RULE`) bans only
+ * `src/data/` and `src/derive/`. Nothing here reaches either. Since 4.1 this file
+ * is off the entry chunk: it is a root file the mount reaches, still governed by
+ * that rule.
  *
  * **Do not grow this file.** The shell's entry, capability detection and dynamic
  * renderer import belong in `src/shell/`; this stays a mount point.
@@ -40,10 +47,10 @@ import artifact from '../generated/layout.generated.json';
 import { CornerChrome } from './shell/corner-chrome.tsx';
 import { FocusPanel } from './shell/focus-panel.tsx';
 import { DestinationNav } from './shell/index-nav.tsx';
+import type { Surface } from './shell/detect.ts';
 import { SceneHost } from './shell/scene-host.tsx';
-import './shell/page.css';
 
-export function App() {
+export function App({ surface }: { readonly surface: Surface }) {
   // The artifact is JSON, so its inferred type is structural rather than the
   // schema's. `DestinationNav` asks only for the five fields the index reads,
   // and TypeScript checks the document against that here — the one place the
@@ -54,7 +61,7 @@ export function App() {
     <main>
       <DestinationNav artifact={artifact} />
       <CornerChrome />
-      <SceneHost artifact={artifact} />
+      {surface === 'scene' && <SceneHost artifact={artifact} />}
       <FocusPanel artifact={artifact} />
     </main>
   );
