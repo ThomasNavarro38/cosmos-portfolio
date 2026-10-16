@@ -42,7 +42,8 @@ import type { Plugin } from 'vite';
  * graph — the entry takes `resolveRoute` alone, but the mount imports the same
  * module, so the whole router (and the preload helper the colophon's import
  * shares) ships on the entry chunk — and measured 3,938, inside the unchanged
- * budget by 62 bytes.
+ * budget by 62 bytes; the router's guarded canonical rewrite brought it to
+ * 3,970, 30 bytes inside.
  */
 export const ENTRY_BUDGET_BYTES = 4_000;
 

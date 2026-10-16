@@ -136,7 +136,18 @@ export function createRouter(history: RouteHistory, initial: Route, position: Po
     listeners.forEach((listener) => listener());
   };
 
-  if (history.pathname() !== ROUTE_PATHS[current]) history.canonicalize(ROUTE_PATHS[current]);
+  // A refused rewrite (a `SecurityError` in a sandboxed, opaque-origin frame)
+  // leaves the URL non-canonical and nothing worse: this runs before
+  // `createRoot`, so a throw here would render nothing. The bare error is
+  // logged, with no message of its own: this module ships on the entry chunk,
+  // whose budget has no room for one.
+  if (history.pathname() !== ROUTE_PATHS[current]) {
+    try {
+      history.canonicalize(ROUTE_PATHS[current]);
+    } catch (error) {
+      console.error(error);
+    }
+  }
   restore(history.state());
 
   const stops = [

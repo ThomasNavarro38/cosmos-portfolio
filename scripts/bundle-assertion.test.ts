@@ -296,12 +296,21 @@ test('the shipped app builds under the assertion, measured within its budget', a
     'and by no static import',
   );
   // Neither the scene nor React's DOM rides along: no chunk the colophon chunk
-  // imports, statically or dynamically, holds a src/render-scene/ module or react-dom.
+  // imports, statically or dynamically — nor any chunk those load with them
+  // through static imports, however deep — holds a src/render-scene/ module or
+  // react-dom. Static imports are not hoisted onto a dynamic chunk, so one hop is not enough.
   type Edges = Pick<Rolldown.OutputChunk, 'fileName' | 'imports' | 'dynamicImports' | 'modules'>;
   const heavy = (from: readonly Edges[], start: string): string[] => {
     const named = new Map(from.map((out) => [out.fileName, out]));
     const own = named.get(start);
-    return [...(own?.imports ?? []), ...(own?.dynamicImports ?? [])].filter((name) =>
+    const reached = new Set<string>();
+    const pending = [...(own?.imports ?? []), ...(own?.dynamicImports ?? [])];
+    for (let name = pending.pop(); name !== undefined; name = pending.pop()) {
+      if (reached.has(name) || name === start) continue;
+      reached.add(name);
+      pending.push(...(named.get(name)?.imports ?? []));
+    }
+    return [...reached].filter((name) =>
       Object.keys(named.get(name)?.modules ?? {}).some((id) => local(id).startsWith('src/render-scene/') || /\/node_modules\/react-dom\//.test(forward(id))),
     );
   };
@@ -312,7 +321,13 @@ test('the shipped app builds under the assertion, measured within its budget', a
     assert.ok(target !== undefined, `a chunk matching ${pattern} was emitted`);
     for (const edge of ['imports', 'dynamicImports'] as const) {
       const mutated: Edges[] = chunks.map((out): Edges => (out === colophon ? { ...out, [edge]: [...out[edge], target.fileName] } : out));
-      assert.deepEqual(heavy(mutated, colophon?.fileName ?? ''), [target.fileName], `an ${edge} edge to ${target.fileName} is caught`);
+      assert.ok(heavy(mutated, colophon?.fileName ?? '').includes(target.fileName), `an ${edge} edge to ${target.fileName} is caught`);
+    }
+    // One hop further: the colophon chunk reaches the target through a shared chunk that imports it.
+    const shared: Edges = { fileName: 'assets/shared-mutant.js', imports: [target.fileName], dynamicImports: [], modules: {} };
+    for (const edge of ['imports', 'dynamicImports'] as const) {
+      const mutated: Edges[] = [...chunks.map((out): Edges => (out === colophon ? { ...out, [edge]: [...out[edge], shared.fileName] } : out)), shared];
+      assert.ok(heavy(mutated, colophon?.fileName ?? '').includes(target.fileName), `an ${edge} edge to a chunk importing ${target.fileName} is caught`);
     }
   }
   const view: BundleView = {
