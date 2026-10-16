@@ -1,6 +1,6 @@
 /**
  * The app root, rendered by `./shell/mount.tsx` with the surface the thin entry
- * chose (4.1).
+ * chose (4.1) and the router (4.2).
  *
  * It renders the DOM destination index from the committed artifact, statically
  * imported — so the index is in the document as soon as the mount chunk runs,
@@ -12,8 +12,11 @@
  *
  * The 3D surface arrives beside it through `./shell/scene-host.tsx`, which holds
  * the `lazy(() => import('../render-scene/scene.tsx'))` edge and the error boundary
- * that keeps the index in the document when the renderer cannot — and only on the
- * `scene` surface. On `fallback` (no WebGL2, or a coarse primary pointer) the host
+ * that keeps the index in the document when the renderer cannot — and only where
+ * the route shows the `scene` surface (4.2: `/` on a capable machine, never
+ * `/chart`). On `/colophon` the Colophon is shown alone, through
+ * `./shell/colophon-host.tsx` — its own lazy edge — so that route never requests
+ * `render-scene`. On `fallback` (no WebGL2, or a coarse primary pointer) the host
  * is not rendered, so `render-scene` is never requested; story 4.3 replaces that
  * surface with the `render-fallback/` star chart. One element here, no
  * responsibility — the rule below is unchanged. The Focus panel (2.7) is one
@@ -43,14 +46,29 @@
  * renderer import belong in `src/shell/`; this stays a mount point.
  */
 
+import { useSyncExternalStore } from 'react';
 import artifact from '../generated/layout.generated.json';
+import { ColophonHost } from './shell/colophon-host.tsx';
 import { CornerChrome } from './shell/corner-chrome.tsx';
 import { FocusPanel } from './shell/focus-panel.tsx';
 import { DestinationNav } from './shell/index-nav.tsx';
 import type { Surface } from './shell/detect.ts';
+import { surfaceOf, type Router } from './shell/router.ts';
 import { SceneHost } from './shell/scene-host.tsx';
 
-export function App({ surface }: { readonly surface: Surface }) {
+export function App({ surface, router }: { readonly surface: Surface; readonly router: Router }) {
+  // The route (4.2) is the router's, never the navigation store's. What it shows
+  // on this machine is `surfaceOf`'s: the Colophon alone on `/colophon`, the flat
+  // chart on `/chart` whatever the machine, and the machine's surface on `/`.
+  const route = useSyncExternalStore(router.subscribe, router.route);
+  const shown = surfaceOf(route, surface);
+  if (shown === 'colophon') {
+    return (
+      <main>
+        <ColophonHost />
+      </main>
+    );
+  }
   // The artifact is JSON, so its inferred type is structural rather than the
   // schema's. `DestinationNav` asks only for the five fields the index reads,
   // and TypeScript checks the document against that here — the one place the
@@ -61,7 +79,7 @@ export function App({ surface }: { readonly surface: Surface }) {
     <main>
       <DestinationNav artifact={artifact} />
       <CornerChrome />
-      {surface === 'scene' && <SceneHost artifact={artifact} />}
+      {shown === 'scene' && <SceneHost artifact={artifact} />}
       <FocusPanel artifact={artifact} />
     </main>
   );

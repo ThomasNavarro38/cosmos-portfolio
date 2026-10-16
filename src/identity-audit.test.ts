@@ -385,6 +385,8 @@ test('contrast: a role moved to a dimmer ink, or one whose ink cannot be read, f
  */
 const VISIBLE_COPY: ReadonlySet<string> = new Set([
   'THOMAS NAVARRO · the model',
+  // The Colophon's one `<h1>` (4.2), minimal until 5.1 fills the surface in.
+  'the model',
   'scroll ↓ — time runs backward',
   '↩ resume the journey',
   'esc — release',

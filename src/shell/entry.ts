@@ -12,6 +12,12 @@
  * fallback surface never asks for `render-scene`; the scene surface asks for it
  * lazily, after the index is in the document (ruling Q2).
  *
+ * The route (4.2) is resolved here too, from the path alone, before the mount
+ * chunk can resolve: `resolveRoute` is the one thing taken from `router.ts`,
+ * which imports nothing. The mount makes the router, which owns history; `/chart`
+ * shows the flat chart on any machine and `/colophon` the Colophon, each asking
+ * for at most one renderer chunk.
+ *
  * The tokens come first so they precede every DOM stylesheet the mount brings
  * (AD-12); `page.css` styles `html`, `body` and the scene host only.
  *
@@ -23,10 +29,12 @@
 import '../tokens/tokens.css';
 import './page.css';
 import { browserEnv, chooseSurface, detect } from './detect.ts';
+import { resolveRoute } from './router.ts';
 
 const mounting = import('./mount.tsx');
 const surface = chooseSurface(detect(browserEnv()));
+const route = resolveRoute(location.pathname);
 
 mounting
-  .then((module) => module.mount(surface))
+  .then((module) => module.mount(surface, route))
   .catch((error: unknown) => console.error('the surface failed to load; the page keeps its ground.', error));

@@ -942,3 +942,29 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-1-capability-detection-in-the-thin-entry.md`
   summary: Rule whether `getContext('webgl2', { failIfMajorPerformanceCaveat: true })` belongs in `detect()` — a software-only WebGL2 (SwiftShader, a blocklisted GPU) currently counts as capable and gets the scene.
   evidence: The flag is a context-creation attribute, not a timing probe, so it does not breach AC 4.1's "no performance probe"; but AD-8 says capability routes and performance offers, and a software renderer is arguably a performance case for 4.6's offer rather than a capability case for the entry. A ruling for Thomas; story 4.6 is the natural home.
+
+## Deferred from: code review of spec-4-2-surface-routing-with-real-history.md (2026-10-16)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
+  summary: Leaving `/` by a browser Back or Forward between same-document entries does not save the scene's position into the departing entry, so a later return restores the position from the last `navigate` — Thomas deferred it to 4.5 (2026-10-16), the first story that calls `navigate`.
+  evidence: `src/shell/router.ts` saves only in `navigate` and on `pagehide`; a `popstate` fires after the entry has changed, so the departing entry can no longer be written. Sequence: `/` at 2.4 → `navigate('colophon')` → Back (2.4) → scroll to 4 → Forward → Back restores 2.4. Unreachable in 4.2 (no caller of `navigate`; a typed URL is a new document, covered by `pagehide`). A fix keeps the current entry's state current while scrolling, throttled against Safari's `replaceState` rate limit.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
+  summary: The entry chunk measures 3,938 of its 4,000-byte budget because `mount.tsx` shares `router.ts` with the entry, so the whole router ships on the entry chunk; the next addition to the entry graph will likely break the build.
+  evidence: `npm run build` on 2026-10-16 (`dist/assets/index-*.js` 3.93 kB); a module cannot be split across chunks. Options: raise the budget, or move `resolveRoute`/`ROUTE_PATHS` to a module the mount does not share (contradicts the spec's "the entry imports only `resolveRoute` from it [router.ts]") — a ruling.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
+  summary: What `App` renders per route is verified only by source-text regexes; no test renders `App` against a router, so a route change that fails to re-render would pass every audit.
+  evidence: `auditMount` in `src/shell/panel-model.test.ts`, `src/render-scene/scene-model.test.ts` App rows, and the `mount.tsx` regexes in `src/shell/router.test.ts` match text only; `.tsx` cannot load under `node --test`. A pure plain-TS model of "what shows for (route, surface)" tested beside `surfaceOf`, or a server-render check in the bundle assertion, would close it.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
+  summary: A route change updates neither `document.title` nor focus and announces nothing, so a screen-reader visitor gets no signal on an in-document route change once 4.5 adds one.
+  evidence: `src/App.tsx` swaps `<main>` content on `router.subscribe`; nothing moves focus to the new heading. Unreachable in 4.2 (no `navigate` caller), real from 4.5.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
+  summary: That the scene's first drawn frame is the restored stop rests on R3F running `useFrame` callbacks before the first draw; nothing pins it, and per-frame work keyed off the `camera` prop (keyframe 0) may compute one frame against a pose never shown.
+  evidence: `src/render-scene/rail-model.ts` seeds the rig at the clamped goal; `rail-model.test.ts` pins the model only. The 4.2 browser check confirmed the restored stop on screen but not the very first frame.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
+  summary: After a redeploy, a request for a stale hashed chunk on a host reading `public/_redirects` is answered with `index.html` and a 200, so the chunk fails as a MIME or parse error instead of a 404.
+  evidence: `public/_redirects` is `/* /index.html 200` with no `/assets/*` exception. The host's own boundary still logs the failed chunk and keeps the root mounted; a `/assets/* 404` line before the catch-all would make the failure an honest 404.

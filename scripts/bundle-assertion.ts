@@ -38,7 +38,11 @@ import type { Plugin } from 'vite';
  * and one dynamic import) and measured 2,704; the budget of 4,000 is about 1.48×
  * that measurement. 4.1's review patches (the `.then().catch()` chain, the import
  * started before detection) brought the entry to 2,777; the budget is about 1.44×
- * that, the figure of record.
+ * that, the figure of record. Story 4.2 added `src/shell/router.ts` to the entry
+ * graph — the entry takes `resolveRoute` alone, but the mount imports the same
+ * module, so the whole router (and the preload helper the colophon's import
+ * shares) ships on the entry chunk — and measured 3,938, inside the unchanged
+ * budget by 62 bytes.
  */
 export const ENTRY_BUDGET_BYTES = 4_000;
 

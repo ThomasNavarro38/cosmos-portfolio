@@ -1439,16 +1439,29 @@ function auditMount(source: string): string[] {
   if (order.some((at) => at === -1) || order.some((at, i) => i > 0 && at < (order[i - 1] ?? 0))) {
     failures.push('the document order is not index, chrome, scene host, panel');
   }
-  // 4.1: the surface the entry chose is App's one prop, and it gates the scene host
-  // alone — once, on `scene`. Every other element renders on both surfaces.
-  if (!/export\s+function\s+App\(\s*\{\s*surface\s*\}\s*:\s*\{\s*readonly\s+surface\s*:\s*Surface\s*\}\s*\)\s*\{/.test(code)) {
-    failures.push('App does not take the surface as its one prop');
+  // 4.1: the surface the entry chose is a prop; 4.2: so is the router. The route is
+  // read from the router (never the store), and what it shows on this machine is
+  // `surfaceOf(route, surface)` — the surface's one read. That answer gates the
+  // scene host alone, once, on `scene`; on `colophon` the Colophon host is shown
+  // alone. Every other element renders on both chart and scene.
+  if (!/export\s+function\s+App\(\s*\{\s*surface\s*,\s*router\s*\}\s*:\s*\{\s*readonly\s+surface\s*:\s*Surface\s*;\s*readonly\s+router\s*:\s*Router\s*\}\s*\)\s*\{/.test(code)) {
+    failures.push('App does not take the surface and the router as its props');
   }
   if (!/import\s+type\s*\{\s*Surface\s*\}\s*from\s*'\.\/shell\/detect\.ts'/.test(code)) failures.push('the Surface type is not detection’s');
-  if ((code.match(/<SceneHost\b/g) ?? []).length !== 1 || !/\{\s*surface\s*===\s*'scene'\s*&&\s*<SceneHost\s+artifact=\{\s*artifact\s*\}\s*\/>\s*\}/.test(code)) {
-    failures.push('the scene host is not rendered once, gated on surface === \'scene\'');
+  if (!/import\s*\{\s*surfaceOf\s*,\s*type\s+Router\s*\}\s*from\s*'\.\/shell\/router\.ts'/.test(code)) failures.push('surfaceOf and Router are not the router’s');
+  if (!/const\s+route\s*=\s*useSyncExternalStore\(\s*router\.subscribe\s*,\s*router\.route\s*\)\s*;/.test(code)) failures.push('the route is not read from the router with useSyncExternalStore');
+  if (!/const\s+shown\s*=\s*surfaceOf\(\s*route\s*,\s*surface\s*\)\s*;/.test(code)) failures.push('what is shown is not surfaceOf(route, surface)');
+  if (/navigationStore|useStore\b/.test(code)) failures.push('App reads the route from the navigation store');
+  if ((code.match(/<SceneHost\b/g) ?? []).length !== 1 || !/\{\s*shown\s*===\s*'scene'\s*&&\s*<SceneHost\s+artifact=\{\s*artifact\s*\}\s*\/>\s*\}/.test(code)) {
+    failures.push('the scene host is not rendered once, gated on shown === \'scene\'');
   }
-  if ((code.match(/\bsurface\b/g) ?? []).length !== 3) failures.push('the surface is read other than by the scene host’s gate');
+  if ((code.match(/\bsurface\b/g) ?? []).length !== 3) failures.push('the surface is read other than by surfaceOf');
+  if (/&&\s*<(?:DestinationNav|CornerChrome|FocusPanel)\b/.test(code)) failures.push('an element other than the scene host is gated');
+  if (!/import\s*\{\s*ColophonHost\s*\}\s*from\s*'\.\/shell\/colophon-host\.tsx'/.test(code)) failures.push('ColophonHost is not imported from the shell');
+  if ((code.match(/<ColophonHost\b/g) ?? []).length !== 1 ||
+    !/if\s*\(\s*shown\s*===\s*'colophon'\s*\)\s*\{\s*return\s*\(\s*<main>\s*<ColophonHost\s*\/>\s*<\/main>\s*\)\s*;\s*\}/.test(code)) {
+    failures.push('the Colophon host is not rendered once, alone, on shown === \'colophon\'');
+  }
   if (/^import\s+'[^']*\.css'/m.test(code)) failures.push('App.tsx imports a stylesheet — the page is the entry’s since 4.1');
   return failures;
 }
@@ -1458,14 +1471,24 @@ test('App.tsx mounts index, chrome, scene host and panel, in that order', () => 
   assert.deepEqual(auditMount(real), []);
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
     ['the panel not mounted', (s) => s.replace(/^\s*<FocusPanel artifact=\{artifact\} \/>\r?\n/m, '')],
-    ['the panel before the scene', (s) => s.replace(/^(\s*\{surface === 'scene' && <SceneHost artifact=\{artifact\} \/>\}\n)(\s*<FocusPanel artifact=\{artifact\} \/>\n)/m, '$2$1')],
-    ['the scene removed', (s) => s.replace(/^\s*\{surface === 'scene' && <SceneHost artifact=\{artifact\} \/>\}\n/m, '')],
+    ['the panel before the scene', (s) => s.replace(/^(\s*\{shown === 'scene' && <SceneHost artifact=\{artifact\} \/>\}\n)(\s*<FocusPanel artifact=\{artifact\} \/>\n)/m, '$2$1')],
+    ['the scene removed', (s) => s.replace(/^\s*\{shown === 'scene' && <SceneHost artifact=\{artifact\} \/>\}\n/m, '')],
     // 4.1: the scene host renders on the scene surface alone, so the fallback never requests render-scene.
-    ['the scene ungated', (s) => s.replace("{surface === 'scene' && <SceneHost artifact={artifact} />}", '<SceneHost artifact={artifact} />')],
-    ['the gate inverted', (s) => s.replace("{surface === 'scene' && <SceneHost", "{surface !== 'scene' && <SceneHost")],
-    ['gated on the fallback', (s) => s.replace("{surface === 'scene' && <SceneHost", "{surface === 'fallback' && <SceneHost")],
-    ['the panel gated too', (s) => s.replace('<FocusPanel artifact={artifact} />', "{surface === 'scene' && <FocusPanel artifact={artifact} />}")],
-    ['the surface not a prop', (s) => s.replace('export function App({ surface }: { readonly surface: Surface })', "export function App() {\n  const surface: Surface = 'scene';\n  return null;\n}\nfunction Unused({ surface }: { readonly surface: Surface })")],
+    ['the scene ungated', (s) => s.replace("{shown === 'scene' && <SceneHost artifact={artifact} />}", '<SceneHost artifact={artifact} />')],
+    ['the gate inverted', (s) => s.replace("{shown === 'scene' && <SceneHost", "{shown !== 'scene' && <SceneHost")],
+    ['gated on the fallback', (s) => s.replace("{shown === 'scene' && <SceneHost", "{shown === 'fallback' && <SceneHost")],
+    // 4.2: gated on the machine's surface, `/chart` on a capable machine would request render-scene.
+    ['gated on the machine, not the route', (s) => s.replace("{shown === 'scene' && <SceneHost", "{surface === 'scene' && <SceneHost")],
+    ['the panel gated too', (s) => s.replace('<FocusPanel artifact={artifact} />', "{shown === 'scene' && <FocusPanel artifact={artifact} />}")],
+    ['the surface not a prop', (s) => s.replace('export function App({ surface, router }: { readonly surface: Surface; readonly router: Router })', "export function App() {\n  const surface: Surface = 'scene';\n  return null;\n}\nfunction Unused({ surface, router }: { readonly surface: Surface; readonly router: Router })")],
+    ['the router not a prop', (s) => s.replace('{ surface, router }: { readonly surface: Surface; readonly router: Router }', '{ surface }: { readonly surface: Surface }')],
+    ['the route fixed', (s) => s.replace('surfaceOf(route, surface)', "surfaceOf('home', surface)")],
+    ['the route from the store', (s) => s.replace('useSyncExternalStore(router.subscribe, router.route)', 'useStore(navigationStore, (state) => state.route)')],
+    ['the surface shown as is', (s) => s.replace('const shown = surfaceOf(route, surface);', 'const shown = surface as string;')],
+    ['the colophon beside the index', (s) => s.replace(/\s*if \(shown === 'colophon'\) \{\s*return \(\s*<main>\s*<ColophonHost \/>\s*<\/main>\s*\);\s*\}/, '').replace('<FocusPanel artifact={artifact} />', "<FocusPanel artifact={artifact} />\n      {shown === 'colophon' && <ColophonHost />}")],
+    ['the colophon never shown', (s) => s.replace(/\s*if \(shown === 'colophon'\) \{\s*return \(\s*<main>\s*<ColophonHost \/>\s*<\/main>\s*\);\s*\}/, '')],
+    ['the colophon on the chart', (s) => s.replace("if (shown === 'colophon') {", "if (shown === 'fallback') {")],
+    ['the colophon with the index', (s) => s.replace(/(<main>\s*)<ColophonHost \/>/, '$1<DestinationNav artifact={artifact} />\n        <ColophonHost />')],
     ['the page imported here again', (s) => s.replace("import { SceneHost } from './shell/scene-host.tsx';", "import { SceneHost } from './shell/scene-host.tsx';\nimport './shell/page.css';")],
     ['mounted twice', (s) => s.replace('<FocusPanel artifact={artifact} />', '<FocusPanel artifact={artifact} />\n      <FocusPanel artifact={artifact} />')],
     ['no artifact', (s) => s.replace('<FocusPanel artifact={artifact} />', '<FocusPanel artifact={{ clients: [] }} />')],
