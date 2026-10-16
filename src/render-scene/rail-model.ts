@@ -671,10 +671,12 @@ export function dampProgress(
  * The rig's whole frame update: chase the scroll target and the live aspect.
  *
  * The target is clamped to `[0, N]` so the spring never chases a stop that does
- * not exist. On the first frame the motion starts **at rest at progress 0** —
- * the keyframe the `camera` prop already shows — whatever the store holds, so a
- * remount with progress already in the store springs out to it from the frame
- * on screen rather than cutting there. A live aspect that is not a positive
+ * not exist. On the first frame the motion starts **at rest at the clamped
+ * goal** — the store's progress (4.2, AD-18, UX-DR54) — so a scene mounted
+ * after the router restored a position from history opens at that stop rather
+ * than gliding out from First Paint. R3F runs the frame callback before the
+ * first draw, so the `camera` prop's keyframe 0 is never on screen. A
+ * non-finite store value on the first frame seeds at 0. A live aspect that is not a positive
  * finite number keeps the previous one (or `NARROWEST_ASPECT`, the floor and
  * the safest frame, on the first frame).
  */
@@ -693,7 +695,7 @@ export function stepRailMotion(
   const aspectGoal = usableAspect ? liveAspect : (previous?.aspect.value ?? NARROWEST_ASPECT);
 
   if (previous === null) {
-    return { progress: { value: 0, velocity: 0 }, aspect: { value: aspectGoal, velocity: 0 } };
+    return { progress: { value: goal, velocity: 0 }, aspect: { value: aspectGoal, velocity: 0 } };
   }
   // Reduced motion (2.10): the same spring on a shorter time constant, for both.
   // For a critically damped spring that is exactly `dt / pace` — time dilated,

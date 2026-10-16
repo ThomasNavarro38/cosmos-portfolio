@@ -2604,8 +2604,10 @@ test('App.tsx imports the scene host and renders it after the index', () => {
   const code = quotedCodeOf(APP_TSX);
   assert.match(code, /import\s*\{\s*SceneHost\s*\}\s*from\s*'\.\/shell\/scene-host\.tsx'/, 'the host is imported');
   assert.match(code, /<SceneHost\b/, 'and rendered');
-  // 4.1: on the scene surface alone — the fallback never requests render-scene.
-  assert.match(code, /\{\s*surface\s*===\s*'scene'\s*&&\s*<SceneHost\b/, 'gated on surface === \'scene\'');
+  // 4.1: on the scene surface alone — the fallback never requests render-scene. 4.2:
+  // the surface the route shows, so `/chart` and `/colophon` never request it either.
+  assert.match(code, /\{\s*shown\s*===\s*'scene'\s*&&\s*<SceneHost\b/, 'gated on shown === \'scene\'');
+  assert.match(code, /const\s+shown\s*=\s*surfaceOf\(\s*route\s*,\s*surface\s*\)\s*;/, 'shown is the route’s surface on this machine');
   assert.equal((code.match(/<SceneHost\b/g) ?? []).length, 1, 'once');
   assert.match(code, /<DestinationNav\b/, 'beside the index, which still renders synchronously');
   assert.ok(

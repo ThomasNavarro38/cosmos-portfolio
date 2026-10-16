@@ -1065,10 +1065,14 @@ test('a spring time that is not a positive finite number is a RangeError naming 
 
 // --- The rig's frame step -------------------------------------------------------
 
-test('the first frame starts at rest at progress 0, the keyframe the camera prop shows; later frames chase a clamped target', () => {
+test('the first frame starts at rest at the clamped goal, the store’s progress (4.2); later frames chase a clamped target', () => {
   const { rail } = railOf(fiveStops());
   const first = stepRailMotion(null, rail, 2, 1.5, 0.016);
-  assert.deepEqual(first, { progress: { value: 0, velocity: 0 }, aspect: { value: 1.5, velocity: 0 } });
+  assert.deepEqual(first, { progress: { value: 2, velocity: 0 }, aspect: { value: 1.5, velocity: 0 } });
+  // Clamped like every later goal, and a non-finite store value seeds the opening frame.
+  assert.equal(stepRailMotion(null, rail, 99, 1.5, 0.016).progress.value, railStopCount(rail), 'past the end seeds at N');
+  assert.equal(stepRailMotion(null, rail, -5, 1.5, 0.016).progress.value, 0, 'before the start seeds at 0');
+  assert.equal(stepRailMotion(null, rail, Number.NaN, 1.5, 0.016).progress.value, 0, 'a non-finite progress seeds at 0');
 
   let motion: RailMotion = stepRailMotion(null, rail, 0, 1.5, 0.016);
   for (let i = 0; i < 600; i += 1) motion = stepRailMotion(motion, rail, 99, 1.5, 1 / 60);
@@ -1077,23 +1081,18 @@ test('the first frame starts at rest at progress 0, the keyframe the camera prop
   assert.ok(Math.abs(motion.progress.value) < 1e-4, 'and before the start to 0');
 });
 
-test('a mount with progress already in the store springs out from the opening frame rather than cutting to it', () => {
-  // Remount or HMR: the store still says 3. The camera prop shows keyframe 0, so
-  // the rig's first pose must be keyframe 0 and every later frame a short step.
-  const { rail, bodies } = railOf(fiveStops());
-  const opening = frameBodies(bodies).position;
+test('a mount with progress already in the store opens at that stop rather than gliding out from the opening frame (4.2)', () => {
+  // A return through history (AD-18, UX-DR54): the router has restored 3 into the
+  // store before the scene mounts, so the rig's first pose is stop 3 at rest, not
+  // keyframe 0 springing out. R3F runs the frame callback before the first draw,
+  // so the camera prop's keyframe 0 is never on screen.
+  const { rail } = railOf(fiveStops());
   let frame = railFrame(null, rail, 3, 1600, 900, 0.016);
-  assertNear(frame.pose.position, opening, 'the first frame is the frame on screen');
-  const jump = distance(railPose(rail, 3, 1600 / 900).position, opening);
-  let previous = frame.pose.position;
-  let largest = 0;
-  for (let i = 0; i < 600; i += 1) {
-    frame = railFrame(frame.motion, rail, 3, 1600, 900, 1 / 60);
-    largest = Math.max(largest, distance(frame.pose.position, previous));
-    previous = frame.pose.position;
-  }
-  assert.ok(largest < jump * 0.1, `no frame jumps: largest step ${largest} against a cut of ${jump}`);
-  assert.ok(Math.abs(frame.motion.progress.value - 3) < 1e-4, 'and it arrives');
+  assertNear(frame.pose.position, railPose(rail, 3, 1600 / 900).position, 'the first frame is the store’s stop');
+  assert.deepEqual(frame.motion.progress, { value: 3, velocity: 0 }, 'at rest');
+  const first = frame.pose.position;
+  for (let i = 0; i < 60; i += 1) frame = railFrame(frame.motion, rail, 3, 1600, 900, 1 / 60);
+  assertNear(frame.pose.position, first, 'and it stays there');
 });
 
 test('railFrame binds its inputs: the carried motion, the store progress, width / height, and delta', () => {
@@ -1101,12 +1100,12 @@ test('railFrame binds its inputs: the carried motion, the store progress, width 
   const start = railFrame(null, rail, 2, 1600, 900, 0.016);
   assert.equal(start.motion.aspect.value, 1600 / 900, 'the aspect is width / height');
 
-  // The carried motion is what advances: fed back, it moves; fed null each frame,
-  // it never leaves the opening frame.
-  const carried = railFrame(start.motion, rail, 2, 1600, 900, 1 / 60);
-  const dropped = railFrame(null, rail, 2, 1600, 900, 1 / 60);
-  assert.ok(carried.motion.progress.value > 0, 'the carried motion advances toward the store');
-  assert.equal(dropped.motion.progress.value, 0, 'a motion not written back never advances');
+  // The carried motion is what advances: fed back, it moves toward a new goal;
+  // fed null each frame, it re-seeds at the goal at rest and never moves (4.2).
+  const carried = railFrame(start.motion, rail, 3, 1600, 900, 1 / 60);
+  const dropped = railFrame(null, rail, 3, 1600, 900, 1 / 60);
+  assert.ok(carried.motion.progress.value > 2 && carried.motion.progress.value < 3, 'the carried motion advances toward the store');
+  assert.deepEqual(dropped.motion.progress, { value: 3, velocity: 0 }, 'a motion not written back sits at the goal, at rest');
 
   // The store progress is the goal.
   const toward1 = railFrame(start.motion, rail, 1, 1600, 900, 1 / 60);

@@ -740,7 +740,7 @@ function auditPreferenceWriter(source: string): string[] {
   if (guard !== null && query !== null && guard.index > query.index) failures.push('the guard comes after the query');
   if ((code.match(/\bsetReducedMotion\(/g) ?? []).length !== 1) failures.push('setReducedMotion is written other than once, in onChange');
   if (/\breducedMotion\(|\bsubscribeReducedMotion\b|\bmotionPace\b/.test(code)) failures.push('the writer reads the preference too');
-  const mount = /export\s+function\s+mount\(\s*surface\s*:\s*Surface\s*\)\s*:\s*void\s*\{([\s\S]*)\}/.exec(code);
+  const mount = /export\s+function\s+mount\(\s*surface\s*:\s*Surface\s*,\s*route\s*:\s*Route\s*\)\s*:\s*void\s*\{([\s\S]*)\}/.exec(code);
   const body2 = mount?.[1] ?? '';
   const called = body2.search(/\bwriteReducedMotion\(\s*\)\s*;/);
   const render = body2.search(/\bcreateRoot\(/);
@@ -750,10 +750,15 @@ function auditPreferenceWriter(source: string): string[] {
   else if (!/^\s*writeReducedMotion\(\s*\)\s*;/.test(body2)) failures.push('the preference is not written first, on every surface');
   else if (render === -1 || called > render) failures.push('the preference is written after the first render');
   if ((code.match(/\bwriteReducedMotion\(\s*\)\s*;/g) ?? []).length !== 1) failures.push('the writer is called other than once');
-  // The surface the entry chose reaches App unchanged, and App is rendered once.
-  if ((code.match(/<App\b/g) ?? []).length !== 1 || !/<App\s+surface=\{\s*surface\s*\}\s*\/>/.test(body2)) {
-    failures.push('mount does not render <App surface={surface} />, once');
+  // The surface the entry chose reaches App unchanged, with the router (4.2), and App is rendered once.
+  if ((code.match(/<App\b/g) ?? []).length !== 1 || !/<App\s+surface=\{\s*surface\s*\}\s+router=\{\s*router\s*\}\s*\/>/.test(body2)) {
+    failures.push('mount does not render <App surface={surface} router={router} />, once');
   }
+  // The router over the real history, at the route the entry resolved, made before the first render
+  // so a restored position is in the store when the scene mounts.
+  const made = body2.search(/const\s+router\s*=\s*createRouter\(\s*browserHistory\(\)\s*,\s*route\s*,/);
+  if (made === -1) failures.push('the router is not createRouter(browserHistory(), route, …)');
+  else if (render === -1 || made > render) failures.push('the router is made after the first render');
   return failures;
 }
 
@@ -777,8 +782,13 @@ test('the writer audit rejects the real mount with any one guarantee removed', (
     ['the addListener fallback removed', (s) => s.replace(/if \(typeof query\.addEventListener === 'function'\) (query\.addEventListener\('change', onChange\);)\n\s*else if \(typeof query\.addListener === 'function'\) query\.addListener\(onChange\);/, '$1')],
     ['addListener called unguarded', (s) => s.replace("else if (typeof query.addListener === 'function') query.addListener", 'else query.addListener')],
     ['addEventListener called unguarded', (s) => s.replace("if (typeof query.addEventListener === 'function') query.addEventListener", 'query.addEventListener')],
-    ['a fixed surface', (s) => s.replace('<App surface={surface} />', '<App surface="scene" />')],
-    ['App rendered twice', (s) => s.replace('<App surface={surface} />', '<App surface={surface} />\n      <App surface={surface} />')],
+    ['a fixed surface', (s) => s.replace('<App surface={surface} router={router} />', '<App surface="scene" router={router} />')],
+    ['App rendered twice', (s) => s.replace('<App surface={surface} router={router} />', '<App surface={surface} router={router} />\n      <App surface={surface} router={router} />')],
+    // 4.2: the router reaches App, made from the entry's route, before the first render.
+    ['no router handed over', (s) => s.replace('<App surface={surface} router={router} />', '<App surface={surface} />')],
+    ['a fixed route', (s) => s.replace('createRouter(browserHistory(), route,', "createRouter(browserHistory(), 'home',")],
+    ['the route not taken', (s) => s.replace('mount(surface: Surface, route: Route)', 'mount(surface: Surface)')],
+    ['the router made after the render', (s) => s.replace(/(\s*\/\/ Lives as long[^\n]*\n\s*const router = createRouter\([\s\S]*?\}\);\n)([\s\S]*?\n {2}\);\n)/, '\n$2$1')],
     ['a second writer', (s) => s.replace('onChange();', 'onChange();\n  setReducedMotion(false);')],
     ['the writer reads too', (s) => s.replace('onChange();', 'onChange();\n  void reducedMotion();')],
     ['never called', (s) => s.replace(/(\{\n)\s*writeReducedMotion\(\);\n/, '$1')],

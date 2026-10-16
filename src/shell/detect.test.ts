@@ -245,8 +245,9 @@ function auditDetect(source: string): string[] {
 }
 
 /**
- * `entry.ts`: the banned words, the two stylesheets then detection, and exactly
- * one dynamic import — the mount, started before detection runs so context
+ * `entry.ts`: the banned words, the two stylesheets then detection then
+ * `resolveRoute` alone from the router (4.2, handed to the mount beside the
+ * surface), and exactly one dynamic import — the mount, started before detection runs so context
  * creation does not delay the chunk request. Its result is chained as
  * `.then(mount).catch(log)`, so a failed import and a throwing mount reach the
  * same `console.error`; the two-argument `.then(ok, err)` would leave a throwing
@@ -256,9 +257,12 @@ function auditEntry(source: string): string[] {
   const code = stripComments(source);
   const failures = auditThin('entry.ts', source);
   const statics = [...code.matchAll(/^\s*import\s+(?:[^'"]*?\sfrom\s+)?'([^']+)'/gm)].map((match) => match[1]);
-  if (JSON.stringify(statics) !== JSON.stringify(['../tokens/tokens.css', './page.css', './detect.ts'])) {
-    failures.push(`entry.ts statically imports ${JSON.stringify(statics)}, not the tokens, the page, then detection`);
+  if (JSON.stringify(statics) !== JSON.stringify(['../tokens/tokens.css', './page.css', './detect.ts', './router.ts'])) {
+    failures.push(`entry.ts statically imports ${JSON.stringify(statics)}, not the tokens, the page, detection, then the router`);
   }
+  // 4.2: `resolveRoute` and nothing else from the router — the rest of it is the mount's.
+  if (!/^\s*import\s*\{\s*resolveRoute\s*\}\s*from\s*'\.\/router\.ts'\s*;/m.test(code)) failures.push('entry.ts takes something other than resolveRoute from the router');
+  if (!/const\s+route\s*=\s*resolveRoute\(\s*location\.pathname\s*\)\s*;/.test(code)) failures.push('the route is not resolveRoute(location.pathname)');
   const dynamic = [...code.matchAll(/\bimport\s*\(/g)];
   if (dynamic.length !== 1) failures.push(`entry.ts holds ${dynamic.length} dynamic imports, not one`);
   if (!/\bimport\(\s*'\.\/mount\.tsx'\s*\)/.test(code)) failures.push('the dynamic import is not ./mount.tsx');
@@ -266,9 +270,9 @@ function auditEntry(source: string): string[] {
   const detected = code.search(/\bdetect\(\s*browserEnv\(\s*\)\s*\)/);
   if (started === -1) failures.push('the mount import is not started as const mounting');
   else if (detected === -1 || started > detected) failures.push('detection runs before the mount import is started');
-  if (!/\.mount\(\s*surface\s*\)/.test(code)) failures.push('the mount is not handed the surface');
+  if (!/\.mount\(\s*surface\s*,\s*route\s*\)/.test(code)) failures.push('the mount is not handed the surface and the route');
   const chain =
-    /\bmounting\s*\.then\(\s*\(\s*(\w+)\s*\)\s*=>\s*\1\.mount\(\s*surface\s*\)\s*\)\s*\.catch\(\s*\(\s*(\w+)\s*(?::\s*unknown\s*)?\)\s*=>\s*console\.error\(\s*'[^']+'\s*,\s*\2\s*\)\s*\)\s*;/;
+    /\bmounting\s*\.then\(\s*\(\s*(\w+)\s*\)\s*=>\s*\1\.mount\(\s*surface\s*,\s*route\s*\)\s*\)\s*\.catch\(\s*\(\s*(\w+)\s*(?::\s*unknown\s*)?\)\s*=>\s*console\.error\(\s*'[^']+'\s*,\s*\2\s*\)\s*\)\s*;/;
   if (!chain.test(code)) failures.push('the mount is not mounting.then(mount).catch(console.error) — a failed import and a throwing mount must log alike');
   if ((code.match(/\.then\(/g) ?? []).length !== 1 || (code.match(/\.catch\(/g) ?? []).length !== 1) failures.push('the mount is chained other than one then and one catch');
   if (!/console\.error\(/.test(code)) failures.push('a failed mount is not logged');
@@ -313,12 +317,17 @@ test('the entry audit rejects the real entry with any one reach added', () => {
     ['the data', (s) => `${s}\nvoid import('../data/career.json');\n`],
     ['the tokens dropped', (s) => s.replace("import '../tokens/tokens.css';", '')],
     ['the page after the tokens swapped', (s) => s.replace("import '../tokens/tokens.css';\nimport './page.css';", "import './page.css';\nimport '../tokens/tokens.css';")],
-    ['the surface not handed over', (s) => s.replace('.mount(surface)', '.mount()')],
+    ['the surface not handed over', (s) => s.replace('.mount(surface, route)', '.mount(route)')],
+    // 4.2: the route the entry resolved reaches the mount, and the router's only export the entry takes is resolveRoute.
+    ['the route not handed over', (s) => s.replace('.mount(surface, route)', '.mount(surface)')],
+    ['the route not resolved from the path', (s) => s.replace('resolveRoute(location.pathname)', "resolveRoute('/')")],
+    ['the whole router taken', (s) => s.replace("import { resolveRoute } from './router.ts';", "import { createRouter, resolveRoute } from './router.ts';")],
+    ['the router dropped', (s) => s.replace("import { resolveRoute } from './router.ts';\n", '')],
     ['the failure swallowed', (s) => s.replace(/console\.error\(/, 'void (')],
     ['a width check', (s) => s.replace('const surface =', 'const wide = window.innerWidth > 600;\nconst surface =')],
     ['the two-argument then', (s) => s.replace(
-      /\.then\(\(module\) => module\.mount\(surface\)\)\s*\.catch\(\(error: unknown\) => (console\.error\('[^']*', error\))\);/,
-      '.then(\n  (module) => module.mount(surface),\n  (error: unknown) => $1,\n);',
+      /\.then\(\(module\) => module\.mount\(surface, route\)\)\s*\.catch\(\(error: unknown\) => (console\.error\('[^']*', error\))\);/,
+      '.then(\n  (module) => module.mount(surface, route),\n  (error: unknown) => $1,\n);',
     )],
     ['detection before the import', (s) => s.replace("const mounting = import('./mount.tsx');\nconst surface = chooseSurface(detect(browserEnv()));", "const surface = chooseSurface(detect(browserEnv()));\nconst mounting = import('./mount.tsx');")],
     ['the import awaited inline after detection', (s) => s.replace("const mounting = import('./mount.tsx');\n", '').replace(/\nmounting\n/, "\nimport('./mount.tsx')\n")],

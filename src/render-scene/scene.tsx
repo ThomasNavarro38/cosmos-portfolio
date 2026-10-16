@@ -42,8 +42,9 @@
  * mounted after `<BodyField>` — every rule in `notable-model.ts`. The
  * approached Project's leader and label are `<AffordanceField>`'s (3.4), mounted
  * last, an overlay over the vignette — every rule in `affordance-model.ts`. The
- * `camera` prop stays keyframe 0, so the first frame is the opening frame
- * whether or not the rig has run yet.
+ * `camera` prop stays keyframe 0; the rig's frame callback runs before the
+ * first draw and seeds at the store's progress (4.2), so a scene remounted
+ * after a return through history opens at the stop it was left at.
  *
  * **Dust is drawn strictly behind every Body** (FR-15). The model in
  * `dust-model.ts` decides what Dust exists; this file only guarantees the Dust's

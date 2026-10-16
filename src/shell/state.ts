@@ -30,7 +30,7 @@
  * | --- | --- | --- |
  * | `mode` | `enterRail` / `enterFreeFlight` | Rail travel or free flight |
  * | `flightTarget` | `enterFreeFlight`, with `mode` as one transition | What free flight frames: a Client, or `null` for the whole universe |
- * | `scrollProgress` | `advanceScroll` — the scroll input's handlers in `scene-host.tsx` (rules in `rail-input.ts`) and the `goHome` door (`activate.ts`) | Continuous progress along the Rail, in stops: 0 is the opening frame, `k` the `k`-th Client stop, present first — the one record of where the Rail is (AD-4a, AD-9) |
+ * | `scrollProgress` | `advanceScroll` — the scroll input's handlers in `scene-host.tsx` (rules in `rail-input.ts`), the `goHome` door (`activate.ts`), and the router's restore (`mount.tsx`, 4.2) | Continuous progress along the Rail, in stops: 0 is the opening frame, `k` the `k`-th Client stop, present first — the one record of where the Rail is (AD-4a, AD-9) |
  * | `focusedProjectId` | `focusProject` / `releaseFocus` | The one Project focused, or none |
  * | `focusOrigin` | `focusProject`, at entry | The mode Focus was entered from |
  * | `hoveredProjectId` | `hoverProject` — the scene's pointer over/out on a Planet's hit sphere (`scene-pick.ts`) | The Planet the pointer is over, or none (3.4) |
@@ -147,7 +147,9 @@ export interface NavigationState {
    * Continuous progress along the Rail, **in stops**. Written by
    * `advanceScroll` only. Its callers are the Rail's scroll input — the wheel
    * and key handlers in `scene-host.tsx`, whose rules are `rail-input.ts`'s —
-   * and the `goHome` door in `activate.ts` (2.9), which writes `0`.
+   * and the `goHome` door in `activate.ts` (2.9), which writes `0` — and,
+   * since 4.2, the router's position restore, bound in `mount.tsx`, which writes
+   * the position a history entry saved when it was left (`src/shell/router.ts`).
    *
    * `0` is the opening frame and `k` is the `k`-th Client stop, present first,
    * so a Rail of `N` Client stops runs over `[0, N]`. The camera rig reads it

@@ -254,8 +254,8 @@ test('the shipped app builds under the assertion, measured within its budget', a
   assert.deepEqual(entries.map((out) => local(out.facadeModuleId ?? '')), ['index.html'], 'one entry, the page');
   assert.deepEqual(
     entries.flatMap((out) => Object.keys(out.modules).map(local).filter((id) => id.startsWith('src/'))).sort(),
-    ['src/shell/detect.ts', 'src/shell/entry.ts', 'src/shell/page.css', 'src/tokens/tokens.css'],
-    'the entry is src/shell/entry.ts, with the stylesheets and detection',
+    ['src/shell/detect.ts', 'src/shell/entry.ts', 'src/shell/page.css', 'src/shell/router.ts', 'src/tokens/tokens.css'],
+    'the entry is src/shell/entry.ts, with the stylesheets, detection and the router (4.2)',
   );
   // No module on the entry graph is React (4.1, AD-7): the entry chunks and every
   // chunk they reach statically, read module by module.
@@ -276,6 +276,45 @@ test('the shipped app builds under the assertion, measured within its budget', a
     chunks.some((out) => !graph.has(out.fileName) && Object.keys(out.modules).some((id) => /\/node_modules\/react-dom\//.test(forward(id)))),
     'react-dom sits off the entry graph',
   );
+  // 4.2: the Colophon is its own chunk, off the entry graph, reached only by the
+  // colophon host's dynamic import — holding neither the scene nor React's DOM.
+  const colophons = chunks.filter((out) => Object.keys(out.modules).some((id) => local(id) === 'src/colophon/colophon.tsx'));
+  assert.equal(colophons.length, 1, 'the colophon is emitted in one chunk');
+  const [colophon] = colophons;
+  assert.ok(colophon !== undefined && !graph.has(colophon.fileName), 'the colophon chunk sits off the entry graph');
+  assert.deepEqual(
+    Object.keys(colophon?.modules ?? {}).map(local).filter((id) => id.startsWith('src/')),
+    ['src/colophon/colophon.tsx'],
+    'and holds the colophon alone',
+  );
+  assert.ok(
+    chunks.some((out) => out.dynamicImports.includes(colophon?.fileName ?? '') && Object.keys(out.modules).some((id) => local(id) === 'src/shell/colophon-host.tsx')),
+    'reached by the colophon host’s dynamic import',
+  );
+  assert.ok(
+    chunks.every((out) => !out.imports.includes(colophon?.fileName ?? '')),
+    'and by no static import',
+  );
+  // Neither the scene nor React's DOM rides along: no chunk the colophon chunk
+  // imports, statically or dynamically, holds a src/render-scene/ module or react-dom.
+  type Edges = Pick<Rolldown.OutputChunk, 'fileName' | 'imports' | 'dynamicImports' | 'modules'>;
+  const heavy = (from: readonly Edges[], start: string): string[] => {
+    const named = new Map(from.map((out) => [out.fileName, out]));
+    const own = named.get(start);
+    return [...(own?.imports ?? []), ...(own?.dynamicImports ?? [])].filter((name) =>
+      Object.keys(named.get(name)?.modules ?? {}).some((id) => local(id).startsWith('src/render-scene/') || /\/node_modules\/react-dom\//.test(forward(id))),
+    );
+  };
+  assert.deepEqual(heavy(chunks, colophon?.fileName ?? ''), [], 'the colophon chunk imports no scene chunk and no react-dom chunk');
+  // Red against a mutated copy: the colophon chunk given an edge to the scene's chunk, then to react-dom's.
+  for (const pattern of [/^src\/render-scene\//, /node_modules\/react-dom\//]) {
+    const target = chunks.find((out) => Object.keys(out.modules).some((id) => pattern.test(local(id))));
+    assert.ok(target !== undefined, `a chunk matching ${pattern} was emitted`);
+    for (const edge of ['imports', 'dynamicImports'] as const) {
+      const mutated: Edges[] = chunks.map((out): Edges => (out === colophon ? { ...out, [edge]: [...out[edge], target.fileName] } : out));
+      assert.deepEqual(heavy(mutated, colophon?.fileName ?? ''), [target.fileName], `an ${edge} edge to ${target.fileName} is caught`);
+    }
+  }
   const view: BundleView = {
     chunks: chunks.map((out) => chunk(out.fileName, [], { isEntry: out.isEntry, imports: out.imports, bytes: Buffer.byteLength(out.code) })),
     importedIds: () => [],
