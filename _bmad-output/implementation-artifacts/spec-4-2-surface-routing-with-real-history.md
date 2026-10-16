@@ -83,6 +83,22 @@ context:
 - Given the scene left at a stop for `/colophon`, when Back is pressed, then the scene's first frame is that stop, not the opening frame.
 - Given a Project focused on `/`, when Back is pressed, then the previous history entry is reached and the store's Focus is untouched.
 
+### Review Findings
+
+Second review round, 2026-10-16, `925844c..06a07f0`.
+
+- [x] [Review][Decision] **Resolved 2026-10-16, Thomas: every route, as now.** The Always rule stands as written: `navigate` and `pagehide` save on every route, and a route-changing pop restores any well-formed state. The `/chart` sequence below is picked up with the 4.5 pop-departure deferral. Finding: a position is saved into, and restored from, entries that never showed the scene — `navigate` and `pagehide` save on every route, and a route-changing pop restores whatever well-formed state the reached entry holds, so a pop to `/chart` or `/colophon` writes `scrollProgress` on a route with no scene. Sequence: `/` at 2.4 → `/chart` (chart entry later saved 2.4) → Back to `/`, scroll to 5 → Forward to `/chart` restores 2.4 → a later `navigate('home')` opens at 2.4, not 5. The spec's Always rule ("navigate … first saves the departing position") is unconditional, while the I/O matrix only names "Leave scene". Choose: save and restore only for `home` entries, or keep saving on every route.
+- [x] [Review][Patch] `createRouter` calls `history.canonicalize` (a `replaceState` with a URL) before `createRoot`, unguarded; a `SecurityError` (sandboxed opaque-origin frame) on a non-canonical path throws out of `mount` and nothing renders — the failure class 4.1's review closed for `matchMedia` [src/shell/router.ts:139]
+- [x] [Review][Patch] The colophon chunk's heavy-reach check walks direct edges only; Rollup hoists transitive static imports onto entry chunks, not dynamic ones, so colophon → shared chunk → react-dom or a scene chunk passes. Walk static imports transitively [scripts/bundle-assertion.test.ts:301]
+- [x] [Review][Patch] `advanceScrollCallers` counts only call sites (`advanceScroll(`); a fourth writer passing the function by reference (`restore: advanceScroll`) evades "three callers and no fourth" [src/shell/router.test.ts:528]
+- [x] [Review][Patch] The `detect.test.ts` row still says "the entry's three static imports in order"; the audit now pins four (tokens, page, detect, router) [src/shell/README.md:14]
+- [x] [Review][Patch] AC 3 is not tested as written: the Focus test presses Back from `/colophon`, never from `/` with Focus held. Add the row: start at `/colophon`, navigate home, focus, Back — route `colophon`, Focus untouched [src/shell/router.test.ts]
+- [x] [Review][Patch] The spec's frontmatter read `status: 'done'` while the story was in `review` [spec-4-2-surface-routing-with-real-history.md:5] — reconciled: the story closes `done` in both
+- [x] [Review][Defer] `navigate`'s `save`/`push` can throw (Safari's `replaceState` rate limit, `SecurityError`) into its caller, leaving the save without the push [src/shell/router.ts:159] — deferred, unreachable until 4.5 adds the first caller
+- [x] [Review][Defer] A pop to a `home` entry holding no saved position (one pushed by 4.5's `navigate('home')`, state `null`) keeps the store's last value rather than opening at 0 [src/shell/router.ts:143] — deferred, unreachable until 4.5
+- [x] [Review][Defer] The mount and entry wiring (`createRouter` hooks bound to the store, `resolveRoute(location.pathname)` into `mount`) and the colophon boundary's failure path are verified only by source text, like `App` [src/shell/mount.tsx:63] — deferred, widens the existing App-rendering deferral
+- [x] [Review][Defer] `/chart` now reaches the interim fallback on a capable desktop, where the corner chrome still reads `scroll ↓ — time runs backward` with no scene [src/App.tsx:78] — deferred, widens 4.1's interim-fallback deferral (4.3)
+
 ## Design Notes
 
 ```ts

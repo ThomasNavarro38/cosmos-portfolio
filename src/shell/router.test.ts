@@ -359,6 +359,42 @@ test('Focus creates no history entry, and Back leaves the store’s Focus untouc
   resetNavigation();
 });
 
+test('Back pressed on / with a Project focused reaches the previous entry and leaves Focus untouched', () => {
+  resetNavigation();
+  const fake = fakeHistory('/colophon');
+  const router = createRouter(fake.history, 'colophon', storePosition);
+  router.navigate('home');
+  focusProject('project-a');
+  const before = fake.calls.length;
+  fake.back();
+  assert.equal(router.route(), 'colophon', 'the previous history entry is reached');
+  assert.equal(fake.url(), '/colophon');
+  assert.equal(navigationStore.getState().focusedProjectId, 'project-a', 'the store’s Focus is untouched');
+  assert.deepEqual(fake.calls.slice(before), [], 'and the pop made no history call');
+  router.dispose();
+  resetNavigation();
+});
+
+// --- A history that refuses -------------------------------------------------------------------
+
+test('a canonicalize that throws is logged, and the router is still made at the resolved route', (t) => {
+  const errors = t.mock.method(console, 'error', () => {});
+  const fake = fakeHistory('/chart/', { scrollProgress: 2 });
+  const refused = new Error('SecurityError');
+  fake.history.canonicalize = () => {
+    throw refused;
+  };
+  const position = fakePosition(0);
+  const router = createRouter(fake.history, 'chart', position.hooks);
+  assert.equal(router.route(), 'chart');
+  assert.equal(fake.url(), '/chart/', 'the URL is left as it was');
+  assert.deepEqual(position.restored, [2], 'the saved position is still restored');
+  assert.equal(fake.listening(), true, 'and the router still listens');
+  assert.equal(errors.mock.callCount(), 1);
+  assert.deepEqual(errors.mock.calls[0]?.arguments, [refused], 'the refusal itself is logged');
+  router.dispose();
+});
+
 // --- browserHistory() against the real globals' shape ----------------------------------------
 
 test('browserHistory drives the window’s history and location, and listens for popstate and pagehide', () => {
@@ -526,8 +562,12 @@ test('the colophon is reached only from src/shell/colophon-host.tsx, and holds o
 
 /** The shell files calling `advanceScroll`, by name — the definition in `state.ts` aside. */
 function advanceScrollCallers(files: Readonly<Record<string, string>>): string[] {
+  // Every reach counts, not only a call: a reference handed on (`restore:
+  // advanceScroll`) is a writer too. Not one: its import, its own declaration,
+  // and the name as a string (`state.ts`'s error label).
+  const imports = /\bimport\s[^;]*?\bfrom\s*['"][^'"]+['"];?/g;
   return Object.entries(files)
-    .filter(([, source]) => /(?<!function\s)\badvanceScroll\(/.test(stripComments(source)))
+    .filter(([, source]) => /(?<!function\s|['"`])\badvanceScroll\b(?!['"`])/.test(stripComments(source).replace(imports, '')))
     .map(([name]) => name)
     .sort();
 }
@@ -543,9 +583,17 @@ test('mount.tsx is advanceScroll’s one caller in the shell outside scene-host.
   assert.equal((mount.match(/\badvanceScroll\(/g) ?? []).length, 1, 'once');
   assert.match(mount, /restore:\s*\(\s*progress\s*\)\s*=>\s*advanceScroll\(\s*progress\s*\)/, 'as the router’s restore hook');
   assert.match(mount, /read:\s*\(\s*\)\s*=>\s*navigationStore\.getState\(\)\.scrollProgress/, 'and the read hook is the store’s progress');
-  // A fourth caller is red.
+  // A fourth caller is red, whether it calls the door or hands it on by reference.
+  for (const reach of ['advanceScroll(0);', 'const hooks = { restore: advanceScroll };', 'const door = advanceScroll; door(0);', 'advanceScroll.call(null, 0);']) {
+    assert.deepEqual(
+      advanceScrollCallers({ ...files, 'router.ts': `${files['router.ts'] ?? ''}\n${reach}\n` }),
+      ['activate.ts', 'mount.tsx', 'router.ts', 'scene-host.tsx'],
+      reach,
+    );
+  }
+  // An import alone is no caller.
   assert.deepEqual(
-    advanceScrollCallers({ ...files, 'router.ts': `${files['router.ts'] ?? ''}\nadvanceScroll(0);\n` }),
-    ['activate.ts', 'mount.tsx', 'router.ts', 'scene-host.tsx'],
+    advanceScrollCallers({ ...files, 'router.ts': `import { advanceScroll } from './state.ts';\n${files['router.ts'] ?? ''}` }),
+    ['activate.ts', 'mount.tsx', 'scene-host.tsx'],
   );
 });

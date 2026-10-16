@@ -950,7 +950,7 @@ Still open after 3.5:
   evidence: `src/shell/router.ts` saves only in `navigate` and on `pagehide`; a `popstate` fires after the entry has changed, so the departing entry can no longer be written. Sequence: `/` at 2.4 → `navigate('colophon')` → Back (2.4) → scroll to 4 → Forward → Back restores 2.4. Unreachable in 4.2 (no caller of `navigate`; a typed URL is a new document, covered by `pagehide`). A fix keeps the current entry's state current while scrolling, throttled against Safari's `replaceState` rate limit.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
-  summary: The entry chunk measures 3,938 of its 4,000-byte budget because `mount.tsx` shares `router.ts` with the entry, so the whole router ships on the entry chunk; the next addition to the entry graph will likely break the build.
+  summary: The entry chunk measures 3,938 of its 4,000-byte budget (3,970 after the second review round's guarded canonical rewrite, 30 bytes of headroom) because `mount.tsx` shares `router.ts` with the entry, so the whole router ships on the entry chunk; the next addition to the entry graph will likely break the build.
   evidence: `npm run build` on 2026-10-16 (`dist/assets/index-*.js` 3.93 kB); a module cannot be split across chunks. Options: raise the budget, or move `resolveRoute`/`ROUTE_PATHS` to a module the mount does not share (contradicts the spec's "the entry imports only `resolveRoute` from it [router.ts]") — a ruling.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
@@ -968,3 +968,25 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
   summary: After a redeploy, a request for a stale hashed chunk on a host reading `public/_redirects` is answered with `index.html` and a 200, so the chunk fails as a MIME or parse error instead of a 404.
   evidence: `public/_redirects` is `/* /index.html 200` with no `/assets/*` exception. The host's own boundary still logs the failed chunk and keeps the root mounted; a `/assets/* 404` line before the catch-all would make the failure an honest 404.
+
+## Deferred from: code review of spec-4-2-surface-routing-with-real-history.md, second round (2026-10-16)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
+  summary: `navigate`'s `save` and `push` are unguarded, so a throwing `replaceState`/`pushState` (Safari's rate limit, a `SecurityError`) propagates into the caller, and a save can land without its push.
+  evidence: `src/shell/router.ts:159-164`. Unreachable in 4.2 (no caller of `navigate`); 4.5 adds the first and should decide the guard.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
+  summary: A pop to a `home` entry holding no saved position keeps the store's last `scrollProgress` instead of opening at 0, so the scene remounts at a stop from another entry.
+  evidence: `src/shell/router.ts:143-149` restores only from a well-formed state; `navigate('home')` pushes `null` state (`browserHistory().push`). Unreachable in 4.2; real from 4.5's `navigate('home')`.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
+  summary: Widens the App-rendering deferral above: the mount and entry wiring — the router's hooks bound to `scrollProgress`/`advanceScroll`, `resolveRoute(location.pathname)` handed to `mount` — and the colophon boundary's failure path are also verified only by source-text regexes.
+  evidence: `src/shell/router.test.ts` (mount hook regexes), `src/shell/rail-input.test.ts` `auditPreferenceWriter`, `src/shell/detect.test.ts` `auditEntry`, the colophon-host audit; `router.test.ts` drives its own copy of the hooks, not `mount.tsx`'s.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
+  summary: Widens 4.1's interim-fallback deferral: `/chart` makes the interim fallback reachable on a capable desktop, where the corner chrome still reads `scroll ↓ — time runs backward` with no scene to scroll.
+  evidence: `src/App.tsx:78-84` renders `CornerChrome` for `fallback`; `src/shell/chrome-model.ts:41-43`. 4.3 replaces the surface.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
+  summary: Thomas ruled (2026-10-16) that the position is saved on every route, not only `/`, so a pop to `/chart` or `/colophon` restores the position that entry was left with — picked up with the 4.5 pop-departure deferral above.
+  evidence: `src/shell/router.ts:133,150,161` save on every route; `:143-148` restore on any route-changing pop. Sequence: `/` at 2.4 → `/chart` → Back to `/`, scroll to 5 → Forward to `/chart` restores 2.4 → a later `navigate('home')` opens at 2.4, not 5. Unreachable in 4.2 (no `navigate` caller); 4.5 resolves it together with keeping the current entry's state current while scrolling.
