@@ -14,12 +14,15 @@
  * the `lazy(() => import('../render-scene/scene.tsx'))` edge and the error boundary
  * that keeps the index in the document when the renderer cannot — and only where
  * the route shows the `scene` surface (4.2: `/` on a capable machine, never
- * `/chart`). On `/colophon` the Colophon is shown alone, through
- * `./shell/colophon-host.tsx` — its own lazy edge — so that route never requests
- * `render-scene`. On `fallback` (no WebGL2, or a coarse primary pointer) the host
- * is not rendered, so `render-scene` is never requested; story 4.3 replaces that
- * surface with the `render-fallback/` star chart. One element here, no
- * responsibility — the rule below is unchanged. The Focus panel (2.7) is one
+ * `/chart`). Each other surface is its own early return, shown alone, so neither
+ * ever requests `render-scene`: on `/colophon` the Colophon, through
+ * `./shell/colophon-host.tsx`; on `fallback` (no WebGL2, a coarse primary
+ * pointer, or `/chart` on any machine) the flat star chart (4.3), through
+ * `./shell/fallback-host.tsx` — each its own lazy edge. The chart is alone
+ * because the index's buttons are scene doors and the chrome and the panel are
+ * scene chrome; on the chart, its table and record anchors are the destination
+ * index, all of it DOM. One element per branch here, no responsibility — the
+ * rule below is unchanged. The Focus panel (2.7) is one
  * more element after it, for the same reason: `./shell/focus-panel.tsx` holds the
  * responsibility, and it comes last in document order because it is read after a
  * destination is chosen.
@@ -31,7 +34,8 @@
  * index, chrome, scene host, panel.
  *
  * The page itself (3.9) is `./shell/page.css`: the ground edge to edge, no page
- * scroll, and the scene host fixed to the viewport. Since 4.1 it is imported by
+ * scroll while the scene host is in the document (4.3: the chart and the
+ * Colophon scroll natively), and the scene host fixed to the viewport. Since 4.1 it is imported by
  * the thin entry (`./shell/entry.ts`), beside the tokens, so the first frame is
  * the ground before React has arrived.
  *
@@ -50,6 +54,7 @@ import { useSyncExternalStore } from 'react';
 import artifact from '../generated/layout.generated.json';
 import { ColophonHost } from './shell/colophon-host.tsx';
 import { CornerChrome } from './shell/corner-chrome.tsx';
+import { FallbackHost } from './shell/fallback-host.tsx';
 import { FocusPanel } from './shell/focus-panel.tsx';
 import { DestinationNav } from './shell/index-nav.tsx';
 import type { Surface } from './shell/detect.ts';
@@ -59,7 +64,7 @@ import { SceneHost } from './shell/scene-host.tsx';
 export function App({ surface, router }: { readonly surface: Surface; readonly router: Router }) {
   // The route (4.2) is the router's, never the navigation store's. What it shows
   // on this machine is `surfaceOf`'s: the Colophon alone on `/colophon`, the flat
-  // chart on `/chart` whatever the machine, and the machine's surface on `/`.
+  // chart alone on `/chart` whatever the machine, and the machine's surface on `/`.
   const route = useSyncExternalStore(router.subscribe, router.route);
   const shown = surfaceOf(route, surface);
   if (shown === 'colophon') {
@@ -69,17 +74,25 @@ export function App({ surface, router }: { readonly surface: Surface; readonly r
       </main>
     );
   }
+  if (shown === 'fallback') {
+    return (
+      <main>
+        <FallbackHost artifact={artifact} />
+      </main>
+    );
+  }
   // The artifact is JSON, so its inferred type is structural rather than the
   // schema's. `DestinationNav` asks only for the five fields the index reads,
   // and TypeScript checks the document against that here — the one place the
-  // artifact and the shell meet. The schema stays the single declaration of the
-  // document's shape; `src/shell/` may not import it (AD-3), and a `derive/`
-  // import for a type alone would be exactly the edge the boundary gate forbids.
+  // artifact and the shell meet (and above, against the chart's slice). The
+  // schema stays the single declaration of the document's shape; `src/shell/`
+  // may not import it (AD-3), and a `derive/` import for a type alone would be
+  // exactly the edge the boundary gate forbids.
   return (
     <main>
       <DestinationNav artifact={artifact} />
       <CornerChrome />
-      {shown === 'scene' && <SceneHost artifact={artifact} />}
+      <SceneHost artifact={artifact} />
       <FocusPanel artifact={artifact} />
     </main>
   );

@@ -19,9 +19,12 @@
  *   4b-i).
  * - **Page** and **Index** — the full-viewport page (ruling 7a) and the index
  *   hidden until keyboard focus (ruling 8a), as exact declaration sets.
+ * - **Chart** — the flat star chart's stylesheet (4.3), as an exact declaration
+ *   set, its two `display: none` admitted only on the plates, by width.
  *
  * This file sits directly in `src/`, so the root-file boundary row governs it:
- * `src/render-scene/` and `src/data/` are read here as text, never imported.
+ * `src/render-scene/`, `src/render-fallback/` and `src/data/` are read here as
+ * text, never imported.
  */
 
 import { strict as assert } from 'node:assert';
@@ -215,9 +218,12 @@ function auditBans(label: string, source: string): string[] {
 
 // --- Contrast (UX-DR44) ----------------------------------------------------------------------------
 
-/** Where a role's ink is read from: a CSS rule's `color`, or a model constant. */
+/**
+ * Where a role's ink is read from: a CSS rule's `color` — or its `fill`, for
+ * SVG text (4.3) — or a model constant.
+ */
 type InkSource =
-  | { readonly css: string; readonly selector: string }
+  | { readonly css: string; readonly selector: string; readonly property?: 'fill' }
   | { readonly model: string; readonly pattern: RegExp };
 
 interface Role {
@@ -231,6 +237,7 @@ const PANEL_CSS = 'shell/focus-panel.css';
 const CHROME_CSS = 'shell/corner-chrome.css';
 const INDEX_CSS = 'shell/index-nav.css';
 const PAGE_CSS = 'shell/page.css';
+const CHART_CSS = 'render-fallback/chart.css';
 const AFFORDANCE_TS = 'render-scene/affordance-model.ts';
 const MOTE_TS = 'render-scene/mote-model.ts';
 
@@ -264,6 +271,17 @@ const ROLES: readonly Role[] = [
   { role: 'index reveal', floor: 4.5, ink: { css: INDEX_CSS, selector: '.index-nav button' }, ground: 'page' },
   // The document's own text: the `<noscript>` line, inheriting `body`'s ink.
   { role: 'noscript line', floor: 4.5, ink: { css: PAGE_CSS, selector: 'body' }, ground: 'page' },
+  // The flat star chart (4.3), on the page ground; its records take the panel's
+  // classes on the panel's ground, measured above. The plate's labels are SVG
+  // text, so their ink is the rule's `fill`.
+  { role: 'chart heading', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-heading' }, ground: 'page' },
+  { role: 'chart Client heading', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-client' }, ground: 'page' },
+  { role: 'index headers', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-index th' }, ground: 'page' },
+  { role: 'index cells', floor: 7, ink: { css: CHART_CSS, selector: '.chart-index td' }, ground: 'page' },
+  { role: 'index links', floor: 7, ink: { css: CHART_CSS, selector: '.chart-index a' }, ground: 'page' },
+  { role: 'index links, raised', floor: 7, ink: { css: CHART_CSS, selector: '.chart-index a:hover, .chart-index a:focus-visible' }, ground: 'page' },
+  { role: 'plate Client label', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-label-client', property: 'fill' }, ground: 'page' },
+  { role: 'plate Project label', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-label-project', property: 'fill' }, ground: 'page' },
 ];
 
 /** The token key a `var(--color-…)` value names, or undefined. */
@@ -301,7 +319,7 @@ function auditContrast(sources: Readonly<Record<string, string>>, panelBackgroun
     const where = 'css' in ink ? `${ink.css} \`${ink.selector}\`` : ink.model;
     let inkKey: string | undefined;
     if ('css' in ink) {
-      const { value, rules } = declared(sources[ink.css] ?? '', ink.selector, 'color');
+      const { value, rules } = declared(sources[ink.css] ?? '', ink.selector, ink.property ?? 'color');
       if (rules > 1) {
         failures.push(`contrast: ${role}'s ink is set by ${rules} top-level rules in ${ink.css} — one rule may set it`);
         continue;
@@ -326,7 +344,7 @@ function auditContrast(sources: Readonly<Record<string, string>>, panelBackgroun
 }
 
 function contrastSources(): Record<string, string> {
-  return Object.fromEntries([PANEL_CSS, CHROME_CSS, INDEX_CSS, PAGE_CSS, AFFORDANCE_TS, MOTE_TS].map((path) => [path, read(`./${path}`)]));
+  return Object.fromEntries([PANEL_CSS, CHROME_CSS, INDEX_CSS, PAGE_CSS, CHART_CSS, AFFORDANCE_TS, MOTE_TS].map((path) => [path, read(`./${path}`)]));
 }
 
 test('contrast: every text role clears its floor on its ground, read from the shipping source', () => {
@@ -370,6 +388,20 @@ test('contrast: a role moved to a dimmer ink, or one whose ink cannot be read, f
     failing(PAGE_CSS, (s) => s.replace('  color: var(--color-ink-label-dark);\n', '')),
     /^contrast: noscript line's ink could not be read off shell\/page\.css `body`/,
   );
+  // The plate's SVG labels are read off `fill`: a dimmer fill fails, and a
+  // `color` in its place is not what the text is drawn in.
+  assert.match(
+    failing(CHART_CSS, (s) => s.replace(/(\.chart-label-project \{[^}]*fill: )var\(--color-ink-prose-dark\)/, '$1var(--color-ink-faint-dark)')),
+    /^contrast: plate Project label is ink-faint-dark on surface-base-dark, \d\.\d\d:1 — below its 4\.5:1 floor$/,
+  );
+  assert.match(
+    failing(CHART_CSS, (s) => s.replace(/(\.chart-label-client \{[^}]*)fill: var\(--color-ink-lift-dark\);/, '$1color: var(--color-ink-lift-dark);')),
+    /^contrast: plate Client label's ink could not be read off render-fallback\/chart\.css `\.chart-label-client`/,
+  );
+  assert.match(
+    failing(CHART_CSS, (s) => s.replace(/(\.chart-index td \{[^}]*color: )var\(--color-ink-prose-dark\)/, '$1var(--color-ink-label-dark)')),
+    /^contrast: index cells is ink-label-dark on surface-base-dark, \d\.\d\d:1 — below its 7:1 floor$/,
+  );
   assert.match(
     auditContrast(real, 'var(--color-stroke-active-dark)').join('\n'),
     /contrast: panel title is ink-lift-dark on stroke-active-dark/,
@@ -402,6 +434,14 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
   // label on 2026-10-11 (finding F4 in `identity-audit-3-9.md`).
   'team of',
   'overview',
+  // The flat star chart's index headers (4.3); its Role header is `Role` above.
+  'Client',
+  'Project',
+  'Dates',
+  // The date separator on the chart (4.3): `start – end`, drawn between two
+  // data elements. Admitted as copy alone, so a word with a dash at its edge is
+  // still that word plus a dash, and fails.
+  '–',
   'Cosmos Portfolio',
   'This portfolio needs JavaScript.',
 ]);
@@ -410,12 +450,12 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
 const ACCESSIBLE_NAMES: ReadonlySet<string> = new Set(['Destinations', 'Skills']);
 
 /** The constants the renderers draw copy from; any other upper-case constant drawn as text fails. */
-const COPY_CONSTANTS: ReadonlySet<string> = new Set(['IDENTITY_LINE', 'SLOT_TEXT', 'EDITORIAL_RULE', 'RELEASE_LABEL', 'FIELD_LABELS', 'DEPTH_LABELS']);
+const COPY_CONSTANTS: ReadonlySet<string> = new Set(['IDENTITY_LINE', 'SLOT_TEXT', 'EDITORIAL_RULE', 'RELEASE_LABEL', 'FIELD_LABELS', 'DEPTH_LABELS', 'CHART_LABELS']);
 
 /**
- * The separators a template sets between data, and nothing else: whitespace and
- * the ` · ` of the ruled formats. A digit, a `?` or an emoji is drawn text, and
- * must be in the list like any other.
+ * The separators a template sets between data, and nothing else: whitespace
+ * and the ` · ` of the ruled formats. A digit, a `?`, an emoji or the chart's
+ * en dash is drawn text, and must be in the list like any other.
  */
 const SEPARATOR_EDGES = /^[\s·]+|[\s·]+$/gu;
 
@@ -705,6 +745,17 @@ function auditCopyConstants(constants: Readonly<Record<string, string>>): string
     .map(([name, value]) => `copy: the constant ${name} is ${JSON.stringify(value)}, which is not in the closed allowlist`);
 }
 
+/**
+ * The chart's copy constant (4.3), read off `render-fallback/chart-model.ts` as
+ * text: the root-file row permits `src/render-fallback/` only dynamically. Every
+ * `key: 'value'` pair of the one-line object literal; none found reads as empty,
+ * which fails the count below.
+ */
+function chartLabels(): Record<string, string> {
+  const literal = /export const CHART_LABELS = \{([^}]*)\} as const;/.exec(codeOf(read('./render-fallback/chart-model.ts'), 'script'))?.[1] ?? '';
+  return Object.fromEntries([...literal.matchAll(/(\w+):\s*'([^']*)'/g)].map(([, key, value]) => [key as string, value as string]));
+}
+
 function copyConstants(): Record<string, string> {
   const entries = (name: string, record: Readonly<Record<string, string>>) => Object.entries(record).map(([key, value]) => [`${name}.${key}`, value] as const);
   return Object.fromEntries([
@@ -714,12 +765,14 @@ function copyConstants(): Record<string, string> {
     ...entries('SLOT_TEXT', SLOT_TEXT),
     ...entries('FIELD_LABELS', FIELD_LABELS),
     ...entries('DEPTH_LABELS', DEPTH_LABELS),
+    ...entries('CHART_LABELS', chartLabels()),
   ]);
 }
 
 test('copy: the copy constants are each in the closed allowlist', () => {
   const constants = copyConstants();
-  assert.ok(Object.keys(constants).length >= 9, 'every copy constant is inspected');
+  assert.ok(Object.keys(constants).length >= 12, 'every copy constant is inspected');
+  assert.deepEqual(Object.keys(chartLabels()), ['client', 'project', 'dates'], 'the chart’s labels are read off its model');
   assert.deepEqual(auditCopyConstants(constants), []);
   assert.deepEqual(
     auditCopyConstants({ ...constants, RELEASE_LABEL: 'Close panel' }),
@@ -745,6 +798,12 @@ test('copy: every visible literal shipped from src/ and index.html is in the clo
     'the panel’s JSX is read, down to the release button',
   );
   assert.ok('shell/focus-panel.css' in scripts, 'stylesheets are shipped files too');
+  // The chart (4.3) draws its headers and identity line as constants, and its
+  // date separator as a text run, `–`, admitted as copy.
+  const chart = jsxDrawn(codeOf(scripts['render-fallback/chart.tsx'] as string, 'script'));
+  assert.ok(chart.some((drawn) => drawn.kind === 'constant' && drawn.text === 'CHART_LABELS'), 'the chart’s headers are read');
+  assert.ok(chart.some((drawn) => drawn.kind === 'constant' && drawn.text === 'IDENTITY_LINE'), 'the chart’s <h1> is read');
+  assert.ok(chart.some((drawn) => drawn.kind === 'text' && drawn.text === '–'), 'the date separator is read');
   assert.deepEqual(auditCopy(scripts, read('../index.html')), []);
 });
 
@@ -815,6 +874,30 @@ test('copy: a tooltip, a caption, help text or a narrated noscript fails with it
   assert.match(
     failing('render-scene/affordance-model.ts', (s) => s.replace('title.textContent = draw.title;', "title.textContent = 'Loading…';")),
     /^copy: src\/render-scene\/affordance-model\.ts draws the DOM text "Loading…"/,
+  );
+  // The en dash is admitted as the chart's date separator, a copy entry of its
+  // own, never as a separator edge: an allowlisted word with a dash at either
+  // side is not that word, and fails in any shipped renderer.
+  assert.match(
+    failing('render-fallback/chart.tsx', (s) => s.replace('<ul className="panel-skills" aria-label="Skills">', '<ul className="panel-skills" aria-label="Skills">\n          <li>– Role</li>')),
+    /^copy: src\/render-fallback\/chart\.tsx draws the visible text "– Role"/,
+  );
+  assert.match(
+    failing('shell/corner-chrome.tsx', (s) => s.replace('<p className="chrome-identity">{IDENTITY_LINE}</p>', '<p className="chrome-identity">{IDENTITY_LINE}</p>\n      <p>Built –</p>')),
+    /^copy: src\/shell\/corner-chrome\.tsx draws the visible text "Built –"/,
+  );
+  // The chart: an apology beside the plate, a caption over the index, a header constant of its own.
+  assert.match(
+    failing('render-fallback/chart.tsx', (s) => s.replace('<h1 className="chart-heading">{IDENTITY_LINE}</h1>', '<h1 className="chart-heading">{IDENTITY_LINE}</h1>\n      <p>Best viewed on desktop</p>')),
+    /^copy: src\/render-fallback\/chart\.tsx draws the visible text "Best viewed on desktop"/,
+  );
+  assert.match(
+    failing('render-fallback/chart.tsx', (s) => s.replace('<table className="chart-index">', '<table className="chart-index">\n        <caption>The fallback index</caption>')),
+    /^copy: src\/render-fallback\/chart\.tsx draws the visible text "The fallback index"/,
+  );
+  assert.match(
+    failing('render-fallback/chart.tsx', (s) => s.replace('{CHART_LABELS.dates}</th>\n          </tr>', '{CHART_LABELS.dates}</th>\n            <th scope="col">{NOTABLE_HEADER}</th>\n          </tr>')),
+    /^copy: src\/render-fallback\/chart\.tsx draws the constant NOTABLE_HEADER/,
   );
   assert.match(
     failing('shell/index-nav.tsx', (s) => s.replace('aria-label="Destinations"', 'aria-label="Site menu"')),
@@ -940,7 +1023,9 @@ test('bands: no Body in generated/layout.generated.json carries stroke-dust', ()
 // --- The page (ruling 7a) -----------------------------------------------------------------------------
 
 const PAGE_RULES: readonly CssRule[] = [
-  { at: '', selector: 'html, body', declarations: ['margin: 0', 'overflow: hidden', 'background: var(--color-surface-base-dark)'] },
+  { at: '', selector: 'html, body', declarations: ['margin: 0', 'background: var(--color-surface-base-dark)'] },
+  // 4.3: only the scene's page is locked; the chart and the Colophon scroll natively.
+  { at: '', selector: 'html:has(.scene-host), html:has(.scene-host) body', declarations: ['overflow: hidden'] },
   // The document's own text — the `<noscript>` line, the one thing drawn with no
   // stylesheet of its own — in the chrome role's family, size and ink.
   {
@@ -976,7 +1061,7 @@ function pageFiles() {
   return { css: read(`./${PAGE_CSS}`), entry: read('./shell/entry.ts'), app: read('./App.tsx'), host: read('./shell/scene-host.tsx'), scene: read('./render-scene/scene.tsx') };
 }
 
-test('page: surface-base edge to edge, no page scroll, the scene host fixed and the canvas filling it', () => {
+test('page: surface-base edge to edge, no page scroll under the scene host, the host fixed and the canvas filling it', () => {
   assert.deepEqual(auditPage(pageFiles()), []);
 });
 
@@ -984,7 +1069,11 @@ test('page: each guarantee removed fails with its own line', () => {
   const real = pageFiles();
   const cases: readonly (readonly [keyof ReturnType<typeof pageFiles>, (source: string) => string, RegExp])[] = [
     ['css', (s) => s.replace('  margin: 0;\n', ''), /^page: `html, body` lacks `margin: 0`$/],
-    ['css', (s) => s.replace('  overflow: hidden;\n', ''), /^page: `html, body` lacks `overflow: hidden`$/],
+    ['css', (s) => s.replace('  overflow: hidden;\n', ''), /^page: `html:has\(\.scene-host\), html:has\(\.scene-host\) body` lacks `overflow: hidden`$/],
+    // 4.3: the lock back on every page, or locking the html alone, fails.
+    ['css', (s) => s.replace('  margin: 0;\n', '  margin: 0;\n  overflow: hidden;\n'), /^page: `html, body` carries the unlisted `overflow: hidden`$/],
+    ['css', (s) => s.replace('html:has(.scene-host),\nhtml:has(.scene-host) body {', 'html:has(.scene-host) {'), /page: the rule `html:has\(\.scene-host\), html:has\(\.scene-host\) body` is missing/],
+    ['css', (s) => s.replace('html:has(.scene-host),\nhtml:has(.scene-host) body {', 'html,\nbody {'), /page: the rule `html:has\(\.scene-host\), html:has\(\.scene-host\) body` is missing/],
     ['css', (s) => s.replace('var(--color-surface-base-dark)', 'var(--color-surface-raised-dark)'), /`html, body` lacks `background: var\(--color-surface-base-dark\)`/],
     ['css', (s) => s.replace('position: fixed;', 'position: absolute;'), /`\.scene-host` lacks `position: fixed`/],
     ['css', (s) => s.replace('  inset: 0;\n', '  inset: 0;\n  z-index: 3;\n'), /^page: `\.scene-host` carries the unlisted `z-index: 3`$/],
@@ -1099,5 +1188,155 @@ test('index: each guarantee removed fails with its own line', () => {
     const mutated = mutate(tsx);
     assert.notEqual(mutated, tsx, `the mutation ${String(message)} must apply`);
     assert.match(auditIndex(css, mutated).join('\n'), message);
+  }
+});
+
+// --- The chart (4.3) -----------------------------------------------------------------------------
+
+const CHART_TSX = 'render-fallback/chart.tsx';
+
+const CHART_TYPE = (role: string): string[] => [
+  `font-family: var(--type-${role}-font-family)`,
+  `font-size: var(--type-${role}-font-size)`,
+  `font-weight: var(--type-${role}-font-weight)`,
+  `line-height: var(--type-${role}-line-height)`,
+  `letter-spacing: var(--type-${role}-letter-spacing)`,
+];
+
+/** SVG text takes no line-height: the plate's labels are the role's family, size, weight and tracking. */
+const PLATE_TYPE = (role: string): string[] => CHART_TYPE(role).filter((line) => !line.startsWith('line-height'));
+
+const PHONE = '@media (max-width: 640px)';
+
+const CHART_RULES: readonly CssRule[] = [
+  {
+    at: '',
+    selector: '.chart',
+    declarations: ['box-sizing: border-box', 'max-width: 1240px', 'margin: 0 auto', 'padding: var(--space-xxl) var(--space-xl) var(--space-xxl)', 'color: var(--color-ink-prose-dark)', 'overflow-wrap: anywhere'],
+  },
+  { at: '', selector: '.chart-heading', declarations: ['margin: 0 0 var(--space-xxl)', ...CHART_TYPE('chrome'), 'color: var(--color-ink-label-dark)'] },
+  { at: '', selector: '.chart-plate', declarations: ['border: 1px solid var(--color-surface-edge-dark)'] },
+  { at: '', selector: '.chart-plate svg', declarations: ['display: block', 'width: 100%', 'height: auto'] },
+  { at: '', selector: '.chart-baseline, .chart-stem', declarations: ['stroke: var(--color-stroke-rest-dark)', 'stroke-width: var(--stroke-hairline)'] },
+  { at: '', selector: '.chart-leader', declarations: ['stroke: var(--color-stroke-rest-dark)', 'stroke-width: var(--stroke-hairline-leader)'] },
+  { at: '', selector: '.chart-star', declarations: ['fill: var(--color-surface-base-dark)', 'stroke: var(--color-stroke-active-dark)', 'stroke-width: var(--stroke-body-client)'] },
+  { at: '', selector: '.chart-star-core', declarations: ['fill: var(--color-stroke-active-dark)'] },
+  { at: '', selector: '.chart-marker', declarations: ['fill: var(--color-surface-base-dark)', 'stroke: var(--color-stroke-near-dark)', 'stroke-width: var(--stroke-body-near)'] },
+  { at: '', selector: '.chart-label-client', declarations: [...PLATE_TYPE('scene-label-client'), 'fill: var(--color-ink-lift-dark)'] },
+  { at: '', selector: '.chart-label-project', declarations: [...PLATE_TYPE('scene-label-project'), 'fill: var(--color-ink-prose-dark)'] },
+  { at: '', selector: '.chart-index', declarations: ['width: 100%', 'margin: var(--space-xxl) 0 0', 'border-collapse: collapse', 'border-spacing: 0'] },
+  {
+    at: '',
+    selector: '.chart-index th',
+    declarations: ['padding: 0 var(--space-lg) var(--space-sm) 0', 'text-align: left', 'vertical-align: baseline', ...CHART_TYPE('field-label'), 'color: var(--color-ink-label-dark)'],
+  },
+  {
+    at: '',
+    selector: '.chart-index td',
+    declarations: [
+      'padding: var(--space-sm) var(--space-lg) var(--space-sm) 0',
+      'border-top: 1px solid var(--color-surface-edge-dark)',
+      'vertical-align: baseline',
+      ...CHART_TYPE('field-value'),
+      'color: var(--color-ink-prose-dark)',
+    ],
+  },
+  { at: '', selector: '.chart-index-dates', declarations: ['white-space: nowrap'] },
+  { at: '', selector: '.chart-index a', declarations: ['color: var(--color-ink-prose-dark)', 'text-decoration: none', 'border-bottom: 1px solid var(--color-stroke-near-dark)'] },
+  { at: '', selector: '.chart-index a:hover, .chart-index a:focus-visible', declarations: ['color: var(--color-ink-lift-dark)', 'border-bottom-color: var(--color-stroke-focus-dark)'] },
+  { at: '', selector: '.chart-index a:focus-visible', declarations: ['outline: 1px solid var(--color-stroke-focus-dark)', 'outline-offset: 3px'] },
+  { at: '', selector: '.chart-section', declarations: ['margin: var(--space-xxl) 0 0'] },
+  { at: '', selector: '.chart-client', declarations: ['margin: 0 0 var(--space-lg)', ...CHART_TYPE('scene-label-client'), 'color: var(--color-ink-lift-dark)'] },
+  {
+    at: '',
+    selector: '.chart-record',
+    declarations: [
+      'margin: 0 0 var(--space-xl)',
+      'padding: var(--space-panel-pad-top) var(--space-panel-pad-x) var(--space-panel-pad-bottom)',
+      'background: var(--color-surface-raised-dark)',
+      'border-left: 1px solid var(--color-surface-edge-dark)',
+    ],
+  },
+  { at: '@media (min-width: 640.02px)', selector: '.chart-plate-down', declarations: ['display: none'] },
+  { at: PHONE, selector: '.chart', declarations: ['padding: var(--space-lg) var(--space-md) var(--space-xxl)'] },
+  { at: PHONE, selector: '.chart-plate-across', declarations: ['display: none'] },
+  { at: PHONE, selector: '.chart-index, .chart-index tbody, .chart-index tr, .chart-index td', declarations: ['display: block'] },
+  { at: PHONE, selector: '.chart-index thead', declarations: ['position: absolute', 'width: 1px', 'height: 1px', 'overflow: hidden', 'clip-path: inset(50%)', 'white-space: nowrap'] },
+  { at: PHONE, selector: '.chart-index tr', declarations: ['padding: var(--space-sm) 0', 'border-top: 1px solid var(--color-surface-edge-dark)'] },
+  { at: PHONE, selector: '.chart-index td', declarations: ['padding: 0', 'border-top: 0'] },
+  { at: PHONE, selector: '.chart-record', declarations: ['margin: 0 0 var(--space-md)', 'padding: var(--space-lg) var(--space-md) var(--space-xl)'] },
+  { at: PHONE, selector: '.chart-record .panel-fields th, .chart-record .panel-fields td', declarations: ['display: block'] },
+  { at: PHONE, selector: '.chart-record .panel-fields th', declarations: ['padding: var(--space-sm) 0 var(--space-hair)'] },
+  { at: PHONE, selector: '.chart-record .panel-fields td', declarations: ['padding: 0 0 var(--space-sm)', 'border-top: 0'] },
+  { at: '@media (forced-colors: active)', selector: '.chart-index a:focus-visible', declarations: ['outline: 1px solid CanvasText'] },
+];
+
+/** The two rules that may hide an element: each plate, outside its own width. Both plates are `aria-hidden`. */
+const PLATE_SWAP = new Set(['@media (min-width: 640.02px) .chart-plate-down', '@media (max-width: 640px) .chart-plate-across']);
+
+/**
+ * The chart's treatment: `chart.css` exactly, with the identity bans — `display:
+ * none` admitted on the two plate rules alone — imported once by `chart.tsx`
+ * beside the panel's stylesheet, the plates `aria-hidden` and no inline style,
+ * hex, radius, shadow or filter anywhere in the stylesheet.
+ */
+function auditChart(css: string, tsx: string): string[] {
+  const swapped = parseCss(css).filter((rule) => rule.declarations.includes('display: none'));
+  const hidden = swapped.map((rule) => `${rule.at === '' ? '' : `${rule.at} `}${rule.selector}`);
+  // Blank the admitted `display: none` before the bans read the sheet, so any other is still caught.
+  const admitted = hidden.every((key) => PLATE_SWAP.has(key));
+  const banned = auditBans('chart', css).filter((line) => !(admitted && line.startsWith('chart: display: none')));
+  const failures = [...banned, ...auditDeclarations('chart', css, CHART_RULES)];
+  for (const key of hidden) if (!PLATE_SWAP.has(key)) failures.push(`chart: \`${key}\` sets display: none — only the plates, by width, may`);
+  const code = codeOf(css, 'css');
+  if (/#[0-9a-f]{3,8}\b/i.test(code)) failures.push('chart: a hex colour — every colour is a token');
+  if (/\b(?:border-radius|box-shadow|text-shadow|filter)\s*:/.test(code)) failures.push('chart: a radius, shadow or filter — corners are square and nothing glows');
+  const script = codeOf(tsx, 'script');
+  if ((script.match(/^import\s+'\.\/chart\.css'\s*;/gm) ?? []).length !== 1) failures.push('chart: chart.tsx does not import ./chart.css, once');
+  if ((script.match(/^import\s+'\.\.\/shell\/focus-panel\.css'\s*;/gm) ?? []).length !== 1) failures.push('chart: chart.tsx does not import the panel’s stylesheet, once');
+  if (!/<div className=\{className\} aria-hidden="true">\s*<svg\b/.test(script)) failures.push('chart: the plate is not an aria-hidden wrapper around its svg');
+  if (/\bstyle=\{/.test(script)) failures.push('chart: an inline style — the treatment is the stylesheet’s');
+  if (/\b(?:fill|stroke)=/.test(script)) failures.push('chart: a colour on the plate’s markup — fill and stroke are the stylesheet’s');
+  return failures;
+}
+
+test('chart: the flat chart’s stylesheet, declaration by declaration, and its markup’s hooks', () => {
+  assert.deepEqual(auditChart(read(`./${CHART_CSS}`), read(`./${CHART_TSX}`)), []);
+});
+
+test('chart: each guarantee removed fails with its own line', () => {
+  const css = read(`./${CHART_CSS}`);
+  const tsx = read(`./${CHART_TSX}`);
+  const cssCases: readonly (readonly [(source: string) => string, RegExp])[] = [
+    // A third `display: none`, on the index, or the plate swap at top level.
+    [(s) => s.replace('  .chart-index thead {\n    position: absolute;', '  .chart-index thead {\n    display: none;\n    position: absolute;'), /`@media \(max-width: 640px\) \.chart-index thead` sets display: none/],
+    [(s) => s.replace('@media (min-width: 640.02px) {\n  .chart-plate-down {\n    display: none;\n  }\n}', '.chart-plate-down {\n  display: none;\n}'), /^chart: display: none/],
+    [(s) => s.replace('  .chart-plate-across {\n    display: none;\n  }\n', ''), /`@media \(max-width: 640px\) \.chart-plate-across` is missing/],
+    [(s) => s.replace('  clip-path: inset(50%);\n', '  visibility: hidden;\n'), /^chart: visibility: hidden/],
+    [(s) => s.replace('fill: var(--color-ink-lift-dark);', 'fill: #F2F2F4;'), /chart: a hex colour/],
+    [(s) => s.replace('  border: 1px solid var(--color-surface-edge-dark);\n', '  border: 1px solid var(--color-surface-edge-dark);\n  border-radius: 4px;\n'), /chart: a radius, shadow or filter/],
+    [(s) => s.replace('  stroke-width: var(--stroke-body-near);\n', '  stroke-width: var(--stroke-body-near);\n  filter: drop-shadow(0 0 4px white);\n'), /chart: a radius, shadow or filter/],
+    [(s) => s.replace('font-weight: var(--type-chrome-font-weight)', 'font-weight: 700'), /^chart: a literal font-weight/],
+    [(s) => s.replace('  color: var(--color-ink-lift-dark);\n}', '  color: var(--color-ink-lift-dark);\n  text-transform: uppercase;\n}'), /^chart: text-transform/],
+    [(s) => s.replace('  stroke: var(--color-stroke-near-dark);\n', '  stroke: var(--color-stroke-active-dark);\n'), /`\.chart-marker` lacks `stroke: var\(--color-stroke-near-dark\)`/],
+    [(s) => s.replace('  background: var(--color-surface-raised-dark);\n', ''), /`\.chart-record` lacks `background: var\(--color-surface-raised-dark\)`/],
+    [(s) => `${s}\n.chart-ring {\n  stroke: var(--color-stroke-near-dark);\n}\n`, /^chart: the unlisted rule `\.chart-ring`$/],
+  ];
+  for (const [mutate, message] of cssCases) {
+    const mutated = mutate(css);
+    assert.notEqual(mutated, css, `the mutation ${String(message)} must apply`);
+    assert.match(auditChart(mutated, tsx).join('\n'), message);
+  }
+  const tsxCases: readonly (readonly [(source: string) => string, RegExp])[] = [
+    [(s) => s.replace("import './chart.css';\n", ''), /chart\.tsx does not import \.\/chart\.css, once/],
+    [(s) => s.replace("import '../shell/focus-panel.css';\n", ''), /does not import the panel’s stylesheet, once/],
+    [(s) => s.replace('<div className={className} aria-hidden="true">', '<div className={className}>'), /the plate is not an aria-hidden wrapper/],
+    [(s) => s.replace('<div className="chart" ', '<div className="chart" style={{ overflow: \'hidden\' }} '), /an inline style/],
+    [(s) => s.replace('<circle key={circle.key} className={circle.className}', '<circle key={circle.key} className={circle.className} fill="white"'), /a colour on the plate’s markup/],
+  ];
+  for (const [mutate, message] of tsxCases) {
+    const mutated = mutate(tsx);
+    assert.notEqual(mutated, tsx, `the mutation ${String(message)} must apply`);
+    assert.match(auditChart(css, mutated).join('\n'), message);
   }
 });

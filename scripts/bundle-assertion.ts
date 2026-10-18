@@ -43,7 +43,11 @@ import type { Plugin } from 'vite';
  * module, so the whole router (and the preload helper the colophon's import
  * shares) ships on the entry chunk — and measured 3,938, inside the unchanged
  * budget by 62 bytes; the router's guarded canonical rewrite brought it to
- * 3,970, 30 bytes inside.
+ * 3,970, 30 bytes inside. Story 4.3's chart reuses shell modules the mount
+ * also loads; kept in a chunk of their own (`vite.config.ts`'s `ui` group, so
+ * the chart reaches no react-dom chunk), they lengthen the entry's preload list
+ * for the mount, and the group is shaped to keep that list at four files:
+ * measured 3,993, 7 bytes inside.
  */
 export const ENTRY_BUDGET_BYTES = 4_000;
 

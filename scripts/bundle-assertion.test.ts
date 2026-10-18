@@ -241,6 +241,52 @@ test('the plugin measures real chunk bytes against its budget', async () => {
 /** A path with forward slashes, as Windows ids are not. */
 const forward = (id: string): string => id.replace(/\\/g, '/');
 
+/** A module id relative to the repository, forward-slashed. */
+const local = (id: string): string => forward(id).slice(forward(REPO).length);
+
+/** What the heavy-reach walk reads of a chunk. */
+type Edges = Pick<Rolldown.OutputChunk, 'fileName' | 'imports' | 'dynamicImports' | 'modules'>;
+
+/**
+ * The scene or react-dom chunks `start` reaches: every chunk it imports,
+ * statically or dynamically — and every chunk those load with them through
+ * static imports, however deep (static imports are not hoisted onto a dynamic
+ * chunk, so one hop is not enough) — that holds a `src/render-scene/` module or
+ * react-dom.
+ */
+function heavy(from: readonly Edges[], start: string): string[] {
+  const named = new Map(from.map((out) => [out.fileName, out]));
+  const own = named.get(start);
+  const reached = new Set<string>();
+  const pending = [...(own?.imports ?? []), ...(own?.dynamicImports ?? [])];
+  for (let name = pending.pop(); name !== undefined; name = pending.pop()) {
+    if (reached.has(name) || name === start) continue;
+    reached.add(name);
+    pending.push(...(named.get(name)?.imports ?? []));
+  }
+  return [...reached].filter((name) =>
+    Object.keys(named.get(name)?.modules ?? {}).some((id) => local(id).startsWith('src/render-scene/') || /\/node_modules\/react-dom\//.test(forward(id))),
+  );
+}
+
+/**
+ * A lazily loaded surface's chunk (4.2's Colophon, 4.3's chart), asserted: the
+ * one chunk holding `module`, off the entry graph, reached by the dynamic
+ * import of the chunk holding `host`, by no static import, and reaching no
+ * scene and no react-dom chunk.
+ */
+function lazySurface(chunks: readonly Rolldown.OutputChunk[], graph: ReadonlySet<string>, module: string, host: string): Rolldown.OutputChunk {
+  const holding = chunks.filter((out) => Object.keys(out.modules).some((id) => local(id) === module));
+  assert.equal(holding.length, 1, `${module} is emitted in one chunk`);
+  const [surface] = holding as [Rolldown.OutputChunk];
+  assert.ok(!graph.has(surface.fileName), `${module}'s chunk sits off the entry graph`);
+  const importers = chunks.filter((out) => out.dynamicImports.includes(surface.fileName));
+  assert.ok(importers.length > 0 && importers.every((out) => Object.keys(out.modules).some((id) => local(id) === host)), `reached by ${host}'s dynamic import, and only by it`);
+  assert.ok(chunks.every((out) => !out.imports.includes(surface.fileName)), `${module}'s chunk is reached by no static import`);
+  assert.deepEqual(heavy(chunks, surface.fileName), [], `${module}'s chunk imports no scene chunk and no react-dom chunk`);
+  return surface;
+}
+
 test('the shipped app builds under the assertion, measured within its budget', async () => {
   const { logger, lines } = capturing();
   const chunks = chunksOf(await build({ configFile: CONFIG, root: REPO, logLevel: 'silent', customLogger: logger, build: { write: false } }));
@@ -250,7 +296,6 @@ test('the shipped app builds under the assertion, measured within its budget', a
   const entries = chunks.filter((out) => out.isEntry);
   // Vite's facade is `index.html`; what it reaches in `src/` is the thin entry and
   // what the entry imports statically — nothing more.
-  const local = (id: string): string => forward(id).slice(forward(REPO).length);
   assert.deepEqual(entries.map((out) => local(out.facadeModuleId ?? '')), ['index.html'], 'one entry, the page');
   assert.deepEqual(
     entries.flatMap((out) => Object.keys(out.modules).map(local).filter((id) => id.startsWith('src/'))).sort(),
@@ -276,58 +321,38 @@ test('the shipped app builds under the assertion, measured within its budget', a
     chunks.some((out) => !graph.has(out.fileName) && Object.keys(out.modules).some((id) => /\/node_modules\/react-dom\//.test(forward(id)))),
     'react-dom sits off the entry graph',
   );
-  // 4.2: the Colophon is its own chunk, off the entry graph, reached only by the
-  // colophon host's dynamic import — holding neither the scene nor React's DOM.
-  const colophons = chunks.filter((out) => Object.keys(out.modules).some((id) => local(id) === 'src/colophon/colophon.tsx'));
-  assert.equal(colophons.length, 1, 'the colophon is emitted in one chunk');
-  const [colophon] = colophons;
-  assert.ok(colophon !== undefined && !graph.has(colophon.fileName), 'the colophon chunk sits off the entry graph');
+  // 4.2: the Colophon is its own chunk, and 4.3: so is the flat chart — each off
+  // the entry graph, reached only by its host's dynamic import, by no static
+  // import, and reaching neither the scene nor React's DOM (`lazySurface`).
+  const colophon = lazySurface(chunks, graph, 'src/colophon/colophon.tsx', 'src/shell/colophon-host.tsx');
   assert.deepEqual(
-    Object.keys(colophon?.modules ?? {}).map(local).filter((id) => id.startsWith('src/')),
+    Object.keys(colophon.modules).map(local).filter((id) => id.startsWith('src/')),
     ['src/colophon/colophon.tsx'],
     'and holds the colophon alone',
   );
+  const chart = lazySurface(chunks, graph, 'src/render-fallback/chart.tsx', 'src/shell/fallback-host.tsx');
   assert.ok(
-    chunks.some((out) => out.dynamicImports.includes(colophon?.fileName ?? '') && Object.keys(out.modules).some((id) => local(id) === 'src/shell/colophon-host.tsx')),
-    'reached by the colophon host’s dynamic import',
+    Object.keys(chart.modules).map(local).some((id) => id === 'src/render-fallback/chart-model.ts'),
+    'and carries its model with it',
   );
-  assert.ok(
-    chunks.every((out) => !out.imports.includes(colophon?.fileName ?? '')),
-    'and by no static import',
-  );
-  // Neither the scene nor React's DOM rides along: no chunk the colophon chunk
-  // imports, statically or dynamically — nor any chunk those load with them
-  // through static imports, however deep — holds a src/render-scene/ module or
-  // react-dom. Static imports are not hoisted onto a dynamic chunk, so one hop is not enough.
-  type Edges = Pick<Rolldown.OutputChunk, 'fileName' | 'imports' | 'dynamicImports' | 'modules'>;
-  const heavy = (from: readonly Edges[], start: string): string[] => {
-    const named = new Map(from.map((out) => [out.fileName, out]));
-    const own = named.get(start);
-    const reached = new Set<string>();
-    const pending = [...(own?.imports ?? []), ...(own?.dynamicImports ?? [])];
-    for (let name = pending.pop(); name !== undefined; name = pending.pop()) {
-      if (reached.has(name) || name === start) continue;
-      reached.add(name);
-      pending.push(...(named.get(name)?.imports ?? []));
-    }
-    return [...reached].filter((name) =>
-      Object.keys(named.get(name)?.modules ?? {}).some((id) => local(id).startsWith('src/render-scene/') || /\/node_modules\/react-dom\//.test(forward(id))),
-    );
-  };
-  assert.deepEqual(heavy(chunks, colophon?.fileName ?? ''), [], 'the colophon chunk imports no scene chunk and no react-dom chunk');
-  // Red against a mutated copy: the colophon chunk given an edge to the scene's chunk, then to react-dom's.
-  for (const pattern of [/^src\/render-scene\//, /node_modules\/react-dom\//]) {
-    const target = chunks.find((out) => Object.keys(out.modules).some((id) => pattern.test(local(id))));
-    assert.ok(target !== undefined, `a chunk matching ${pattern} was emitted`);
-    for (const edge of ['imports', 'dynamicImports'] as const) {
-      const mutated: Edges[] = chunks.map((out): Edges => (out === colophon ? { ...out, [edge]: [...out[edge], target.fileName] } : out));
-      assert.ok(heavy(mutated, colophon?.fileName ?? '').includes(target.fileName), `an ${edge} edge to ${target.fileName} is caught`);
-    }
-    // One hop further: the colophon chunk reaches the target through a shared chunk that imports it.
-    const shared: Edges = { fileName: 'assets/shared-mutant.js', imports: [target.fileName], dynamicImports: [], modules: {} };
-    for (const edge of ['imports', 'dynamicImports'] as const) {
-      const mutated: Edges[] = [...chunks.map((out): Edges => (out === colophon ? { ...out, [edge]: [...out[edge], shared.fileName] } : out)), shared];
-      assert.ok(heavy(mutated, colophon?.fileName ?? '').includes(target.fileName), `an ${edge} edge to a chunk importing ${target.fileName} is caught`);
+  // Ruling Q2: the chart is the one renderer chunk `/chart` and a fallback `/`
+  // request — it is not the scene's chunk, and the scene's is not reached from it.
+  assert.ok(!Object.keys(chart.modules).map(local).some((id) => id.startsWith('src/render-scene/')), 'the chart chunk holds no scene module');
+  // Red against a mutated copy: each surface chunk given an edge to the scene's
+  // chunk, then to react-dom's — directly, or through a shared chunk that imports it.
+  for (const surface of [colophon, chart]) {
+    for (const pattern of [/^src\/render-scene\//, /node_modules\/react-dom\//]) {
+      const target = chunks.find((out) => Object.keys(out.modules).some((id) => pattern.test(local(id))));
+      assert.ok(target !== undefined, `a chunk matching ${pattern} was emitted`);
+      for (const edge of ['imports', 'dynamicImports'] as const) {
+        const mutated: Edges[] = chunks.map((out): Edges => (out === surface ? { ...out, [edge]: [...out[edge], target.fileName] } : out));
+        assert.ok(heavy(mutated, surface.fileName).includes(target.fileName), `${surface.fileName}: an ${edge} edge to ${target.fileName} is caught`);
+      }
+      const shared: Edges = { fileName: 'assets/shared-mutant.js', imports: [target.fileName], dynamicImports: [], modules: {} };
+      for (const edge of ['imports', 'dynamicImports'] as const) {
+        const mutated: Edges[] = [...chunks.map((out): Edges => (out === surface ? { ...out, [edge]: [...out[edge], shared.fileName] } : out)), shared];
+        assert.ok(heavy(mutated, surface.fileName).includes(target.fileName), `${surface.fileName}: an ${edge} edge to a chunk importing ${target.fileName} is caught`);
+      }
     }
   }
   const view: BundleView = {

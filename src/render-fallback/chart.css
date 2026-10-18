@@ -1,0 +1,235 @@
+/*
+ * The flat star chart's treatment (4.3; the UX key screen `keyscreen-fallback.html`).
+ * Every colour, family, size, weight and stroke is a token custom property from
+ * `src/tokens/tokens.css`; the only literal lengths are the chart's measure, the
+ * 1px rules (as the panel's), the focus outline and the clip pattern's 1px. No
+ * hue, no radius, no shadow, no glow and no vignette: the plate has no centre.
+ * `identity-audit.test.ts` holds each declaration.
+ *
+ * The records take the scene panel's classes from `src/shell/focus-panel.css`;
+ * this file adds only their surface — `surface-raised` with one `surface-edge`
+ * left rule, the panel's own — and their rhythm on the page.
+ *
+ * Above 640px the across plate shows and the down plate is `display: none`;
+ * at 640px and below, the reverse. Both are `aria-hidden` in the markup, so the
+ * one hidden is no loss to the accessibility tree — and these are the only two
+ * `display: none` the audit admits. At phone width the index table's rows stack
+ * (its header clipped, never removed) and the record's field rows stack, as the
+ * key screen draws them.
+ */
+
+.chart {
+  box-sizing: border-box;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: var(--space-xxl) var(--space-xl) var(--space-xxl);
+  color: var(--color-ink-prose-dark);
+  overflow-wrap: anywhere;
+}
+
+.chart-heading {
+  margin: 0 0 var(--space-xxl);
+  font-family: var(--type-chrome-font-family);
+  font-size: var(--type-chrome-font-size);
+  font-weight: var(--type-chrome-font-weight);
+  line-height: var(--type-chrome-line-height);
+  letter-spacing: var(--type-chrome-letter-spacing);
+  color: var(--color-ink-label-dark);
+}
+
+.chart-plate {
+  border: 1px solid var(--color-surface-edge-dark);
+}
+
+.chart-plate svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.chart-baseline,
+.chart-stem {
+  stroke: var(--color-stroke-rest-dark);
+  stroke-width: var(--stroke-hairline);
+}
+
+.chart-leader {
+  stroke: var(--color-stroke-rest-dark);
+  stroke-width: var(--stroke-hairline-leader);
+}
+
+.chart-star {
+  fill: var(--color-surface-base-dark);
+  stroke: var(--color-stroke-active-dark);
+  stroke-width: var(--stroke-body-client);
+}
+
+.chart-star-core {
+  fill: var(--color-stroke-active-dark);
+}
+
+.chart-marker {
+  fill: var(--color-surface-base-dark);
+  stroke: var(--color-stroke-near-dark);
+  stroke-width: var(--stroke-body-near);
+}
+
+.chart-label-client {
+  font-family: var(--type-scene-label-client-font-family);
+  font-size: var(--type-scene-label-client-font-size);
+  font-weight: var(--type-scene-label-client-font-weight);
+  letter-spacing: var(--type-scene-label-client-letter-spacing);
+  fill: var(--color-ink-lift-dark);
+}
+
+.chart-label-project {
+  font-family: var(--type-scene-label-project-font-family);
+  font-size: var(--type-scene-label-project-font-size);
+  font-weight: var(--type-scene-label-project-font-weight);
+  letter-spacing: var(--type-scene-label-project-letter-spacing);
+  fill: var(--color-ink-prose-dark);
+}
+
+.chart-index {
+  width: 100%;
+  margin: var(--space-xxl) 0 0;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.chart-index th {
+  padding: 0 var(--space-lg) var(--space-sm) 0;
+  text-align: left;
+  vertical-align: baseline;
+  font-family: var(--type-field-label-font-family);
+  font-size: var(--type-field-label-font-size);
+  font-weight: var(--type-field-label-font-weight);
+  line-height: var(--type-field-label-line-height);
+  letter-spacing: var(--type-field-label-letter-spacing);
+  color: var(--color-ink-label-dark);
+}
+
+.chart-index td {
+  padding: var(--space-sm) var(--space-lg) var(--space-sm) 0;
+  border-top: 1px solid var(--color-surface-edge-dark);
+  vertical-align: baseline;
+  font-family: var(--type-field-value-font-family);
+  font-size: var(--type-field-value-font-size);
+  font-weight: var(--type-field-value-font-weight);
+  line-height: var(--type-field-value-line-height);
+  letter-spacing: var(--type-field-value-letter-spacing);
+  color: var(--color-ink-prose-dark);
+}
+
+.chart-index-dates {
+  white-space: nowrap;
+}
+
+.chart-index a {
+  color: var(--color-ink-prose-dark);
+  text-decoration: none;
+  border-bottom: 1px solid var(--color-stroke-near-dark);
+}
+
+.chart-index a:hover,
+.chart-index a:focus-visible {
+  color: var(--color-ink-lift-dark);
+  border-bottom-color: var(--color-stroke-focus-dark);
+}
+
+.chart-index a:focus-visible {
+  outline: 1px solid var(--color-stroke-focus-dark);
+  outline-offset: 3px;
+}
+
+.chart-section {
+  margin: var(--space-xxl) 0 0;
+}
+
+.chart-client {
+  margin: 0 0 var(--space-lg);
+  font-family: var(--type-scene-label-client-font-family);
+  font-size: var(--type-scene-label-client-font-size);
+  font-weight: var(--type-scene-label-client-font-weight);
+  line-height: var(--type-scene-label-client-line-height);
+  letter-spacing: var(--type-scene-label-client-letter-spacing);
+  color: var(--color-ink-lift-dark);
+}
+
+.chart-record {
+  margin: 0 0 var(--space-xl);
+  padding: var(--space-panel-pad-top) var(--space-panel-pad-x) var(--space-panel-pad-bottom);
+  background: var(--color-surface-raised-dark);
+  border-left: 1px solid var(--color-surface-edge-dark);
+}
+
+@media (min-width: 640.02px) {
+  .chart-plate-down {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .chart {
+    padding: var(--space-lg) var(--space-md) var(--space-xxl);
+  }
+
+  .chart-plate-across {
+    display: none;
+  }
+
+  .chart-index,
+  .chart-index tbody,
+  .chart-index tr,
+  .chart-index td {
+    display: block;
+  }
+
+  .chart-index thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .chart-index tr {
+    padding: var(--space-sm) 0;
+    border-top: 1px solid var(--color-surface-edge-dark);
+  }
+
+  .chart-index td {
+    padding: 0;
+    border-top: 0;
+  }
+
+  .chart-record {
+    margin: 0 0 var(--space-md);
+    padding: var(--space-lg) var(--space-md) var(--space-xl);
+  }
+
+  .chart-record .panel-fields th,
+  .chart-record .panel-fields td {
+    display: block;
+  }
+
+  .chart-record .panel-fields th {
+    padding: var(--space-sm) 0 var(--space-hair);
+  }
+
+  .chart-record .panel-fields td {
+    padding: 0 0 var(--space-sm);
+    border-top: 0;
+  }
+}
+
+/*
+ * Forced colours flatten the ink step a link's hover and focus rely on: there,
+ * keyboard focus keeps a system-coloured outline.
+ */
+@media (forced-colors: active) {
+  .chart-index a:focus-visible {
+    outline: 1px solid CanvasText;
+  }
+}

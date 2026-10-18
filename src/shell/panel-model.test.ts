@@ -1441,9 +1441,11 @@ function auditMount(source: string): string[] {
   }
   // 4.1: the surface the entry chose is a prop; 4.2: so is the router. The route is
   // read from the router (never the store), and what it shows on this machine is
-  // `surfaceOf(route, surface)` — the surface's one read. That answer gates the
-  // scene host alone, once, on `scene`; on `colophon` the Colophon host is shown
-  // alone. Every other element renders on both chart and scene.
+  // `surfaceOf(route, surface)` — the surface's one read. 4.3: each of the two
+  // other surfaces is shown alone — the Colophon host on `colophon`, the
+  // fallback host (the flat chart) on `fallback` — so the index's scene doors,
+  // the chrome and the panel render on the scene alone, and there the scene
+  // host renders ungated.
   if (!/export\s+function\s+App\(\s*\{\s*surface\s*,\s*router\s*\}\s*:\s*\{\s*readonly\s+surface\s*:\s*Surface\s*;\s*readonly\s+router\s*:\s*Router\s*\}\s*\)\s*\{/.test(code)) {
     failures.push('App does not take the surface and the router as its props');
   }
@@ -1452,34 +1454,50 @@ function auditMount(source: string): string[] {
   if (!/const\s+route\s*=\s*useSyncExternalStore\(\s*router\.subscribe\s*,\s*router\.route\s*\)\s*;/.test(code)) failures.push('the route is not read from the router with useSyncExternalStore');
   if (!/const\s+shown\s*=\s*surfaceOf\(\s*route\s*,\s*surface\s*\)\s*;/.test(code)) failures.push('what is shown is not surfaceOf(route, surface)');
   if (/navigationStore|useStore\b/.test(code)) failures.push('App reads the route from the navigation store');
-  if ((code.match(/<SceneHost\b/g) ?? []).length !== 1 || !/\{\s*shown\s*===\s*'scene'\s*&&\s*<SceneHost\s+artifact=\{\s*artifact\s*\}\s*\/>\s*\}/.test(code)) {
-    failures.push('the scene host is not rendered once, gated on shown === \'scene\'');
-  }
   if ((code.match(/\bsurface\b/g) ?? []).length !== 3) failures.push('the surface is read other than by surfaceOf');
-  if (/&&\s*<(?:DestinationNav|CornerChrome|FocusPanel)\b/.test(code)) failures.push('an element other than the scene host is gated');
+  if (/&&\s*</.test(code) || /\?\s*</.test(code)) failures.push('an element is gated inside a branch — each surface is its own return');
+  if ((code.match(/<SceneHost\b/g) ?? []).length !== 1 || !/<SceneHost\s+artifact=\{\s*artifact\s*\}\s*\/>/.test(code)) {
+    failures.push('the scene host is not rendered once, handed the artifact');
+  }
   if (!/import\s*\{\s*ColophonHost\s*\}\s*from\s*'\.\/shell\/colophon-host\.tsx'/.test(code)) failures.push('ColophonHost is not imported from the shell');
-  if ((code.match(/<ColophonHost\b/g) ?? []).length !== 1 ||
-    !/if\s*\(\s*shown\s*===\s*'colophon'\s*\)\s*\{\s*return\s*\(\s*<main>\s*<ColophonHost\s*\/>\s*<\/main>\s*\)\s*;\s*\}/.test(code)) {
+  const colophonBranch = /if\s*\(\s*shown\s*===\s*'colophon'\s*\)\s*\{\s*return\s*\(\s*<main>\s*<ColophonHost\s*\/>\s*<\/main>\s*\)\s*;\s*\}/.exec(code);
+  if ((code.match(/<ColophonHost\b/g) ?? []).length !== 1 || colophonBranch === null) {
     failures.push('the Colophon host is not rendered once, alone, on shown === \'colophon\'');
+  }
+  if (!/import\s*\{\s*FallbackHost\s*\}\s*from\s*'\.\/shell\/fallback-host\.tsx'/.test(code)) failures.push('FallbackHost is not imported from the shell');
+  const fallbackBranch = /if\s*\(\s*shown\s*===\s*'fallback'\s*\)\s*\{\s*return\s*\(\s*<main>\s*<FallbackHost\s+artifact=\{\s*artifact\s*\}\s*\/>\s*<\/main>\s*\)\s*;\s*\}/.exec(code);
+  if ((code.match(/<FallbackHost\b/g) ?? []).length !== 1 || fallbackBranch === null) {
+    failures.push('the fallback host is not rendered once, alone, handed the artifact, on shown === \'fallback\'');
+  }
+  // Both branches return before the scene's elements, so neither surface renders the scene's doors.
+  const firstSceneElement = code.indexOf('<DestinationNav');
+  for (const branch of [colophonBranch, fallbackBranch]) {
+    if (branch !== null && firstSceneElement !== -1 && branch.index > firstSceneElement) failures.push('a surface branch follows the scene’s elements');
   }
   if (/^import\s+'[^']*\.css'/m.test(code)) failures.push('App.tsx imports a stylesheet — the page is the entry’s since 4.1');
   return failures;
 }
 
-test('App.tsx mounts index, chrome, scene host and panel, in that order', () => {
+test('App.tsx mounts index, chrome, scene host and panel on the scene, in that order, and the chart alone on fallback', () => {
   const real = readFileSync(APP_TSX, 'utf8').replace(/\r\n/g, '\n');
   assert.deepEqual(auditMount(real), []);
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
     ['the panel not mounted', (s) => s.replace(/^\s*<FocusPanel artifact=\{artifact\} \/>\r?\n/m, '')],
-    ['the panel before the scene', (s) => s.replace(/^(\s*\{shown === 'scene' && <SceneHost artifact=\{artifact\} \/>\}\n)(\s*<FocusPanel artifact=\{artifact\} \/>\n)/m, '$2$1')],
-    ['the scene removed', (s) => s.replace(/^\s*\{shown === 'scene' && <SceneHost artifact=\{artifact\} \/>\}\n/m, '')],
-    // 4.1: the scene host renders on the scene surface alone, so the fallback never requests render-scene.
-    ['the scene ungated', (s) => s.replace("{shown === 'scene' && <SceneHost artifact={artifact} />}", '<SceneHost artifact={artifact} />')],
-    ['the gate inverted', (s) => s.replace("{shown === 'scene' && <SceneHost", "{shown !== 'scene' && <SceneHost")],
-    ['gated on the fallback', (s) => s.replace("{shown === 'scene' && <SceneHost", "{shown === 'fallback' && <SceneHost")],
-    // 4.2: gated on the machine's surface, `/chart` on a capable machine would request render-scene.
-    ['gated on the machine, not the route', (s) => s.replace("{shown === 'scene' && <SceneHost", "{surface === 'scene' && <SceneHost")],
-    ['the panel gated too', (s) => s.replace('<FocusPanel artifact={artifact} />', "{shown === 'scene' && <FocusPanel artifact={artifact} />}")],
+    ['the panel before the scene', (s) => s.replace(/^(\s*<SceneHost artifact=\{artifact\} \/>\n)(\s*<FocusPanel artifact=\{artifact\} \/>\n)/m, '$2$1')],
+    ['the scene removed', (s) => s.replace(/^\s*<SceneHost artifact=\{artifact\} \/>\n/m, '')],
+    // 4.3: the scene host is ungated in the scene's own branch; the other surfaces return before it.
+    ['the scene gated again', (s) => s.replace('<SceneHost artifact={artifact} />', "{shown === 'scene' && <SceneHost artifact={artifact} />}")],
+    ['the fallback branch removed', (s) => s.replace(/\s*if \(shown === 'fallback'\) \{\s*return \(\s*<main>\s*<FallbackHost artifact=\{artifact\} \/>\s*<\/main>\s*\);\s*\}/, '')],
+    ['the fallback branch on the machine, not the route', (s) => s.replace("if (shown === 'fallback') {", "if (surface === 'fallback') {")],
+    ['the fallback branch on the chart route alone', (s) => s.replace("if (shown === 'fallback') {", "if (route === 'chart') {")],
+    ['the chart beside the index', (s) => s.replace(/(<main>\s*)<FallbackHost artifact=\{artifact\} \/>/, '$1<DestinationNav artifact={artifact} />\n        <FallbackHost artifact={artifact} />')],
+    ['the chart with the chrome', (s) => s.replace(/(<FallbackHost artifact=\{artifact\} \/>)/, '$1\n        <CornerChrome />')],
+    ['the chart with the panel', (s) => s.replace(/(<FallbackHost artifact=\{artifact\} \/>)/, '$1\n        <FocusPanel artifact={artifact} />')],
+    ['the chart on the scene too', (s) => s.replace('<FocusPanel artifact={artifact} />', "<FocusPanel artifact={artifact} />\n      {shown === 'fallback' && <FallbackHost artifact={artifact} />}")],
+    ['the chart not handed the artifact', (s) => s.replace('<FallbackHost artifact={artifact} />', '<FallbackHost artifact={{ clients: [] }} />')],
+    ['the fallback host imported from elsewhere', (s) => s.replace("from './shell/fallback-host.tsx'", "from './render-fallback/chart.tsx'")],
+    ['the fallback branch after the scene', (s) => s.replace(/\s*if \(shown === 'fallback'\) \{\s*return \(\s*<main>\s*<FallbackHost artifact=\{artifact\} \/>\s*<\/main>\s*\);\s*\}/, '').replace('<FocusPanel artifact={artifact} />', "<FocusPanel artifact={artifact} />\n      {shown === 'fallback' ? <FallbackHost artifact={artifact} /> : null}")],
+    ['the panel gated', (s) => s.replace('<FocusPanel artifact={artifact} />', "{shown === 'scene' && <FocusPanel artifact={artifact} />}")],
     ['the surface not a prop', (s) => s.replace('export function App({ surface, router }: { readonly surface: Surface; readonly router: Router })', "export function App() {\n  const surface: Surface = 'scene';\n  return null;\n}\nfunction Unused({ surface, router }: { readonly surface: Surface; readonly router: Router })")],
     ['the router not a prop', (s) => s.replace('{ surface, router }: { readonly surface: Surface; readonly router: Router }', '{ surface }: { readonly surface: Surface }')],
     ['the route fixed', (s) => s.replace('surfaceOf(route, surface)', "surfaceOf('home', surface)")],
