@@ -255,6 +255,11 @@ type Edges = Pick<Rolldown.OutputChunk, 'fileName' | 'imports' | 'dynamicImports
  * react-dom.
  */
 function heavy(from: readonly Edges[], start: string): string[] {
+  return reaching(from, start, (id) => local(id).startsWith('src/render-scene/') || /\/node_modules\/react-dom\//.test(forward(id)));
+}
+
+/** The chunks `start` reaches, by `heavy`'s walk, that hold a module `holds` names. */
+function reaching(from: readonly Edges[], start: string, holds: (id: string) => boolean): string[] {
   const named = new Map(from.map((out) => [out.fileName, out]));
   const own = named.get(start);
   const reached = new Set<string>();
@@ -264,10 +269,11 @@ function heavy(from: readonly Edges[], start: string): string[] {
     reached.add(name);
     pending.push(...(named.get(name)?.imports ?? []));
   }
-  return [...reached].filter((name) =>
-    Object.keys(named.get(name)?.modules ?? {}).some((id) => local(id).startsWith('src/render-scene/') || /\/node_modules\/react-dom\//.test(forward(id))),
-  );
+  return [...reached].filter((name) => Object.keys(named.get(name)?.modules ?? {}).some(holds));
 }
+
+/** The mount's own modules: a lazy surface reaching them reaches the whole scene-surface graph the mount loads. */
+const MOUNT_MODULES = /^src\/(?:App\.tsx|shell\/(?:mount|scene-host|fallback-host|colophon-host)\.tsx)$/;
 
 /**
  * A lazily loaded surface's chunk (4.2's Colophon, 4.3's chart), asserted: the
@@ -338,6 +344,22 @@ test('the shipped app builds under the assertion, measured within its budget', a
   // Ruling Q2: the chart is the one renderer chunk `/chart` and a fallback `/`
   // request — it is not the scene's chunk, and the scene's is not reached from it.
   assert.ok(!Object.keys(chart.modules).map(local).some((id) => id.startsWith('src/render-scene/')), 'the chart chunk holds no scene module');
+  // The chart's own modules, a closed list, and no edge back to the mount's
+  // chunk: the shell modules it shares sit in the `ui` group, so a new shared
+  // module left out of that group would fall back into the mount chunk and
+  // bring the chart its whole graph.
+  assert.deepEqual(
+    Object.keys(chart.modules).map(local).filter((id) => id.startsWith('src/')).sort(),
+    ['src/render-fallback/chart-model.ts', 'src/render-fallback/chart.css', 'src/render-fallback/chart.tsx'],
+    'and holds the chart alone',
+  );
+  const mountChunk = chunks.find((out) => Object.keys(out.modules).some((id) => local(id) === 'src/shell/mount.tsx'));
+  assert.ok(mountChunk !== undefined, 'the mount was emitted');
+  for (const surface of [colophon, chart]) {
+    assert.deepEqual(reaching(chunks, surface.fileName, (id) => MOUNT_MODULES.test(local(id))), [], `${surface.fileName} reaches no chunk of the mount's`);
+    const mutated: Edges[] = chunks.map((out): Edges => (out === surface ? { ...out, imports: [...out.imports, mountChunk.fileName] } : out));
+    assert.ok(reaching(mutated, surface.fileName, (id) => MOUNT_MODULES.test(local(id))).includes(mountChunk.fileName), `${surface.fileName}: an edge to the mount's chunk is caught`);
+  }
   // Red against a mutated copy: each surface chunk given an edge to the scene's
   // chunk, then to react-dom's — directly, or through a shared chunk that imports it.
   for (const surface of [colophon, chart]) {

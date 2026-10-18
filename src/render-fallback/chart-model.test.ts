@@ -22,6 +22,7 @@ import {
   MARKER_R,
   buildChart,
   fragmentTarget,
+  labelTypeOf,
   landOnFragment,
   type ChartArtifact,
   type ChartArtifactClient,
@@ -397,8 +398,13 @@ test('landOnFragment: a chart Project or Client fragment scrolls it into view on
 /** The solve fields the chart never reads, `weight` with them (a tuning number, not shown). */
 const FORBIDDEN_FIELDS = /\b(?:position|mass|luminanceBand|moteTier|orbitNormal|railDistance|weight)\b/;
 
-/** A specifier that reaches past the chart's two permitted directories. */
-const FORBIDDEN_SPECIFIER = /^(?:three|@react-three\/|react-dom(?:\/|$))|(?:^|\/)(?:data|derive|render-scene|colophon)\/|layout\.generated/;
+/**
+ * The only modules a render-fallback module may import: the shell's two pure
+ * models and the panel's stylesheet, the tokens, and the directory's own. An
+ * allowlist, so React, shell state or a scene-chrome sheet fails as surely as
+ * the data, the solver, the scene, Three or the artifact.
+ */
+const PERMITTED_SPECIFIER = /^(?:\.\.\/shell\/(?:panel-model\.ts|chrome-model\.ts|focus-panel\.css)|\.\.\/tokens\/[\w.-]+|\.\/(?:chart-model\.ts|chart\.css))$/;
 
 /** Every reason a render-fallback module breaks the directory's purity. */
 function auditPurity(files: Readonly<Record<string, string>>): string[] {
@@ -409,7 +415,7 @@ function auditPurity(files: Readonly<Record<string, string>>): string[] {
     if (field !== null) failures.push(`${path} reads ${field[0]} — the chart's layout is timeAxis alone`);
     const kept = stripComments(source);
     for (const [, specifier] of kept.matchAll(/(?:\bfrom\s*|\bimport\s*\(?\s*)['"]([^'"]+)['"]/g)) {
-      if (FORBIDDEN_SPECIFIER.test(specifier as string)) failures.push(`${path} imports ${specifier}`);
+      if (!PERMITTED_SPECIFIER.test(specifier as string)) failures.push(`${path} imports ${specifier}`);
     }
     if (/canvas/i.test(code)) failures.push(`${path} draws a canvas`);
   }
@@ -449,6 +455,12 @@ test('purity: each reach added to the real modules fails', () => {
     ['chart-model.ts', (s) => `const later = () => import('../colophon/colophon.tsx');\n${s}`, /imports \.\.\/colophon\/colophon\.tsx/],
     ['chart-model.ts', (s) => `import artifact from '../../generated/layout.generated.json';\n${s}`, /imports \.\.\/\.\.\/generated\/layout\.generated\.json/],
     ['chart.tsx', (s) => s.replace('<svg ', '<canvas />\n        <svg '), /draws a canvas/],
+    // Outside the permitted modules, though no denylist names them: React itself
+    // (the chart's JSX runtime is the compiler's), shell state, a scene-chrome sheet.
+    ['chart.tsx', (s) => `import { useEffect } from 'react';\n${s}`, /imports react$/m],
+    ['chart.tsx', (s) => `import { useNavigation } from '../shell/state.ts';\n${s}`, /imports \.\.\/shell\/state\.ts/],
+    ['chart.tsx', (s) => `import '../shell/index-nav.css';\n${s}`, /imports \.\.\/shell\/index-nav\.css/],
+    ['chart-model.ts', (s) => `import { surfaceOf } from '../shell/router.ts';\n${s}`, /imports \.\.\/shell\/router\.ts/],
   ];
   for (const [path, mutate, message] of cases) {
     const mutated = { ...files, [path]: mutate(files[path] as string) };
@@ -457,6 +469,28 @@ test('purity: each reach added to the real modules fails', () => {
   }
   // Prose and string content are not reads.
   assert.deepEqual(auditPurity({ 'x.ts': "// the reading position\nexport const s = 'mass';\n" }), []);
+  // Every permitted module stays permitted.
+  const permitted = ['../shell/panel-model.ts', '../shell/chrome-model.ts', '../shell/focus-panel.css', '../tokens/tokens.ts', './chart-model.ts', './chart.css'];
+  assert.deepEqual(auditPurity({ 'x.ts': permitted.map((specifier) => `import '${specifier}';`).join('\n') }), []);
+});
+
+test('label widths: a type role is read in px and em, and any other unit is refused', () => {
+  assert.deepEqual(labelTypeOf({ fontSize: '12px', letterSpacing: '0.12em' }), { size: 12, tracking: 0.12 });
+  assert.deepEqual(labelTypeOf({ fontSize: '11px', letterSpacing: '-0.02em' }), { size: 11, tracking: -0.02 });
+  for (const token of [
+    { fontSize: '0.75rem', letterSpacing: '0.12em' },
+    { fontSize: '12', letterSpacing: '0.12em' },
+    { fontSize: '12px', letterSpacing: '1px' },
+    { fontSize: '12px', letterSpacing: 'normal' },
+  ]) {
+    assert.throws(() => labelTypeOf(token), /px.*em|em.*px/, `${token.fontSize} / ${token.letterSpacing} is refused`);
+  }
+});
+
+test('the plates draw 1:1: chart.css holds each plate’s svg at its viewBox width', () => {
+  const css = readFileSync(join(DIR, 'chart.css'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(css, new RegExp(`\\.chart-plate-across svg \\{\\n  min-width: ${ACROSS.width}px;\\n  max-width: ${ACROSS.width}px;\\n\\}`), 'the across plate is held at its width');
+  assert.match(css, new RegExp(`\\.chart-plate-down svg \\{\\n  max-width: ${DOWN.width}px;`), 'the down plate is capped at its width');
 });
 
 /**
