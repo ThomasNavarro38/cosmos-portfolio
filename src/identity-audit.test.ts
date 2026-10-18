@@ -277,6 +277,7 @@ const ROLES: readonly Role[] = [
   { role: 'chart heading', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-heading' }, ground: 'page' },
   { role: 'chart Client heading', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-client' }, ground: 'page' },
   { role: 'index headers', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-index th' }, ground: 'page' },
+  { role: 'chart legend', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-legend' }, ground: 'page' },
   { role: 'index cells', floor: 7, ink: { css: CHART_CSS, selector: '.chart-index td' }, ground: 'page' },
   { role: 'index links', floor: 7, ink: { css: CHART_CSS, selector: '.chart-index a' }, ground: 'page' },
   { role: 'index links, raised', floor: 7, ink: { css: CHART_CSS, selector: '.chart-index a:hover, .chart-index a:focus-visible' }, ground: 'page' },
@@ -438,6 +439,11 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
   'Client',
   'Project',
   'Dates',
+  // The Deep/Shallow signal on the chart (4.4): the index's first header and
+  // the legend's two phrases, a glyph beside each — no sentence beyond them.
+  'Notable',
+  'Carries a notable',
+  'Does not',
   // The date separator on the chart (4.3): `start – end`, drawn between two
   // data elements. Admitted as copy alone, so a word with a dash at its edge is
   // still that word plus a dash, and fails.
@@ -447,7 +453,13 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
 ]);
 
 /** Accessible names — announced, never drawn — listed separately. */
-const ACCESSIBLE_NAMES: ReadonlySet<string> = new Set(['Destinations', 'Skills']);
+const ACCESSIBLE_NAMES: ReadonlySet<string> = new Set([
+  'Destinations',
+  'Skills',
+  // The chart's Notable glyph on a Shallow row (4.4); its Deep name is the
+  // visible `Carries a notable`, the legend's phrase.
+  'No notable',
+]);
 
 /** The constants the renderers draw copy from; any other upper-case constant drawn as text fails. */
 const COPY_CONSTANTS: ReadonlySet<string> = new Set(['IDENTITY_LINE', 'SLOT_TEXT', 'EDITORIAL_RULE', 'RELEASE_LABEL', 'FIELD_LABELS', 'DEPTH_LABELS', 'CHART_LABELS']);
@@ -738,10 +750,18 @@ function auditCopy(files: Readonly<Record<string, string>>, html: string): strin
   return failures;
 }
 
-/** Each copy constant's value, by name, against the closed allowlist. */
+/** The one copy constant announced and never drawn (4.4): the Notable glyph's name on a Shallow row. */
+const ANNOUNCED_CONSTANTS: ReadonlySet<string> = new Set(['CHART_LABELS.none']);
+
+/**
+ * Each copy constant's value, by name, against the closed allowlist. Only an
+ * announced constant (`ANNOUNCED_CONSTANTS`) may instead be an accessible name;
+ * every other constant is drawn, so it must be visible copy.
+ */
 function auditCopyConstants(constants: Readonly<Record<string, string>>): string[] {
+  const allowed = (name: string, value: string): boolean => VISIBLE_COPY.has(value) || (ANNOUNCED_CONSTANTS.has(name) && ACCESSIBLE_NAMES.has(value));
   return Object.entries(constants)
-    .filter(([, value]) => !VISIBLE_COPY.has(value))
+    .filter(([name, value]) => !allowed(name, value))
     .map(([name, value]) => `copy: the constant ${name} is ${JSON.stringify(value)}, which is not in the closed allowlist`);
 }
 
@@ -772,11 +792,25 @@ function copyConstants(): Record<string, string> {
 test('copy: the copy constants are each in the closed allowlist', () => {
   const constants = copyConstants();
   assert.ok(Object.keys(constants).length >= 12, 'every copy constant is inspected');
-  assert.deepEqual(Object.keys(chartLabels()), ['client', 'project', 'dates'], 'the chart’s labels are read off its model');
+  assert.deepEqual(Object.keys(chartLabels()), ['notable', 'client', 'project', 'dates', 'carries', 'doesNot', 'none'], 'the chart’s labels are read off its model');
+  assert.equal(chartLabels().none, 'No notable', 'the Shallow glyph’s name is read off the model');
   assert.deepEqual(auditCopyConstants(constants), []);
   assert.deepEqual(
     auditCopyConstants({ ...constants, RELEASE_LABEL: 'Close panel' }),
     ['copy: the constant RELEASE_LABEL is "Close panel", which is not in the closed allowlist'],
+  );
+  // An accessible name is admitted for the chart's labels alone; a sentence explaining the Ring is in neither set.
+  assert.deepEqual(
+    auditCopyConstants({ ...constants, RELEASE_LABEL: 'No notable' }),
+    ['copy: the constant RELEASE_LABEL is "No notable", which is not in the closed allowlist'],
+  );
+  // A drawn chart label set to an accessible-only name is not admitted: only CHART_LABELS.none is announced, never drawn.
+  for (const [name, value] of [['CHART_LABELS.client', 'Skills'], ['CHART_LABELS.notable', 'No notable'], ['CHART_LABELS.doesNot', 'Destinations']] as const) {
+    assert.deepEqual(auditCopyConstants({ ...constants, [name]: value }), [`copy: the constant ${name} is ${JSON.stringify(value)}, which is not in the closed allowlist`]);
+  }
+  assert.deepEqual(
+    auditCopyConstants({ ...constants, 'CHART_LABELS.carries': 'A ring means it opens' }),
+    ['copy: the constant CHART_LABELS.carries is "A ring means it opens", which is not in the closed allowlist'],
   );
   assert.deepEqual(htmlText(read('../index.html')), ['Cosmos Portfolio', 'This portfolio needs JavaScript.'], 'index.html draws its title and its noscript line, and nothing else');
 });
@@ -1226,6 +1260,15 @@ const CHART_RULES: readonly CssRule[] = [
   { at: '', selector: '.chart-star', declarations: ['fill: var(--color-surface-base-dark)', 'stroke: var(--color-stroke-active-dark)', 'stroke-width: var(--stroke-body-client)'] },
   { at: '', selector: '.chart-star-core', declarations: ['fill: var(--color-stroke-active-dark)'] },
   { at: '', selector: '.chart-marker', declarations: ['fill: var(--color-surface-base-dark)', 'stroke: var(--color-stroke-near-dark)', 'stroke-width: var(--stroke-body-near)'] },
+  // DESIGN.md `components.ring-notable` (4.4): stroke-near, the hairline, no fill, no dash.
+  { at: '', selector: '.chart-ring', declarations: ['fill: none', 'stroke: var(--color-stroke-near-dark)', 'stroke-width: var(--stroke-hairline)'] },
+  { at: '', selector: '.chart-glyph', declarations: ['display: block'] },
+  {
+    at: '',
+    selector: '.chart-legend',
+    declarations: ['display: flex', 'flex-wrap: wrap', 'gap: var(--space-xl)', 'margin: var(--space-md) 0 0', ...CHART_TYPE('field-label'), 'color: var(--color-ink-label-dark)'],
+  },
+  { at: '', selector: '.chart-legend-entry', declarations: ['display: flex', 'align-items: center', 'gap: var(--space-sm)'] },
   { at: '', selector: '.chart-label-client', declarations: [...PLATE_TYPE('scene-label-client'), 'fill: var(--color-ink-lift-dark)'] },
   { at: '', selector: '.chart-label-project', declarations: [...PLATE_TYPE('scene-label-project'), 'fill: var(--color-ink-prose-dark)'] },
   { at: '', selector: '.chart-index', declarations: ['width: 100%', 'margin: var(--space-xxl) 0 0', 'border-collapse: collapse', 'border-spacing: 0'] },
@@ -1245,6 +1288,9 @@ const CHART_RULES: readonly CssRule[] = [
       'color: var(--color-ink-prose-dark)',
     ],
   },
+  // The Notable header on one line: `.chart`'s `overflow-wrap: anywhere` broke it letter by letter.
+  { at: '', selector: '.chart-index th:first-child', declarations: ['white-space: nowrap'] },
+  { at: '', selector: '.chart-index-notable', declarations: ['width: 20px'] },
   { at: '', selector: '.chart-index-dates', declarations: ['white-space: nowrap'] },
   { at: '', selector: '.chart-index a', declarations: ['color: var(--color-ink-prose-dark)', 'text-decoration: none', 'border-bottom: 1px solid var(--color-stroke-near-dark)'] },
   { at: '', selector: '.chart-index a:hover, .chart-index a:focus-visible', declarations: ['color: var(--color-ink-lift-dark)', 'border-bottom-color: var(--color-stroke-focus-dark)'] },
@@ -1264,10 +1310,13 @@ const CHART_RULES: readonly CssRule[] = [
   { at: PHONE, selector: '.chart', declarations: ['padding: var(--space-lg) var(--space-md) var(--space-xxl)'] },
   { at: PHONE, selector: '.chart-plate-across', declarations: ['display: none'] },
   { at: PHONE, selector: '.chart-plate-down', declarations: ['display: block'] },
+  { at: PHONE, selector: '.chart-legend', declarations: ['flex-direction: column', 'gap: var(--space-md)'] },
   { at: PHONE, selector: '.chart-index, .chart-index tbody, .chart-index tr, .chart-index td', declarations: ['display: block'] },
   { at: PHONE, selector: '.chart-index thead', declarations: ['position: absolute', 'width: 1px', 'height: 1px', 'overflow: hidden', 'clip-path: inset(50%)', 'white-space: nowrap'] },
-  { at: PHONE, selector: '.chart-index tr', declarations: ['padding: var(--space-sm) 0', 'border-top: 1px solid var(--color-surface-edge-dark)'] },
+  { at: PHONE, selector: '.chart-index tr', declarations: ['position: relative', 'padding: var(--space-sm) 0 var(--space-sm) var(--space-xl)', 'border-top: 1px solid var(--color-surface-edge-dark)'] },
   { at: PHONE, selector: '.chart-index td', declarations: ['padding: 0', 'border-top: 0'] },
+  // The Notable cell stays first in each stacked row, in its left gutter.
+  { at: PHONE, selector: '.chart-index-notable', declarations: ['position: absolute', 'top: var(--space-sm)', 'left: 0'] },
   { at: PHONE, selector: '.chart-record', declarations: ['margin: 0 0 var(--space-md)', 'padding: var(--space-lg) var(--space-md) var(--space-xl)'] },
   { at: PHONE, selector: '.chart-record .panel-fields th, .chart-record .panel-fields td', declarations: ['display: block'] },
   { at: PHONE, selector: '.chart-record .panel-fields th', declarations: ['padding: var(--space-sm) 0 var(--space-hair)'] },
@@ -1303,6 +1352,8 @@ function auditChart(css: string, tsx: string): string[] {
   if ((script.match(/^import\s+'\.\/chart\.css'\s*;/gm) ?? []).length !== 1) failures.push('chart: chart.tsx does not import ./chart.css, once');
   if ((script.match(/^import\s+'\.\.\/shell\/focus-panel\.css'\s*;/gm) ?? []).length !== 1) failures.push('chart: chart.tsx does not import the panel’s stylesheet, once');
   if (!/<div className=\{className\} aria-hidden="true">\s*<svg\b/.test(script)) failures.push('chart: the plate is not an aria-hidden wrapper around its svg');
+  if (!/<div className="chart-legend" aria-hidden="true">/.test(script)) failures.push('chart: the legend is not aria-hidden — it decodes the aria-hidden plate');
+  if (!/<td className="chart-index-notable">\s*<svg className="chart-glyph"[^>]*\brole="img" aria-label=\{row\.notable\.label\}/.test(script)) failures.push('chart: the Notable cell is not an image named by the model');
   if (/\bstyle=\{/.test(script)) failures.push('chart: an inline style — the treatment is the stylesheet’s');
   if (/\b(?:fill|stroke)=/.test(script)) failures.push('chart: a colour on the plate’s markup — fill and stroke are the stylesheet’s');
   return failures;
@@ -1331,7 +1382,18 @@ test('chart: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('  color: var(--color-ink-lift-dark);\n}', '  color: var(--color-ink-lift-dark);\n  text-transform: uppercase;\n}'), /^chart: text-transform/],
     [(s) => s.replace('  stroke: var(--color-stroke-near-dark);\n', '  stroke: var(--color-stroke-active-dark);\n'), /`\.chart-marker` lacks `stroke: var\(--color-stroke-near-dark\)`/],
     [(s) => s.replace('  background: var(--color-surface-raised-dark);\n', ''), /`\.chart-record` lacks `background: var\(--color-surface-raised-dark\)`/],
-    [(s) => `${s}\n.chart-ring {\n  stroke: var(--color-stroke-near-dark);\n}\n`, /^chart: the unlisted rule `\.chart-ring`$/],
+    // The Deep/Shallow signal (4.4) is the Ring alone, undashed, unfilled, at stroke-near.
+    [(s) => s.replace('  fill: none;\n  stroke: var(--color-stroke-near-dark);\n  stroke-width: var(--stroke-hairline);', '  fill: var(--color-stroke-near-dark);\n  stroke: var(--color-stroke-near-dark);\n  stroke-width: var(--stroke-hairline);'), /`\.chart-ring` lacks `fill: none`/],
+    [(s) => s.replace('  fill: none;\n  stroke: var(--color-stroke-near-dark);', '  fill: none;\n  stroke: var(--color-stroke-active-dark);'), /`\.chart-ring` lacks `stroke: var\(--color-stroke-near-dark\)`/],
+    [(s) => s.replace('  stroke-width: var(--stroke-hairline);\n}\n\n.chart-glyph', '  stroke-width: var(--stroke-hairline);\n  stroke-dasharray: 2 2;\n}\n\n.chart-glyph'), /`\.chart-ring` carries the unlisted `stroke-dasharray: 2 2`/],
+    [(s) => s.replace('  stroke: var(--color-stroke-near-dark);\n  stroke-width: var(--stroke-hairline);\n}\n\n.chart-glyph', '  stroke: var(--color-stroke-near-dark);\n  stroke-width: var(--stroke-body-near);\n}\n\n.chart-glyph'), /`\.chart-ring` lacks `stroke-width: var\(--stroke-hairline\)`/],
+    [(s) => s.replace('.chart-legend {\n  display: flex;', '.chart-legend {\n  display: none;'), /`\.chart-legend` sets display: none/],
+    [(s) => s.replace('  .chart-legend {\n    flex-direction: column;', '  .chart-legend {\n    display: none;\n    flex-direction: column;'), /`@media \(max-width: 640px\) \.chart-legend` sets display: none/],
+    [(s) => s.replace('.chart-index th:first-child {\n  white-space: nowrap;\n}\n', ''), /`\.chart-index th:first-child` is missing/],
+    [(s) => `${s}\n.deep .chart-marker {\n  transform: scale(1.4);\n}\n`, /^chart: the unlisted rule `\.deep \.chart-marker`$/m],
+    [(s) => `${s}\n.chart-halo {\n  stroke: var(--color-stroke-near-dark);\n}\n`, /^chart: the unlisted rule `\.chart-halo`$/m],
+    [(s) => s.replace('  .chart-index-notable {\n    position: absolute;', '  .chart-index-notable {\n    display: none;\n    position: absolute;'), /`@media \(max-width: 640px\) \.chart-index-notable` sets display: none/],
+    [(s) => s.replace('  color: var(--color-ink-label-dark);\n}\n\n.chart-legend-entry', '  color: var(--color-ink-label-dark);\n  text-transform: uppercase;\n}\n\n.chart-legend-entry'), /^chart: text-transform/m],
   ];
   for (const [mutate, message] of cssCases) {
     const mutated = mutate(css);
@@ -1344,6 +1406,9 @@ test('chart: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('<div className={className} aria-hidden="true">', '<div className={className}>'), /the plate is not an aria-hidden wrapper/],
     [(s) => s.replace('<div className="chart" ', '<div className="chart" style={{ overflow: \'hidden\' }} '), /an inline style/],
     [(s) => s.replace('<circle key={circle.key} className={circle.className}', '<circle key={circle.key} className={circle.className} fill="white"'), /a colour on the plate’s markup/],
+    [(s) => s.replace('<div className="chart-legend" aria-hidden="true">', '<div className="chart-legend">'), /the legend is not aria-hidden/],
+    [(s) => s.replace('role="img" aria-label={row.notable.label}', 'aria-hidden="true"'), /the Notable cell is not an image named by the model/],
+    [(s) => s.replace('<circle className="chart-ring"', '<circle className="chart-ring" stroke="white"'), /a colour on the plate’s markup/],
   ];
   for (const [mutate, message] of tsxCases) {
     const mutated = mutate(tsx);
