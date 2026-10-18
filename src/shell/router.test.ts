@@ -3,8 +3,9 @@
  * against an injected `RouteHistory` and position hooks (the Focus rows against
  * the real navigation store), `browserHistory()` against stubbed `window`
  * globals, and source scans pinning `router.ts`'s purity, the colophon host's
- * lazy edge, and the shell's callers of `advanceScroll` — each driven red by a
- * mutation of the real file.
+ * lazy edge, the fallback host's (4.3) and the chart reached from it alone, and
+ * the shell's callers of `advanceScroll` — each driven red by a mutation of the
+ * real file.
  */
 
 import { strict as assert } from 'node:assert';
@@ -28,6 +29,7 @@ import { advanceScroll, focusProject, navigationStore, resetNavigation } from '.
 const SHELL = fileURLToPath(new URL('.', import.meta.url));
 const ROUTER_TS = join(SHELL, 'router.ts');
 const COLOPHON_HOST_TSX = join(SHELL, 'colophon-host.tsx');
+const FALLBACK_HOST_TSX = join(SHELL, 'fallback-host.tsx');
 const COLOPHON_TSX = fileURLToPath(new URL('../colophon/colophon.tsx', import.meta.url));
 
 interface Entry {
@@ -556,6 +558,95 @@ test('the colophon is reached only from src/shell/colophon-host.tsx, and holds o
   assert.doesNotMatch(colophon, /shell\/|motion-preference|reducedMotion/, 'no shell, no preference');
   assert.equal((colophon.match(/<h1\b/g) ?? []).length, 1, 'one <h1>');
   assert.match(colophon, /export\s+default\s+function\s+Colophon\(\)/, 'a default export for lazy()');
+});
+
+// --- The chart's lazy edge (4.3) -------------------------------------------------------------
+
+/**
+ * `fallback-host.tsx`, the colophon host's twin: `lazy(() => import('../render-fallback/chart.tsx'))`
+ * — the one import of the chart anywhere — behind an error boundary that logs
+ * and renders `null`, around `<Suspense fallback={null}>`, the artifact handed
+ * through and its shape restated (a type-only import of the chart is an edge the
+ * boundary gate forbids). Nothing static from the chart, no render-scene.
+ */
+function auditFallbackHost(source: string): string[] {
+  const code = stripComments(source);
+  const failures: string[] = [];
+  if (!/const\s+Chart\s*=\s*lazy\(\s*\(\s*\)\s*=>\s*import\(\s*'\.\.\/render-fallback\/chart\.tsx'\s*\)\s*\)\s*;/.test(code)) {
+    failures.push("the chart is not lazy(() => import('../render-fallback/chart.tsx'))");
+  }
+  if ((code.match(/\bimport\s*\(/g) ?? []).length !== 1) failures.push('the host holds other than one dynamic import');
+  if (/^\s*import\s[^\n]*from\s*'\.\.\/render-fallback\//m.test(code)) failures.push('the chart is imported statically');
+  if (/render-scene|colophon\//.test(code)) failures.push('the fallback host reaches another surface');
+  const tags = (code.match(/<(?:FallbackBoundary|Suspense|Chart)\b[^>]*>/g) ?? []).map((tag) => tag.replace(/^<(\w+)[\s\S]*$/, '$1'));
+  if (JSON.stringify(tags) !== JSON.stringify(['FallbackBoundary', 'Suspense', 'Chart'])) {
+    failures.push(`the nesting is ${JSON.stringify(tags)}, not boundary, Suspense, Chart`);
+  }
+  if (!/<Chart\s+artifact=\{\s*artifact\s*\}\s*\/>/.test(code)) failures.push('the chart is not handed the artifact');
+  if (!/export\s+function\s+FallbackHost\(\s*\{\s*artifact\s*\}\s*:\s*FallbackHostProps\s*\)/.test(code)) failures.push('the host does not take the artifact as its one prop');
+  if (!/interface\s+FallbackHostArtifact\b/.test(code)) failures.push('the artifact shape is not restated');
+  const shape = /interface\s+FallbackHostArtifact[\s\S]*?\n\}/.exec(code);
+  if (shape !== null && /\n\s+(?!readonly)[a-zA-Z_]+\s*[?:]/.test(shape[0])) failures.push('a member of the restated shape is not readonly');
+  if (!/<Suspense\s+fallback=\{\s*null\s*\}\s*>/.test(code)) failures.push('the suspense edge shows something while loading');
+  if (!/static\s+getDerivedStateFromError\s*\(/.test(code)) failures.push('the boundary does not stop the unmount');
+  if (!/\bcomponentDidCatch\s*\([^)]*\)\s*:\s*void\s*\{\s*console\.error\(/.test(code)) failures.push('a failed chart is not logged');
+  if (!/this\.state\.failed\s*\?\s*null\s*:/.test(code)) failures.push('a failed chart does not render null');
+  if (/retry|setTimeout|setInterval|location\.reload/.test(code)) failures.push('a failed chart is retried');
+  return failures;
+}
+
+test('the fallback host is a lazy edge behind a logging boundary, handing the artifact through', () => {
+  assert.deepEqual(auditFallbackHost(readFileSync(FALLBACK_HOST_TSX, 'utf8')), []);
+});
+
+test('the fallback host audit rejects the real host with any one guarantee removed', () => {
+  const real = readFileSync(FALLBACK_HOST_TSX, 'utf8').replace(/\r\n/g, '\n');
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['a static import', (s) => s.replace("const Chart = lazy(() => import('../render-fallback/chart.tsx'));", "import Chart from '../render-fallback/chart.tsx';")],
+    ['the scene instead', (s) => s.replace("import('../render-fallback/chart.tsx')", "import('../render-scene/scene.tsx')")],
+    ['a second import', (s) => `${s}\nvoid import('../render-fallback/chart.tsx');\n`],
+    ['the boundary inside Suspense', (s) => s.replace(/<FallbackBoundary>\s*<Suspense fallback=\{null\}>\s*<Chart artifact=\{artifact\} \/>\s*<\/Suspense>\s*<\/FallbackBoundary>/, '<Suspense fallback={null}>\n      <FallbackBoundary>\n        <Chart artifact={artifact} />\n      </FallbackBoundary>\n    </Suspense>')],
+    ['a loading copy', (s) => s.replace(/(\n\s*)<Suspense fallback=\{null\}>/, '$1<Suspense fallback={<p>loading</p>}>')],
+    ['not logged', (s) => s.replace(/console\.error\(/, 'void (')],
+    ['a failure rendered', (s) => s.replace('this.state.failed ? null :', 'this.state.failed ? this.props.children :')],
+    ['retried', (s) => s.replace('return { failed: true };', 'setTimeout(() => location.reload(), 1000);\n    return { failed: true };')],
+    ['the artifact dropped', (s) => s.replace('<Chart artifact={artifact} />', '<Chart artifact={{ clients: [] }} />')],
+    ['a mutable member', (s) => s.replace('readonly timeAxis: number;', 'timeAxis: number;')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
+    assert.notDeepEqual(auditFallbackHost(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
+/**
+ * The shipped source files outside `src/render-fallback/` importing from it —
+ * statically, by type or dynamically — by path under `src/`. A specifier is the
+ * reach; the directory named in a string elsewhere (the boundary table's README
+ * citations) is not.
+ */
+function chartReachers(files: Readonly<Record<string, string>>): string[] {
+  return Object.entries(files)
+    .filter(([path]) => !path.startsWith('render-fallback/'))
+    .filter(([, source]) => /(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s*)['"][^'"]*render-fallback\//m.test(stripComments(source)))
+    .map(([path]) => path)
+    .sort();
+}
+
+test('render-fallback is reached only from src/shell/fallback-host.tsx', () => {
+  const src = fileURLToPath(new URL('..', import.meta.url));
+  const files = Object.fromEntries(
+    sourceFilesUnder(src)
+      .filter((path) => !isTestFile(path))
+      .map((path) => [path.slice(src.length).replace(/\\/g, '/'), readFileSync(path, 'utf8')]),
+  );
+  assert.deepEqual(chartReachers(files), ['shell/fallback-host.tsx']);
+  // A second reach is red, whether static, dynamic or from the root.
+  assert.deepEqual(chartReachers({ ...files, 'App.tsx': `import Chart from './render-fallback/chart.tsx';\n${files['App.tsx'] ?? ''}` }), ['App.tsx', 'shell/fallback-host.tsx']);
+  assert.deepEqual(chartReachers({ ...files, 'shell/mount.tsx': `${files['shell/mount.tsx'] ?? ''}\nvoid import('../render-fallback/chart.tsx');\n` }), ['shell/fallback-host.tsx', 'shell/mount.tsx']);
+  // Prose naming it is not a reach.
+  assert.deepEqual(chartReachers({ ...files, 'shell/state.ts': `// see src/render-fallback/\n${files['shell/state.ts'] ?? ''}` }), ['shell/fallback-host.tsx']);
 });
 
 // --- Who writes scrollProgress from the shell --------------------------------------------

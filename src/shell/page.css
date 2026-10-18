@@ -1,13 +1,15 @@
 /*
- * The page (3.9): one full-bleed void, edge to edge, that never scrolls. Every
- * colour is a token custom property from `src/tokens/tokens.css`; there is no
- * literal length here. `identity-audit.test.ts` holds each declaration.
+ * The page (3.9): one full-bleed void, edge to edge. Every colour is a token
+ * custom property from `src/tokens/tokens.css`; there is no literal length here.
+ * `identity-audit.test.ts` holds each declaration.
  *
  * The document's own white and its default margin are what the greybox showed
  * around the scene; the ground is `surface-base`, the same token the canvas
- * clears to, so the page and the scene are one surface. Nothing on the page
- * scrolls the document: the Rail reads the wheel over the scene, and the panel
- * scrolls itself (`overflow-y: auto` on `#focus-panel`).
+ * clears to, so the page and the scene are one surface. While the scene host is
+ * in the document nothing scrolls it: the Rail reads the wheel over the scene,
+ * and the panel scrolls itself (`overflow-y: auto` on `#focus-panel`). The lock
+ * is scoped to that page (4.3): the flat chart is a conventional document and
+ * scrolls natively, as the Colophon does.
  *
  * The scene host is fixed to the viewport and the canvas fills it (`scene.tsx`,
  * `100%` by `100%`). The chrome (`z-index` 1) and the panel (`z-index` 2) are
@@ -19,8 +21,12 @@
 html,
 body {
   margin: 0;
-  overflow: hidden;
   background: var(--color-surface-base-dark);
+}
+
+html:has(.scene-host),
+html:has(.scene-host) body {
+  overflow: hidden;
 }
 
 /*

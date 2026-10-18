@@ -1,0 +1,205 @@
+/**
+ * The flat star chart, rendered (4.3): the surface every phone, every machine
+ * without WebGL2 and every `/chart` visitor reads.
+ *
+ * **A mapping, and nothing else.** The order, both plates' geometry, the records
+ * and the fragment rule live in `chart-model.ts`, which is pure and executed
+ * under `node --test`. This file cannot be loaded by that runner (`.tsx`), so it
+ * is kept thin enough that reading it suffices, and `chart-model.test.ts` scans
+ * it: no sort, no filter, no conditional operator.
+ *
+ * A conventional document, top to bottom: the `<h1>` (the identity line), the
+ * plate twice — across for a wide window, down for a narrow one, `chart.css`
+ * showing one by width — the index table (Client, Project as a link to its
+ * record, Role, Dates), then a `<section>` per Client (`<h2>`, its entity ID as
+ * the `id`) holding an `<article>` per Project (its entity ID as the `id`, the
+ * title an `<h3>`). The plates are `aria-hidden`: the table and the records
+ * repeat every word they draw.
+ *
+ * The records mirror the scene panel's markup (`src/shell/focus-panel.tsx`) and
+ * take its classes from `focus-panel.css`, so the voice, the lift and the rule
+ * line read identically on both surfaces. The dates are a fourth row of the
+ * field table: `start`, the separator, `end` — two elements, so an ongoing
+ * engagement's `null` end draws nothing.
+ *
+ * **The fragment** is read once, when the chart is attached: a ref callback —
+ * the commit-time hook that needs no import from `react`, which would tie this
+ * chunk to the mount's — makes one call to the model's `landOnFragment`,
+ * handing it the element, `location.hash`, the chart's IDs,
+ * `document.getElementById` and the module's `WeakSet` of landed roots. The
+ * decision is the model's and is executed by `chart-model.test.ts`: a Client or
+ * Project the fragment names is scrolled into view, anything else scrolls
+ * nothing, and a re-attached ref (a development double mount) does not scroll
+ * twice.
+ */
+
+import { IDENTITY_LINE } from '../shell/chrome-model.ts';
+import { FIELD_LABELS, type PanelReading, type PanelRun } from '../shell/panel-model.ts';
+import { CHART_LABELS, buildChart, landOnFragment, type ChartArtifact, type ChartDates, type ChartRecord, type Plate, type RecordBlock } from './chart-model.ts';
+import '../shell/focus-panel.css';
+import './chart.css';
+
+/** The chart roots already landed on, so the fragment is honoured once per chart. */
+const landed = new WeakSet<object>();
+
+/** What the chart needs: the artifact, passed by `App` through the fallback host. */
+export interface ChartProps {
+  readonly artifact: ChartArtifact;
+}
+
+export default function Chart({ artifact }: ChartProps) {
+  const chart = buildChart(artifact);
+  return (
+    <div className="chart" ref={(element) => landOnFragment(element, window.location.hash, chart.ids, (id) => document.getElementById(id), landed)}>
+      <h1 className="chart-heading">{IDENTITY_LINE}</h1>
+      <PlateView plate={chart.across} className="chart-plate chart-plate-across" />
+      <PlateView plate={chart.down} className="chart-plate chart-plate-down" />
+      <table className="chart-index">
+        <thead>
+          <tr>
+            <th scope="col">{CHART_LABELS.client}</th>
+            <th scope="col">{CHART_LABELS.project}</th>
+            <th scope="col">{FIELD_LABELS.role}</th>
+            <th scope="col">{CHART_LABELS.dates}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {chart.rows.map((row) => (
+            <tr key={row.id}>
+              <td className="chart-index-client">{row.client}</td>
+              <td className="chart-index-project">
+                <a href={row.href}>{row.title}</a>
+              </td>
+              <td className="chart-index-role">{row.role}</td>
+              <td className="chart-index-dates">
+                <Dates dates={row.dates} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {chart.sections.map((section) => (
+        <section key={section.id} id={section.id} className="chart-section">
+          <h2 className="chart-client">{section.name}</h2>
+          {section.records.map((record) => (
+            <Record key={record.id} record={record} />
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+interface PlateViewProps {
+  readonly plate: Plate;
+  readonly className: string;
+}
+
+/** One plate: lines, then marks, then labels, every colour and stroke from `chart.css`. */
+function PlateView({ plate, className }: PlateViewProps) {
+  return (
+    <div className={className} aria-hidden="true">
+      <svg viewBox={plate.viewBox} focusable="false">
+        {plate.lines.map((line) => (
+          <line key={line.key} className={line.className} x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} />
+        ))}
+        {plate.circles.map((circle) => (
+          <circle key={circle.key} className={circle.className} cx={circle.cx} cy={circle.cy} r={circle.r} />
+        ))}
+        {plate.labels.map((label) => (
+          <text key={label.key} className={label.className} x={label.x} y={label.y} textAnchor={label.anchor}>
+            {label.text}
+          </text>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+/** An engagement's dates: start, the separator, end — an ongoing end draws nothing. */
+function Dates({ dates }: { readonly dates: ChartDates }) {
+  return (
+    <>
+      <span>{dates.start}</span> – <span>{dates.end}</span>
+    </>
+  );
+}
+
+/** One Project's record: the scene panel's blocks, in its order. */
+function Record({ record }: { readonly record: ChartRecord }) {
+  return (
+    <article id={record.id} className="chart-record">
+      {record.blocks.map((block) => (
+        <RecordBlockView key={block.kind} block={block} dates={record.dates} />
+      ))}
+    </article>
+  );
+}
+
+function RecordBlockView({ block, dates }: { readonly block: RecordBlock; readonly dates: ChartDates }) {
+  switch (block.kind) {
+    case 'kicker':
+      return <p className="panel-kicker">{block.text}</p>;
+    case 'title':
+      return <h3 className="panel-title">{block.text}</h3>;
+    case 'reading':
+      return (
+        <div className="panel-reading">
+          <Reading reading={block.reading} />
+        </div>
+      );
+    case 'fields':
+      return (
+        <table className="panel-fields">
+          <tbody>
+            {block.rows.map((row) => (
+              <tr key={row.label}>
+                <th scope="row">{row.label}</th>
+                <td>{row.value}</td>
+              </tr>
+            ))}
+            <tr>
+              <th scope="row">{CHART_LABELS.dates}</th>
+              <td>
+                <Dates dates={dates} />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      );
+    case 'skills':
+      return (
+        <ul className="panel-skills" aria-label="Skills">
+          {block.items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      );
+  }
+}
+
+/** The reading position: the Notable's paragraphs on a Deep Project, the rule line on a Shallow one. */
+function Reading({ reading }: { readonly reading: PanelReading }) {
+  switch (reading.kind) {
+    case 'rule':
+      return <p className="panel-rule">{reading.text}</p>;
+    case 'notable':
+      return reading.paragraphs.map((runs, index) => (
+        <p key={index} className="panel-prose">
+          {runs.map((run, at) => (
+            <Run key={at} run={run} />
+          ))}
+        </p>
+      ));
+  }
+}
+
+/** One run of a paragraph: the lifted constraint sentence in `panel-lift`, any other as text. */
+function Run({ run }: { readonly run: PanelRun }) {
+  switch (run.lifted) {
+    case true:
+      return <span className="panel-lift">{run.text}</span>;
+    case false:
+      return run.text;
+  }
+}
