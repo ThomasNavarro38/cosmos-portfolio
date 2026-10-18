@@ -24,8 +24,21 @@
  *   line longer for each line a wrapped label adds), labels running right and
  *   wrapped to the plate's width.
  *
- * Every Project marker is one size and one class: no Deep/Shallow mark, no
- * ring (story 4.4), and no year marks (date navigation is story 4.5).
+ * Every Project marker is one size and one class, Deep or Shallow, and there
+ * are no year marks (date navigation is story 4.5).
+ *
+ * **The Deep/Shallow signal** (4.4). There is no Moon on a flat chart, so the
+ * Ring alone carries it, read from the artifact's `isDeep` and nothing else
+ * (no `content.notable` presence, no classification), through three redundant
+ * structural channels: a `chart-ring` circle at `RING_R = 2.2 × MARKER_R`
+ * around a Deep Project's marker on both plates (DESIGN.md
+ * `components.ring-notable`); the same ring glyph in the index table's first
+ * `Notable` column (`IndexRow.notable.kind`, `ring` or `plain`); and that
+ * glyph's accessible name (`Carries a notable` / `No notable`). The marker
+ * itself is identical for both, and a Deep Project's leader starts beyond its
+ * Ring (`RING_R + 3`, against a Shallow one's `MARKER_R + 3`), as the scene's
+ * leader starts beyond a Deep Planet's Ring. `legend` is the two entries drawn
+ * once under the plates: what the Ring is, and what its absence is.
  *
  * **The records are the scene panel's** (AD-3). Each Project's blocks are
  * `buildPanel(artifact, id).blocks` minus the release button, so the kicker, the
@@ -43,8 +56,12 @@
 import { buildPanel, type PanelArtifact, type PanelArtifactClient, type PanelArtifactProject, type PanelBlock } from '../shell/panel-model.ts';
 import { tokens } from '../tokens/tokens.ts';
 
-/** The chart's own visible copy: the index table's headers (Role is `FIELD_LABELS.role`). */
-export const CHART_LABELS = { client: 'Client', project: 'Project', dates: 'Dates' } as const;
+/**
+ * The chart's own copy: the index table's headers (Role is `FIELD_LABELS.role`),
+ * the legend's two phrases, and the Notable glyph's two accessible names
+ * (`carries` doubles as the Deep one; `none` is announced, never drawn).
+ */
+export const CHART_LABELS = { notable: 'Notable', client: 'Client', project: 'Project', dates: 'Dates', carries: 'Carries a notable', doesNot: 'Does not', none: 'No notable' } as const;
 
 /** A Project as the chart reads it: the panel's slice, plus its time-axis scalar and its dates. */
 export interface ChartArtifactProject extends PanelArtifactProject {
@@ -87,9 +104,35 @@ export interface ChartSection {
   readonly records: readonly ChartRecord[];
 }
 
+/** Ring or plain: whether a Project's mark carries the Ring, as the model emits it. */
+export type NotableKind = 'ring' | 'plain';
+
+/** An index row's Notable cell: the glyph's kind and its accessible name. */
+export interface NotableCell {
+  readonly kind: NotableKind;
+  readonly label: string;
+}
+
+/** One entry of the legend: a glyph and its phrase. */
+export interface LegendEntry {
+  readonly kind: NotableKind;
+  readonly text: string;
+}
+
+/** A glyph's frame: a square viewBox, its centre, the marker's radius and the Ring's. */
+export interface Glyph {
+  readonly size: number;
+  readonly viewBox: string;
+  readonly centre: number;
+  readonly markerR: number;
+  readonly ringR: number;
+}
+
 /** One row of the index table. */
 export interface IndexRow {
   readonly id: string;
+  /** The first column: the ring glyph on a Deep row, the plain marker on a Shallow one. */
+  readonly notable: NotableCell;
   /** The record's anchor: `#` and the entity ID, so a fragment names an entity. */
   readonly href: string;
   readonly client: string;
@@ -113,7 +156,7 @@ export interface PlateLine {
 export interface PlateCircle {
   readonly key: string;
   readonly entity: string;
-  readonly className: 'chart-star' | 'chart-star-core' | 'chart-marker';
+  readonly className: 'chart-star' | 'chart-star-core' | 'chart-marker' | 'chart-ring';
   readonly cx: number;
   readonly cy: number;
   readonly r: number;
@@ -147,6 +190,8 @@ export interface ChartModel {
   readonly across: Plate;
   readonly down: Plate;
   readonly rows: readonly IndexRow[];
+  /** The legend's two entries, ring first. */
+  readonly legend: readonly LegendEntry[];
   readonly sections: readonly ChartSection[];
   /** Every entity a fragment may name: the Clients, then the Projects, in reading order. */
   readonly ids: readonly string[];
@@ -162,6 +207,54 @@ export const DOWN = { width: 350, stemX: 40, top: 32, edge: 8, firstStep: 46, pr
 export const STAR_R = 11;
 export const CORE_R = 1.7;
 export const MARKER_R = 7;
+
+/**
+ * The Ring's radius as a share of its marker's: DESIGN.md
+ * `components.ring-notable`'s `radiusRatio`, restated here because
+ * `render-fallback/` may not import the scene's `RING_RADIUS_RATIO`.
+ */
+export const RING_RATIO = 2.2;
+
+/** One decimal: the plate's coordinates, without float noise. */
+const round = (value: number): number => Math.round(value * 10) / 10;
+
+/** The Ring around a Deep Project's marker. */
+export const RING_R = round(RING_RATIO * MARKER_R);
+
+/** The gap between a mark's outer edge and the start of its leader. */
+const LEADER_GAP = 3;
+
+/** A glyph frame of `size`, its marker at `markerR` and the Ring at the plate's ratio. */
+function glyphOf(size: number, markerR: number): Glyph {
+  return { size, viewBox: `0 0 ${size} ${size}`, centre: size / 2, markerR, ringR: round(RING_RATIO * markerR) };
+}
+
+/** The index row's glyph: a 20-unit frame, the marker at 4 and the Ring at 8.8. */
+export const INDEX_GLYPH = glyphOf(20, 4);
+
+/** The legend's glyph: the plate's own marks, at the plate's own size. */
+export const LEGEND_GLYPH = glyphOf(40, MARKER_R);
+
+/** A Project's kind of mark, from the artifact's `isDeep` and nothing else. */
+const notableKindOf = (project: { readonly isDeep: boolean }): NotableKind => (project.isDeep ? 'ring' : 'plain');
+
+/** How far a Project's leader starts from its mark's centre: beyond the Ring on a Deep one. */
+const leaderStartOf = (project: { readonly isDeep: boolean }): number => (project.isDeep ? RING_R : MARKER_R) + LEADER_GAP;
+
+/** The Ring at a Deep Project's marker; nothing for a Shallow one. */
+function ringsOf(project: { readonly id: string; readonly isDeep: boolean }, cx: number, cy: number): PlateCircle[] {
+  return project.isDeep ? [{ key: `chart-ring:${project.id}`, entity: project.id, className: 'chart-ring', cx, cy, r: RING_R }] : [];
+}
+
+const NOTABLE_CELLS: Readonly<Record<NotableKind, NotableCell>> = {
+  ring: { kind: 'ring', label: CHART_LABELS.carries },
+  plain: { kind: 'plain', label: CHART_LABELS.none },
+};
+
+const LEGEND: readonly LegendEntry[] = [
+  { kind: 'ring', text: CHART_LABELS.carries },
+  { kind: 'plain', text: CHART_LABELS.doesNot },
+];
 
 /** The across plate's two label depths below the row, as baselines; the first Project takes the deeper. */
 const LABEL_DEPTHS = [52, 34] as const;
@@ -199,9 +292,6 @@ const PROJECT_TYPE = labelTypeOf(tokens.typography['scene-label-project']);
 function widthOf(text: string, type: LabelType): number {
   return round([...text].length * type.size * (CHAR_EM + type.tracking));
 }
-
-/** One decimal: the plate's coordinates, without float noise. */
-const round = (value: number): number => Math.round(value * 10) / 10;
 
 const clamp = (value: number, low: number, high: number): number => Math.min(Math.max(value, low), high);
 
@@ -256,8 +346,8 @@ export function acrossPlate(artifact: ChartArtifact): Plate {
     projects.forEach((project, index) => {
       const x = xAt(project.timeAxis);
       const baseline = y + LABEL_DEPTHS[index % 2 === 0 ? 0 : 1];
-      circles.push({ key: `chart-marker:${project.id}`, entity: project.id, className: 'chart-marker', cx: x, cy: y, r: MARKER_R });
-      lines.push({ key: `chart-leader:${project.id}`, entity: project.id, className: 'chart-leader', x1: x, y1: y + MARKER_R + 3, x2: x, y2: baseline - PROJECT_TYPE.size - 2 });
+      circles.push({ key: `chart-marker:${project.id}`, entity: project.id, className: 'chart-marker', cx: x, cy: y, r: MARKER_R }, ...ringsOf(project, x, y));
+      lines.push({ key: `chart-leader:${project.id}`, entity: project.id, className: 'chart-leader', x1: x, y1: round(y + leaderStartOf(project)), x2: x, y2: baseline - PROJECT_TYPE.size - 2 });
       labels.push(centred(project.id, 'chart-label-project', x, baseline, project.content.project, PROJECT_TYPE));
     });
   });
@@ -314,8 +404,8 @@ export function downPlate(artifact: ChartArtifact): Plate {
     let lastLines = 1;
     for (const project of projects) {
       const text = wrap(project.content.project, PROJECT_TYPE, width - edge - projectX);
-      circles.push({ key: `chart-marker:${project.id}`, entity: project.id, className: 'chart-marker', cx: stemX, cy: y, r: MARKER_R });
-      lines.push({ key: `chart-leader:${project.id}`, entity: project.id, className: 'chart-leader', x1: stemX + MARKER_R + 3, y1: y, x2: projectX - 5, y2: y });
+      circles.push({ key: `chart-marker:${project.id}`, entity: project.id, className: 'chart-marker', cx: stemX, cy: y, r: MARKER_R }, ...ringsOf(project, stemX, y));
+      lines.push({ key: `chart-leader:${project.id}`, entity: project.id, className: 'chart-leader', x1: round(stemX + leaderStartOf(project)), y1: y, x2: projectX - 5, y2: y });
       text.forEach((line, index) => labels.push(label(project.id, 'chart-label-project', projectX, y + 4 + index * lineStep, line, PROJECT_TYPE, index)));
       last = y;
       lastLines = text.length;
@@ -340,6 +430,7 @@ export function buildChart(artifact: ChartArtifact): ChartModel {
   const rows: IndexRow[] = order.flatMap(({ client, projects }) =>
     projects.map((project) => ({
       id: project.id,
+      notable: NOTABLE_CELLS[notableKindOf(project)],
       href: `#${project.id}`,
       client: client.name,
       title: project.content.project,
@@ -351,6 +442,7 @@ export function buildChart(artifact: ChartArtifact): ChartModel {
     across: acrossPlate(artifact),
     down: downPlate(artifact),
     rows,
+    legend: LEGEND,
     sections,
     ids: [...sections.map((section) => section.id), ...rows.map((row) => row.id)],
   };

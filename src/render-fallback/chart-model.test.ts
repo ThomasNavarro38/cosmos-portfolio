@@ -1,7 +1,8 @@
 /**
  * The flat star chart's rules, executed (4.3): the present-to-past order and its
  * ties, content parity against the committed artifact, the Shallow rule line,
- * both plates' geometry, the fragment target — and two source scans that hold
+ * both plates' geometry, the Deep/Shallow Ring (4.4) on both plates and in the
+ * index, the fragment target — and two source scans that hold
  * what `node --test` cannot load: the directory's purity (no solve field, no
  * `src/data`/`derive`/`render-scene`/Three, no canvas) and `chart.tsx`'s
  * thinness (no sort, filter, `if` or conditional operator). Each scan is driven over
@@ -19,7 +20,11 @@ import {
   ACROSS,
   CHART_LABELS,
   DOWN,
+  INDEX_GLYPH,
+  LEGEND_GLYPH,
   MARKER_R,
+  RING_R,
+  RING_RATIO,
   buildChart,
   fragmentTarget,
   labelTypeOf,
@@ -35,6 +40,7 @@ import {
 const DIR = fileURLToPath(new URL('.', import.meta.url));
 const CHART_TSX = join(DIR, 'chart.tsx');
 const ARTIFACT_JSON = fileURLToPath(new URL('../../generated/layout.generated.json', import.meta.url));
+const DESIGN_MD = fileURLToPath(new URL('../../_bmad-output/planning-artifacts/ux-designs/ux-cosmos-portfolio-2026-09-01/DESIGN.md', import.meta.url));
 
 const committed = (): ChartArtifact => JSON.parse(readFileSync(ARTIFACT_JSON, 'utf8')) as ChartArtifact;
 
@@ -152,6 +158,7 @@ test('parity: every committed Client and Project is drawn, each record holding e
     id: 'project:sncf/client-referential',
     href: '#project:sncf/client-referential',
     client: 'SNCF',
+    notable: { kind: 'ring', label: 'Carries a notable' },
     title: 'Client referential',
     role: projects.find(({ project: inner }) => inner.id === 'project:sncf/client-referential')?.project.content.role,
     dates: { start: '2022-08', end: '2024-02' },
@@ -179,8 +186,8 @@ test('Shallow: the reading position is EDITORIAL_RULE, string-equal; Deep: the N
   assert.ok(chart.sections.flatMap((section) => section.records).every((record) => record.blocks.every((block) => (block.kind as string) !== 'release')), 'no release on the chart');
 });
 
-test('the copy labels are the three table headers', () => {
-  assert.deepEqual(CHART_LABELS, { client: 'Client', project: 'Project', dates: 'Dates' });
+test('the copy labels: the four table headers, the two legend phrases, and the one accessible name never drawn', () => {
+  assert.deepEqual(CHART_LABELS, { notable: 'Notable', client: 'Client', project: 'Project', dates: 'Dates', carries: 'Carries a notable', doesNot: 'Does not', none: 'No notable' });
 });
 
 // --- The plates -------------------------------------------------------------
@@ -291,20 +298,173 @@ for (const [name, artifact] of [['the committed artifact', committed()], ['the t
   });
 }
 
-test('both plates draw every Project at one size and one class, and no Deep mark', () => {
-  const artifact = committed();
-  for (const plate of [buildChart(artifact).across, buildChart(artifact).down]) {
-    // Each class is one of the eight the stylesheet treats; a ring or a Deep class is none of them.
-    const allowed: ReadonlySet<string> = new Set(['chart-baseline', 'chart-stem', 'chart-leader', 'chart-star', 'chart-star-core', 'chart-marker', 'chart-label-client', 'chart-label-project']);
-    const classes: string[] = [...plate.circles, ...plate.lines, ...plate.labels].map((item) => item.className);
-    assert.deepEqual(classes.filter((name) => !allowed.has(name)), []);
-    // Deep and Shallow markers are drawn alike: same class, same radius.
-    const deep = new Set(artifact.clients.flatMap((entry) => entry.projects.filter((inner) => inner.isDeep).map((inner) => inner.id)));
-    assert.ok(deep.size > 0, 'the committed artifact holds a Deep Project');
-    assert.deepEqual(new Set(markers(plate).filter((marker) => deep.has(marker.entity)).map((marker) => `${marker.className} ${marker.r}`)), new Set([`chart-marker ${MARKER_R}`]));
-    assert.equal(new Set(markers(plate).map((marker) => marker.r)).size, 1);
+/** One `components.<name>` block of DESIGN.md's frontmatter, as `key: value` text pairs (the scene's `notable-model.test.ts` reads it alike). */
+function designComponent(name: string): Record<string, string> {
+  const text = readFileSync(DESIGN_MD, 'utf8').replace(/\r\n/g, '\n');
+  const block = new RegExp(`\\n  ${name}:\\n((?:    [^\\n]*\\n)+)`).exec(text)?.[1] ?? '';
+  return Object.fromEntries([...block.matchAll(/^    ([\w-]+):\s*(.+?)\s*$/gm)].map((match) => [match[1] ?? '', (match[2] ?? '').replace(/^"|"$/g, '')]));
+}
+
+test('the Ring is DESIGN.md’s ring-notable: 2.2 × the marker, stroke-near, hairline, undashed — and the glyphs keep the ratio', () => {
+  const ring = designComponent('ring-notable');
+  assert.equal(Number(ring.radiusRatio), RING_RATIO);
+  assert.equal(RING_RATIO, 2.2);
+  assert.equal(RING_R, 15.4);
+  assert.ok(Math.abs(RING_R / MARKER_R - 2.2) < 1e-9, 'RING_R / MARKER_R is 2.2');
+  assert.equal(ring.stroke, '{colors.stroke-near-dark}', 'chart.css strokes .chart-ring at stroke-near');
+  assert.equal(ring.strokeWidth, '{components.stroke-weight.hairline}', 'chart.css strokes .chart-ring at the hairline');
+  assert.equal(ring.dash, 'none');
+  assert.deepEqual(INDEX_GLYPH, { size: 20, viewBox: '0 0 20 20', centre: 10, markerR: 4, ringR: 8.8 });
+  assert.deepEqual(LEGEND_GLYPH, { size: 40, viewBox: '0 0 40 40', centre: 20, markerR: MARKER_R, ringR: RING_R });
+  for (const glyph of [INDEX_GLYPH, LEGEND_GLYPH]) {
+    assert.ok(Math.abs(glyph.ringR / glyph.markerR - 2.2) < 1e-9, `${glyph.viewBox}: the plate's ratio`);
+    assert.ok(glyph.centre + glyph.ringR <= glyph.size, `${glyph.viewBox}: the Ring fits its frame`);
   }
 });
+
+const rings = (plate: Plate) => plate.circles.filter((circle) => circle.className === 'chart-ring');
+const leaderOf = (plate: Plate, id: string) => plate.lines.find((line) => line.className === 'chart-leader' && line.entity === id);
+
+/** The committed artifact with one Project's `isDeep` inverted. */
+function flipped(artifact: ChartArtifact, id: string): ChartArtifact {
+  return { clients: artifact.clients.map((entry) => ({ ...entry, projects: entry.projects.map((inner) => (inner.id === id ? { ...inner, isDeep: !inner.isDeep } : inner)) })) };
+}
+
+/** The Deep Project IDs of an artifact, read off `isDeep`. */
+const deepIds = (artifact: ChartArtifact): Set<string> => new Set(artifact.clients.flatMap((entry) => entry.projects.filter((inner) => inner.isDeep).map((inner) => inner.id)));
+
+test('Deep/Shallow (committed): exactly one ring per plate, at the one Deep Project, and one ringed index row', () => {
+  const artifact = committed();
+  assert.deepEqual([...deepIds(artifact)], ['project:sncf/client-referential']);
+  const chart = buildChart(artifact);
+  for (const plate of [chart.across, chart.down]) {
+    const ringed = rings(plate);
+    assert.deepEqual(ringed.map((circle) => circle.entity), ['project:sncf/client-referential']);
+    const marker = markers(plate).find((circle) => circle.entity === 'project:sncf/client-referential');
+    assert.ok(marker !== undefined);
+    assert.deepEqual([ringed[0]?.cx, ringed[0]?.cy, ringed[0]?.r], [marker.cx, marker.cy, RING_R], 'concentric with its marker, at RING_R');
+  }
+  assert.deepEqual(chart.rows.filter((row) => row.notable.kind === 'ring').map((row) => row.id), ['project:sncf/client-referential']);
+  for (const row of chart.rows) {
+    assert.deepEqual(row.notable, row.id === 'project:sncf/client-referential' ? { kind: 'ring', label: 'Carries a notable' } : { kind: 'plain', label: 'No notable' }, row.id);
+  }
+  assert.deepEqual(chart.legend, [{ kind: 'ring', text: 'Carries a notable' }, { kind: 'plain', text: 'Does not' }]);
+});
+
+test('Deep/Shallow: the signal is isDeep alone — a notable on a Shallow Project rings nothing, a Deep one without content.notable is ringed', () => {
+  const chart = buildChart({
+    clients: [client('client:a', 1, [project('project:a/deep', 1, {}, true), project('project:a/shallow', 0.5, { notable: 'Prose on a Shallow entry.' })])],
+  });
+  for (const plate of [chart.across, chart.down]) assert.deepEqual(rings(plate).map((circle) => circle.entity), ['project:a/deep']);
+  assert.deepEqual(chart.rows.map((row) => [row.id, row.notable.kind, row.notable.label]), [['project:a/deep', 'ring', 'Carries a notable'], ['project:a/shallow', 'plain', 'No notable']]);
+});
+
+test('Deep/Shallow: both plates draw every marker at one size, one class — only the Ring differs', () => {
+  const artifact = committed();
+  const deep = deepIds(artifact);
+  assert.ok(deep.size > 0, 'the committed artifact holds a Deep Project');
+  for (const plate of [buildChart(artifact).across, buildChart(artifact).down]) {
+    // Each class is one of the nine the stylesheet treats; a Deep class or a halo is none of them.
+    const allowed: ReadonlySet<string> = new Set(['chart-baseline', 'chart-stem', 'chart-leader', 'chart-star', 'chart-star-core', 'chart-marker', 'chart-ring', 'chart-label-client', 'chart-label-project']);
+    const classes: string[] = [...plate.circles, ...plate.lines, ...plate.labels].map((item) => item.className);
+    assert.deepEqual(classes.filter((name) => !allowed.has(name)), []);
+    assert.deepEqual(new Set(markers(plate).map((marker) => `${marker.className} ${marker.r}`)), new Set([`chart-marker ${MARKER_R}`]), 'Deep and Shallow markers are drawn alike');
+    assert.equal(markers(plate).length, artifact.clients.reduce((count, entry) => count + entry.projects.length, 0), 'one marker per Project, Deep or Shallow');
+    assert.ok(rings(plate).every((ring) => deep.has(ring.entity)), 'a ring only on a Deep Project');
+  }
+});
+
+test('Deep/Shallow: flipping one isDeep changes only that Project’s ring, leader start and index cell', () => {
+  const artifact = committed();
+  const base = buildChart(artifact);
+  for (const id of ['project:sncf/client-referential', 'project:decathlon/store-labelling-generation']) {
+    const after = buildChart(flipped(artifact, id));
+    for (const which of ['across', 'down'] as const) {
+      const [a, b] = [base[which], after[which]];
+      assert.deepEqual([b.width, b.height, b.viewBox], [a.width, a.height, a.viewBox], `${which}: the frame is unchanged`);
+      assert.deepEqual(b.labels, a.labels, `${which}: every label is unchanged`);
+      const notRing = (plate: Plate) => plate.circles.filter((circle) => circle.className !== 'chart-ring');
+      assert.deepEqual(notRing(b), notRing(a), `${which}: every Star and marker is unchanged`);
+      assert.deepEqual(rings(b).filter((ring) => ring.entity !== id), rings(a).filter((ring) => ring.entity !== id), `${which}: every other ring is unchanged`);
+      assert.notEqual(rings(b).some((ring) => ring.entity === id), rings(a).some((ring) => ring.entity === id), `${which}: ${id}'s ring toggles`);
+      assert.deepEqual(b.lines.filter((line) => line.entity !== id), a.lines.filter((line) => line.entity !== id), `${which}: every other line is unchanged`);
+      const [la, lb] = [leaderOf(a, id), leaderOf(b, id)];
+      assert.ok(la !== undefined && lb !== undefined);
+      assert.deepEqual([lb.x2, lb.y2], [la.x2, la.y2], `${which}: the leader's end is unchanged`);
+      // The start moves along the leader, outward on Deep, by the Ring's margin over the marker.
+      const shift = Math.hypot(lb.x1 - la.x1, lb.y1 - la.y1);
+      assert.ok(Math.abs(shift - (RING_R - MARKER_R)) < 1e-9, `${which}: ${id}'s leader start moves by RING_R − MARKER_R, not ${shift}`);
+      const toward = Math.hypot(lb.x2 - lb.x1, lb.y2 - lb.y1) - Math.hypot(la.x2 - la.x1, la.y2 - la.y1);
+      const deepAfter = rings(b).some((ring) => ring.entity === id);
+      assert.ok(Math.abs(toward - (deepAfter ? -1 : 1) * (RING_R - MARKER_R)) < 1e-9, `${which}: ${id}'s leader shortens on Deep, lengthens on Shallow`);
+    }
+    assert.deepEqual(after.rows.filter((row) => row.id !== id), base.rows.filter((row) => row.id !== id), 'every other index row is unchanged');
+    const cellOf = (chart: ChartModel) => chart.rows.find((row) => row.id === id)?.notable;
+    const cells = { ring: { kind: 'ring', label: 'Carries a notable' }, plain: { kind: 'plain', label: 'No notable' } } as const;
+    const before = cellOf(base);
+    assert.ok(before !== undefined);
+    assert.deepEqual(cellOf(after), before.kind === 'ring' ? cells.plain : cells.ring, `${id}'s cell flips, kind and label`);
+    // The flipped record's reading position follows isDeep (the panel's own branch); every other record is untouched.
+    const others = (chart: ChartModel) => chart.sections.map((section) => section.records.filter((record) => record.id !== id));
+    assert.deepEqual(others(after), others(base), 'every other record is unchanged');
+  }
+});
+
+/** The shortest distance from a point to a line segment. */
+function segmentDistance(px: number, py: number, line: { readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number }): number {
+  const [dx, dy] = [line.x2 - line.x1, line.y2 - line.y1];
+  const length = dx * dx + dy * dy;
+  const t = length === 0 ? 0 : Math.min(Math.max(((px - line.x1) * dx + (py - line.y1) * dy) / length, 0), 1);
+  return Math.hypot(px - (line.x1 + t * dx), py - (line.y1 + t * dy));
+}
+
+/** The Deep fixture: every Project ringed, so each geometry row is checked with the most rings. */
+const ALL_DEEP = (artifact: ChartArtifact): ChartArtifact => ({ clients: artifact.clients.map((entry) => ({ ...entry, projects: entry.projects.map((inner) => ({ ...inner, isDeep: true })) })) });
+
+for (const [name, artifact] of [['the committed artifact', committed()], ['the committed artifact, every Project Deep', ALL_DEEP(committed())], ['the tied fixture, every Project Deep', ALL_DEEP(TIED)]] as const) {
+  test(`Ring geometry (${name}): each leader starts beyond its mark, the Ring inside the viewBox and clear of every other mark, line and label`, () => {
+    const chart = buildChart(artifact);
+    const deep = deepIds(artifact);
+    const owner = new Map(artifact.clients.flatMap((entry) => entry.projects.map((inner) => [inner.id, entry.id] as const)));
+    for (const [which, plate] of [['across', chart.across], ['down', chart.down]] as const) {
+      assert.deepEqual(outside(plate), [], `${which}: everything, rings counted, inside the viewBox`);
+      for (const marker of markers(plate)) {
+        const leader = leaderOf(plate, marker.entity);
+        assert.ok(leader !== undefined, marker.entity);
+        const start = Math.hypot(leader.x1 - marker.cx, leader.y1 - marker.cy);
+        const end = Math.hypot(leader.x2 - marker.cx, leader.y2 - marker.cy);
+        const floor = deep.has(marker.entity) ? RING_R : MARKER_R;
+        assert.ok(start >= floor, `${which}: ${marker.entity}'s leader starts at ${start}, beyond ${floor}`);
+        assert.ok(end - start >= 1, `${which}: ${marker.entity}'s leader shows at least one unit (${end - start})`);
+      }
+      for (const ring of rings(plate)) {
+        // A mark at the ring's own centre is a tie in timeAxis (4.3 draws tied Projects on one spot), not a ring collision.
+        const elsewhere = (circle: Plate['circles'][number]) => circle.cx !== ring.cx || circle.cy !== ring.cy;
+        // Every other Star, marker and Ring: the core dot sits inside its Star, so the Star stands for it.
+        for (const other of plate.circles.filter((circle) => circle.entity !== ring.entity && circle.className !== 'chart-star-core' && elsewhere(circle))) {
+          assert.ok(Math.hypot(ring.cx - other.cx, ring.cy - other.cy) >= ring.r + other.r, `${which}: ${ring.key} is clear of ${other.key}`);
+        }
+        // Every line but the ring's own leader and its own Client's baseline or stem, which run to its marker by design.
+        const own = new Set([ring.entity, owner.get(ring.entity)]);
+        for (const line of plate.lines.filter((candidate) => !own.has(candidate.entity))) {
+          const distance = segmentDistance(ring.cx, ring.cy, line);
+          assert.ok(distance >= ring.r, `${which}: ${ring.key} is clear of ${line.key} (${distance})`);
+        }
+        for (const label of plate.labels) {
+          const b = box(label);
+          const apart = ring.cx + ring.r <= b.left || b.right <= ring.cx - ring.r || ring.cy + ring.r <= b.top || b.bottom <= ring.cy - ring.r;
+          assert.ok(apart, `${which}: ${ring.key} is clear of ${label.key}`);
+        }
+      }
+      const boxes = plate.labels.map((label) => [label.key, box(label)] as const);
+      for (const [i, [keyA, a]] of boxes.entries()) {
+        for (const [keyB, b] of boxes.slice(i + 1)) {
+          assert.ok(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top, `${which}: ${keyA} and ${keyB} overlap`);
+        }
+      }
+    }
+  });
+}
 
 test('the across plate draws one baseline per Client and no stem; the down plate one stem per Client and no baseline', () => {
   for (const artifact of [committed(), TIED]) {
@@ -491,6 +651,7 @@ test('the plates draw 1:1: chart.css holds each plate’s svg at its viewBox wid
   const css = readFileSync(join(DIR, 'chart.css'), 'utf8').replace(/\r\n/g, '\n');
   assert.match(css, new RegExp(`\\.chart-plate-across svg \\{\\n  min-width: ${ACROSS.width}px;\\n  max-width: ${ACROSS.width}px;\\n\\}`), 'the across plate is held at its width');
   assert.match(css, new RegExp(`\\.chart-plate-down svg \\{\\n  max-width: ${DOWN.width}px;`), 'the down plate is capped at its width');
+  assert.match(css, new RegExp(`\\.chart-index-notable \\{\\n  width: ${INDEX_GLYPH.size}px;\\n\\}`), 'the Notable cell asks for the index glyph’s width');
 });
 
 /**
@@ -540,7 +701,7 @@ test('chart.tsx draws the model: the h1 identity line, the plates aria-hidden, t
   assert.match(code, /<h2 className="chart-client">\{section\.name\}<\/h2>/);
   assert.match(code, /<article id=\{record\.id\}/, 'a record carries its entity ID');
   assert.match(code, /<h3 className="panel-title">\{block\.text\}<\/h3>/);
-  assert.equal((code.match(/aria-hidden="true"/g) ?? []).length, 1, 'the plate wrapper, once, rendered for both plates');
+  assert.equal((code.match(/aria-hidden="true"/g) ?? []).length, 2, 'the plate wrapper, once, rendered for both plates; and the legend');
   assert.match(code, /<a href=\{row\.href\}>/);
   assert.match(
     code,
@@ -554,5 +715,59 @@ test('chart.tsx draws the model: the h1 identity line, the plates aria-hidden, t
   );
   assert.equal((code.match(/<Dates dates=/g) ?? []).length, 2, 'the index row and the record fields both draw Dates');
   assert.match(code, /^import '\.\.\/shell\/focus-panel\.css';$/m);
+  // The Deep/Shallow signal (4.4): the Notable column first, its glyph an image named by the model, the legend after both plates.
+  const headers = [...code.matchAll(/<th scope="col">\{(\w+\.\w+)\}<\/th>/g)].map((match) => match[1]);
+  assert.deepEqual(headers, ['CHART_LABELS.notable', 'CHART_LABELS.client', 'CHART_LABELS.project', 'FIELD_LABELS.role', 'CHART_LABELS.dates'], 'Notable, Client, Project, Role, Dates');
+  assert.match(code, /<tr key=\{row\.id\}>\s*<td className="chart-index-notable">\s*<svg className="chart-glyph" viewBox=\{INDEX_GLYPH\.viewBox\} width=\{INDEX_GLYPH\.size\} height=\{INDEX_GLYPH\.size\} role="img" aria-label=\{row\.notable\.label\} focusable="false">\s*<Glyph glyph=\{INDEX_GLYPH\} kind=\{row\.notable\.kind\} \/>/, 'the first cell of each row: the glyph, an image named by the model');
+  assert.match(code, /switch \(kind\) \{\s*case 'ring':[\s\S]*?className="chart-marker"[\s\S]*?className="chart-ring"[\s\S]*?case 'plain':[\s\S]*?className="chart-marker"/, 'ring versus plain is the model’s kind, mapped by switch, reusing the plate’s classes');
+  assert.match(code, /<PlateView plate=\{chart\.down\} className="chart-plate chart-plate-down" \/>\s*<div className="chart-legend" aria-hidden="true">\s*\{chart\.legend\.map\(/, 'the legend once, after both plates, before the table, aria-hidden');
+  assert.match(code, /<div className="chart-legend" aria-hidden="true">[\s\S]*?<\/div>\s*<table className="chart-index">/, 'the legend sits above the table');
+  assert.equal((code.match(/className="chart-ring"/g) ?? []).length, 1, 'one ring mapping, used by the index glyph and the legend alike');
+  assert.doesNotMatch(code, /isDeep|content\.notable|row\.notable\b(?!\.)/, 'the renderer reads no isDeep and no notable: the kind is the model’s');
+  assert.deepEqual(auditGlyphMarkup(code), []);
+});
+
+/**
+ * What `chart.tsx` must hold of the Deep/Shallow glyph: `No notable` announced
+ * and never drawn, the legend's phrases and the glyph's names reaching the DOM
+ * only through the model, and the glyph's radii and the legend's kind bound to
+ * the model's values rather than written in.
+ */
+function auditGlyphMarkup(code: string): string[] {
+  const failures: string[] = [];
+  const spoken = /CHART_LABELS\.(none|carries|doesNot)\b/.exec(code);
+  if (spoken !== null) failures.push(`chart.tsx names CHART_LABELS.${spoken[1]} — it reaches the DOM only through row.notable.label or entry.text`);
+  const ring = /case 'ring':([\s\S]*?)case 'plain':([\s\S]*?)\n {2}\}/.exec(code);
+  if (ring === null) failures.push('chart.tsx maps no ring and plain case');
+  const [ringCase, plainCase] = [ring?.[1] ?? '', ring?.[2] ?? ''];
+  if (!/<circle className="chart-marker" cx=\{glyph\.centre\} cy=\{glyph\.centre\} r=\{glyph\.markerR\} \/>\s*<circle className="chart-ring" cx=\{glyph\.centre\} cy=\{glyph\.centre\} r=\{glyph\.ringR\} \/>/.test(ringCase)) {
+    failures.push('chart.tsx: the ring glyph is not the marker at glyph.markerR inside the Ring at glyph.ringR');
+  }
+  if (!/^\s*return <circle className="chart-marker" cx=\{glyph\.centre\} cy=\{glyph\.centre\} r=\{glyph\.markerR\} \/>;\s*$/.test(plainCase)) {
+    failures.push('chart.tsx: the plain glyph is not the marker alone at glyph.markerR');
+  }
+  if (!/<Glyph glyph=\{LEGEND_GLYPH\} kind=\{entry\.kind\} \/>\s*<\/svg>\s*<span>\{entry\.text\}<\/span>/.test(code)) failures.push('chart.tsx: a legend entry does not draw the model’s kind and text');
+  if (!/<Glyph glyph=\{INDEX_GLYPH\} kind=\{row\.notable\.kind\} \/>/.test(code)) failures.push('chart.tsx: an index glyph does not draw the model’s kind');
+  return failures;
+}
+
+test('chart.tsx glyph markup: each binding replaced fails with its own line', () => {
+  const code = stripComments(readFileSync(CHART_TSX, 'utf8').replace(/\r\n/g, '\n'));
+  assert.deepEqual(auditGlyphMarkup(code), []);
+  const cases: readonly (readonly [(source: string) => string, RegExp])[] = [
+    [(s) => s.replace('<span>{entry.text}</span>', '<span>{entry.text}</span>\n            <span>{CHART_LABELS.none}</span>'), /names CHART_LABELS\.none/],
+    [(s) => s.replace('<span>{entry.text}</span>', '<span>{CHART_LABELS.doesNot}</span>'), /names CHART_LABELS\.doesNot/],
+    [(s) => s.replace('aria-label={row.notable.label}', 'aria-label={CHART_LABELS.carries}'), /names CHART_LABELS\.carries/],
+    [(s) => s.replace('<circle className="chart-marker" cx={glyph.centre} cy={glyph.centre} r={glyph.markerR} />\n          <circle className="chart-ring"', '<circle className="chart-marker" cx={glyph.centre} cy={glyph.centre} r={glyph.ringR} />\n          <circle className="chart-ring"'), /the ring glyph is not/],
+    [(s) => s.replace('<circle className="chart-ring" cx={glyph.centre} cy={glyph.centre} r={glyph.ringR} />', '<circle className="chart-ring" cx={glyph.centre} cy={glyph.centre} r={glyph.markerR} />'), /the ring glyph is not/],
+    [(s) => s.replace('return <circle className="chart-marker" cx={glyph.centre} cy={glyph.centre} r={glyph.markerR} />;', 'return <circle className="chart-marker" cx={glyph.centre} cy={glyph.centre} r={glyph.ringR} />;'), /the plain glyph is not/],
+    [(s) => s.replace('<Glyph glyph={LEGEND_GLYPH} kind={entry.kind} />', '<Glyph glyph={LEGEND_GLYPH} kind="ring" />'), /a legend entry does not draw/],
+    [(s) => s.replace('<Glyph glyph={INDEX_GLYPH} kind={row.notable.kind} />', '<Glyph glyph={INDEX_GLYPH} kind="plain" />'), /an index glyph does not draw/],
+  ];
+  for (const [mutate, message] of cases) {
+    const mutated = mutate(code);
+    assert.notEqual(mutated, code, `the mutation ${String(message)} must apply`);
+    assert.match(auditGlyphMarkup(mutated).join('\n'), message);
+  }
   assert.match(code, /^import '\.\/chart\.css';$/m);
 });

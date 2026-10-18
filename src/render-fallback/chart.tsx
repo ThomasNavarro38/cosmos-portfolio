@@ -10,11 +10,21 @@
  *
  * A conventional document, top to bottom: the `<h1>` (the identity line), the
  * plate twice — across for a wide window, down for a narrow one, `chart.css`
- * showing one by width — the index table (Client, Project as a link to its
- * record, Role, Dates), then a `<section>` per Client (`<h2>`, its entity ID as
+ * showing one by width — the legend, the index table (Notable, Client, Project
+ * as a link to its record, Role, Dates), then a `<section>` per Client (`<h2>`, its entity ID as
  * the `id`) holding an `<article>` per Project (its entity ID as the `id`, the
  * title an `<h3>`). The plates are `aria-hidden`: the table and the records
  * repeat every word they draw.
+ *
+ * **The Deep/Shallow signal** (4.4) is the model's, drawn three ways: the
+ * plate's `chart-ring` circles; each index row's first cell, a
+ * `svg` glyph of `role="img"`, named by `row.notable.label`; and that name. The
+ * glyph maps `row.notable.kind` by `switch` — `ring` draws the marker and the
+ * Ring, `plain` the marker alone — in the plate's own `chart-marker` and
+ * `chart-ring` classes, so one rule colours both. The legend (the same glyph at
+ * the plate's size, beside each phrase) sits once under the plates and is
+ * `aria-hidden`: it decodes the `aria-hidden` plate, and the Notable column
+ * already carries the signal for assistive technology.
  *
  * The records mirror the scene panel's markup (`src/shell/focus-panel.tsx`) and
  * take its classes from `focus-panel.css`, so the voice, the lift and the rule
@@ -35,7 +45,20 @@
 
 import { IDENTITY_LINE } from '../shell/chrome-model.ts';
 import { FIELD_LABELS, type PanelReading, type PanelRun } from '../shell/panel-model.ts';
-import { CHART_LABELS, buildChart, landOnFragment, type ChartArtifact, type ChartDates, type ChartRecord, type Plate, type RecordBlock } from './chart-model.ts';
+import {
+  CHART_LABELS,
+  INDEX_GLYPH,
+  LEGEND_GLYPH,
+  buildChart,
+  landOnFragment,
+  type ChartArtifact,
+  type ChartDates,
+  type ChartRecord,
+  type Glyph as GlyphFrame,
+  type NotableKind,
+  type Plate,
+  type RecordBlock,
+} from './chart-model.ts';
 import '../shell/focus-panel.css';
 import './chart.css';
 
@@ -54,9 +77,20 @@ export default function Chart({ artifact }: ChartProps) {
       <h1 className="chart-heading">{IDENTITY_LINE}</h1>
       <PlateView plate={chart.across} className="chart-plate chart-plate-across" />
       <PlateView plate={chart.down} className="chart-plate chart-plate-down" />
+      <div className="chart-legend" aria-hidden="true">
+        {chart.legend.map((entry) => (
+          <div key={entry.kind} className="chart-legend-entry">
+            <svg className="chart-glyph" viewBox={LEGEND_GLYPH.viewBox} width={LEGEND_GLYPH.size} height={LEGEND_GLYPH.size} focusable="false">
+              <Glyph glyph={LEGEND_GLYPH} kind={entry.kind} />
+            </svg>
+            <span>{entry.text}</span>
+          </div>
+        ))}
+      </div>
       <table className="chart-index">
         <thead>
           <tr>
+            <th scope="col">{CHART_LABELS.notable}</th>
             <th scope="col">{CHART_LABELS.client}</th>
             <th scope="col">{CHART_LABELS.project}</th>
             <th scope="col">{FIELD_LABELS.role}</th>
@@ -66,6 +100,11 @@ export default function Chart({ artifact }: ChartProps) {
         <tbody>
           {chart.rows.map((row) => (
             <tr key={row.id}>
+              <td className="chart-index-notable">
+                <svg className="chart-glyph" viewBox={INDEX_GLYPH.viewBox} width={INDEX_GLYPH.size} height={INDEX_GLYPH.size} role="img" aria-label={row.notable.label} focusable="false">
+                  <Glyph glyph={INDEX_GLYPH} kind={row.notable.kind} />
+                </svg>
+              </td>
               <td className="chart-index-client">{row.client}</td>
               <td className="chart-index-project">
                 <a href={row.href}>{row.title}</a>
@@ -114,6 +153,21 @@ function PlateView({ plate, className }: PlateViewProps) {
       </svg>
     </div>
   );
+}
+
+/** A Project's mark as a glyph: the marker, and the Ring around it on a Deep one — the kind is the model's. */
+function Glyph({ glyph, kind }: { readonly glyph: GlyphFrame; readonly kind: NotableKind }) {
+  switch (kind) {
+    case 'ring':
+      return (
+        <>
+          <circle className="chart-marker" cx={glyph.centre} cy={glyph.centre} r={glyph.markerR} />
+          <circle className="chart-ring" cx={glyph.centre} cy={glyph.centre} r={glyph.ringR} />
+        </>
+      );
+    case 'plain':
+      return <circle className="chart-marker" cx={glyph.centre} cy={glyph.centre} r={glyph.markerR} />;
+  }
 }
 
 /** An engagement's dates: start, the separator, end — an ongoing end draws nothing. */
