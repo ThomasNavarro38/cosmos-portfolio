@@ -20,8 +20,9 @@
  *   marker on a leader, alternating two depths by in-row index so neighbours
  *   in one row never share a line.
  * - **Down** (phone): the same chart transposed. Client stems stacked present
- *   first; each stem a Star and its name, then its Projects at a fixed step,
- *   labels running right and wrapped to the plate's width.
+ *   first; each stem a Star and its name, then its Projects a step apart (one
+ *   line longer for each line a wrapped label adds), labels running right and
+ *   wrapped to the plate's width.
  *
  * Every Project marker is one size and one class: no Deep/Shallow mark, no
  * ring (story 4.4), and no year marks (date navigation is story 4.5).
@@ -172,19 +173,27 @@ const LABEL_DEPTHS = [52, 34] as const;
  */
 const CHAR_EM = 0.6;
 
-/** A type role's size and tracking, in viewBox units (the plate is drawn about 1:1). */
-interface LabelType {
+/** A type role's size and tracking, in viewBox units (`chart.css` draws each plate 1:1). */
+export interface LabelType {
   readonly size: number;
   readonly tracking: number;
 }
 
-const typeOf = (role: 'scene-label-client' | 'scene-label-project'): LabelType => ({
-  size: Number.parseFloat(tokens.typography[role].fontSize),
-  tracking: Number.parseFloat(tokens.typography[role].letterSpacing),
-});
+/**
+ * A type token read as a label's size (px, one viewBox unit each) and tracking
+ * (em, a fraction of the size, which `widthOf` adds to the glyph's advance).
+ * Any other unit is refused: read as a bare number it would size every label
+ * wrongly, with nothing to say so.
+ */
+export function labelTypeOf(token: { readonly fontSize: string; readonly letterSpacing: string }): LabelType {
+  const size = /^(\d+(?:\.\d+)?)px$/.exec(token.fontSize);
+  const tracking = /^(-?\d*\.?\d+)em$/.exec(token.letterSpacing);
+  if (size === null || tracking === null) throw new Error(`a label's type is read in px and em, not ${token.fontSize} and ${token.letterSpacing}`);
+  return { size: Number(size[1]), tracking: Number(tracking[1]) };
+}
 
-const CLIENT_TYPE = typeOf('scene-label-client');
-const PROJECT_TYPE = typeOf('scene-label-project');
+const CLIENT_TYPE = labelTypeOf(tokens.typography['scene-label-client']);
+const PROJECT_TYPE = labelTypeOf(tokens.typography['scene-label-project']);
 
 /** A string's estimated width in a type role. */
 function widthOf(text: string, type: LabelType): number {

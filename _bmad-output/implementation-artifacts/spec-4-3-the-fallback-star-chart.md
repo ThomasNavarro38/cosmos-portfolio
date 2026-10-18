@@ -90,7 +90,7 @@ deferred: []
   - a purity scan of `src/render-fallback/*.ts{,x}`: no forbidden field, no `src/data`/`derive`/`render-scene`/`three` specifier, no `<canvas`;
   - a thin scan of `chart.tsx`: no `.sort(`, `.filter(`, `?`-ternary, `??`, `&&`, `||`.
 - [x] `src/render-fallback/chart-model.ts` -- `ChartArtifact`, `buildChart`, `acrossPlate`, `downPlate`, `fragmentTarget`. Pure, no React, no DOM.
-- [x] `src/render-fallback/chart.tsx` + `chart.css` -- default export `Chart({ artifact })`, mapping the model to header (`<h1>`), the two plates, the index table (Client, Project link `#id`, Role, Dates) and the Client sections of records. A mount effect scrolls to `fragmentTarget(location.hash, …)`. Phone rules follow the mock: plate swap, table rows stacked, field rows stacked.
+- [x] `src/render-fallback/chart.tsx` + `chart.css` -- default export `Chart({ artifact })`, mapping the model to header (`<h1>`), the two plates, the index table (Client, Project link `#id`, Role, Dates) and the Client sections of records. A ref callback on the chart root makes one call to the model's `landOnFragment` (which scrolls to `fragmentTarget(location.hash, …)` once per root), since a mount effect would need an import from `react`. Phone rules follow the mock: plate swap, table rows stacked, field rows stacked.
 - [x] `src/shell/fallback-host.tsx` -- lazy edge + boundary + restated artifact shape. `src/App.tsx`, `src/shell/page.css` -- as mapped.
 - [x] Audits as mapped. Repoint them red-then-green with mutation rows: App on fallback renders the host alone, page lock scoped to the scene host, chart.css exact declarations and contrast, copy allowlist, bundle chunk.
 - [x] Docs: `src/render-fallback/README.md`, `src/shell/README.md` (files table: `fallback-host.tsx`), `App.tsx` header, deferred-work 939/987 closed by 4.3.
@@ -100,11 +100,38 @@ deferred: []
 - Given any machine at `/chart`, when the page renders, then the document holds no `<canvas>`, headings run h1 → h2 → h3, and every Project title, Built text, Skill, and the Deep Project's every Notable paragraph appear as text.
 - Given every visible string on the surface, when the identity audit runs, then each is in the closed allowlist or is data, and the voice audit passes.
 
+### Review Findings
+
+- [x] [Review][Patch] Plate labels drawn off their token size between breakpoints — resolved (Thomas, 2026-10-18, option 1): each plate's SVG keeps its viewBox width; it is capped with `max-width` at that width, and above 640px it gets `min-width: 1160px` with `overflow-x: auto` on the frame, so labels draw 1:1 and the across plate scrolls sideways below about 1240px [src/render-fallback/chart.css:44]
+- [x] [Review][Patch] Sub-pixel breakpoint gap: both plates show between 640 and 640.02px [src/render-fallback/chart.css:166]
+- [x] [Review][Patch] The purity scan is a denylist, but the Always clause names an import allowlist: bare `react`, `../shell/state.ts` or `../shell/index-nav.css` would pass [src/render-fallback/chart-model.test.ts:401]
+- [x] [Review][Patch] The bundle assertion does not stop the chart chunk from reaching the mount chunk: the heavy-reach check flags only `render-scene` and react-dom [scripts/bundle-assertion.test.ts]
+- [x] [Review][Patch] Spec text drift: the en dash is a fourth `VISIBLE_COPY` entry; the down plate's Project step grows with wrapped lines; the fragment lands by a ref callback, not a mount effect; `wrap`/`centred` branch on content width (geometry, not classification) [_bmad-output/implementation-artifacts/spec-4-3-the-fallback-star-chart.md:43]
+- [x] [Review][Patch] `typeOf` drops units without checking them: the width estimate assumes `fontSize` in px and `letterSpacing` in em [src/render-fallback/chart-model.ts:181]
+- [x] [Review][Defer] Nothing renders `Chart` or `App` on `fallback`: the ids, index hrefs, fragment wiring and host-alone branch are checked only by source-text regexes [src/render-fallback/chart.tsx:53] — deferred, the same tooling gap as the 4.2 "App's text-only verification" deferral (`node --test` cannot load `.tsx`)
+- [x] [Review][Defer] Plate geometry has no fallback for a dense row (3+ Projects at close `timeAxis` put labels i and i+2 on one depth) or an over-long single word (overflows the down plate) [src/render-fallback/chart-model.ts:249] — deferred: today's data is clean, and the label-box and inside-viewBox tests on the committed artifact fail on such data before it can ship
+
 ## Spec Change Log
+
+- 2026-10-18, review of 7b78c2d. These amend the frozen contract by note; its text stands as approved.
+  - *Always, "New visible copy is limited to … `Client`, `Project` and `Dates`"*: `VISIBLE_COPY` also holds the en dash `'–'`. It is the Dates separator that the Always clause on dates requires (` – ` between two elements), admitted as copy in review loop 0. It is the separator itself, not new wording.
+  - *Always, "no conditional on a raw content field (AD-3)"*: `chart-model.ts` `wrap` and `centred` compare the *estimated width* of a Client name or Project title against the plate's room. That is geometry, not classification: no branch reads what the text says, only how long it is.
+  - *Always, "imports only `src/shell/` (`panel-model.ts`, `chrome-model.ts`, `focus-panel.css`) and `src/tokens/`"*: the purity scan now holds this as an allowlist (`PERMITTED_SPECIFIER` in `chart-model.test.ts`), plus the directory's own `chart-model.ts` and `chart.css`.
+  - *I/O matrix, desktop and phone width*: each plate draws 1:1. The across svg is held at 1160px and scrolls inside its frame below that. The down svg is capped at 350px. One media query decides the swap (Thomas's ruling D1, option 1).
 
 ## Review Triage Log
 
 - 2026-10-18, loop 0: three reviewers (Blind Hunter, Edge Case Hunter, Verification Gap). No intent_gap or bad_spec. Six patches applied red-then-green: the fragment landing moved into the model as `landOnFragment` and executed under `node --test`; `auditThin` bans `if (`; the purity scan bans `react-dom` and `colophon/`; the plate-lines test asserts what it names; a label-box non-intersection test on both plates; the en dash admitted as copy (`VISIBLE_COPY`) instead of as an edge separator everywhere. Four deferred (fragment focus, phone table semantics, chart scroll across history, non-text contrast of the index link). Rejected as by design: the fallback renders the chart alone and a failed chunk leaves an empty root (frozen matrix row "Chunk fails").
+
+- 2026-10-18, second pass on 7b78c2d: four reviewers (Blind Hunter, Edge Case Hunter, Verification Gap, Acceptance Auditor). One decision, ruled by Thomas: D1, option 1, each plate drawn 1:1. Six patches applied red-then-green:
+  - each plate drawn 1:1, the across plate scrolling inside its frame below 1160px, and the measure widened to 1242px so it fits exactly;
+  - the plate swap decided by one query, closing the 640–640.02px gap;
+  - the purity scan made an allowlist;
+  - the bundle assertion pins the chart chunk's closed module list and bars both lazy surfaces from reaching the mount's chunk;
+  - `labelTypeOf` refuses any unit other than px and em;
+  - the spec drift recorded in the Spec Change Log.
+
+  Verified in Chrome at 1400, 900, 640 and 390px. Two deferred: no render-level test of `Chart` or `App`, and no geometry fallback for a dense row or an over-long word. Thirty dismissed. Most fail on the artifact schema's guarantees (`timeAxis` in [0, 1], at least one Client and one Project each, unique IDs), are required by the spec, or were already deferred.
 
 ## Design Notes
 
@@ -112,7 +139,7 @@ deferred: []
 
 **Plate across** (viewBox 1160 wide): present at x≈260, past at x≈1120, with x = past − t·(past − present). There is one row per Client, about 110 apart. The Star sits about 44 left of its newest marker, its name above. The baseline hairline runs from the Star to the oldest marker. Each Project label sits below its marker on a leader, alternating two depths by in-row index.
 
-**Plate down** (viewBox 350 wide): Client stems stacked present-first. Each stem has a Star and name, then its Projects at a fixed step, labels running right. This follows the mock's transposition.
+**Plate down** (viewBox 350 wide): Client stems stacked present-first. Each stem has a Star and name, then its Projects at a step of `DOWN.projectStep`, grown by `DOWN.lineStep` per extra line when a label wraps so wrapped labels never meet. Labels run right. This follows the mock's transposition.
 
 ## Verification
 

@@ -1212,11 +1212,15 @@ const CHART_RULES: readonly CssRule[] = [
   {
     at: '',
     selector: '.chart',
-    declarations: ['box-sizing: border-box', 'max-width: 1240px', 'margin: 0 auto', 'padding: var(--space-xxl) var(--space-xl) var(--space-xxl)', 'color: var(--color-ink-prose-dark)', 'overflow-wrap: anywhere'],
+    declarations: ['box-sizing: border-box', 'max-width: 1242px', 'margin: 0 auto', 'padding: var(--space-xxl) var(--space-xl) var(--space-xxl)', 'color: var(--color-ink-prose-dark)', 'overflow-wrap: anywhere'],
   },
   { at: '', selector: '.chart-heading', declarations: ['margin: 0 0 var(--space-xxl)', ...CHART_TYPE('chrome'), 'color: var(--color-ink-label-dark)'] },
   { at: '', selector: '.chart-plate', declarations: ['border: 1px solid var(--color-surface-edge-dark)'] },
   { at: '', selector: '.chart-plate svg', declarations: ['display: block', 'width: 100%', 'height: auto'] },
+  { at: '', selector: '.chart-plate-across', declarations: ['overflow-x: auto'] },
+  { at: '', selector: '.chart-plate-across svg', declarations: ['min-width: 1160px', 'max-width: 1160px'] },
+  { at: '', selector: '.chart-plate-down', declarations: ['display: none'] },
+  { at: '', selector: '.chart-plate-down svg', declarations: ['max-width: 350px', 'margin: 0 auto'] },
   { at: '', selector: '.chart-baseline, .chart-stem', declarations: ['stroke: var(--color-stroke-rest-dark)', 'stroke-width: var(--stroke-hairline)'] },
   { at: '', selector: '.chart-leader', declarations: ['stroke: var(--color-stroke-rest-dark)', 'stroke-width: var(--stroke-hairline-leader)'] },
   { at: '', selector: '.chart-star', declarations: ['fill: var(--color-surface-base-dark)', 'stroke: var(--color-stroke-active-dark)', 'stroke-width: var(--stroke-body-client)'] },
@@ -1257,9 +1261,9 @@ const CHART_RULES: readonly CssRule[] = [
       'border-left: 1px solid var(--color-surface-edge-dark)',
     ],
   },
-  { at: '@media (min-width: 640.02px)', selector: '.chart-plate-down', declarations: ['display: none'] },
   { at: PHONE, selector: '.chart', declarations: ['padding: var(--space-lg) var(--space-md) var(--space-xxl)'] },
   { at: PHONE, selector: '.chart-plate-across', declarations: ['display: none'] },
+  { at: PHONE, selector: '.chart-plate-down', declarations: ['display: block'] },
   { at: PHONE, selector: '.chart-index, .chart-index tbody, .chart-index tr, .chart-index td', declarations: ['display: block'] },
   { at: PHONE, selector: '.chart-index thead', declarations: ['position: absolute', 'width: 1px', 'height: 1px', 'overflow: hidden', 'clip-path: inset(50%)', 'white-space: nowrap'] },
   { at: PHONE, selector: '.chart-index tr', declarations: ['padding: var(--space-sm) 0', 'border-top: 1px solid var(--color-surface-edge-dark)'] },
@@ -1271,8 +1275,12 @@ const CHART_RULES: readonly CssRule[] = [
   { at: '@media (forced-colors: active)', selector: '.chart-index a:focus-visible', declarations: ['outline: 1px solid CanvasText'] },
 ];
 
-/** The two rules that may hide an element: each plate, outside its own width. Both plates are `aria-hidden`. */
-const PLATE_SWAP = new Set(['@media (min-width: 640.02px) .chart-plate-down', '@media (max-width: 640px) .chart-plate-across']);
+/**
+ * The two rules that may hide an element: each plate, outside its own width.
+ * Both plates are `aria-hidden`. One query decides both, so no width — a
+ * fractional one under zoom included — shows both plates or neither.
+ */
+const PLATE_SWAP = new Set(['.chart-plate-down', '@media (max-width: 640px) .chart-plate-across']);
 
 /**
  * The chart's treatment: `chart.css` exactly, with the identity bans — `display:
@@ -1310,8 +1318,11 @@ test('chart: each guarantee removed fails with its own line', () => {
   const cssCases: readonly (readonly [(source: string) => string, RegExp])[] = [
     // A third `display: none`, on the index, or the plate swap at top level.
     [(s) => s.replace('  .chart-index thead {\n    position: absolute;', '  .chart-index thead {\n    display: none;\n    position: absolute;'), /`@media \(max-width: 640px\) \.chart-index thead` sets display: none/],
-    [(s) => s.replace('@media (min-width: 640.02px) {\n  .chart-plate-down {\n    display: none;\n  }\n}', '.chart-plate-down {\n  display: none;\n}'), /^chart: display: none/],
+    [(s) => s.replace('.chart-plate-down {\n  display: none;\n}', '@media (min-width: 640.02px) {\n  .chart-plate-down {\n    display: none;\n  }\n}'), /`@media \(min-width: 640\.02px\) \.chart-plate-down` sets display: none/],
     [(s) => s.replace('  .chart-plate-across {\n    display: none;\n  }\n', ''), /`@media \(max-width: 640px\) \.chart-plate-across` is missing/],
+    [(s) => s.replace('  .chart-plate-down {\n    display: block;\n  }\n', ''), /`@media \(max-width: 640px\) \.chart-plate-down` is missing/],
+    [(s) => s.replace('  min-width: 1160px;\n', ''), /`\.chart-plate-across svg` lacks `min-width: 1160px`/],
+    [(s) => s.replace('  overflow-x: auto;\n', ''), /`\.chart-plate-across` lacks `overflow-x: auto`/],
     [(s) => s.replace('  clip-path: inset(50%);\n', '  visibility: hidden;\n'), /^chart: visibility: hidden/],
     [(s) => s.replace('fill: var(--color-ink-lift-dark);', 'fill: #F2F2F4;'), /chart: a hex colour/],
     [(s) => s.replace('  border: 1px solid var(--color-surface-edge-dark);\n', '  border: 1px solid var(--color-surface-edge-dark);\n  border-radius: 4px;\n'), /chart: a radius, shadow or filter/],

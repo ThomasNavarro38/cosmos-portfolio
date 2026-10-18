@@ -1004,3 +1004,12 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-the-fallback-star-chart.md`
   summary: The identity audit checks the chart's new text roles against the page ground, but not the non-text indicators it draws there: the link underline and the focus outline/border, against the 3:1 floor (WCAG 1.4.11, 2.4.11).
   evidence: `src/identity-audit.test.ts` `ROLES` covers text roles; `src/render-fallback/chart.css:128-143` draws the index link's underline as a `border-bottom` in `--color-stroke-near-dark` and its `:focus-visible` outline in `--color-stroke-focus-dark`, with no contrast row for either.
+
+## Deferred from: code review of spec-4-3-the-fallback-star-chart.md (2026-10-18)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-3-the-fallback-star-chart.md`
+  summary: Nothing renders `Chart`, or `App` on the `fallback` surface. The DOM ids against `chart.ids`, the index `href`s resolving to elements, the ref-callback fragment wiring, and "the host alone on fallback" are checked only by source-text regexes.
+  evidence: `src/render-fallback/chart-model.test.ts` (`chart.tsx draws the model` regexes), `src/shell/panel-model.test.ts` `auditMount`; `node --test` cannot load `.tsx`. A `renderToStaticMarkup` script test would close it. This widens the 4.2 "App's text-only verification" deferral.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-3-the-fallback-star-chart.md`
+  summary: The plate geometry has no fallback for a dense row or an over-long word. Three or more Projects at close `timeAxis` in one row put labels i and i+2 on the same depth (`LABEL_DEPTHS[index % 2]`). A single word wider than the down plate's room overflows the viewBox.
+  evidence: `src/render-fallback/chart-model.ts:249`, `:259-274`. Today's committed data is clean. The label-box non-intersection and inside-viewBox tests run on the committed artifact, so data that triggers either case fails the suite instead of shipping.

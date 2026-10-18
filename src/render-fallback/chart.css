@@ -2,7 +2,8 @@
  * The flat star chart's treatment (4.3; the UX key screen `keyscreen-fallback.html`).
  * Every colour, family, size, weight and stroke is a token custom property from
  * `src/tokens/tokens.css`; the only literal lengths are the chart's measure, the
- * 1px rules (as the panel's), the focus outline and the clip pattern's 1px. No
+ * plates' widths, the 1px rules (as the panel's), the focus outline and the
+ * clip pattern's 1px. No
  * hue, no radius, no shadow, no glow and no vignette: the plate has no centre.
  * `identity-audit.test.ts` holds each declaration.
  *
@@ -11,16 +12,26 @@
  * left rule, the panel's own — and their rhythm on the page.
  *
  * Above 640px the across plate shows and the down plate is `display: none`;
- * at 640px and below, the reverse. Both are `aria-hidden` in the markup, so the
- * one hidden is no loss to the accessibility tree — and these are the only two
- * `display: none` the audit admits. At phone width the index table's rows stack
+ * at 640px and below, the reverse. One query decides both, so no width — a
+ * fractional one under zoom included — shows both plates or neither. Both are
+ * `aria-hidden` in the markup, so the one hidden is no loss to the
+ * accessibility tree — and these are the only two `display: none` the audit
+ * admits.
+ *
+ * Each plate draws 1:1, its svg at its viewBox width (`ACROSS.width`,
+ * `DOWN.width` in `chart-model.ts`), because the labels' type is a token size
+ * in viewBox units and their spacing is estimated at that size. The across
+ * plate is held at 1160px and its frame scrolls sideways below that; the
+ * measure (1160 + the 2 × `--space-xl` padding + the frame's two 1px rules) is
+ * the width at which it no longer has to. The down plate is capped at 350px and
+ * centred, and narrows below that on the narrowest phones. At phone width the index table's rows stack
  * (its header clipped, never removed) and the record's field rows stack, as the
  * key screen draws them.
  */
 
 .chart {
   box-sizing: border-box;
-  max-width: 1240px;
+  max-width: 1242px;
   margin: 0 auto;
   padding: var(--space-xxl) var(--space-xl) var(--space-xxl);
   color: var(--color-ink-prose-dark);
@@ -45,6 +56,24 @@
   display: block;
   width: 100%;
   height: auto;
+}
+
+.chart-plate-across {
+  overflow-x: auto;
+}
+
+.chart-plate-across svg {
+  min-width: 1160px;
+  max-width: 1160px;
+}
+
+.chart-plate-down {
+  display: none;
+}
+
+.chart-plate-down svg {
+  max-width: 350px;
+  margin: 0 auto;
 }
 
 .chart-baseline,
@@ -163,12 +192,6 @@
   border-left: 1px solid var(--color-surface-edge-dark);
 }
 
-@media (min-width: 640.02px) {
-  .chart-plate-down {
-    display: none;
-  }
-}
-
 @media (max-width: 640px) {
   .chart {
     padding: var(--space-lg) var(--space-md) var(--space-xxl);
@@ -176,6 +199,10 @@
 
   .chart-plate-across {
     display: none;
+  }
+
+  .chart-plate-down {
+    display: block;
   }
 
   .chart-index,
