@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 10-19-2026 09:08
+last_updated: 10-19-2026 16:16
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -88,7 +88,11 @@ development_status:
   4-4-the-deep-shallow-signal-on-a-flat-chart: done
   4-5-one-click-movement-between-surfaces: done
   4-6-performance-offers-never-forces: done
-  epic-4-retrospective: optional
+  4-7-the-render-harness: backlog
+  4-8-follow-up-review-of-stories-4-5-and-4-6: backlog
+  4-9-deferred-work-register-housekeeping: backlog
+  4-10-fallback-accessibility: backlog
+  epic-4-retrospective: done
 
   epic-5: backlog
   5-1-the-colophon-as-a-fourth-lazy-chunk: backlog
@@ -133,8 +137,8 @@ action_items:
     status: done
     resolution: "2026-10-12: story 3.12 — CareerSchema refines asOf against the latest
       duration.start; the artifact (v8) carries sourceDigest, and the gate fails naming
-      both hashes when career.json changed without a re-solve, and both values on an
-      asOf mismatch"
+      both hashes when career.json changed without a re-solve, and both values on
+      an asOf mismatch"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-4-gate-content-checks"
     epic: 1
@@ -142,9 +146,9 @@ action_items:
       empty Client, coincident Bodies"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-12: story 3.12 — checkContent (pre-write and at the gate) names a
-      wrong clientId, an isDeep disagreeing with content.notable via isDeepProject, and
-      coincident Bodies; an empty Client fails the schema naming its path"
+    resolution: "2026-10-12: story 3.12 — checkContent (pre-write and at the gate)
+      names a wrong clientId, an isDeep disagreeing with content.notable via isDeepProject,
+      and coincident Bodies; an empty Client fails the schema naming its path"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-5-bundle-assertion"
     epic: 1
@@ -162,9 +166,9 @@ action_items:
       R3F on render-fallback, cross-renderer edge, narrow src/types exemption to .d.ts"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-12: story 3.13 — derive bans three/R3F/drei/react/react-dom, ROOT_RULE
-      and shell add d3-force-3d, render-fallback adds R3F and drei, render-scene and
-      render-fallback never import each other, a non-declaration file under src/types/
+    resolution: "2026-10-12: story 3.13 — derive bans three/R3F/drei/react/react-dom,
+      ROOT_RULE and shell add d3-force-3d, render-fallback adds R3F and drei, render-scene
+      and render-fallback never import each other, a non-declaration file under src/types/
       fails; each pinned by a mutation test"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-7-boundary-parser-loud"
@@ -173,9 +177,9 @@ action_items:
       dynamic import specifiers"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-12: story 3.13 — findImports reports require, createRequire and a
-      non-literal import() as unresolvable; every governed non-test file fails on one;
-      src/data/README.md narrowed to literal specifiers"
+    resolution: "2026-10-12: story 3.13 — findImports reports require, createRequire
+      and a non-literal import() as unresolvable; every governed non-test file fails
+      on one; src/data/README.md narrowed to literal specifiers"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-8-constrain-empty-cases"
     epic: 1
@@ -184,8 +188,8 @@ action_items:
     owner: "Thomas"
     status: done
     resolution: "2026-10-12: story 3.12 — min(1) on CareerSchema.projects and on artifact
-      clients, destinations, dwell, shots, each with a message; each Client's projects already
-      carried min(1) and now names the empty Client"
+      clients, destinations, dwell, shots, each with a message; each Client's projects
+      already carried min(1) and now names the empty Client"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-9-client-slug-collision-warning"
     epic: 1
@@ -203,7 +207,10 @@ action_items:
       lens did not complete in the retro"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-12: story 3.14 — verification-gap pass over src/derive/*.test.ts by mutation probe (18 mutations); three survivors fixed test-only (mote-tier split at 0.5, MIN_SHOT_DISTANCE, slug separator trim), golden-only constants deferred; findings in spec-3-14"
+    resolution: "2026-10-12: story 3.14 — verification-gap pass over src/derive/*.test.ts
+      by mutation probe (18 mutations); three survivors fixed test-only (mote-tier
+      split at 0.5, MIN_SHOT_DISTANCE, slug separator trim), golden-only constants
+      deferred; findings in spec-3-14"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-11-multi-client-maintenance-test"
     epic: 1
@@ -211,7 +218,10 @@ action_items:
       Client-granular consequences"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-12: story 3.14 — maintenance.test.ts appends an unseen Client and asserts dwell/shots/rail +1, destinations +2, the new Shot outside its orbit, every existing Shot and tempo unchanged; artifact.test.ts solves a multi-Client career in separate processes, forward and reversed"
+    resolution: "2026-10-12: story 3.14 — maintenance.test.ts appends an unseen Client
+      and asserts dwell/shots/rail +1, destinations +2, the new Shot outside its orbit,
+      every existing Shot and tempo unchanged; artifact.test.ts solves a multi-Client
+      career in separate processes, forward and reversed"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "epic-1-retro-item-12-packaging-enforcement"
     epic: 1
@@ -240,9 +250,10 @@ action_items:
       beside the ID minters, used by destinations.ts, dwell.ts, shots.ts and artifact.ts
       (the tiebreak included); the derive suites' fixture moved to src/derive/fixtures.test.ts
       (skills.test.ts keeps its differing entry/graphOf); checkEmittedArtifact's header
-      states that the import boundaries are checked at the gate only (Thomas's ruling R3);
-      the gate's success line names the artifact and career.json paths it checked, as
-      passed (seam paths pinned by a CLI test); the Story 1.7+ comments were already gone"
+      states that the import boundaries are checked at the gate only (Thomas's ruling
+      R3); the gate's success line names the artifact and career.json paths it checked,
+      as passed (seam paths pinned by a CLI test); the Story 1.7+ comments were already
+      gone"
     ref: "_bmad-output/implementation-artifacts/epic-1-retro-09-06-2026.md"
   - id: "story-2-1-review-item-1-rail-sequence-ungated"
     epic: 2
@@ -255,8 +266,8 @@ action_items:
     owner: "Thomas"
     status: done
     resolution: "2026-10-12: story 3.12 — checkStops checks rail's order through rail.ts's
-      earliestStart and compareRailKeys once rail is the correct set, naming expected vs
-      actual order"
+      earliestStart and compareRailKeys once rail is the correct set, naming expected
+      vs actual order"
     ref: "_bmad-output/implementation-artifacts/spec-2-1-the-dom-destination-index.md"
   - id: "story-2-1-review-item-2-root-rule-renderer-ban"
     epic: 2
@@ -296,10 +307,10 @@ action_items:
       closed from; add a stepFocus test with B far from A"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-13 (story 3.15): FocusMotion carries closedFrom; stepFocus shortens
-      only a release or a reopen of the ID the slide closed from. The slide mirror
-      (FocusSlide, flipSlide, advanceSlide) moved to shell/focus-motion.ts; stepFocus
-      tests with B 95 units from A"
+    resolution: "2026-10-13 (story 3.15): FocusMotion carries closedFrom; stepFocus
+      shortens only a release or a reopen of the ID the slide closed from. The slide
+      mirror (FocusSlide, flipSlide, advanceSlide) moved to shell/focus-motion.ts;
+      stepFocus tests with B 95 units from A"
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
   - id: "epic-2-retro-item-3-panel-visibility-on-reversed-slide"
     epic: 2
@@ -307,8 +318,8 @@ action_items:
       than the full duration (panel-model.ts:388); test pairing panelStyle with flipSlide"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-13 (story 3.15): panelStyle(open, pace, factor) delays visibility by
-      FOCUS_SECONDS x factor x pace when closing; focus-panel.tsx mirrors the slide
+    resolution: "2026-10-13 (story 3.15): panelStyle(open, pace, factor) delays visibility
+      by FOCUS_SECONDS x factor x pace when closing; focus-panel.tsx mirrors the slide
       with panelSlide from performance.now(); a test pairs panelStyle with flipSlide;
       auditPanel pins the binding with mutation rows"
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
@@ -319,10 +330,10 @@ action_items:
       case"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-13 (story 3.15): a SceneMounted marker inside <Suspense> sets
-      sceneMounted; keyAction and wheelIntent take it and drop every Rail answer
-      while the scene is absent (Escape and the panel answer kept); both wiring
-      audits pin it with mutation rows"
+    resolution: "2026-10-13 (story 3.15): a SceneMounted marker inside <Suspense>
+      sets sceneMounted; keyAction and wheelIntent take it and drop every Rail answer
+      while the scene is absent (Escape and the panel answer kept); both wiring audits
+      pin it with mutation rows"
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
   - id: "epic-2-retro-item-5-review-story-2-10"
     epic: 2
@@ -338,8 +349,8 @@ action_items:
       not only action_items"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-12: open retro items of Epics 1-3 scheduled as stories
-      3.10-3.19 in epics.md and development_status, ahead of Story 4.1"
+    resolution: "2026-10-12: open retro items of Epics 1-3 scheduled as stories 3.10-3.19
+      in epics.md and development_status, ahead of Story 4.1"
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
   - id: "epic-2-retro-item-7-doc-drift"
     epic: 2
@@ -348,8 +359,8 @@ action_items:
       shell/README.md:81), render-scene/README.md:5 lists its five shell imports"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-14 (story 3.19): focus-model.ts and render-scene/README.md give
-      the release goal as the pose beneath Focus (flightFrame's); scene-host.tsx,
+    resolution: "2026-10-14 (story 3.19): focus-model.ts and render-scene/README.md
+      give the release goal as the pose beneath Focus (flightFrame's); scene-host.tsx,
       rail-input.ts and shell/README.md name the goHome door (returnToRail() then
       advanceScroll(0)); render-scene/README.md:5 lists its shell imports - six as
       found, not five: state, activate, focus-motion, panel-model, motion-preference,
@@ -362,10 +373,10 @@ action_items:
     owner: "Thomas"
     status: done
     resolution: "2026-10-14 (story 3.19): Thomas's ruling R1 - railPosition and selectClient
-      dropped from src/shell/state.ts and from AC 2.2, AD-4a and AD-9 (epics.md and the
-      architecture spine, dated supersession notes); scrollProgress alone says where the
-      Rail is; every audit and mutation row that used selectClient re-pointed to another
-      real event and verified red-then-green; no aria-current added"
+      dropped from src/shell/state.ts and from AC 2.2, AD-4a and AD-9 (epics.md and
+      the architecture spine, dated supersession notes); scrollProgress alone says
+      where the Rail is; every audit and mutation row that used selectClient re-pointed
+      to another real event and verified red-then-green; no aria-current added"
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
   - id: "epic-2-retro-item-9-test-support-home"
     epic: 2
@@ -374,7 +385,10 @@ action_items:
       directory"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-12: story 3.14 — scripts/source-scan.ts holds the one walker and the single-pass stripper; every walk and regex stripper in the suite collapsed onto it; the renderer scans walk src/render-scene/ and the coverage test is gone"
+    resolution: "2026-10-12: story 3.14 — scripts/source-scan.ts holds the one walker
+      and the single-pass stripper; every walk and regex stripper in the suite collapsed
+      onto it; the renderer scans walk src/render-scene/ and the coverage test is
+      gone"
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
   - id: "epic-3-retro-item-1-run-identity-protocols"
     epic: 3
@@ -391,10 +405,10 @@ action_items:
       and assert drawn white"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-14 (story 3.16): <Canvas flat> (NoToneMapping, sRGB output kept)
-      in scene.tsx, pinned by auditColourManagement in scene-model.test.ts (no flat,
-      flat={false}, linear, gl toneMapping/outputColorSpace and any toneMapped fail,
-      each with a fixture or mutation row); drawn at 1440x900: Client Star 242,242,244,
+    resolution: "2026-10-14 (story 3.16): <Canvas flat> (NoToneMapping, sRGB output
+      kept) in scene.tsx, pinned by auditColourManagement in scene-model.test.ts (no
+      flat, flat={false}, linear, gl toneMapping/outputColorSpace and any toneMapped
+      fail, each with a fixture or mutation row); drawn at 1440x900: Client Star 242,242,244,
       stroke-active 182,182,190, ground 8,8,10, all exact; M1 and M2 re-look recorded
       in spec-3-16"
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
@@ -406,13 +420,13 @@ action_items:
     status: done
     resolution: "2026-10-14 (story 3.17): content rewritten, spec kept (Thomas's ruling);
       the four Built values (SIMSU, SNCF File aggregator-transcoder, Air France-KLM,
-      SNCF Client referential) reworded to the approved text; CareerSchema rejects any
-      role or built value naming a Skill from the career-wide vocabulary (case-insensitive,
-      whole word, one issue per Project/field/Skill), so validate, solve and gate fail;
-      pinned by the matrix tests and a schema mutant in src/data/validate.test.ts;
+      SNCF Client referential) reworded to the approved text; CareerSchema rejects
+      any role or built value naming a Skill from the career-wide vocabulary (case-insensitive,
+      whole word, one issue per Project/field/Skill), so validate, solve and gate
+      fail; pinned by the matrix tests and a schema mutant in src/data/validate.test.ts;
       artifact re-solved. Partial against AC 3.6's wording: an alias or a technology
-      word outside the Skills vocabulary (Cordova, MDM, UWP) still passes; deferred to
-      3.19 in deferred-work.md (code review of spec-3-17)"
+      word outside the Skills vocabulary (Cordova, MDM, UWP) still passes; deferred
+      to 3.19 in deferred-work.md (code review of spec-3-17)"
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
   - id: "epic-3-retro-item-4-mutants-to-tmpdir"
     epic: 3
@@ -420,7 +434,9 @@ action_items:
       tree scans cannot race them"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-12: story 3.14 — scripts/mutant.ts writes mutants under os.tmpdir() with specifiers rewritten to absolute URLs; the .gitignore entry and the colour scan dot-file skip are gone"
+    resolution: "2026-10-12: story 3.14 — scripts/mutant.ts writes mutants under os.tmpdir()
+      with specifiers rewritten to absolute URLs; the .gitignore entry and the colour
+      scan dot-file skip are gone"
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
   - id: "epic-3-retro-item-5-spec-reconciliations"
     epic: 3
@@ -429,13 +445,13 @@ action_items:
       case superseded (7-25 per Project)"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-14 (story 3.19): dated notes in epics.md - UX-DR27 and AC 3.8
-      carry the exception for the index entry revealed by :focus-visible (ruling 8a);
-      UX-DR2 and AC 3.2 name the two-step band stroke-rest, stroke-near (4b-i); UX-DR16
-      and AC 3.5 mark nine as superseded (7-25 Skills per Project, tested by 3.18's sweeps
-      at 7, 12 and 25); AC 3.6 reconciled to 'no field value names a Skill from the Skills
-      vocabulary' (ruling R2). DESIGN.md prose (not its frontmatter) follows for the band
-      and the no-third-line rule"
+    resolution: "2026-10-14 (story 3.19): dated notes in epics.md - UX-DR27 and AC
+      3.8 carry the exception for the index entry revealed by :focus-visible (ruling
+      8a); UX-DR2 and AC 3.2 name the two-step band stroke-rest, stroke-near (4b-i);
+      UX-DR16 and AC 3.5 mark nine as superseded (7-25 Skills per Project, tested
+      by 3.18's sweeps at 7, 12 and 25); AC 3.6 reconciled to 'no field value names
+      a Skill from the Skills vocabulary' (ruling R2). DESIGN.md prose (not its frontmatter)
+      follows for the band and the no-third-line rule"
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
   - id: "epic-3-retro-item-6-mote-degradation-ruling"
     epic: 3
@@ -445,16 +461,17 @@ action_items:
     owner: "Thomas"
     status: done
     resolution: "2026-10-14 (story 3.18): the label pass split into src/render-scene/mote-label.ts
-      (re-exported from mote-model.ts) before any behaviour change; Thomas's ruling recorded on
-      moteLabelLayout (moteLabelPass is its shown set) and in src/render-scene/README.md: 1a sticky priority with hysteresis
-      (focused first, last frame's shown labels before newcomers, then rank; an incumbent
-      stays down to a gap of 0, a newcomer needs 4 + 8px; canvas and panel edges hide at
-      once), 2a the affordance wins (affordanceObstacles: the label block, grown by the
-      keyboard outline, and the leader's box, seeded as shown; Mote labels within 4px
-      hidden), 3a reduced motion accepted (Epic 2 F-6 closed; the panel lists every Skill),
-      4 the cap stays at 12, Mote labels only. Sweeps at 7, 12 and 25 Skills (1440x900,
-      390x844) for flicker, affordance overlap and reduced motion in mote-model.test.ts,
-      with an incumbents-ignored mutation row"
+      (re-exported from mote-model.ts) before any behaviour change; Thomas's ruling
+      recorded on moteLabelLayout (moteLabelPass is its shown set) and in src/render-scene/README.md:
+      1a sticky priority with hysteresis (focused first, last frame's shown labels
+      before newcomers, then rank; an incumbent stays down to a gap of 0, a newcomer
+      needs 4 + 8px; canvas and panel edges hide at once), 2a the affordance wins
+      (affordanceObstacles: the label block, grown by the keyboard outline, and the
+      leader's box, seeded as shown; Mote labels within 4px hidden), 3a reduced motion
+      accepted (Epic 2 F-6 closed; the panel lists every Skill), 4 the cap stays at
+      12, Mote labels only. Sweeps at 7, 12 and 25 Skills (1440x900, 390x844) for
+      flicker, affordance overlap and reduced motion in mote-model.test.ts, with an
+      incumbents-ignored mutation row"
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
   - id: "epic-3-retro-item-7-deferrals-into-story-specs"
     epic: 3
@@ -463,6 +480,38 @@ action_items:
       before Epic 4"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-12: retro items scheduled as stories 3.10-3.19 ahead of
-      Epic 4; the deferred-work pull-in applies from each story-spec creation onward"
+    resolution: "2026-10-12: retro items scheduled as stories 3.10-3.19 ahead of Epic
+      4; the deferred-work pull-in applies from each story-spec creation onward"
     ref: "_bmad-output/implementation-artifacts/epic-3-retro-10-11-2026.md"
+  - id: "epic-4-retro-item-34-render-harness-rendertostaticmarkup-test"
+    epic: 4
+    action: "Render harness: renderToStaticMarkup tests of App per route/surface,
+      Chart, FallbackHost and CornerChrome around the offer latch; retire the exact-shape
+      regexes and move audits beside their modules (closes the five widened render
+      deferrals)"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-10-19-2026.md"
+  - id: "epic-4-retro-item-35-run-bmad-code-review-over-6582786-cd6191"
+    epic: 4
+    action: "Run bmad-code-review over 6582786^..cd61915: the follow-up reviews stories
+      4.5 and 4.6 recommended, plus the full-diff lens pass the retro narrowed"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-10-19-2026.md"
+  - id: "epic-4-retro-item-36-deferred-work-md-housekeeping-add-spec-4"
+    epic: 4
+    action: "deferred-work.md housekeeping: add spec-4-5 and spec-4-6 sections from
+      their deferred frontmatter, refile the 4.3 and 4.4 entries under their own headers,
+      decide one deferral register"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-10-19-2026.md"
+  - id: "epic-4-retro-item-37-fallback-accessibility-story-route-chang"
+    epic: 4
+    action: "Fallback accessibility story: route-change focus and announcement, phone
+      table semantics, fragment-landing focus, non-text contrast rows for link underline,
+      focus outline, Ring and glyphs"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-4-retro-10-19-2026.md"
