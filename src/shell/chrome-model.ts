@@ -2,8 +2,10 @@
  * The corner chrome as a pure model (3.8, DESIGN.md §7.9, UX-DR27): the two
  * lines the frame carries, and what the stateful one says.
  *
- * **Exactly two lines, in opposite corners.** Top-left, one constant identity
- * line, never a control. Bottom-right, one slot whose content is read off the
+ * **Exactly two lines, in opposite corners.** Top-left, the constant identity
+ * line, then ` · ` and one link, `the chart` (4.5, ruling Q1): the scene's one
+ * route to the flat chart, present in every state — the panel covers the right
+ * edge while Focused, never the left-top. Bottom-right, one slot whose content is read off the
  * navigation state's `mode` and `focusedProjectId` and nothing else:
  *
  * | State | Text | Element |
@@ -17,8 +19,10 @@
  *
  * **The strings are set as authored.** DESIGN.md sets plate designations in
  * capitals, corner chrome included, but the ratified strings are mixed case
- * (`the model`, `scroll ↓ …`), so no `text-transform` touches them. `the model`
- * is plain text until Story 5.1 adds its route (ruled 2026-10-10, 1a).
+ * (`the model`, `scroll ↓ …`), so no `text-transform` touches them. In the
+ * scene, `the model` is plain text until Story 5.1 adds its route (ruled
+ * 2026-10-10, 1a); on the chart (4.5) it is already a link to the Colophon, so
+ * the line is also given as its two parts, `IDENTITY_NAME` and `IDENTITY_MODEL`.
  *
  * **The slot moves with the panel** (ruled 3a). While Focused the panel's column
  * covers the right edge, so the slot sits `--space-xl` left of it — the same
@@ -33,8 +37,14 @@
 import { FOCUS_SECONDS, focusEasingCss } from './focus-motion.ts';
 import { panelWidthCss } from './panel-model.ts';
 
-/** The top-left line, verbatim (UX-DR27). Text, never a control or a link — the route is 5.1's. */
+/** The top-left line, verbatim (UX-DR27). In the scene, text — its route is 5.1's. */
 export const IDENTITY_LINE = 'THOMAS NAVARRO · the model';
+
+/** The identity line's name, before its ` · `: the chart's heading draws it beside its `the model` link. */
+export const IDENTITY_NAME = 'THOMAS NAVARRO';
+
+/** The identity line's last words, `the model`: on the chart, the link to the Colophon (4.5). */
+export const IDENTITY_MODEL = 'the model';
 
 /** The slot's three texts, verbatim (DESIGN.md §7.9). `↓` and `↩` are the permitted instruction glyphs. */
 export const SLOT_TEXT = {

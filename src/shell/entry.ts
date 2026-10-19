@@ -13,8 +13,10 @@
  * lazily, after the index is in the document (ruling Q2).
  *
  * The route (4.2) is resolved here too, from the path alone, before the mount
- * chunk can resolve: `resolveRoute` is the one thing taken from `router.ts`,
- * which imports nothing. The mount makes the router, which owns history; `/chart`
+ * chunk can resolve: `resolveRoute` is taken from `route.ts`, which holds the
+ * routes, their paths and the resolution and imports nothing (4.5, ruling Q3:
+ * split from `router.ts` so the router itself stays off this chunk's budget).
+ * The mount makes the router, which owns history; `/chart`
  * shows the flat chart on any machine and `/colophon` the Colophon, each asking
  * for at most one renderer chunk.
  *
@@ -29,7 +31,7 @@
 import '../tokens/tokens.css';
 import './page.css';
 import { browserEnv, chooseSurface, detect } from './detect.ts';
-import { resolveRoute } from './router.ts';
+import { resolveRoute } from './route.ts';
 
 const mounting = import('./mount.tsx');
 const surface = chooseSurface(detect(browserEnv()));

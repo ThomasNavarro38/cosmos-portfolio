@@ -38,16 +38,13 @@ import type { Plugin } from 'vite';
  * and one dynamic import) and measured 2,704; the budget of 4,000 is about 1.48×
  * that measurement. 4.1's review patches (the `.then().catch()` chain, the import
  * started before detection) brought the entry to 2,777; the budget is about 1.44×
- * that, the figure of record. Story 4.2 added `src/shell/router.ts` to the entry
- * graph — the entry takes `resolveRoute` alone, but the mount imports the same
- * module, so the whole router (and the preload helper the colophon's import
- * shares) ships on the entry chunk — and measured 3,938, inside the unchanged
- * budget by 62 bytes; the router's guarded canonical rewrite brought it to
- * 3,970, 30 bytes inside. Story 4.3's chart reuses shell modules the mount
- * also loads; kept in a chunk of their own (`vite.config.ts`'s `ui` group, so
- * the chart reaches no react-dom chunk), they lengthen the entry's preload list
- * for the mount, and the group is shaped to keep that list at four files:
- * measured 3,993, 7 bytes inside.
+ * that. Story 4.2 put the whole router on the entry graph (the mount shared the
+ * module the entry took `resolveRoute` from) and reached 3,970; story 4.3's
+ * `ui` chunk group (`vite.config.ts`) lengthened the entry's preload list for
+ * the mount and reached 3,993. Story 4.5 split `src/shell/route.ts` (the routes,
+ * their paths and `resolveRoute`) out of the router (ruling Q3), so the entry
+ * imports that alone and the router ships with the mount: the entry measures
+ * 3,028, the figure of record, with the budget unchanged.
  */
 export const ENTRY_BUDGET_BYTES = 4_000;
 

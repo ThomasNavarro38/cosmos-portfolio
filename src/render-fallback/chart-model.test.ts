@@ -26,6 +26,7 @@ import {
   RING_R,
   RING_RATIO,
   buildChart,
+  spanText,
   fragmentTarget,
   labelTypeOf,
   landOnFragment,
@@ -65,7 +66,7 @@ function project(id: string, timeAxis: number, extra: Partial<ChartArtifactProje
 }
 
 function client(id: string, timeAxis: number, projects: readonly ChartArtifactProject[]): ChartArtifactClient {
-  return { id, name: `Name ${id}`, timeAxis, projects };
+  return { id, name: `Name ${id}`, timeAxis, span: { start: '2020-01', end: '2020-06' }, projects };
 }
 
 /** Ties at every level: two Clients at 1, two Projects at 0.5 inside one, emitted in the wrong order. */
@@ -372,7 +373,7 @@ test('Deep/Shallow: both plates draw every marker at one size, one class — onl
   assert.ok(deep.size > 0, 'the committed artifact holds a Deep Project');
   for (const plate of [buildChart(artifact).across, buildChart(artifact).down]) {
     // Each class is one of the nine the stylesheet treats; a Deep class or a halo is none of them.
-    const allowed: ReadonlySet<string> = new Set(['chart-baseline', 'chart-stem', 'chart-leader', 'chart-star', 'chart-star-core', 'chart-marker', 'chart-ring', 'chart-label-client', 'chart-label-project']);
+    const allowed: ReadonlySet<string> = new Set(['chart-baseline', 'chart-stem', 'chart-leader', 'chart-star', 'chart-star-core', 'chart-marker', 'chart-ring', 'chart-label-client', 'chart-label-span', 'chart-label-project']);
     const classes: string[] = [...plate.circles, ...plate.lines, ...plate.labels].map((item) => item.className);
     assert.deepEqual(classes.filter((name) => !allowed.has(name)), []);
     assert.deepEqual(new Set(markers(plate).map((marker) => `${marker.className} ${marker.r}`)), new Set([`chart-marker ${MARKER_R}`]), 'Deep and Shallow markers are drawn alike');
@@ -513,6 +514,86 @@ for (const [name, artifact] of [['the committed artifact', committed()], ['the t
     }
   });
 }
+
+// --- The Client span (4.5) ---------------------------------------------------
+
+test('spanText: years, one year when equal, an open dash while ongoing', () => {
+  assert.equal(spanText({ start: '2016-05', end: '2017-07' }), '2016 – 2017');
+  assert.equal(spanText({ start: '2019-03', end: '2019-04' }), '2019');
+  assert.equal(spanText({ start: '2024-02', end: null }), '2024 –');
+  assert.equal(spanText({ start: '2020-11', end: '2022-01' }), '2020 – 2022');
+});
+
+/** Each Client's labels on a plate, in drawing order, by class. */
+const clientLabels = (plate: Plate, id: string) => plate.labels.filter((label) => label.entity === id);
+
+for (const [name, artifact] of [['the committed artifact', committed()], ['the tied fixture', TIED]] as const) {
+  test(`span (${name}): every Client’s span is drawn on both plates, read off the artifact, beside its name`, () => {
+    const chart = buildChart(artifact);
+    for (const entry of artifact.clients) {
+      for (const [which, plate] of [['across', chart.across], ['down', chart.down]] as const) {
+        const labels = clientLabels(plate, entry.id);
+        const spans = labels.filter((label) => label.className === 'chart-label-span');
+        const names = labels.filter((label) => label.className === 'chart-label-client');
+        assert.deepEqual(spans.map((label) => label.text), [spanText(entry.span)], `${which}: ${entry.id} draws its span once`);
+        const [span] = spans;
+        const last = names.at(-1);
+        assert.ok(span !== undefined && last !== undefined && names.length > 0);
+        assert.ok(span.y > last.y, `${which}: ${entry.id}'s span is under its name`);
+        if (which === 'down') assert.equal(span.x, last.x, 'down: the span starts where the name does');
+        else assert.equal(span.anchor, 'middle', 'across: centred, as the name is');
+        assert.equal(labels.indexOf(span), names.length, `${which}: name, then span`);
+        if (which === 'across') {
+          const star = stars(plate).find((circle) => circle.entity === entry.id);
+          assert.ok(star !== undefined && span.y < star.cy - star.r, 'across: the span sits above the Star, under the name');
+        }
+      }
+    }
+    for (const section of chart.sections) {
+      const span = clientLabels(chart.down, section.id).find((label) => label.className === 'chart-label-span');
+      const first = chart.down.labels.find((label) => label.entity === section.records[0]?.id);
+      assert.ok(span !== undefined && first !== undefined);
+      assert.ok(first.y - first.size > span.y, `down: ${section.id}'s first Project label starts below its span's baseline`);
+    }
+    assert.deepEqual(outside(chart.across), [], 'across: inside the viewBox with spans counted');
+    assert.deepEqual(outside(chart.down), [], 'down: inside the viewBox with spans counted');
+  });
+}
+
+/** What `spanText`'s body may not do: anything but read its `span` and print years. */
+function auditSpanText(body: string): string[] {
+  const failures: string[] = [];
+  if (!/\bspan\.start\b/.test(body) || !/\bspan\.end\b/.test(body)) failures.push('spanText does not read its span');
+  if (/duration/.test(body)) failures.push('spanText reads a duration');
+  if (/\.sort\(|\.reduce\(|localeCompare/.test(body)) failures.push('spanText orders or aggregates');
+  return failures;
+}
+
+test('span: the chart reads the artifact’s span and never the Projects’ dates', () => {
+  const artifact = committed();
+  // A span disagreeing with the Projects is drawn as the artifact says: the chart aggregates nothing.
+  const lied: ChartArtifact = { clients: artifact.clients.map((entry) => ({ ...entry, span: { start: '1999-01', end: null } })) };
+  const chart = buildChart(lied);
+  for (const plate of [chart.across, chart.down]) {
+    assert.ok(plate.labels.filter((label) => label.className === 'chart-label-span').every((label) => label.text === '1999 –'));
+  }
+  const code = stripCommentsAndStrings(readFileSync(join(DIR, 'chart-model.ts'), 'utf8'));
+  const body = /export function spanText\([^)]*\): string \{([\s\S]*?)\n\}/.exec(code)?.[1] ?? '';
+  assert.ok(body !== '', 'spanText is found');
+  assert.deepEqual(auditSpanText(body), []);
+  const mutated = body.replace('const start = yearOf(span.start);', 'const start = yearOf([...span.start].sort().join(\'\'));');
+  assert.notEqual(mutated, body, 'the mutation must apply');
+  assert.notDeepEqual(auditSpanText(mutated), [], 'a sort in spanText is rejected');
+  assert.notDeepEqual(auditSpanText(body.replace(/span\./g, 'project.content.duration.')), [], 'reading Project dates is rejected');
+  assert.doesNotMatch(code, /duration\.start\s*[<>]|duration\.end\s*[<>]|Math\.(?:min|max)\([^)]*duration/, 'no Project dates compared or aggregated');
+});
+
+test('span labels are the scene-label-secondary role at ink-label, one class', () => {
+  const css = readFileSync(join(DIR, 'chart.css'), 'utf8').replace(/\r\n/g, '\n');
+  const rule = /\n\.chart-label-span \{\n([^}]*)\}/.exec(css)?.[1] ?? '';
+  assert.match(rule, /^ {2}font-size: var\(--type-scene-label-secondary-font-size\);$/m);
+  assert.match(rule, /^ {2}fill: var\(--color-ink-label-dark\);$/m);
+});
 
 // --- The fragment -----------------------------------------------------------
 
@@ -703,7 +784,8 @@ test('chart.tsx is a mapping: no sort, filter, if, ternary, ??, && or ||', () =>
     [(s) => s.replace('{row.role}', '{row.role ?? null}'), /holds a \?/],
     [(s) => s.replace('{row.role}', '{row.role !== "" && row.role}'), /holds &&/],
     [(s) => s.replace('{row.role}', '{row.role || null}'), /holds \|\|/],
-    [(s) => s.replace('export default function Chart({ artifact }: ChartProps) {', 'export default function Chart({ artifact }: ChartProps) {\n  if (artifact.clients.length === 0) return null;'), /holds an if/],
+    [(s) => s.replace('export default function Chart({ artifact, links }: ChartProps) {', 'export default function Chart({ artifact, links }: ChartProps) {\n  if (artifact.clients.length === 0) return null;'), /holds an if/],
+    [(s) => s.replace('{links.routes.map((link) => (', "{links.routes.length === 0 ? null : links.routes.map((link) => ("), /holds a \?/],
   ];
   for (const [mutate, message] of cases) {
     const mutated = mutate(real);
@@ -714,8 +796,8 @@ test('chart.tsx is a mapping: no sort, filter, if, ternary, ??, && or ||', () =>
 
 test('chart.tsx draws the model: the h1 identity line, the plates aria-hidden, the record anchors', () => {
   const code = stripComments(readFileSync(CHART_TSX, 'utf8'));
-  assert.match(code, /export\s+default\s+function\s+Chart\(\s*\{\s*artifact\s*\}/, 'a default export for lazy()');
-  assert.match(code, /<h1 className="chart-heading">\{IDENTITY_LINE\}<\/h1>/);
+  assert.match(code, /export\s+default\s+function\s+Chart\(\s*\{\s*artifact\s*,\s*links\s*\}\s*:\s*ChartProps\s*\)/, 'a default export for lazy(), taking the artifact and the links');
+  assert.deepEqual(auditChrome(code), []);
   assert.equal((code.match(/<h1\b/g) ?? []).length, 1, 'one <h1>');
   assert.match(code, /<section key=\{section\.id\} id=\{section\.id\}/, 'a Client section carries its entity ID');
   assert.match(code, /<h2 className="chart-client">\{section\.name\}<\/h2>/);
@@ -745,6 +827,47 @@ test('chart.tsx draws the model: the h1 identity line, the plates aria-hidden, t
   assert.equal((code.match(/className="chart-ring"/g) ?? []).length, 1, 'one ring mapping, used by the index glyph and the legend alike');
   assert.doesNotMatch(code, /isDeep|content\.notable|row\.notable\b(?!\.)/, 'the renderer reads no isDeep and no notable: the kind is the model’s');
   assert.deepEqual(auditGlyphMarkup(code), []);
+});
+
+/**
+ * What `chart.tsx` must hold of its chrome (4.5): one row, the `<h1>` — the
+ * identity name, ` · `, and `the model` as the model link — and the route line
+ * opposite it, one `<a>` per route the host handed over; every link's `href`,
+ * click and text the prop's own, so the chart decides nothing about where a
+ * link goes or which clicks it keeps.
+ */
+function auditChrome(code: string): string[] {
+  const failures: string[] = [];
+  const row =
+    /<div className="chart-chrome">\s*<h1 className="chart-heading">\s*\{IDENTITY_NAME\} · <a href=\{links\.model\.href\} onClick=\{links\.model\.follow\}>\{links\.model\.text\}<\/a>\s*<\/h1>\s*<p className="chart-routes">\s*\{links\.routes\.map\(\(link\) => \(\s*<a key=\{link\.key\} href=\{link\.href\} onClick=\{link\.follow\}>\s*\{link\.text\}\s*<\/a>\s*\)\)\}\s*<\/p>\s*<\/div>/;
+  if (!row.test(code)) failures.push('chart.tsx: the chrome is not one row of the heading (name · the model link) and the route line mapped from links.routes');
+  if ((code.match(/<h1\b/g) ?? []).length !== 1) failures.push('chart.tsx: other than one <h1>');
+  if (/\bnavigate\b|\brouter\b|\bsurface\b|\bROUTE_PATHS\b|\blocation\.(?:pathname|assign|href)|\bhistory\./.test(code)) failures.push('chart.tsx: reads a router, a route or the machine surface — the links are the host’s');
+  if (/href="\/|href=\{'\//.test(code)) failures.push('chart.tsx: writes a path — every href is the link’s');
+  if ((code.match(/\bonClick=/g) ?? []).length !== 2) failures.push('chart.tsx: a click other than the two links’ own follow');
+  if (/IDENTITY_LINE/.test(code)) failures.push('chart.tsx: draws IDENTITY_LINE whole — the model is a link');
+  return failures;
+}
+
+test('chart.tsx chrome: each binding replaced fails with its own line', () => {
+  const code = stripComments(readFileSync(CHART_TSX, 'utf8').replace(/\r\n/g, '\n'));
+  assert.deepEqual(auditChrome(code), []);
+  const cases: readonly (readonly [(source: string) => string, RegExp])[] = [
+    [(s) => s.replace('{IDENTITY_NAME} · <a href={links.model.href} onClick={links.model.follow}>{links.model.text}</a>', '{IDENTITY_LINE}'), /the chrome is not one row/],
+    [(s) => s.replace('<a href={links.model.href}', '<a href="/colophon"'), /writes a path/],
+    [(s) => s.replace('onClick={links.model.follow}', 'onClick={() => links.model.follow}'), /the chrome is not one row/],
+    [(s) => s.replace('{links.model.text}</a>', 'the model</a>'), /the chrome is not one row/],
+    [(s) => s.replace('<a key={link.key} href={link.href} onClick={link.follow}>', '<a key={link.key} href={link.href}>'), /the chrome is not one row|a click other than/],
+    [(s) => s.replace('{links.routes.map((link) => (', '{[links.model].map((link) => ('), /the chrome is not one row/],
+    [(s) => s.replace('<div className="chart-chrome">', '<a href={ROUTE_PATHS.home}>{links.model.text}</a>\n      <div className="chart-chrome">'), /reads a router/],
+    [(s) => s.replace('<p className="chart-routes">', '<p className="chart-routes" onClick={() => window.history.back()}>'), /reads a router|a click other than/],
+    [(s) => s.replace('<h1 className="chart-heading">', '<h1 className="chart-heading">\n          <h1>x</h1>'), /other than one <h1>/],
+  ];
+  for (const [mutate, message] of cases) {
+    const mutated = mutate(code);
+    assert.notEqual(mutated, code, `the mutation ${String(message)} must apply`);
+    assert.match(auditChrome(mutated).join('\n'), message);
+  }
 });
 
 /**

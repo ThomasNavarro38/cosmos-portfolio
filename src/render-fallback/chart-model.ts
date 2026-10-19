@@ -24,8 +24,21 @@
  *   line longer for each line a wrapped label adds), labels running right and
  *   wrapped to the plate's width.
  *
- * Every Project marker is one size and one class, Deep or Shallow, and there
- * are no year marks (date navigation is story 4.5).
+ * Every Project marker is one size and one class, Deep or Shallow. There are
+ * no year marks along the axis: `timeAxis` is a recency rank, so marks spaced
+ * along it would lie. A Client is dated instead (4.5, ruling Q2a) by its
+ * artifact `span` — derived in `src/derive/`, never aggregated here from its
+ * Projects' dates (AD-3) — drawn as years (`spanText`: `2016 – 2017`, one year
+ * when both are equal, `2024 –` while ongoing), a `chart-label-span` line under
+ * the Client's name on both plates: above the Star across, below the name on
+ * the down plate's stem, as the key screen draws it.
+ *
+ * **The chart's links** (4.5) arrive as props, built by
+ * `src/shell/fallback-host.tsx` from the router and this machine's surface:
+ * `the model` in the heading, to the Colophon, and the route line's entries
+ * (`the scene` where this machine is capable). Each is `{ key, text, href,
+ * follow }`, restated here as `ChartLink`: the chart imports no router and
+ * reads no machine surface.
  *
  * **The Deep/Shallow signal** (4.4). There is no Moon on a flat chart, so the
  * Ring alone carries it, read from the artifact's `isDeep` and nothing else
@@ -71,9 +84,41 @@ export interface ChartArtifactProject extends PanelArtifactProject {
   };
 }
 
+/** A Client's calendar span, as the artifact derives it: `YYYY-MM` months, `end` `null` while ongoing. */
+export interface ChartSpan {
+  readonly start: string;
+  readonly end: string | null;
+}
+
 export interface ChartArtifactClient extends PanelArtifactClient {
   readonly timeAxis: number;
+  readonly span: ChartSpan;
   readonly projects: readonly ChartArtifactProject[];
+}
+
+/** The slice of a click a link's `follow` reads, restated: the chart may not import `src/shell/route-link.ts`. */
+export interface ChartLinkClick {
+  readonly button: number;
+  readonly ctrlKey: boolean;
+  readonly metaKey: boolean;
+  readonly shiftKey: boolean;
+  readonly altKey: boolean;
+  readonly defaultPrevented: boolean;
+  preventDefault(): void;
+}
+
+/** One link of the chart's chrome: its key, its text, its `href`, and its click. */
+export interface ChartLink {
+  readonly key: string;
+  readonly text: string;
+  readonly href: string;
+  readonly follow: (event: ChartLinkClick) => void;
+}
+
+/** The chart's links: `the model` in its heading, and its route line, empty where the scene cannot run. */
+export interface ChartLinks {
+  readonly model: ChartLink;
+  readonly routes: readonly ChartLink[];
 }
 
 /** The slice of the artifact the chart reads, restated structurally; it extends the panel's. */
@@ -166,7 +211,7 @@ export interface PlateCircle {
 export interface PlateLabel {
   readonly key: string;
   readonly entity: string;
-  readonly className: 'chart-label-client' | 'chart-label-project';
+  readonly className: 'chart-label-client' | 'chart-label-span' | 'chart-label-project';
   readonly x: number;
   readonly y: number;
   readonly anchor: 'start' | 'middle';
@@ -286,7 +331,26 @@ export function labelTypeOf(token: { readonly fontSize: string; readonly letterS
 }
 
 const CLIENT_TYPE = labelTypeOf(tokens.typography['scene-label-client']);
+const SPAN_TYPE = labelTypeOf(tokens.typography['scene-label-secondary']);
 const PROJECT_TYPE = labelTypeOf(tokens.typography['scene-label-project']);
+
+/** The step between a Client's name line and its span line, as between two wrapped name lines. */
+const NAME_LINE = 15;
+
+/** A `YYYY-MM` month's year. */
+const yearOf = (month: string): string => month.slice(0, 4);
+
+/**
+ * A Client's span as the chart draws it, in years: `2016 – 2017`; one year
+ * when both are equal (`2019`); the start and an open dash while ongoing
+ * (`2024 –`).
+ */
+export function spanText(span: ChartSpan): string {
+  const start = yearOf(span.start);
+  if (span.end === null) return `${start} –`;
+  const end = yearOf(span.end);
+  return start === end ? start : `${start} – ${end}`;
+}
 
 /** A string's estimated width in a type role. */
 function widthOf(text: string, type: LabelType): number {
@@ -342,7 +406,9 @@ export function acrossPlate(artifact: ChartArtifact): Plate {
     lines.push({ key: `chart-baseline:${client.id}`, entity: client.id, className: 'chart-baseline', x1: starX, y1: y, x2: endX, y2: y });
     circles.push({ key: `chart-star:${client.id}`, entity: client.id, className: 'chart-star', cx: starX, cy: y, r: STAR_R });
     circles.push({ key: `chart-star-core:${client.id}`, entity: client.id, className: 'chart-star-core', cx: starX, cy: y, r: CORE_R });
-    labels.push(centred(client.id, 'chart-label-client', starX, y - STAR_R - 10, client.name, CLIENT_TYPE));
+    // Name, then span, above the Star: the span on the line the name held before 4.5.
+    labels.push(centred(client.id, 'chart-label-client', starX, y - STAR_R - 10 - NAME_LINE - 1, client.name, CLIENT_TYPE));
+    labels.push(centred(client.id, 'chart-label-span', starX, y - STAR_R - 10, spanText(client.span), SPAN_TYPE));
     projects.forEach((project, index) => {
       const x = xAt(project.timeAxis);
       const baseline = y + LABEL_DEPTHS[index % 2 === 0 ? 0 : 1];
@@ -396,10 +462,13 @@ export function downPlate(artifact: ChartArtifact): Plate {
   for (const { client, projects } of ordered(artifact)) {
     const starY = cursor;
     const name = wrap(client.name, CLIENT_TYPE, width - edge - clientX);
-    name.forEach((text, index) => labels.push(label(client.id, 'chart-label-client', clientX, starY + 4 + index * 15, text, CLIENT_TYPE, index)));
+    name.forEach((text, index) => labels.push(label(client.id, 'chart-label-client', clientX, starY + 4 + index * NAME_LINE, text, CLIENT_TYPE, index)));
+    // The span under the name, as the key screen draws it.
+    labels.push(label(client.id, 'chart-label-span', clientX, starY + 4 + name.length * NAME_LINE, spanText(client.span), SPAN_TYPE, 0));
     circles.push({ key: `chart-star:${client.id}`, entity: client.id, className: 'chart-star', cx: stemX, cy: starY, r: STAR_R });
     circles.push({ key: `chart-star-core:${client.id}`, entity: client.id, className: 'chart-star-core', cx: stemX, cy: starY, r: CORE_R });
-    let y = starY + firstStep + (name.length - 1) * 15;
+    // The first Project sits below the name lines and the span line under them.
+    let y = starY + firstStep + name.length * NAME_LINE;
     let last = starY;
     let lastLines = 1;
     for (const project of projects) {

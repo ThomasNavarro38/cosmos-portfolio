@@ -290,6 +290,24 @@ test('every authored field is present and equal on the emitted Project', () => {
   );
 });
 
+test('each emitted Client carries the span its entity derived, from its Projects’ dates (4.5)', () => {
+  const doc = artifactOf(
+    { ...baseEntry(), client: 'SIMSU', project: 'One', duration: { start: '2016-05', end: '2016-11' } },
+    { ...baseEntry(), client: 'SIMSU', project: 'Two', duration: { start: '2016-09', end: '2017-07' } },
+    { ...baseEntry(), client: 'Decathlon', project: 'Ongoing', duration: { start: '2024-02', end: null } },
+  );
+  const spans = Object.fromEntries(doc.clients.map((client) => [client.id, client.span]));
+  assert.deepEqual(spans, {
+    'client:simsu': { start: '2016-05', end: '2017-07' },
+    'client:decathlon': { start: '2024-02', end: null },
+  });
+  for (const client of doc.clients) {
+    const starts = client.projects.map((project) => project.content.duration.start).sort();
+    assert.equal(client.span.start, starts[0], `${client.id}: the earliest start`);
+  }
+  assert.deepEqual(validateArtifact(doc), []);
+});
+
 test('parity survives the three Shallow forms, whose parsed shapes differ', () => {
   // An absent `notable` yields nine keys, `null` and `""` yield ten. A payload
   // built by listing fields would normalize the difference away; carrying the

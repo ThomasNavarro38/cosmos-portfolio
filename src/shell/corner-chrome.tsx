@@ -32,6 +32,15 @@
  *     in free flight turns the button from `esc — release` into `↩ resume the
  *     journey` in place — the same element — and its cleanup does not run.
  *
+ * **The route to the chart** (4.5, ruling Q1). The identity line ends ` · ` and
+ * one `<a href="/chart">`, `the chart` — present in every state, Rail, free
+ * flight and Focused, since the panel covers the right edge and never the
+ * left-top. Its click is `followRoute`'s (`route-link.ts`): a primary click is
+ * the router's one `navigate('chart')`, any other is the browser's, so a new
+ * tab works. Leaving the scene releases nothing: Focus, the mode and the
+ * Rail's progress are the store's and survive the round trip. `the model`
+ * stays text here until 5.1. The router arrives as the one prop.
+ *
  * **Exactly two lines, and one persistent slot.** The slot is one `<p>` mounted
  * in every state, carrying the position and the `right` transition, so the
  * transition runs on every change of Focus — Rail ↔ Focus included — and the
@@ -59,7 +68,9 @@
  *
  * **The treatment is `corner-chrome.css`**: the `chrome` type role at
  * `ink-label`, fixed at the `--space-xl` inset, below the panel. Only the slot's
- * `right` and its transition are inline, because they follow the state.
+ * `right` and its transition are inline, because they follow the state. The
+ * chart link takes the pointer on a line that otherwise takes none, and mirrors
+ * the slot's button.
  */
 
 import { useCallback, useSyncExternalStore } from 'react';
@@ -68,11 +79,14 @@ import { releaseLayer, returnToRail } from './activate.ts';
 import { IDENTITY_LINE, chromeSlot, slotStyle } from './chrome-model.ts';
 import { OVERVIEW_ID } from './index-model.ts';
 import { motionPace, reducedMotion, subscribeReducedMotion } from './motion-preference.ts';
+import { ROUTE_PATHS } from './route.ts';
+import { CHART_LINK_TEXT, followRoute } from './route-link.ts';
+import type { Router } from './router.ts';
 import { navigationStore } from './state.ts';
 import './corner-chrome.css';
 
 /** The two chrome lines. Always in the document; the slot swaps its content. */
-export function CornerChrome() {
+export function CornerChrome({ router }: { readonly router: Router }) {
   const mode = useStore(navigationStore, (state) => state.mode);
   const focusedProjectId = useStore(navigationStore, (state) => state.focusedProjectId);
   const pace = motionPace(useSyncExternalStore(subscribeReducedMotion, reducedMotion));
@@ -89,7 +103,9 @@ export function CornerChrome() {
 
   return (
     <>
-      <p className="chrome-identity">{IDENTITY_LINE}</p>
+      <p className="chrome-identity">
+        {IDENTITY_LINE} · <a className="chrome-route" href={ROUTE_PATHS.chart} onClick={(event) => followRoute(event, router.navigate, 'chart')}>{CHART_LINK_TEXT}</a>
+      </p>
       <p className="chrome-slot" style={style}>
         {slot.kind === 'control' ? (
           <button

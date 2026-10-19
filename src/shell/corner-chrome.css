@@ -10,7 +10,8 @@
  * state: 40px with nothing focused, 40px left of the panel while Focused.
  *
  * The strings are set as authored — no `text-transform`. The lines take no
- * pointer; the slot's button does, and mirrors `.panel-release`: no box, no
+ * pointer; the identity line's `the chart` link (4.5) takes it, and mirrors the
+ * slot's button. The slot's button does, and mirrors `.panel-release`: no box, no
  * background, no border, the line's type and ink inherited, raised to
  * `ink-prose` on hover and `:focus-visible`, and underlined by a hairline on
  * `:focus-visible` alone.
@@ -37,6 +38,28 @@
 
 .chrome-slot {
   bottom: var(--space-xl);
+}
+
+/*
+ * The route to the chart (4.5), on the identity line: the line's own type and
+ * ink, no box, no underline at rest — the slot's button's treatment, as a link.
+ */
+.chrome-route {
+  color: inherit;
+  text-decoration: none;
+  pointer-events: auto;
+}
+
+.chrome-route:hover,
+.chrome-route:focus-visible {
+  color: var(--color-ink-prose-dark);
+  outline: none;
+}
+
+.chrome-route:focus-visible {
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--stroke-hairline);
+  text-underline-offset: var(--space-hair);
 }
 
 /* The control inside the slot: the line's own type and ink, no box. */
@@ -74,6 +97,7 @@
  * outline, in the system's own colour.
  */
 @media (forced-colors: active) {
+  .chrome-route:focus-visible,
   .chrome-slot-control:focus-visible {
     outline: 1px solid CanvasText;
   }

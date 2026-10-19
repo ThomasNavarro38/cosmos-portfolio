@@ -8,7 +8,9 @@
  * is kept thin enough that reading it suffices, and `chart-model.test.ts` scans
  * it: no sort, no filter, no conditional operator.
  *
- * A conventional document, top to bottom: the `<h1>` (the identity line), the
+ * A conventional document, top to bottom: the chrome row — the `<h1>` (the
+ * identity line, `the model` its link to the Colophon) and the route line
+ * opposite it (`the scene` where this machine is capable, else nothing) — the
  * plate twice — across for a wide window, down for a narrow one, `chart.css`
  * showing one by width — the legend, the index table (Notable, Client, Project
  * as a link to its record, Role, Dates), then a `<section>` per Client (`<h2>`, its entity ID as
@@ -32,6 +34,13 @@
  * field table: `start`, the separator, `end` — two elements, so an ongoing
  * engagement's `null` end draws nothing.
  *
+ * **The links** (4.5) are the `links` prop, built by `src/shell/fallback-host.tsx`
+ * from the router and the machine's surface, each `{ key, text, href, follow }`:
+ * an `<a href>` whose click is the link's own `follow`. The chart imports no
+ * router or store and reads no machine surface; which links exist, where they
+ * go and which clicks they keep are decided before they arrive. The heading's
+ * text is `IDENTITY_NAME`, ` · ` and `the model`: the identity line.
+ *
  * **The fragment** is read once, when the chart is attached: a ref callback —
  * the commit-time hook that needs no import from `react`, which would tie this
  * chunk to the mount's — makes one call to the model's `landOnFragment`,
@@ -43,7 +52,7 @@
  * twice.
  */
 
-import { IDENTITY_LINE } from '../shell/chrome-model.ts';
+import { IDENTITY_NAME } from '../shell/chrome-model.ts';
 import { FIELD_LABELS, type PanelReading, type PanelRun } from '../shell/panel-model.ts';
 import {
   CHART_LABELS,
@@ -53,6 +62,7 @@ import {
   landOnFragment,
   type ChartArtifact,
   type ChartDates,
+  type ChartLinks,
   type ChartRecord,
   type Glyph as GlyphFrame,
   type NotableKind,
@@ -65,16 +75,28 @@ import './chart.css';
 /** The chart roots already landed on, so the fragment is honoured once per chart. */
 const landed = new WeakSet<object>();
 
-/** What the chart needs: the artifact, passed by `App` through the fallback host. */
+/** What the chart needs: the artifact, passed by `App` through the fallback host, and its links, built there. */
 export interface ChartProps {
   readonly artifact: ChartArtifact;
+  readonly links: ChartLinks;
 }
 
-export default function Chart({ artifact }: ChartProps) {
+export default function Chart({ artifact, links }: ChartProps) {
   const chart = buildChart(artifact);
   return (
     <div className="chart" ref={(element) => landOnFragment(element, window.location.hash, chart.ids, (id) => document.getElementById(id), landed)}>
-      <h1 className="chart-heading">{IDENTITY_LINE}</h1>
+      <div className="chart-chrome">
+        <h1 className="chart-heading">
+          {IDENTITY_NAME} · <a href={links.model.href} onClick={links.model.follow}>{links.model.text}</a>
+        </h1>
+        <p className="chart-routes">
+          {links.routes.map((link) => (
+            <a key={link.key} href={link.href} onClick={link.follow}>
+              {link.text}
+            </a>
+          ))}
+        </p>
+      </div>
       <PlateView plate={chart.across} className="chart-plate chart-plate-across" />
       <PlateView plate={chart.down} className="chart-plate chart-plate-down" />
       <div className="chart-legend" aria-hidden="true">

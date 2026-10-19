@@ -34,10 +34,11 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { codeOf, languageOf } from '../scripts/colour-literals.ts';
 import { filesUnder } from '../scripts/source-scan.ts';
-import { IDENTITY_LINE, SLOT_TEXT } from './shell/chrome-model.ts';
+import { IDENTITY_LINE, IDENTITY_MODEL, IDENTITY_NAME, SLOT_TEXT } from './shell/chrome-model.ts';
 import { contrast, channels, linear } from './shell/contrast.ts';
 import { DEPTH_LABELS } from './shell/index-model.ts';
 import { EDITORIAL_RULE, FIELD_LABELS, RELEASE_LABEL, panelStyle } from './shell/panel-model.ts';
+import { CHART_LINK_TEXT, SCENE_LINK_TEXT } from './shell/route-link.ts';
 import { tokens } from './tokens/tokens.ts';
 
 const SRC = fileURLToPath(new URL('.', import.meta.url));
@@ -256,6 +257,9 @@ const ROLES: readonly Role[] = [
   { role: 'Mote label', floor: 4.5, ink: { model: MOTE_TS, pattern: /export const MOTE_LABEL_COLOR = tokens\.colors\['([\w-]+)'\];/ }, ground: 'page' },
   { role: 'chrome', floor: 4.5, ink: { css: CHROME_CSS, selector: '.chrome-identity, .chrome-slot' }, ground: 'page' },
   { role: 'chrome control, raised', floor: 4.5, ink: { css: CHROME_CSS, selector: '.chrome-slot-control:hover, .chrome-slot-control:focus-visible' }, ground: 'page' },
+  // The scene's link to the chart (4.5) takes the line's ink at rest (`inherit`,
+  // measured as `chrome` above) and the raised ink on hover and focus.
+  { role: 'chrome chart link, raised', floor: 4.5, ink: { css: CHROME_CSS, selector: '.chrome-route:hover, .chrome-route:focus-visible' }, ground: 'page' },
   {
     role: 'affordance title',
     floor: 4.5,
@@ -275,6 +279,9 @@ const ROLES: readonly Role[] = [
   // classes on the panel's ground, measured above. The plate's labels are SVG
   // text, so their ink is the rule's `fill`.
   { role: 'chart heading', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-heading' }, ground: 'page' },
+  // The chart's chrome links (4.5): `the model` and `the scene`.
+  { role: 'chart chrome links', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-chrome a' }, ground: 'page' },
+  { role: 'chart chrome links, raised', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-chrome a:hover, .chart-chrome a:focus-visible' }, ground: 'page' },
   { role: 'chart Client heading', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-client' }, ground: 'page' },
   { role: 'index headers', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-index th' }, ground: 'page' },
   { role: 'chart legend', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-legend' }, ground: 'page' },
@@ -283,6 +290,8 @@ const ROLES: readonly Role[] = [
   { role: 'index links, raised', floor: 7, ink: { css: CHART_CSS, selector: '.chart-index a:hover, .chart-index a:focus-visible' }, ground: 'page' },
   { role: 'plate Client label', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-label-client', property: 'fill' }, ground: 'page' },
   { role: 'plate Project label', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-label-project', property: 'fill' }, ground: 'page' },
+  // A Client's date span on the plate (4.5).
+  { role: 'plate span label', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-label-span', property: 'fill' }, ground: 'page' },
 ];
 
 /** The token key a `var(--color-…)` value names, or undefined. */
@@ -403,6 +412,19 @@ test('contrast: a role moved to a dimmer ink, or one whose ink cannot be read, f
     failing(CHART_CSS, (s) => s.replace(/(\.chart-index td \{[^}]*color: )var\(--color-ink-prose-dark\)/, '$1var(--color-ink-label-dark)')),
     /^contrast: index cells is ink-label-dark on surface-base-dark, \d\.\d\d:1 — below its 7:1 floor$/,
   );
+  // 4.5: the span label and the chrome links at the quiet step.
+  assert.match(
+    failing(CHART_CSS, (s) => s.replace(/(\.chart-label-span \{[^}]*fill: )var\(--color-ink-label-dark\)/, '$1var(--color-ink-quiet-dark)')),
+    /^contrast: plate span label is ink-quiet-dark on surface-base-dark/,
+  );
+  assert.match(
+    failing(CHART_CSS, (s) => s.replace(/(\.chart-chrome a \{\n  color: )var\(--color-ink-label-dark\)/, '$1var(--color-ink-faint-dark)')),
+    /^contrast: chart chrome links is ink-faint-dark on surface-base-dark/,
+  );
+  assert.match(
+    failing(CHROME_CSS, (s) => s.replace(/(\.chrome-route:focus-visible \{\n  color: )var\(--color-ink-prose-dark\)/, '$1var(--color-ink-faint-dark)')),
+    /^contrast: chrome chart link, raised is ink-faint-dark on surface-base-dark/,
+  );
   assert.match(
     auditContrast(real, 'var(--color-stroke-active-dark)').join('\n'),
     /contrast: panel title is ink-lift-dark on stroke-active-dark/,
@@ -418,6 +440,13 @@ test('contrast: a role moved to a dimmer ink, or one whose ink cannot be read, f
  */
 const VISIBLE_COPY: ReadonlySet<string> = new Set([
   'THOMAS NAVARRO · the model',
+  // The identity line's name, drawn alone in the chart's heading beside its
+  // `the model` link (4.5).
+  'THOMAS NAVARRO',
+  // The links between surfaces (4.5): the scene's to the chart, the chart's to
+  // the scene. Each surface named as a surface, never a fallback or a version.
+  'the chart',
+  'the scene',
   // The Colophon's one `<h1>` (4.2), minimal until 5.1 fills the surface in.
   'the model',
   'scroll ↓ — time runs backward',
@@ -462,7 +491,7 @@ const ACCESSIBLE_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 /** The constants the renderers draw copy from; any other upper-case constant drawn as text fails. */
-const COPY_CONSTANTS: ReadonlySet<string> = new Set(['IDENTITY_LINE', 'SLOT_TEXT', 'EDITORIAL_RULE', 'RELEASE_LABEL', 'FIELD_LABELS', 'DEPTH_LABELS', 'CHART_LABELS']);
+const COPY_CONSTANTS: ReadonlySet<string> = new Set(['IDENTITY_LINE', 'IDENTITY_NAME', 'IDENTITY_MODEL', 'CHART_LINK_TEXT', 'SCENE_LINK_TEXT', 'SLOT_TEXT', 'EDITORIAL_RULE', 'RELEASE_LABEL', 'FIELD_LABELS', 'DEPTH_LABELS', 'CHART_LABELS']);
 
 /**
  * The separators a template sets between data, and nothing else: whitespace
@@ -780,6 +809,10 @@ function copyConstants(): Record<string, string> {
   const entries = (name: string, record: Readonly<Record<string, string>>) => Object.entries(record).map(([key, value]) => [`${name}.${key}`, value] as const);
   return Object.fromEntries([
     ['IDENTITY_LINE', IDENTITY_LINE],
+    ['IDENTITY_NAME', IDENTITY_NAME],
+    ['IDENTITY_MODEL', IDENTITY_MODEL],
+    ['CHART_LINK_TEXT', CHART_LINK_TEXT],
+    ['SCENE_LINK_TEXT', SCENE_LINK_TEXT],
     ['EDITORIAL_RULE', EDITORIAL_RULE],
     ['RELEASE_LABEL', RELEASE_LABEL],
     ...entries('SLOT_TEXT', SLOT_TEXT),
@@ -791,7 +824,11 @@ function copyConstants(): Record<string, string> {
 
 test('copy: the copy constants are each in the closed allowlist', () => {
   const constants = copyConstants();
-  assert.ok(Object.keys(constants).length >= 12, 'every copy constant is inspected');
+  assert.ok(Object.keys(constants).length >= 16, 'every copy constant is inspected');
+  // 4.5: a link named as a downgrade is not in the allowlist.
+  for (const [name, value] of [['CHART_LINK_TEXT', 'the fallback'], ['SCENE_LINK_TEXT', 'the 3D version'], ['CHART_LINK_TEXT', 'list view']] as const) {
+    assert.deepEqual(auditCopyConstants({ ...constants, [name]: value }), [`copy: the constant ${name} is ${JSON.stringify(value)}, which is not in the closed allowlist`]);
+  }
   assert.deepEqual(Object.keys(chartLabels()), ['notable', 'client', 'project', 'dates', 'carries', 'doesNot', 'none'], 'the chart’s labels are read off its model');
   assert.equal(chartLabels().none, 'No notable', 'the Shallow glyph’s name is read off the model');
   assert.deepEqual(auditCopyConstants(constants), []);
@@ -824,6 +861,7 @@ test('copy: every visible literal shipped from src/ and index.html is in the clo
   assert.ok(nav.some((drawn) => drawn.kind === 'text' && drawn.text === 'overview'), 'the index’s overview text is read');
   const chrome = jsxDrawn(codeOf(scripts['shell/corner-chrome.tsx'] as string, 'script'));
   assert.ok(chrome.some((drawn) => drawn.kind === 'constant' && drawn.text === 'IDENTITY_LINE'), 'the chrome’s identity constant is read');
+  assert.ok(chrome.some((drawn) => drawn.kind === 'constant' && drawn.text === 'CHART_LINK_TEXT'), 'the chrome’s link to the chart is read');
   // The panel draws only expressions, so nothing literal is found in it — and a
   // word planted in its deepest JSX (a `case` block's button) is.
   const planted = (scripts['shell/focus-panel.tsx'] as string).replace('{block.label}\n', 'Close {block.label}\n');
@@ -836,7 +874,7 @@ test('copy: every visible literal shipped from src/ and index.html is in the clo
   // date separator as a text run, `–`, admitted as copy.
   const chart = jsxDrawn(codeOf(scripts['render-fallback/chart.tsx'] as string, 'script'));
   assert.ok(chart.some((drawn) => drawn.kind === 'constant' && drawn.text === 'CHART_LABELS'), 'the chart’s headers are read');
-  assert.ok(chart.some((drawn) => drawn.kind === 'constant' && drawn.text === 'IDENTITY_LINE'), 'the chart’s <h1> is read');
+  assert.ok(chart.some((drawn) => drawn.kind === 'constant' && drawn.text === 'IDENTITY_NAME'), 'the chart’s <h1> is read');
   assert.ok(chart.some((drawn) => drawn.kind === 'text' && drawn.text === '–'), 'the date separator is read');
   assert.deepEqual(auditCopy(scripts, read('../index.html')), []);
 });
@@ -849,6 +887,8 @@ test('copy: a tooltip, a caption, help text or a narrated noscript fails with it
     assert.notEqual(mutated[path], scripts[path], 'the mutation must apply');
     return auditCopy(mutated, html).join('\n');
   };
+  /** Markup added after the chrome's identity line (4.5: the line ends on the chart link). */
+  const afterIdentity = (s: string, markup: string): string => s.replace('{CHART_LINK_TEXT}</a>\n      </p>', `{CHART_LINK_TEXT}</a>\n      </p>\n      ${markup}`);
   assert.match(
     failing('shell/index-nav.tsx', (s) => s.replace('<button type="button" id={OVERVIEW_ID}', '<button type="button" title="Back to the overview" id={OVERVIEW_ID}')),
     /^copy: src\/shell\/index-nav\.tsx draws the title "Back to the overview"/,
@@ -858,26 +898,26 @@ test('copy: a tooltip, a caption, help text or a narrated noscript fails with it
     /^copy: src\/shell\/index-nav\.tsx draws the visible text "see everything"/,
   );
   assert.match(
-    failing('shell/corner-chrome.tsx', (s) => s.replace('<p className="chrome-identity">{IDENTITY_LINE}</p>', '<p className="chrome-identity">{IDENTITY_LINE}</p>\n      <p>{\'Use the arrow keys to move.\'}</p>')),
+    failing('shell/corner-chrome.tsx', (s) => afterIdentity(s, '<p>{\'Use the arrow keys to move.\'}</p>')),
     /copy: src\/shell\/corner-chrome\.tsx draws the visible text "Use the arrow keys to move\."/,
   );
   assert.match(
-    failing('shell/corner-chrome.tsx', (s) => s.replace('{IDENTITY_LINE}</p>', '{IDENTITY_LINE}</p>\n      <p>{HELP_TEXT}</p>')),
+    failing('shell/corner-chrome.tsx', (s) => s.replace('{CHART_LINK_TEXT}</a>\n      </p>', '{CHART_LINK_TEXT}</a>\n      </p>\n      <p>{HELP_TEXT}</p>')),
     /^copy: src\/shell\/corner-chrome\.tsx draws the constant HELP_TEXT/,
   );
   // A parenthetical caption: punctuation is no proof that text is code.
   assert.match(
-    failing('shell/corner-chrome.tsx', (s) => s.replace('<p className="chrome-identity">{IDENTITY_LINE}</p>', '<p className="chrome-identity">{IDENTITY_LINE}</p>\n      <p>Scroll to travel (Tab opens the index)</p>')),
+    failing('shell/corner-chrome.tsx', (s) => afterIdentity(s, '<p>Scroll to travel (Tab opens the index)</p>')),
     /^copy: src\/shell\/corner-chrome\.tsx draws the visible text "Scroll to travel \(Tab opens the index\)"/,
   );
   // Text beside an expression, on either side.
   assert.match(
-    failing('shell/corner-chrome.tsx', (s) => s.replace('<p className="chrome-identity">{IDENTITY_LINE}</p>', '<p className="chrome-identity">Hello {IDENTITY_LINE} and welcome</p>')),
+    failing('shell/corner-chrome.tsx', (s) => afterIdentity(s, '<p className="chrome-identity">Hello {IDENTITY_LINE} and welcome</p>')),
     /^copy: src\/shell\/corner-chrome\.tsx draws the visible text "Hello",[^\n]*\ncopy: src\/shell\/corner-chrome\.tsx draws the visible text "and welcome",/,
   );
   // A literal inside an expression container, behind a ternary.
   assert.match(
-    failing('shell/corner-chrome.tsx', (s) => s.replace('<p className="chrome-identity">{IDENTITY_LINE}</p>', "<p className=\"chrome-identity\">{IDENTITY_LINE}</p>\n      <p>{slot.kind === 'control' ? 'Press Escape to leave' : null}</p>")),
+    failing('shell/corner-chrome.tsx', (s) => afterIdentity(s, "<p>{slot.kind === 'control' ? 'Press Escape to leave' : null}</p>")),
     /^copy: src\/shell\/corner-chrome\.tsx draws the visible text "Press Escape to leave", which is not in the closed allowlist$/,
   );
   // Generated content in a shipped stylesheet is drawn text too.
@@ -896,7 +936,7 @@ test('copy: a tooltip, a caption, help text or a narrated noscript fails with it
   // A digit, a `?` or an emoji is drawn text, not a separator.
   for (const drawn of ['?', '42', '✨']) {
     assert.match(
-      failing('shell/corner-chrome.tsx', (s) => s.replace('<p className="chrome-identity">{IDENTITY_LINE}</p>', `<p className="chrome-identity">{IDENTITY_LINE}</p>\n      <p>${drawn}</p>`)),
+      failing('shell/corner-chrome.tsx', (s) => afterIdentity(s, `<p>${drawn}</p>`)),
       new RegExp(`^copy: src/shell/corner-chrome\\.tsx draws the visible text "${drawn.replace('?', '\\?')}"`),
     );
   }
@@ -917,12 +957,25 @@ test('copy: a tooltip, a caption, help text or a narrated noscript fails with it
     /^copy: src\/render-fallback\/chart\.tsx draws the visible text "– Role"/,
   );
   assert.match(
-    failing('shell/corner-chrome.tsx', (s) => s.replace('<p className="chrome-identity">{IDENTITY_LINE}</p>', '<p className="chrome-identity">{IDENTITY_LINE}</p>\n      <p>Built –</p>')),
+    failing('shell/corner-chrome.tsx', (s) => afterIdentity(s, '<p>Built –</p>')),
     /^copy: src\/shell\/corner-chrome\.tsx draws the visible text "Built –"/,
+  );
+  // 4.5: a link named as a downgrade, or apologising, in either renderer.
+  assert.match(
+    failing('shell/corner-chrome.tsx', (s) => s.replace('>{CHART_LINK_TEXT}</a>', '>{CHART_LINK_TEXT} (lite version)</a>')),
+    /^copy: src\/shell\/corner-chrome\.tsx draws the visible text "\(lite version\)"/,
+  );
+  assert.match(
+    failing('render-fallback/chart.tsx', (s) => s.replace('<p className="chart-routes">', '<p className="chart-routes">\n          Switch to 3D')),
+    /^copy: src\/render-fallback\/chart\.tsx draws the visible text "Switch to 3D"/,
+  );
+  assert.match(
+    failing('render-fallback/chart.tsx', (s) => s.replace('{links.model.text}</a>', '{links.model.text}</a> {FALLBACK_NOTE}')),
+    /^copy: src\/render-fallback\/chart\.tsx draws the constant FALLBACK_NOTE/,
   );
   // The chart: an apology beside the plate, a caption over the index, a header constant of its own.
   assert.match(
-    failing('render-fallback/chart.tsx', (s) => s.replace('<h1 className="chart-heading">{IDENTITY_LINE}</h1>', '<h1 className="chart-heading">{IDENTITY_LINE}</h1>\n      <p>Best viewed on desktop</p>')),
+    failing('render-fallback/chart.tsx', (s) => s.replace('<div className="chart-chrome">', '<p>Best viewed on desktop</p>\n      <div className="chart-chrome">')),
     /^copy: src\/render-fallback\/chart\.tsx draws the visible text "Best viewed on desktop"/,
   );
   assert.match(
@@ -1248,7 +1301,14 @@ const CHART_RULES: readonly CssRule[] = [
     selector: '.chart',
     declarations: ['box-sizing: border-box', 'max-width: 1242px', 'margin: 0 auto', 'padding: var(--space-xxl) var(--space-xl) var(--space-xxl)', 'color: var(--color-ink-prose-dark)', 'overflow-wrap: anywhere'],
   },
-  { at: '', selector: '.chart-heading', declarations: ['margin: 0 0 var(--space-xxl)', ...CHART_TYPE('chrome'), 'color: var(--color-ink-label-dark)'] },
+  // The chrome row (4.5): the heading and the route line, opposite each other on one baseline.
+  { at: '', selector: '.chart-chrome', declarations: ['display: flex', 'justify-content: space-between', 'align-items: baseline', 'gap: var(--space-md)', 'margin: 0 0 var(--space-xxl)'] },
+  { at: '', selector: '.chart-heading, .chart-routes', declarations: ['margin: 0', ...CHART_TYPE('chrome'), 'color: var(--color-ink-label-dark)'] },
+  // 4.5: the route line, empty on the fallback surface, leaves no gap in the column.
+  { at: '', selector: '.chart-routes:empty', declarations: ['display: none'] },
+  { at: '', selector: '.chart-chrome a', declarations: ['color: var(--color-ink-label-dark)', 'text-decoration: none', 'border-bottom: 1px solid var(--color-stroke-near-dark)'] },
+  { at: '', selector: '.chart-chrome a:hover, .chart-chrome a:focus-visible', declarations: ['color: var(--color-ink-lift-dark)', 'border-bottom-color: var(--color-stroke-focus-dark)'] },
+  { at: '', selector: '.chart-chrome a:focus-visible', declarations: ['outline: 1px solid var(--color-stroke-focus-dark)', 'outline-offset: 3px'] },
   { at: '', selector: '.chart-plate', declarations: ['border: 1px solid var(--color-surface-edge-dark)'] },
   { at: '', selector: '.chart-plate svg', declarations: ['display: block', 'width: 100%', 'height: auto'] },
   { at: '', selector: '.chart-plate-across', declarations: ['overflow-x: auto'] },
@@ -1270,6 +1330,8 @@ const CHART_RULES: readonly CssRule[] = [
   },
   { at: '', selector: '.chart-legend-entry', declarations: ['display: flex', 'align-items: center', 'gap: var(--space-sm)'] },
   { at: '', selector: '.chart-label-client', declarations: [...PLATE_TYPE('scene-label-client'), 'fill: var(--color-ink-lift-dark)'] },
+  // A Client's span (4.5): the scene's secondary label role, at ink-label.
+  { at: '', selector: '.chart-label-span', declarations: [...PLATE_TYPE('scene-label-secondary'), 'fill: var(--color-ink-label-dark)'] },
   { at: '', selector: '.chart-label-project', declarations: [...PLATE_TYPE('scene-label-project'), 'fill: var(--color-ink-prose-dark)'] },
   { at: '', selector: '.chart-index', declarations: ['width: 100%', 'margin: var(--space-xxl) 0 0', 'border-collapse: collapse', 'border-spacing: 0'] },
   {
@@ -1308,6 +1370,7 @@ const CHART_RULES: readonly CssRule[] = [
     ],
   },
   { at: PHONE, selector: '.chart', declarations: ['padding: var(--space-lg) var(--space-md) var(--space-xxl)'] },
+  { at: PHONE, selector: '.chart-chrome', declarations: ['flex-direction: column', 'gap: var(--space-xs)'] },
   { at: PHONE, selector: '.chart-plate-across', declarations: ['display: none'] },
   { at: PHONE, selector: '.chart-plate-down', declarations: ['display: block'] },
   { at: PHONE, selector: '.chart-legend', declarations: ['flex-direction: column', 'gap: var(--space-md)'] },
@@ -1321,7 +1384,7 @@ const CHART_RULES: readonly CssRule[] = [
   { at: PHONE, selector: '.chart-record .panel-fields th, .chart-record .panel-fields td', declarations: ['display: block'] },
   { at: PHONE, selector: '.chart-record .panel-fields th', declarations: ['padding: var(--space-sm) 0 var(--space-hair)'] },
   { at: PHONE, selector: '.chart-record .panel-fields td', declarations: ['padding: 0 0 var(--space-sm)', 'border-top: 0'] },
-  { at: '@media (forced-colors: active)', selector: '.chart-index a:focus-visible', declarations: ['outline: 1px solid CanvasText'] },
+  { at: '@media (forced-colors: active)', selector: '.chart-chrome a:focus-visible, .chart-index a:focus-visible', declarations: ['outline: 1px solid CanvasText'] },
 ];
 
 /**
@@ -1329,7 +1392,7 @@ const CHART_RULES: readonly CssRule[] = [
  * Both plates are `aria-hidden`. One query decides both, so no width — a
  * fractional one under zoom included — shows both plates or neither.
  */
-const PLATE_SWAP = new Set(['.chart-plate-down', '@media (max-width: 640px) .chart-plate-across']);
+const PLATE_SWAP = new Set(['.chart-plate-down', '@media (max-width: 640px) .chart-plate-across', '.chart-routes:empty']);
 
 /**
  * The chart's treatment: `chart.css` exactly, with the identity bans — `display:
@@ -1390,6 +1453,16 @@ test('chart: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('.chart-legend {\n  display: flex;', '.chart-legend {\n  display: none;'), /`\.chart-legend` sets display: none/],
     [(s) => s.replace('  .chart-legend {\n    flex-direction: column;', '  .chart-legend {\n    display: none;\n    flex-direction: column;'), /`@media \(max-width: 640px\) \.chart-legend` sets display: none/],
     [(s) => s.replace('.chart-index th:first-child {\n  white-space: nowrap;\n}\n', ''), /`\.chart-index th:first-child` is missing/],
+    // 4.5: the chrome row, its links and the span label.
+    [(s) => s.replace('  justify-content: space-between;\n', ''), /`\.chart-chrome` lacks `justify-content: space-between`/],
+    [(s) => s.replace('.chart-routes:empty {\n  display: none;\n}\n', ''), /`\.chart-routes:empty` is missing/],
+    [(s) => s.replace('.chart-routes:empty {', '.chart-routes {'), /`\.chart-routes` sets display: none/],
+    [(s) => s.replace('  .chart-chrome {\n    flex-direction: column;', '  .chart-chrome {\n    flex-direction: row;'), /`@media \(max-width: 640px\) \.chart-chrome` lacks `flex-direction: column`/],
+    [(s) => s.replace('.chart-chrome a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;', '.chart-chrome a {\n  color: var(--color-ink-label-dark);\n  text-decoration: underline;'), /`\.chart-chrome a` lacks `text-decoration: none`/],
+    [(s) => s.replace('.chart-chrome a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;\n  border-bottom: 1px solid var(--color-stroke-near-dark);', '.chart-chrome a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;'), /`\.chart-chrome a` lacks `border-bottom/],
+    [(s) => s.replace('  .chart-chrome a:focus-visible,\n  .chart-index a:focus-visible {', '  .chart-index a:focus-visible {'), /`@media \(forced-colors: active\) \.chart-chrome a:focus-visible, \.chart-index a:focus-visible` is missing/],
+    [(s) => s.replace('  font-size: var(--type-scene-label-secondary-font-size);\n', '  font-size: var(--type-scene-label-project-font-size);\n'), /`\.chart-label-span` lacks `font-size: var\(--type-scene-label-secondary-font-size\)`/],
+    [(s) => s.replace('.chart-routes {\n  margin: 0;', '.chart-routes {\n  display: none;\n  margin: 0;'), /sets display: none/],
     [(s) => `${s}\n.deep .chart-marker {\n  transform: scale(1.4);\n}\n`, /^chart: the unlisted rule `\.deep \.chart-marker`$/m],
     [(s) => `${s}\n.chart-halo {\n  stroke: var(--color-stroke-near-dark);\n}\n`, /^chart: the unlisted rule `\.chart-halo`$/m],
     [(s) => s.replace('  .chart-index-notable {\n    position: absolute;', '  .chart-index-notable {\n    display: none;\n    position: absolute;'), /`@media \(max-width: 640px\) \.chart-index-notable` sets display: none/],

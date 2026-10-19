@@ -26,12 +26,24 @@
  * sits in a left gutter of each stacked row, first in it, as the key screen
  * draws it.
  *
+ * The chrome row (4.5) is the key screen's `.fb-chrome`: the heading and the
+ * route line opposite each other, on one baseline, stacked at 640px and below.
+ * Both are the `chrome` type role at `ink-label`; their links (`the model`,
+ * `the scene`) keep that ink with a 1px `stroke-near` rule under the word,
+ * raised to `ink-lift` and a `stroke-focus` rule on hover and focus, and given
+ * the index links' focus outline. A Client's span (`.chart-label-span`) is the
+ * `scene-label-secondary` role at `ink-label`, as the key screen sets it.
+ * On the fallback surface the route line is empty (no scene to offer), and
+ * `.chart-routes:empty` takes it out of the row, so the stacked phone column
+ * keeps no stray gap: an empty paragraph has nothing for assistive technology
+ * to lose.
+ *
  * Above 640px the across plate shows and the down plate is `display: none`;
  * at 640px and below, the reverse. One query decides both, so no width — a
  * fractional one under zoom included — shows both plates or neither. Both are
  * `aria-hidden` in the markup, so the one hidden is no loss to the
- * accessibility tree — and these are the only two `display: none` the audit
- * admits.
+ * accessibility tree — and these, with the empty route line, are the only
+ * `display: none` the audit admits.
  *
  * Each plate draws 1:1, its svg at its viewBox width (`ACROSS.width`,
  * `DOWN.width` in `chart-model.ts`), because the labels' type is a token size
@@ -53,14 +65,44 @@
   overflow-wrap: anywhere;
 }
 
-.chart-heading {
+.chart-chrome {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-md);
   margin: 0 0 var(--space-xxl);
+}
+
+.chart-heading,
+.chart-routes {
+  margin: 0;
   font-family: var(--type-chrome-font-family);
   font-size: var(--type-chrome-font-size);
   font-weight: var(--type-chrome-font-weight);
   line-height: var(--type-chrome-line-height);
   letter-spacing: var(--type-chrome-letter-spacing);
   color: var(--color-ink-label-dark);
+}
+
+.chart-routes:empty {
+  display: none;
+}
+
+.chart-chrome a {
+  color: var(--color-ink-label-dark);
+  text-decoration: none;
+  border-bottom: 1px solid var(--color-stroke-near-dark);
+}
+
+.chart-chrome a:hover,
+.chart-chrome a:focus-visible {
+  color: var(--color-ink-lift-dark);
+  border-bottom-color: var(--color-stroke-focus-dark);
+}
+
+.chart-chrome a:focus-visible {
+  outline: 1px solid var(--color-stroke-focus-dark);
+  outline-offset: 3px;
 }
 
 .chart-plate {
@@ -153,6 +195,14 @@
   font-weight: var(--type-scene-label-client-font-weight);
   letter-spacing: var(--type-scene-label-client-letter-spacing);
   fill: var(--color-ink-lift-dark);
+}
+
+.chart-label-span {
+  font-family: var(--type-scene-label-secondary-font-family);
+  font-size: var(--type-scene-label-secondary-font-size);
+  font-weight: var(--type-scene-label-secondary-font-weight);
+  letter-spacing: var(--type-scene-label-secondary-letter-spacing);
+  fill: var(--color-ink-label-dark);
 }
 
 .chart-label-project {
@@ -249,6 +299,11 @@
     padding: var(--space-lg) var(--space-md) var(--space-xxl);
   }
 
+  .chart-chrome {
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
+
   .chart-plate-across {
     display: none;
   }
@@ -320,6 +375,7 @@
  * keyboard focus keeps a system-coloured outline.
  */
 @media (forced-colors: active) {
+  .chart-chrome a:focus-visible,
   .chart-index a:focus-visible {
     outline: 1px solid CanvasText;
   }

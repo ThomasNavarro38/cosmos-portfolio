@@ -18,9 +18,19 @@
  * chrome is left behind: the index's buttons are scene doors, and the corner
  * chrome and the panel are scene chrome. On the chart, the table and the record
  * anchors are the destination index.
+ *
+ * **The chart's links are built here** (4.5), from the router and this
+ * machine's surface, by `chartLinks` (`route-link.ts`): `the model` to the
+ * Colophon on any machine, and `the scene` to `/` only where the surface is the
+ * scene — a phone or a machine without WebGL2 is shown the chart at `/`. Each
+ * is `{ key, text, href, follow }`, so the chart reads no router, store or
+ * machine surface of its own.
  */
 
 import { Component, Suspense, lazy, type ReactNode } from 'react';
+import type { Surface } from './detect.ts';
+import { chartLinks } from './route-link.ts';
+import type { Router } from './router.ts';
 
 const Chart = lazy(() => import('../render-fallback/chart.tsx'));
 
@@ -38,6 +48,10 @@ export interface FallbackHostArtifact {
     readonly id: string;
     readonly name: string;
     readonly timeAxis: number;
+    readonly span: {
+      readonly start: string;
+      readonly end: string | null;
+    };
     readonly projects: readonly {
       readonly id: string;
       readonly isDeep: boolean;
@@ -61,6 +75,9 @@ export interface FallbackHostArtifact {
 
 export interface FallbackHostProps {
   readonly artifact: FallbackHostArtifact;
+  /** This machine's surface: the chart offers the scene only where it can run. */
+  readonly surface: Surface;
+  readonly router: Router;
 }
 
 interface FallbackBoundaryProps {
@@ -88,11 +105,12 @@ class FallbackBoundary extends Component<FallbackBoundaryProps, FallbackBoundary
   }
 }
 
-export function FallbackHost({ artifact }: FallbackHostProps) {
+export function FallbackHost({ artifact, surface, router }: FallbackHostProps) {
+  const links = chartLinks(surface, router.navigate);
   return (
     <FallbackBoundary>
       <Suspense fallback={null}>
-        <Chart artifact={artifact} />
+        <Chart artifact={artifact} links={links} />
       </Suspense>
     </FallbackBoundary>
   );

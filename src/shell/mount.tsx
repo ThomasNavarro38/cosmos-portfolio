@@ -15,11 +15,14 @@
  * lives as long as the page.
  *
  * Then the router (4.2), over the real history, starting at the route the entry
- * resolved. Its position hooks are the store's: `read` is `scrollProgress`, and
- * `restore` is `advanceScroll` — the router's one door into the store, its third
- * caller beside the scroll input and `goHome`. The router is made before the
- * first render, so a position restored from `history.state` is in the store when
- * the scene mounts, and the rig's first frame is that stop (AD-18, UX-DR54).
+ * resolved. Its position hooks are the store's, `storePositionHooks()` from
+ * `position-hooks.ts` (4.5) — the binding `router.test.ts` executes: `read` is
+ * `scrollProgress`, `restore` is `advanceScroll` (the router's one door into the
+ * store) and `subscribe` hears a `scrollProgress` change alone, so the router
+ * keeps the current history entry's position current. The router is made
+ * before the first render, so a position restored from `history.state` is in
+ * the store when the scene mounts, and the rig's first frame is that stop
+ * (AD-18, UX-DR54).
  *
  * Then `App`, handed the surface the entry chose and the router. `App` shows the
  * Colophon alone on `/colophon`; otherwise the index, the chrome and the panel,
@@ -31,8 +34,9 @@ import { createRoot } from 'react-dom/client';
 import { App } from '../App.tsx';
 import type { Surface } from './detect.ts';
 import { REDUCED_MOTION_QUERY, setReducedMotion } from './motion-preference.ts';
-import { browserHistory, createRouter, type Route } from './router.ts';
-import { advanceScroll, navigationStore } from './state.ts';
+import type { Route } from './route.ts';
+import { storePositionHooks } from './position-hooks.ts';
+import { browserHistory, createRouter } from './router.ts';
 
 /** The preference's one writer: the media query, now and on every change. */
 function writeReducedMotion(): void {
@@ -60,10 +64,7 @@ export function mount(surface: Surface, route: Route): void {
     throw new Error('Root container #root is missing from index.html');
   }
   // Lives as long as the page, like the preference's listener: never disposed.
-  const router = createRouter(browserHistory(), route, {
-    read: () => navigationStore.getState().scrollProgress,
-    restore: (progress) => advanceScroll(progress),
-  });
+  const router = createRouter(browserHistory(), route, storePositionHooks());
   createRoot(container).render(
     <StrictMode>
       <App surface={surface} router={router} />

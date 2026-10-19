@@ -84,8 +84,40 @@ export interface ClientEntity {
    * to `luminanceBand` by test and left free of the Rail.
    */
   readonly timeAxis: number;
+  /**
+   * The engagement's calendar span (Story 4.5): the earliest of its Projects'
+   * `duration.start`, and the latest `duration.end` — or `null` while any of them
+   * is ongoing. Derived here, once, so the Fallback draws a Client's dates
+   * without aggregating Project dates itself (AD-3). `timeAxis` is a recency
+   * rank, not a calendar, so this is the only place a Client's years live.
+   */
+  readonly span: ClientSpan;
   /** In authored order within this Client. Never empty. */
   readonly projects: readonly ProjectEntity[];
+}
+
+/** A Client's span: authored `YYYY-MM` months; `end` is `null` while any Project is ongoing. */
+export interface ClientSpan {
+  readonly start: string;
+  readonly end: string | null;
+}
+
+/**
+ * The span of a set of engagements: the earliest `start`, and the latest `end`,
+ * or `null` when any one is ongoing. `YYYY-MM` compares as a string.
+ *
+ * @throws on an empty set — a Client always owns at least one Project.
+ */
+export function clientSpanOf(durations: readonly { readonly start: string; readonly end: string | null }[]): ClientSpan {
+  const [first, ...rest] = durations;
+  if (first === undefined) throw new Error('a span needs at least one engagement');
+  let start = first.start;
+  let end: string | null = first.end;
+  for (const duration of rest) {
+    if (duration.start < start) start = duration.start;
+    end = end === null || duration.end === null ? null : duration.end > end ? duration.end : end;
+  }
+  return { start, end };
 }
 
 /** The whole derived graph. Clients in first-appearance order. */
@@ -348,6 +380,7 @@ export function deriveEntities(career: Career, options: DeriveOptions): EntityGr
     // Project, so a long early engagement would outrank a short late one on the
     // Fallback — and `artifact.test.ts` fixes a set where exactly that differs.
     timeAxis: Math.max(...owned.map((entity) => entity.timeAxis)),
+    span: clientSpanOf(owned.map((entity) => entity.project.duration)),
     projects: owned,
   }));
 

@@ -226,6 +226,9 @@ const LINES = '.chrome-identity, .chrome-slot';
 const CONTROL = '.chrome-slot-control';
 const RAISED = '.chrome-slot-control:hover, .chrome-slot-control:focus-visible';
 const FOCUSED = '.chrome-slot-control:focus-visible';
+const ROUTE = '.chrome-route';
+const ROUTE_RAISED = '.chrome-route:hover, .chrome-route:focus-visible';
+const ROUTE_FOCUSED = '.chrome-route:focus-visible';
 const TYPE_PROPERTIES = ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing'] as const;
 
 /**
@@ -261,8 +264,18 @@ const EXPECTED: readonly (readonly [string | null, string, string, string])[] = 
   [null, FOCUSED, 'text-decoration-line', 'underline'],
   [null, FOCUSED, 'text-decoration-thickness', 'var(--stroke-hairline)'],
   [null, FOCUSED, 'text-underline-offset', 'var(--space-hair)'],
+  // The identity line's link to the chart (4.5) mirrors the button: the line's
+  // type and ink, no box, no rest underline; it alone on that line takes the pointer.
+  [null, ROUTE, 'color', 'inherit'],
+  [null, ROUTE, 'text-decoration', 'none'],
+  [null, ROUTE, 'pointer-events', 'auto'],
+  [null, ROUTE_RAISED, 'color', 'var(--color-ink-prose-dark)'],
+  [null, ROUTE_RAISED, 'outline', 'none'],
+  [null, ROUTE_FOCUSED, 'text-decoration-line', 'underline'],
+  [null, ROUTE_FOCUSED, 'text-decoration-thickness', 'var(--stroke-hairline)'],
+  [null, ROUTE_FOCUSED, 'text-underline-offset', 'var(--space-hair)'],
   // Forced colours flatten the ink step, so keyboard focus there is the system outline.
-  [FORCED_COLORS, '.chrome-slot-control:focus-visible', 'outline', '1px solid CanvasText'],
+  [FORCED_COLORS, '.chrome-route:focus-visible, .chrome-slot-control:focus-visible', 'outline', '1px solid CanvasText'],
 ];
 
 function auditStylesheet(css: string, tokensCss: string): string[] {
@@ -360,6 +373,14 @@ test('the stylesheet audit rejects the real stylesheet with any one departure', 
     ['a stray rule', (s) => `${s}\n.chrome-identity::after {\n  content: '';\n}\n`],
     ['an @supports block', (s) => `${s}\n@supports (display: grid) {\n  .chrome-slot {\n    font-size: 12px;\n  }\n}\n`],
     ['an !important', (s) => s.replace('z-index: 1;', 'z-index: 1 !important;')],
+    // 4.5: the chart link.
+    ['the link takes no pointer', (s) => s.replace('  text-decoration: none;\n  pointer-events: auto;', '  text-decoration: none;\n  pointer-events: none;')],
+    ['the link underlined at rest', (s) => s.replace('  color: inherit;\n  text-decoration: none;', '  color: inherit;\n  text-decoration: underline;')],
+    ['the link in its own ink', (s) => s.replace('.chrome-route {\n  color: inherit;', '.chrome-route {\n  color: var(--color-ink-prose-dark);')],
+    ['the link not raised', (s) => s.replace('.chrome-route:focus-visible {\n  color: var(--color-ink-prose-dark);', '.chrome-route:focus-visible {\n  color: var(--color-ink-label-dark);')],
+    ['the link focus by colour alone', (s) => s.replace(/\n\.chrome-route:focus-visible \{[^}]*text-decoration-line[^}]*\}\n/, '\n')],
+    ['the link boxed', (s) => s.replace('  text-decoration: none;\n  pointer-events: auto;', '  text-decoration: none;\n  pointer-events: auto;\n  border: 1px solid var(--color-surface-edge-dark);')],
+    ['no forced-colours focus on the link', (s) => s.replace('.chrome-route:focus-visible,\n  .chrome-slot-control:focus-visible {', '.chrome-slot-control:focus-visible {')],
     ['a missing token', (s) => s.replace('var(--color-ink-label-dark)', 'var(--color-ink-chrome-dark)')],
     ['a declaration with no colon', (s) => s.replace('cursor: pointer;', 'cursor pointer;')],
   ];
@@ -404,7 +425,17 @@ function auditChrome(source: string): string[] {
   if (!/const\s+style\s*=\s*slotStyle\(\s*focusedProjectId\s*!==\s*null\s*,\s*pace\s*\)\s*;/.test(code)) failures.push('the style is not slotStyle(focused, pace)');
   if ((code.match(/\bchromeSlot\(/g) ?? []).length !== 1 || (code.match(/\bslotStyle\(/g) ?? []).length !== 1) failures.push('the model is asked other than once');
   // Exactly two chrome elements: the identity line, and one persistent slot.
-  if (!/<p\s+className="chrome-identity"\s*>\s*\{\s*IDENTITY_LINE\s*\}\s*<\/p>/.test(code)) failures.push('the identity line is not one <p class="chrome-identity"> of IDENTITY_LINE');
+  // 4.5: the identity line is IDENTITY_LINE, ` · `, and one link to the chart —
+  // its href the canonical path, its click `followRoute`'s, its text the model's.
+  if (!/<p\s+className="chrome-identity"\s*>\s*\{\s*IDENTITY_LINE\s*\}\s*·\s*<a\b[^\n]*>\s*\{\s*CHART_LINK_TEXT\s*\}\s*<\/a>\s*<\/p>/.test(code)) {
+    failures.push('the identity line is not one <p class="chrome-identity"> of IDENTITY_LINE, ` · ` and the chart link');
+  }
+  if (!/<a\s+className="chrome-route"\s+href=\{\s*ROUTE_PATHS\.chart\s*\}\s+onClick=\{\(\s*(\w+)\s*\)\s*=>\s*followRoute\(\s*\1\s*,\s*router\.navigate\s*,\s*'chart'\s*\)\}\s*>/.test(code)) {
+    failures.push('the chart link is not <a class="chrome-route" href={ROUTE_PATHS.chart}> whose click is followRoute(event, router.navigate, \'chart\')');
+  }
+  if (!/export\s+function\s+CornerChrome\(\s*\{\s*router\s*\}\s*:\s*\{\s*readonly\s+router\s*:\s*Router\s*\}\s*\)/.test(code)) failures.push('the chrome does not take the router as its one prop');
+  if (!/import\s*\{\s*CHART_LINK_TEXT\s*,\s*followRoute\s*\}\s*from\s*'\.\/route-link\.ts'/.test(code)) failures.push('the link text and click are not route-link.ts’s');
+  if (/\bnavigate\(/.test(code)) failures.push('the chrome navigates itself — the click is followRoute’s');
   const slot =
     /<p\s+className="chrome-slot"\s+style=\{\s*style\s*\}\s*>\s*\{\s*slot\.kind\s*===\s*'control'\s*\?\s*\(\s*<button\s+type="button"\s+ref=\{\s*handBack\s*\}\s+className="chrome-slot-control"\s+data-action=\{\s*slot\.action\s*\}\s+onClick=\{\(\s*(\w+)\s*\)\s*=>\s*\(\s*\1\.detail\s*>\s*1\s*\?\s*undefined\s*:\s*slot\.action\s*===\s*'return'\s*\?\s*returnToRail\(\)\s*:\s*releaseLayer\(\)\s*\)\}\s+onKeyDown=\{\(\s*(\w+)\s*\)\s*=>\s*\{\s*if\s*\(\s*\2\.repeat\s*&&\s*\2\.key\s*===\s*'Enter'\s*\)\s*\2\.preventDefault\(\)\s*;?\s*\}\s*\}\s*>\s*\{\s*slot\.text\s*\}\s*<\/button>\s*\)\s*:\s*\(\s*slot\.text\s*\)\s*\}\s*<\/p>/;
   if (!slot.test(code)) {
@@ -413,18 +444,19 @@ function auditChrome(source: string): string[] {
   if ((code.match(/\bstyle=\{/g) ?? []).length !== 1) failures.push('the style is not on the one persistent slot element');
   if (/\bkey=\{/.test(code)) failures.push('a key — a keyed slot remounts, and jumps');
   if ((code.match(/<button\b/g) ?? []).length > 1) failures.push('more than one <button>');
+  if ((code.match(/<a\b/g) ?? []).length !== 1 || (code.match(/\bhref=/g) ?? []).length !== 1) failures.push('a link other than the chart’s — the model’s route is 5.1’s');
   if (
     (code.match(/className="chrome-identity"/g) ?? []).length !== 1 ||
     (code.match(/className="chrome-slot"/g) ?? []).length !== 1 ||
-    (code.match(/className="chrome-slot-control"/g) ?? []).length !== 1
+    (code.match(/className="chrome-slot-control"/g) ?? []).length !== 1 ||
+    (code.match(/className="chrome-route"/g) ?? []).length !== 1
   ) {
     failures.push('a third chrome line, or a slot drawn twice');
   }
   const elements = code.match(/<[a-zA-Z][\w.]*/g) ?? [];
-  if (elements.length !== 3) failures.push(`elements other than the identity, the slot and its button — found ${elements.join(' ')}`);
+  if (elements.length !== 4) failures.push(`elements other than the identity, its chart link, the slot and its button — found ${elements.join(' ')}`);
   // The name is the visible text.
   if (/\baria-[\w-]+=|\btitle=|\balt=/.test(code)) failures.push('an ARIA or title attribute — the name is the visible text');
-  if (/<a\b|\bhref=/.test(code)) failures.push('a link — the model’s route is 5.1’s');
   if (/\btabIndex=/.test(code)) failures.push('a tabIndex — the instruction is text, the button focusable by default');
   // No store event, and only the two doors.
   if (/\b(?:focusProject|enterFreeFlight|enterRail|releaseFocus|advanceScroll|hoverProject|keyboardApproach|resetNavigation)\b|\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) {
@@ -432,7 +464,7 @@ function auditChrome(source: string): string[] {
   }
   if (/\b(?:pullBack|goHome|activateClient|activateProject|approachByKeyboard|leaveByKeyboard)\b/.test(code)) failures.push('a door other than return and release');
   if (!/import\s*\{\s*releaseLayer\s*,\s*returnToRail\s*\}\s*from\s*'\.\/activate\.ts'/.test(code)) failures.push('the doors are not activate.ts’s');
-  if ((code.match(/\bonClick\b/g) ?? []).length !== 1) failures.push('a handler beyond the slot’s');
+  if ((code.match(/\bonClick\b/g) ?? []).length !== 2) failures.push('a handler beyond the slot’s and the chart link’s');
   if (/\bon(?:Mouse|Pointer|Key(?!Down=)|Focus|Blur|Wheel|Scroll)\w*=/.test(code) || (code.match(/\bonKeyDown=/g) ?? []).length !== 1) failures.push('reacts to hover, pointer, keys or focus — the slot is a plain control');
   // The hand-back: a stable ref cleanup, focus to overview by its id, exactly when
   // the button held it and its last action was `return`, read off the element.
@@ -450,7 +482,7 @@ function auditChrome(source: string): string[] {
   if (/\buseState\b|\buseReducer\b|\buseMemo\b|\buseRef\b|\buseEffect\b|\buseLayoutEffect\b/.test(code)) failures.push('keeps state or effects of its own');
   if (/\bwindow\b|innerWidth|innerHeight|getBoundingClientRect|matchMedia/.test(code)) failures.push('reads the viewport');
   if (/\bstyle=\{\{|textTransform|fontWeight|toUpperCase|toLowerCase/.test(code)) failures.push('an inline style literal or a recasing — the treatment is corner-chrome.css and the model');
-  if (/(?:'|")(?:THOMAS|scroll ↓|↩|esc —)/.test(code)) failures.push('a chrome string written in the renderer — the strings are the model’s');
+  if (/(?:'|")(?:THOMAS|scroll ↓|↩|esc —|the chart|the model)/.test(code) || />\s*the chart\s*</.test(code)) failures.push('a chrome string written in the renderer — the strings are the model’s');
   if ((code.match(/^import\s+'\.\/corner-chrome\.css'\s*;/gm) ?? []).length !== 1) failures.push('the stylesheet is not imported, once');
   return failures;
 }
@@ -491,9 +523,18 @@ const CHROME_TARGETS: ReadonlyMap<string, string> = new Map([
   ['the pace ignoring the preference', 'the pace is not motionPace'],
   ['the style never focused', 'the style is not slotStyle(focused, pace)'],
   ['the style at full motion always', 'the style is not slotStyle(focused, pace)'],
-  ['a third line', 'elements other than the identity, the slot and its button'],
+  ['a third line', 'elements other than the identity, its chart link, the slot and its button'],
   ['a second button', 'more than one <button>'],
-  ['the identity a link', 'a link — the model’s route is 5.1’s'],
+  ['the identity a link', 'a link other than the chart’s'],
+  ['the model a link too', 'a link other than the chart’s'],
+  ['the chart link dropped', 'the identity line is not one <p class="chrome-identity">'],
+  ['the chart link a written path', 'the chart link is not <a class="chrome-route"'],
+  ['the chart link navigating on every click', 'the chart link is not <a class="chrome-route"'],
+  ['the chart link to the colophon', 'the chart link is not <a class="chrome-route"'],
+  ['the chart link written out', 'a chrome string written in the renderer'],
+  ['the chart link a button', 'the identity line is not one <p class="chrome-identity">'],
+  ['the router not a prop', 'the chrome does not take the router as its one prop'],
+  ['a click rule of its own', 'the chrome navigates itself'],
   ['the identity a button', 'the identity line is not one <p class="chrome-identity">'],
   ['the identity written out', 'the identity line is not one <p class="chrome-identity">'],
   ['the identity recased', 'a recasing'],
@@ -550,11 +591,20 @@ test('the chrome audit rejects the real renderer with any one guarantee broken',
     ['the pace ignoring the preference', (s) => s.replace('motionPace(useSyncExternalStore(subscribeReducedMotion, reducedMotion))', 'motionPace(false)')],
     ['the style never focused', (s) => s.replace('slotStyle(focusedProjectId !== null, pace)', 'slotStyle(false, pace)')],
     ['the style at full motion always', (s) => s.replace('slotStyle(focusedProjectId !== null, pace)', 'slotStyle(focusedProjectId !== null)')],
-    ['a third line', (s) => s.replace('<p className="chrome-identity">{IDENTITY_LINE}</p>', '<p className="chrome-identity">{IDENTITY_LINE}</p>\n      <p className="chrome-hud">{mode}</p>')],
-    ['a second button', (s) => s.replace('<p className="chrome-identity">{IDENTITY_LINE}</p>', '<p className="chrome-identity">{IDENTITY_LINE}</p>\n      <button type="button" onClick={() => releaseLayer()}>esc</button>')],
-    ['the identity a link', (s) => s.replace('<p className="chrome-identity">{IDENTITY_LINE}</p>', '<a className="chrome-identity" href="/colophon">{IDENTITY_LINE}</a>')],
-    ['the identity a button', (s) => s.replace('<p className="chrome-identity">{IDENTITY_LINE}</p>', '<button className="chrome-identity">{IDENTITY_LINE}</button>')],
-    ['the identity written out', (s) => s.replace('{IDENTITY_LINE}</p>', 'THOMAS NAVARRO · the model</p>')],
+    ['a third line', (s) => s.replace('{CHART_LINK_TEXT}</a>\n      </p>', '{CHART_LINK_TEXT}</a>\n      </p>\n      <p className="chrome-hud">{mode}</p>')],
+    ['a second button', (s) => s.replace('{CHART_LINK_TEXT}</a>\n      </p>', '{CHART_LINK_TEXT}</a>\n      </p>\n      <button type="button" onClick={() => releaseLayer()}>esc</button>')],
+    ['the identity a link', (s) => s.replace('{CHART_LINK_TEXT}</a>\n      </p>', '{CHART_LINK_TEXT}</a>\n      </p>\n      <a className="chrome-identity" href="/colophon">{IDENTITY_LINE}</a>')],
+    ['the model a link too', (s) => s.replace('{IDENTITY_LINE} · <a', '<a href="/colophon">{IDENTITY_LINE}</a> · <a')],
+    ['the chart link dropped', (s) => s.replace(/\{IDENTITY_LINE\} · <a[^\n]*<\/a>/, '{IDENTITY_LINE}')],
+    ['the chart link a written path', (s) => s.replace('href={ROUTE_PATHS.chart}', 'href="/chart"')],
+    ['the chart link navigating on every click', (s) => s.replace("onClick={(event) => followRoute(event, router.navigate, 'chart')}", "onClick={() => router.navigate('chart')}")],
+    ['the chart link to the colophon', (s) => s.replace("followRoute(event, router.navigate, 'chart')", "followRoute(event, router.navigate, 'colophon')")],
+    ['the chart link written out', (s) => s.replace('>{CHART_LINK_TEXT}</a>', '>the chart</a>')],
+    ['the chart link a button', (s) => s.replace(/<a className="chrome-route"[^\n]*<\/a>/, '<button type="button">{CHART_LINK_TEXT}</button>')],
+    ['the router not a prop', (s) => s.replace('export function CornerChrome({ router }: { readonly router: Router }) {', 'export function CornerChrome() {\n  const router = window.router as Router;')],
+    ['a click rule of its own', (s) => s.replace("onClick={(event) => followRoute(event, router.navigate, 'chart')}", "onClick={(event) => (event.button === 0 ? (event.preventDefault(), router.navigate('chart')) : undefined)}")],
+    ['the identity a button', (s) => s.replace('<p className="chrome-identity">', '<button className="chrome-identity">').replace('{CHART_LINK_TEXT}</a>\n      </p>', '{CHART_LINK_TEXT}</a>\n      </button>')],
+    ['the identity written out', (s) => s.replace('{IDENTITY_LINE} · ', 'THOMAS NAVARRO · the model · ')],
     ['the identity recased', (s) => s.replace('{IDENTITY_LINE}', '{IDENTITY_LINE.toUpperCase()}')],
     ['an aria-label', (s) => s.replace('className="chrome-slot-control"', 'className="chrome-slot-control"\n            aria-label={slot.text}')],
     ['an aria-labelledby', (s) => s.replace('type="button"', 'type="button" aria-labelledby="chrome"')],

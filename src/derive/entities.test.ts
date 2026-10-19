@@ -18,8 +18,8 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { RESTING_BANDS } from './rules.ts';
-import { clientFoldWarnings, clientIdOf, deriveEntities, isDeepProject, projectIdOf } from './entities.ts';
-import { allProjects, AS_OF, baseEntry, graphOf as derive } from './fixtures.test.ts';
+import { clientFoldWarnings, clientIdOf, clientSpanOf, deriveEntities, isDeepProject, projectIdOf } from './entities.ts';
+import { allProjects, AS_OF, baseEntry, entry, graphOf as derive } from './fixtures.test.ts';
 
 /** The real authored file, resolved the way `src/data/validate.test.ts` does. */
 const CAREER_JSON = fileURLToPath(new URL('../data/career.json', import.meta.url));
@@ -369,4 +369,38 @@ test('isDeepProject is the one predicate, and deriveEntities classifies through 
   for (const entity of allProjects(graph)) {
     assert.equal(entity.isDeep, isDeepProject(entity.project), `"${entity.id}" must be classified by isDeepProject`);
   }
+});
+
+// --- The Client span (4.5) ---------------------------------------------------
+
+test('a Client spans its earliest start to its latest end, derived beside timeAxis', () => {
+  const graph = derive(
+    entry('SIMSU', 'One', { duration: { start: '2016-05', end: '2016-11' } }),
+    entry('SIMSU', 'Two', { duration: { start: '2016-09', end: '2017-07' } }),
+    entry('Other', 'Same year', { duration: { start: '2019-03', end: '2019-04' } }),
+  );
+  const span = (id: string) => graph.clients.find((client) => client.id === id)?.span;
+  assert.deepEqual(span('client:simsu'), { start: '2016-05', end: '2017-07' });
+  assert.deepEqual(span('client:other'), { start: '2019-03', end: '2019-04' });
+});
+
+test('a Client with any ongoing Project has a null end, whatever the others ended on', () => {
+  const graph = derive(
+    entry('Decathlon', 'Done', { duration: { start: '2024-02', end: '2025-01' } }),
+    entry('Decathlon', 'Ongoing', { duration: { start: '2024-06', end: null } }),
+  );
+  assert.deepEqual(graph.clients[0]?.span, { start: '2024-02', end: null });
+});
+
+test('clientSpanOf: order-free, null wins, and an empty set throws', () => {
+  const durations = [
+    { start: '2020-01', end: '2020-03' },
+    { start: '2018-07', end: '2019-02' },
+    { start: '2019-05', end: '2021-12' },
+  ];
+  assert.deepEqual(clientSpanOf(durations), { start: '2018-07', end: '2021-12' });
+  assert.deepEqual(clientSpanOf([...durations].reverse()), { start: '2018-07', end: '2021-12' });
+  assert.deepEqual(clientSpanOf([{ start: '2020-01', end: null }, ...durations]), { start: '2018-07', end: null });
+  assert.deepEqual(clientSpanOf([...durations, { start: '2022-01', end: null }]), { start: '2018-07', end: null });
+  assert.throws(() => clientSpanOf([]), /at least one/);
 });

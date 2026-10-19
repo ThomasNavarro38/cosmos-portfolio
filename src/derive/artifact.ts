@@ -84,6 +84,9 @@ function clientOf(client: ClientEntity, layout: SolvedLayout): ArtifactClient {
     id: client.id,
     name: client.name,
     timeAxis: client.timeAxis,
+    // The calendar span (4.5), derived in `entities.ts` beside `timeAxis`, so the
+    // Fallback draws a Client's years without aggregating its Projects' dates.
+    span: client.span,
     position: positionOf(layout, client.id),
     // Projects in ID order, so the document's own ordering is content-derived
     // and a re-ordered `career.json` emits byte-identical bytes. This is the

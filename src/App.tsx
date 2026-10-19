@@ -27,6 +27,11 @@
  * responsibility, and it comes last in document order because it is read after a
  * destination is chosen.
  *
+ * The scene and the chart are each handed the router (4.5), for their links
+ * between surfaces: the chrome's `the chart`, and the chart's `the model` and,
+ * where this machine's surface is the scene, `the scene` — which is why the
+ * fallback host is handed the machine's surface too. Props only.
+ *
  * The corner chrome (3.8) sits between the index and the scene host:
  * `./shell/corner-chrome.tsx` holds it — the identity line and the stateful slot
  * whose button is the page's one return button. After the index, so the destinations
@@ -77,7 +82,7 @@ export function App({ surface, router }: { readonly surface: Surface; readonly r
   if (shown === 'fallback') {
     return (
       <main>
-        <FallbackHost artifact={artifact} />
+        <FallbackHost artifact={artifact} surface={surface} router={router} />
       </main>
     );
   }
@@ -91,7 +96,7 @@ export function App({ surface, router }: { readonly surface: Surface; readonly r
   return (
     <main>
       <DestinationNav artifact={artifact} />
-      <CornerChrome />
+      <CornerChrome router={router} />
       <SceneHost artifact={artifact} />
       <FocusPanel artifact={artifact} />
     </main>

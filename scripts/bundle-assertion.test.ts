@@ -305,8 +305,8 @@ test('the shipped app builds under the assertion, measured within its budget', a
   assert.deepEqual(entries.map((out) => local(out.facadeModuleId ?? '')), ['index.html'], 'one entry, the page');
   assert.deepEqual(
     entries.flatMap((out) => Object.keys(out.modules).map(local).filter((id) => id.startsWith('src/'))).sort(),
-    ['src/shell/detect.ts', 'src/shell/entry.ts', 'src/shell/page.css', 'src/shell/router.ts', 'src/tokens/tokens.css'],
-    'the entry is src/shell/entry.ts, with the stylesheets, detection and the router (4.2)',
+    ['src/shell/detect.ts', 'src/shell/entry.ts', 'src/shell/page.css', 'src/shell/route.ts', 'src/tokens/tokens.css'],
+    'the entry is src/shell/entry.ts, with the stylesheets, detection and the routes (4.2; 4.5 split route.ts from the router, which is off the entry)',
   );
   // No module on the entry graph is React (4.1, AD-7): the entry chunks and every
   // chunk they reach statically, read module by module.
