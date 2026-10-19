@@ -5,7 +5,7 @@ created: '2026-10-19'
 status: 'done'
 baseline_commit: '65827868e8e37f63bbf8dad5fbb922149d99589d'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-4-context.md'
 warnings:
@@ -144,6 +144,15 @@ deferred:
   - `[low]` `[patch]` `resetChartOfferForTest` kept listeners across tests; it now clears them, tested.
   - `[low]` `[patch]` The bad-delta test ran above the floor, proving nothing; it now runs below the floor with NaN, 0, -1, ±Infinity interleaved and asserts the same latch frame.
   - `[low]` `[patch]` README rows: `chart-offer.test.ts` added to `src/shell/README.md`; the sampler audits named in `src/render-scene/README.md`.
+
+### 2026-10-19 — Follow-up review (story 4.8)
+- lenses: adversarial (blind hunter), edge-case, verification-gap; run during story 4.8's planning over `6582786^..cd61915` (code only, specs and the regenerated artifact excluded), weighting the 4.2 × 4.5 router seam and the 4.5 × 4.6 link seam; every finding checked against HEAD `10ca252`.
+- whole review: 19 raw findings (15 adversarial, 2 edge-case, 2 verification-gap); after deduplication 3 patch (P1–P3, all applied), 4 defer, 12 dismissed. Deferrals are in `deferred-work.md` under `## Deferred from: follow-up code review of spec-4-5 and spec-4-6 (story 4.8, 2026-10-19)`.
+- touching this spec: patch 1 (low 1), defer 3 (medium 2, low 1), dismissed 1.
+- patches applied:
+  - `[low]` P3: the chrome's `useSyncExternalStore` subscription to the offer was held only by a regex; the rendered after-latch row read the snapshot alone. The render harness now records every `subscribe` argument a render hands `useSyncExternalStore` (`subscriptions()`), and `corner-chrome.test.ts` asserts the rendered chrome's list holds `subscribeChartOffer` from the Vite-loaded `chart-offer.ts` — red against a list holding only `subscribeReducedMotion`. This closes the subscription half of this spec's render-level deferral.
+- deferred: D1 (a stall resets the warm-up and any in-cap frame clears the gap run, so an alternating or stall-punctuated slow scene is never offered; needs Thomas's ruling on Q3's semantics), D2 (the sampler's feed inside `<Canvas>` and the host's resets held by source audits only), D3 (a lost WebGL context stops `useFrame`, so the offer never latches).
+- dismissed here: the reset sharing the input-listener effect (no current consequence).
 
 ## Design Notes
 

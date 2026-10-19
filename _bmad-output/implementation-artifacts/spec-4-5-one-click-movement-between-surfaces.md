@@ -5,7 +5,7 @@ created: '2026-10-19'
 status: 'done'
 baseline_commit: '218ef33eab0575578a60563997cc9dd8844f957e'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-4-context.md'
   - '{project-root}/_bmad-output/planning-artifacts/ux-designs/ux-cosmos-portfolio-2026-09-01/mockups/keyscreen-fallback.html'
@@ -181,6 +181,16 @@ Close the 4.2 history deferrals that the first `navigate` caller makes reachable
   - A pop onto `/chart` restores `scrollProgress`, following the every-route save ruling.
   - `the model` appears twice in the allowlist.
   - The budget was not tightened after the drop to 3,028, which would need a ruling.
+
+### 2026-10-19 — Follow-up review (story 4.8)
+- lenses: adversarial (blind hunter), edge-case, verification-gap; run during story 4.8's planning over `6582786^..cd61915` (code only, specs and the regenerated artifact excluded), weighting the 4.2 × 4.5 router seam and the 4.5 × 4.6 link seam; every finding checked against HEAD `10ca252`.
+- whole review: 19 raw findings (15 adversarial, 2 edge-case, 2 verification-gap); after deduplication 3 patch (P1–P3, all applied), 4 defer, 12 dismissed. Deferrals are in `deferred-work.md` under `## Deferred from: follow-up code review of spec-4-5 and spec-4-6 (story 4.8, 2026-10-19)`.
+- touching this spec: patch 2 (medium 2), defer 1 (medium 1), dismissed 11.
+- patches applied:
+  - `[medium]` P1: a same-route pop (`history.go(-2)` between two `/` entries, a fragment-only pop) cancelled nothing, so a pending keep-current write landed in the reached entry stamped with the position of the entry left. `src/shell/router.ts` now counts every pop (`pops += 1` ahead of the same-route return); a same-route pop still restores nothing and tells no one. Row `a same-route pop cancels the pending keep-current write too` in `router.test.ts`, seen red first; the router audit and a mutation row follow the new order.
+  - `[medium]` P2: the route links' clicks were held only by regexes and stub routers. The render harness now records the props components hand host elements (`elements()`), and rendered rows run the click rule on the handlers actually rendered: the chrome's `the chart` (`corner-chrome.test.ts`) and the chart's `the model` and `the scene` through the host (`fallback-host.test.ts`), through a recording router — primary taken, primary refused, Ctrl, middle — each check red against broken handlers.
+- deferred: D4 (the chart's window scroll on Back and Forward is unmanaged; no `scrollRestoration` decision).
+- dismissed here: no rest cue on the scene's `the chart` and route-change focus, title and announcement (4.10's); `the model` as text in the scene and the Client span on the `aria-hidden` plates only (ruled); "no regenerated artifact" (a planning exclusion); the restated `ChartLinks` types (barred by `PERMITTED_SPECIFIER`); a refused push's full load (the documented fallback); the Safari rate-limit figure (a documentation claim); the chrome binding `href` and route as two literals and `IDENTITY_LINE` not built from its parts (held by tests once P2 landed); a same-route pop restoring nothing after P1 (the 4.2 contract).
 
 ## Design Notes
 

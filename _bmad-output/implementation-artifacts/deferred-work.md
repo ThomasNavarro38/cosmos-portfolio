@@ -1029,3 +1029,18 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-4-the-deep-shallow-signal-on-a-flat-chart.md`
   summary: The Ring and the index and legend glyph marks are hairlines at `stroke-near` on the page ground, with no 3:1 non-text contrast check (WCAG 1.4.11). This extends the 4.3 deferral on the index link's non-text contrast.
   evidence: `src/identity-audit.test.ts` `ROLES` measures text roles only (the legend's text was added in 4.4); `.chart-ring` is `stroke: var(--color-stroke-near-dark)` at `--stroke-hairline`. The Notable column's accessible name and the legend phrases carry the signal redundantly, so the Ring isn't the only carrier.
+
+## Deferred from: follow-up code review of spec-4-5 and spec-4-6 (story 4.8, 2026-10-19)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-6-performance-offers-never-forces.md`
+  summary: (D1, medium) A stall over `MAX_FRAME_SECONDS` resets sampling, warm-up included, and any frame within the cap clears the gap run, so a scene alternating 1.5 s and 0.5 s frames, or running at 2 fps with a 1.2 s stall every 5 s, is never offered the chart. Fixing it changes ruling Q3's warm-up and window semantics, so it needs Thomas's ruling.
+  evidence: `src/shell/chart-offer.ts:110-117` — a delta above `MAX_FRAME_SECONDS` counts a gap and resets the warm-up and the window; the next in-cap delta sets `gaps = 0`, so `SUSTAINED_GAPS` in a row never accrue and the 5 s window never fills between stalls. Found by the follow-up review's edge-case lens over `6582786^..cd61915`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-6-performance-offers-never-forces.md`
+  summary: (D2, medium) `FrameSampler`'s feed from inside `<Canvas>` and `scene-host.tsx`'s resets (the effect run, the `visibilitychange` listener on `document`) are held only by source audits. Rendering inside `<Canvas>` is out of scope and there is no DOM harness. Story 4.8 (P3) closed the subscription half of 4.6's own deferral: the chrome's subscription to the offer is now rendered.
+  evidence: `src/render-scene/frame-sampler.tsx:18-23` (`useFrame` → `sampleFrame(delta)`), `src/shell/scene-host.tsx:259-306` (`resetFrameSampling()` on the effect and on `visibilitychange`); the render harness (`scripts/render.ts`) never renders inside `<Canvas>` and has no `document`. The subscription row is `src/shell/corner-chrome.test.ts` (`subscribesToOffer`).
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-6-performance-offers-never-forces.md`
+  summary: (D3, low) A lost WebGL context stops `useFrame`, so no delta arrives and the offer never latches exactly when it is most needed. The `the chart` link itself is always present, so the chart stays one click away.
+  evidence: `src/render-scene/frame-sampler.tsx` samples only frames R3F delivers; nothing listens for `webglcontextlost`. `src/shell/corner-chrome.tsx:117` renders the link in every state.
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-5-one-click-movement-between-surfaces.md`
+  summary: (D4, medium) The chart's window scroll on Back and Forward is unmanaged. The chart re-renders lazily after a pop, so the browser's `auto` scroll restoration can run before the content exists and leave the visitor at the top. There is no `history.scrollRestoration` decision. (Related to the 4.3 document-scroll deferral above, which concerns saving the position; this one concerns when the browser restores it.)
+  evidence: no `scrollRestoration` anywhere under `src/`; `src/shell/fallback-host.tsx` loads the chart through `lazy(() => import('../render-fallback/chart.tsx'))` behind `<Suspense fallback={null}>`, so the document is momentarily short when the pop's restoration runs.
