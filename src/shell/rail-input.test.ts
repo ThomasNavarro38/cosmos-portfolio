@@ -788,7 +788,7 @@ test('the writer audit rejects the real mount with any one guarantee removed', (
     ['no router handed over', (s) => s.replace('<App surface={surface} router={router} />', '<App surface={surface} />')],
     ['a fixed route', (s) => s.replace('createRouter(browserHistory(), route,', "createRouter(browserHistory(), 'home',")],
     ['the route not taken', (s) => s.replace('mount(surface: Surface, route: Route)', 'mount(surface: Surface)')],
-    ['the router made after the render', (s) => s.replace(/(\s*\/\/ Lives as long[^\n]*\n\s*const router = createRouter\([\s\S]*?\}\);\n)([\s\S]*?\n {2}\);\n)/, '\n$2$1')],
+    ['the router made after the render', (s) => s.replace(/(\s*\/\/ Lives as long[^\n]*\n\s*const router = createRouter\([^\n]*\);\n)([\s\S]*?\n {2}\);\n)/, '\n$2$1')],
     ['a second writer', (s) => s.replace('onChange();', 'onChange();\n  setReducedMotion(false);')],
     ['the writer reads too', (s) => s.replace('onChange();', 'onChange();\n  void reducedMotion();')],
     ['never called', (s) => s.replace(/(\{\n)\s*writeReducedMotion\(\);\n/, '$1')],

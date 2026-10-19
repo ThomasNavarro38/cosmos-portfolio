@@ -96,8 +96,8 @@ test('SCHEMA_VERSION is a literal in the schema, so a mismatch fails', () => {
   }
 });
 
-test('the version is 8 now that the artifact names its source, and changing the shape means changing it', () => {
-  assert.equal(SCHEMA_VERSION, 8, 'Story 3.12 added `sourceDigest` and the non-empty lists, so the shape version is 8');
+test('the version is 9 now that each Client carries its span, and changing the shape means changing it', () => {
+  assert.equal(SCHEMA_VERSION, 9, 'Story 4.5 added each Client’s `span`, so the shape version is 9');
   assert.equal(valid().schemaVersion, SCHEMA_VERSION, 'the emitter declares it');
 
   // Read off the source: the literal must be in the schema, not merely compared
@@ -655,6 +655,47 @@ test('an artifact still declaring schemaVersion 4 is rejected', () => {
   const old = copy(valid());
   old['schemaVersion'] = 4;
   assertFails(validateArtifact(old), /schemaVersion/, 'a pre-orbit artifact must not be read on a guess');
+});
+
+test('an artifact still declaring schemaVersion 8 is rejected', () => {
+  const old = copy(valid());
+  old['schemaVersion'] = 8;
+  assertFails(validateArtifact(old), /schemaVersion/, 'a span-less artifact must not be read on a guess');
+});
+
+test('a Client span is required, closed and a pair of year-months', () => {
+  const missing = copy(valid()) as { clients: Record<string, unknown>[] };
+  delete (missing.clients[0] as Record<string, unknown>)['span'];
+  assertFails(validateArtifact(missing), /clients\.0\.span/, 'a Client without a span is rejected');
+  for (const bad of [{ start: '2019', end: '2021-01' }, { start: '2019-01', end: '2021-13' }, { start: '2019-01' }, { start: '2019-01', end: '2021-01', years: '2019 – 2021' }]) {
+    const broken = copy(valid()) as { clients: Record<string, unknown>[] };
+    (broken.clients[0] as Record<string, unknown>)['span'] = bad;
+    assertFails(validateArtifact(broken), /clients\.0\.span/, `the span ${JSON.stringify(bad)} is rejected`);
+  }
+});
+
+test('a Client span disagreeing with its Projects is rejected, naming the Client', () => {
+  const doc = valid(
+    { ...baseEntry(), project: 'One', duration: { start: '2016-05', end: '2016-11' } },
+    { ...baseEntry(), project: 'Two', duration: { start: '2016-09', end: '2017-07' } },
+  );
+  assert.deepEqual(validateArtifact(doc), []);
+  assert.deepEqual(doc.clients[0]?.span, { start: '2016-05', end: '2017-07' });
+  for (const bad of [{ start: '2016-09', end: '2017-07' }, { start: '2016-05', end: '2016-11' }, { start: '2016-05', end: null }]) {
+    const broken = copy(doc) as { clients: Record<string, unknown>[] };
+    (broken.clients[0] as Record<string, unknown>)['span'] = bad;
+    assertFails(validateArtifact(broken), /^clients\.0\.span: "client:sncf" spans/, `the span ${JSON.stringify(bad)} disagrees with its Projects`);
+  }
+  // Ongoing: the end is null, and any closed end is refused.
+  const ongoing = valid(
+    { ...baseEntry(), project: 'One', duration: { start: '2024-02', end: null } },
+    { ...baseEntry(), project: 'Two', duration: { start: '2024-06', end: '2025-01' } },
+  );
+  assert.deepEqual(ongoing.clients[0]?.span, { start: '2024-02', end: null });
+  assert.deepEqual(validateArtifact(ongoing), []);
+  const closed = copy(ongoing) as { clients: Record<string, unknown>[] };
+  (closed.clients[0] as Record<string, unknown>)['span'] = { start: '2024-02', end: '2025-01' };
+  assertFails(validateArtifact(closed), /"client:sncf" spans 2024-02 – 2025-01, but its Projects run 2024-02 – null/, 'an ongoing Client cannot claim an end');
 });
 
 test('timeAxis is bounded to 0..1', () => {

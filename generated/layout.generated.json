@@ -1,5 +1,5 @@
 { "$banner": "GENERATED FILE — do not edit by hand. Produced by src/derive/index.ts from src/data/career.json; run `npm run solve` to regenerate. Hand edits are overwritten by the next solve. The build gate rejects an artifact that breaks its invariants or was solved from a different career.json, but not a hand edit that keeps both.",
-  "schemaVersion": 8,
+  "schemaVersion": 9,
   "asOf": "2026-09",
   "sourceDigest": "7495d150d1bff922fbc94a7f7ec261df2bfd1ab1643948f4510c9fb573aec253",
   "clients": [
@@ -7,6 +7,10 @@
       "id": "client:simsu",
       "name": "SIMSU",
       "timeAxis": 0,
+      "span": {
+        "start": "2016-05",
+        "end": "2017-07"
+      },
       "position": {
         "x": -132.0502,
         "y": 11.6181,
@@ -62,6 +66,10 @@
       "id": "client:transilien",
       "name": "Transilien",
       "timeAxis": 0.2857142857142857,
+      "span": {
+        "start": "2017-09",
+        "end": "2019-03"
+      },
       "position": {
         "x": -79.5469,
         "y": 4.9085,
@@ -167,6 +175,10 @@
       "id": "client:sncf-connect-tech",
       "name": "SNCF Connect & Tech",
       "timeAxis": 0.5714285714285714,
+      "span": {
+        "start": "2019-05",
+        "end": "2020-11"
+      },
       "position": {
         "x": 26.145,
         "y": 24.679,
@@ -229,6 +241,10 @@
       "id": "client:air-france-klm",
       "name": "Air France-KLM",
       "timeAxis": 0.7142857142857143,
+      "span": {
+        "start": "2020-11",
+        "end": "2022-08"
+      },
       "position": {
         "x": 68.1233,
         "y": -26.3178,
@@ -292,6 +308,10 @@
       "id": "client:sncf",
       "name": "SNCF",
       "timeAxis": 0.8571428571428571,
+      "span": {
+        "start": "2019-03",
+        "end": "2024-02"
+      },
       "position": {
         "x": -29.824,
         "y": -25.2442,
@@ -407,6 +427,10 @@
       "id": "client:decathlon",
       "name": "Decathlon",
       "timeAxis": 1,
+      "span": {
+        "start": "2024-02",
+        "end": null
+      },
       "position": {
         "x": 132.3499,
         "y": 3.3716,

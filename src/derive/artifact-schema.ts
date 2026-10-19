@@ -31,8 +31,11 @@ import { SHOT_FRAMINGS } from './shots.ts';
  * the top-level `skills`, **7** when Story 3.9 narrowed `luminanceBand` to two
  * steps (`stroke-rest`, `stroke-near`), and is **8** now that Story 3.12 has
  * added `sourceDigest` and made `clients`, `destinations`, `dwell` and `shots`
- * non-empty: each time the contract's shape changed, the number it declares
- * changed with it. An artifact carrying `7` names no source, so the gate could
+ * non-empty, and is **9** now that Story 4.5 has added each Client's calendar
+ * `span`: each time the contract's shape changed, the number it declares
+ * changed with it. An artifact carrying `8` gives the Fallback no Client
+ * dates, so it would have to aggregate its Projects' `duration`s itself — the
+ * derivation AD-3 keeps out of a renderer. An artifact carrying `7` names no source, so the gate could
  * not tell whether it was solved from the `career.json` beside it. An artifact
  * still carrying `5` publishes no Skill tiers, and must fail rather than be read
  * by a scene that seats Motes by them — it would have to count shares itself,
@@ -44,7 +47,7 @@ import { SHOT_FRAMINGS } from './shots.ts';
  * the artifact fail its own gate, which is precisely what the gate exists to
  * prevent, and is why each was deliberately absent until the story that emits it.
  */
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 /** ISO 8601 year-month, matching the authored form exactly. */
 const IsoYearMonth = z
@@ -106,6 +109,17 @@ const UnitVectorSchema = PositionSchema.refine(
  * gate should say so rather than let the Fallback lay out past its own extent.
  */
 const TimeAxisSchema = z.number().min(0).max(1);
+
+/**
+ * A Client's calendar span (Story 4.5): the earliest of its Projects'
+ * `duration.start`, and the latest `duration.end`, or `null` while any Project
+ * is ongoing. Closed at two fields; its agreement with the Projects is refined
+ * on the Client, which sees both.
+ */
+const ClientSpanSchema = z.strictObject({
+  start: IsoYearMonth,
+  end: IsoYearMonth.nullable(),
+});
 
 /**
  * One Project in the artifact: everything a surface renders, derived and
@@ -233,6 +247,7 @@ const ArtifactClientSchema = z
     id: z.string().min(1),
     name: z.string().min(1),
     timeAxis: TimeAxisSchema,
+    span: ClientSpanSchema,
     position: PositionSchema,
     // An empty Client is a Star with no Planet: no orbit to frame, no start month
     // to place it on the Rail. Named, because "too small" against a document
@@ -242,6 +257,22 @@ const ArtifactClientSchema = z
       .min(1, 'an empty Client — every Client must carry at least one Project'),
   })
   .superRefine((client, ctx) => {
+    // The span is the Projects' own, restated as a check rather than imported
+    // from `entities.ts`: a document whose span disagrees with the dates it
+    // carries would draw one set of years on the chart and another in the records.
+    const starts = client.projects.map((project) => project.content.duration.start).sort();
+    const ends = client.projects.map((project) => project.content.duration.end);
+    const start = starts[0];
+    const end = ends.includes(null) ? null : ([...ends].sort().at(-1) ?? null);
+    if (start !== undefined && (client.span.start !== start || client.span.end !== end)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['span'],
+        message:
+          `"${client.id}" spans ${client.span.start} – ${String(client.span.end)}, but its Projects run ` +
+          `${start} – ${String(end)}; the span is the earliest start and the latest end, null while any is ongoing.`,
+      });
+    }
     client.projects.forEach((project, index) => {
       const offset = {
         x: project.position.x - client.position.x,

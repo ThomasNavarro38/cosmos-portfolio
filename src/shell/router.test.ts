@@ -14,20 +14,23 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { isTestFile, sourceFilesUnder, stripComments } from '../../scripts/source-scan.ts';
+import { ROUTE_PATHS, resolveRoute } from './route.ts';
 import {
-  ROUTE_PATHS,
+  SAVE_INTERVAL_MS,
   browserHistory,
   createRouter,
-  resolveRoute,
   savedPosition,
   surfaceOf,
   type PositionHooks,
   type RouteHistory,
 } from './router.ts';
-import { advanceScroll, focusProject, navigationStore, resetNavigation } from './state.ts';
+import { storePositionHooks } from './position-hooks.ts';
+import { advanceScroll, focusProject, hoverProject, navigationStore, resetNavigation } from './state.ts';
 
 const SHELL = fileURLToPath(new URL('.', import.meta.url));
 const ROUTER_TS = join(SHELL, 'router.ts');
+const ROUTE_TS = join(SHELL, 'route.ts');
+const MOUNT_TSX = join(SHELL, 'mount.tsx');
 const COLOPHON_HOST_TSX = join(SHELL, 'colophon-host.tsx');
 const FALLBACK_HOST_TSX = join(SHELL, 'fallback-host.tsx');
 const COLOPHON_TSX = fileURLToPath(new URL('../colophon/colophon.tsx', import.meta.url));
@@ -41,13 +44,15 @@ interface Entry {
  * A fake browser history: a list of entries and an index, every router call
  * recorded by name. `back()` / `forward()` / `fragment()` are the browser's own
  * moves, not the router's, so they record nothing; the first two fire `popstate`
- * with the reached entry's state, as a browser does.
+ * with the reached entry's state, as a browser does. `later` queues its
+ * function and records nothing; `flush()` runs the queue, as the timer firing.
  */
 function fakeHistory(url: string, state: unknown = null) {
   const entries: Entry[] = [{ url, state }];
   let index = 0;
   const calls: string[] = [];
   const events = new Map<string, (state: unknown) => void>();
+  const queued: (() => void)[] = [];
   const at = (): Entry => entries[index] as Entry;
   const parsed = (): URL => new URL(at().url, 'https://example.test');
   const history: RouteHistory = {
@@ -62,11 +67,14 @@ function fakeHistory(url: string, state: unknown = null) {
       const { search, hash } = parsed();
       at().url = `${path}${search}${hash}`;
     },
-    push: (path) => {
+    push: (path, state) => {
       calls.push(`push ${path}`);
       entries.splice(index + 1);
-      entries.push({ url: path, state: null });
+      entries.push({ url: path, state });
       index += 1;
+    },
+    later: (fn) => {
+      queued.push(fn);
     },
     listen: (type, listener) => {
       calls.push(`listen ${type}`);
@@ -98,6 +106,11 @@ function fakeHistory(url: string, state: unknown = null) {
       index += 1;
     },
     pagehide: () => events.get('pagehide')?.(undefined),
+    /** The pending `later` calls, run now, as the timer firing. */
+    flush: () => {
+      for (const fn of queued.splice(0)) fn();
+    },
+    pending: () => queued.length,
     listening: () => events.size > 0,
     length: () => entries.length,
   };
@@ -106,23 +119,34 @@ function fakeHistory(url: string, state: unknown = null) {
 /** What creating a router records on a canonical path with nothing to restore. */
 const LISTEN = ['listen popstate', 'listen pagehide'];
 
-/** Position hooks over a plain value, every restore recorded. */
+/**
+ * Position hooks over a plain value, every restore recorded. `set` is the
+ * position changing (the Rail's scroll), so its subscribers are told; a
+ * restore is the router's write, recorded and applied, as `advanceScroll` is.
+ */
 function fakePosition(value: number) {
   const restored: number[] = [];
+  const heard = new Set<() => void>();
+  const set = (next: number): void => {
+    value = next;
+    heard.forEach((listener) => listener());
+  };
   const hooks: PositionHooks = {
     read: () => value,
     restore: (progress) => {
       restored.push(progress);
+      set(progress);
+    },
+    subscribe: (listener) => {
+      heard.add(listener);
+      return () => heard.delete(listener);
     },
   };
-  return { hooks, restored, set: (next: number) => (value = next) };
+  return { hooks, restored, set, listening: () => heard.size };
 }
 
-/** The position hooks `mount.tsx` binds: the real store. */
-const storePosition: PositionHooks = {
-  read: () => navigationStore.getState().scrollProgress,
-  restore: (progress) => advanceScroll(progress),
-};
+/** The position hooks `mount.tsx` binds: the shipped factory over the real store. */
+const storePosition: PositionHooks = storePositionHooks();
 
 // --- Resolution -------------------------------------------------------------------
 
@@ -207,7 +231,7 @@ test('a well-formed saved position is restored at creation; anything else writes
 
 // --- navigate --------------------------------------------------------------------------
 
-test('leaving the scene saves its position into the departing entry, then pushes the target with no fragment', () => {
+test('leaving the scene saves its position into the departing entry, then pushes the target with no fragment and the same position', () => {
   const fake = fakeHistory('/#client-a');
   const position = fakePosition(2.4);
   const router = createRouter(fake.history, 'home', position.hooks);
@@ -217,7 +241,7 @@ test('leaving the scene saves its position into the departing entry, then pushes
   assert.deepEqual(fake.calls, [...LISTEN, 'save', 'push /colophon'], 'saved first, then pushed');
   assert.deepEqual(fake.entries, [
     { url: '/#client-a', state: { scrollProgress: 2.4 } },
-    { url: '/colophon', state: null },
+    { url: '/colophon', state: { scrollProgress: 2.4 } },
   ]);
   assert.equal(router.route(), 'colophon');
   assert.equal(told, 1);
@@ -403,6 +427,7 @@ test('browserHistory drives the window’s history and location, and listens for
   const calls: unknown[][] = [];
   const listeners = new Map<string, (event: { state?: unknown }) => void>();
   const removed: [string, unknown][] = [];
+  const timers: [() => void, number][] = [];
   const globals: Record<string, unknown> = {
     location: { pathname: '/chart', search: '?a', hash: '#client-x' },
     history: {
@@ -412,6 +437,7 @@ test('browserHistory drives the window’s history and location, and listens for
     },
     addEventListener: (type: string, listener: (event: { state?: unknown }) => void) => listeners.set(type, listener),
     removeEventListener: (type: string, listener: unknown) => removed.push([type, listener]),
+    setTimeout: (fn: () => void, delay: number) => timers.push([fn, delay]),
   };
   const saved = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
   for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
@@ -421,12 +447,19 @@ test('browserHistory drives the window’s history and location, and listens for
     assert.deepEqual(history.state(), { scrollProgress: 1 });
     history.save({ scrollProgress: 2 });
     history.canonicalize('/colophon');
-    history.push('/');
+    history.push('/', { scrollProgress: 3 });
     assert.deepEqual(calls, [
       ['replaceState', { scrollProgress: 2 }, ''],
       ['replaceState', { scrollProgress: 1 }, '', '/colophon?a#client-x'],
-      ['pushState', null, '', '/'],
-    ], 'save keeps the URL (no third argument), canonicalize keeps the state, search and fragment, push carries no fragment');
+      ['pushState', { scrollProgress: 3 }, '', '/'],
+    ], 'save keeps the URL (no third argument), canonicalize keeps the state, search and fragment, push carries its state and no fragment');
+    let ran = 0;
+    history.later(() => (ran += 1));
+    assert.equal(timers.length, 1, 'later is one setTimeout');
+    assert.equal(timers[0]?.[1], SAVE_INTERVAL_MS, 'after SAVE_INTERVAL_MS');
+    assert.equal(ran, 0, 'and nothing runs before the timer fires');
+    timers[0]?.[0]();
+    assert.equal(ran, 1);
     const popped: unknown[] = [];
     let hidden = 0;
     const stops = [history.listen('popstate', (state) => popped.push(state)), history.listen('pagehide', () => (hidden += 1))];
@@ -445,27 +478,285 @@ test('browserHistory drives the window’s history and location, and listens for
     }
   }
   assert.equal('history' in globalThis, false, 'the globals are restored');
+  assert.equal(SAVE_INTERVAL_MS, 300);
+});
+
+// --- Keeping the current entry current (4.5) -----------------------------------------------
+
+test('storePositionHooks: read and restore are scrollProgress, and subscribe fires on its change alone', () => {
+  resetNavigation();
+  const hooks = storePositionHooks();
+  let heard = 0;
+  const off = hooks.subscribe(() => (heard += 1));
+  hoverProject('project-a');
+  assert.equal(heard, 0, 'another field changing is not heard');
+  hooks.restore(2);
+  assert.equal(navigationStore.getState().scrollProgress, 2);
+  assert.equal(hooks.read(), 2);
+  assert.equal(heard, 1, 'a scrollProgress change is heard');
+  advanceScroll(2);
+  assert.equal(heard, 1, 'the same value is no change');
+  off();
+  advanceScroll(3);
+  assert.equal(heard, 1, 'nothing heard after the unsubscribe');
+  resetNavigation();
+});
+
+test('keep current: progress 2 → 3 → 4 within one interval is one save, of 4, when the scheduled call fires', () => {
+  const fake = fakeHistory('/');
+  const position = fakePosition(2);
+  const router = createRouter(fake.history, 'home', position.hooks);
+  position.set(3);
+  position.set(4);
+  assert.equal(fake.pending(), 1, 'one pending write, however many changes');
+  assert.deepEqual(fake.calls, LISTEN, 'nothing written before the scheduled call fires');
+  fake.flush();
+  assert.deepEqual(fake.calls, [...LISTEN, 'save'], 'one save');
+  assert.deepEqual(fake.entries[0], { url: '/', state: { scrollProgress: 4 } }, 'of the latest position');
+  // The next change schedules the next write.
+  position.set(5);
+  assert.equal(fake.pending(), 1);
+  fake.flush();
+  assert.deepEqual(fake.entries[0]?.state, { scrollProgress: 5 });
+  router.dispose();
+});
+
+test('pop-departure: / at 2 → chart → Back → progress 4 → Forward → Back restores 4', () => {
+  const fake = fakeHistory('/');
+  const position = fakePosition(2);
+  const router = createRouter(fake.history, 'home', position.hooks);
+  router.navigate('chart');
+  fake.back();
+  assert.equal(router.route(), 'home');
+  assert.deepEqual(position.restored, [2]);
+  fake.flush();
+  position.set(4);
+  fake.flush();
+  fake.forward();
+  assert.equal(router.route(), 'chart');
+  fake.flush();
+  fake.back();
+  assert.equal(router.route(), 'home');
+  assert.equal(position.restored.at(-1), 4, 'the entry the Forward left was kept current, so Back restores 4');
+  router.dispose();
+});
+
+test('pop-departure through the real store: the Rail moved after a Back is what the next Back restores', () => {
+  resetNavigation();
+  advanceScroll(2);
+  const fake = fakeHistory('/');
+  const router = createRouter(fake.history, 'home', storePosition);
+  router.navigate('chart');
+  fake.back();
+  fake.flush();
+  advanceScroll(4);
+  fake.flush();
+  fake.forward();
+  fake.flush();
+  advanceScroll(0);
+  fake.back();
+  assert.equal(navigationStore.getState().scrollProgress, 4);
+  router.dispose();
+  resetNavigation();
+});
+
+test('a pop cancels the pending keep-current write: a stale write never stamps the reached entry', () => {
+  const fake = fakeHistory('/');
+  const position = fakePosition(2);
+  const router = createRouter(fake.history, 'home', position.hooks);
+  router.navigate('chart');
+  (fake.entries[0] as Entry).state = null; // an entry holding no well-formed state
+  position.set(5); // scrolled on /chart: a write is pending, never flushed
+  fake.back();
+  assert.equal(router.route(), 'home');
+  fake.flush(); // the stale write's timer fires after the pop
+  assert.equal((fake.entries[0] as Entry).state, null, 'nothing stamped into the reached entry');
+  assert.deepEqual(position.restored, [], 'and nothing restored from it');
+  router.dispose();
+});
+
+test('the documented limit: movement within SAVE_INTERVAL_MS before a pop is not saved into the departing entry', () => {
+  const fake = fakeHistory('/');
+  const position = fakePosition(2);
+  const router = createRouter(fake.history, 'home', position.hooks);
+  router.navigate('chart');
+  fake.back();
+  fake.flush();
+  position.set(4); // moved on /, the write still pending
+  fake.forward(); // left before it flushed
+  fake.flush();
+  assert.deepEqual((fake.entries[0] as Entry).state, { scrollProgress: 2 }, 'the departing entry keeps its last flushed position');
+  fake.back();
+  assert.equal(position.restored.at(-1), 2, 'so Back restores 2, not 4');
+  router.dispose();
+});
+
+test('navigate returns true when the route changed or was already current', () => {
+  const fake = fakeHistory('/');
+  const router = createRouter(fake.history, 'home', fakePosition(0).hooks);
+  assert.equal(router.navigate('home'), true, 'already current');
+  assert.equal(router.navigate('chart'), true, 'changed');
+  router.dispose();
+});
+
+test('a pushed entry carries the current position, never null', () => {
+  const fake = fakeHistory('/');
+  const position = fakePosition(1.5);
+  const router = createRouter(fake.history, 'home', position.hooks);
+  router.navigate('chart');
+  position.set(3);
+  router.navigate('colophon');
+  router.navigate('home');
+  assert.deepEqual(fake.entries.map((entry) => entry.state), [{ scrollProgress: 1.5 }, { scrollProgress: 3 }, { scrollProgress: 3 }, { scrollProgress: 3 }]);
+  router.dispose();
+});
+
+test('dispose stops the keep-current subscription, and a write already scheduled does nothing', () => {
+  const fake = fakeHistory('/');
+  const position = fakePosition(1);
+  const router = createRouter(fake.history, 'home', position.hooks);
+  assert.equal(position.listening(), 1, 'the router hears the position');
+  position.set(2);
+  router.dispose();
+  assert.equal(position.listening(), 0, 'and stops on dispose');
+  const before = fake.calls.length;
+  fake.flush();
+  position.set(3);
+  fake.flush();
+  assert.deepEqual(fake.calls.slice(before), [], 'no save after dispose');
+});
+
+test('a save that throws is logged, and the router carries on', (t) => {
+  const errors = t.mock.method(console, 'error', () => {});
+  const fake = fakeHistory('/');
+  const refused = new Error('SecurityError');
+  fake.history.save = () => {
+    throw refused;
+  };
+  const position = fakePosition(1);
+  const router = createRouter(fake.history, 'home', position.hooks);
+  position.set(2);
+  assert.doesNotThrow(() => fake.flush(), 'the keep-current save');
+  assert.doesNotThrow(() => fake.pagehide(), 'the pagehide save');
+  assert.doesNotThrow(() => router.navigate('chart'), 'the departing save');
+  assert.equal(router.route(), 'chart', 'a refused save does not hold the route back');
+  assert.equal(fake.url(), '/chart');
+  assert.equal(errors.mock.callCount(), 1, 'a refused save is logged once, not on every save');
+  assert.deepEqual(errors.mock.calls[0]?.arguments, [refused]);
+  router.dispose();
+});
+
+test('two failing keep-current saves log once, and saving is still tried', (t) => {
+  const errors = t.mock.method(console, 'error', () => {});
+  const fake = fakeHistory('/');
+  let tried = 0;
+  fake.history.save = () => {
+    tried += 1;
+    throw new Error('SecurityError');
+  };
+  const position = fakePosition(1);
+  const router = createRouter(fake.history, 'home', position.hooks);
+  position.set(2);
+  fake.flush();
+  position.set(3);
+  fake.flush();
+  assert.equal(tried, 2, 'each scheduled save is tried');
+  assert.equal(errors.mock.callCount(), 1, 'and logged once');
+  router.dispose();
+});
+
+test('a push that throws is logged, leaves the route, URL and subscribers unchanged, and navigate returns normally', (t) => {
+  const errors = t.mock.method(console, 'error', () => {});
+  const fake = fakeHistory('/');
+  const refused = new Error('SecurityError');
+  fake.history.push = () => {
+    throw refused;
+  };
+  const router = createRouter(fake.history, 'home', fakePosition(1).hooks);
+  let told = 0;
+  router.subscribe(() => (told += 1));
+  let moved: boolean | undefined;
+  assert.doesNotThrow(() => (moved = router.navigate('chart')));
+  assert.equal(moved, false, 'navigate says the push failed');
+  assert.equal(router.route(), 'home');
+  assert.equal(fake.url(), '/');
+  assert.equal(fake.length(), 1);
+  assert.equal(told, 0);
+  assert.deepEqual(errors.mock.calls.map((call) => call.arguments), [[refused]]);
+  router.dispose();
+});
+
+/** `route.ts`: the routes, their paths and the resolution, importing nothing, its paths never saying fallback. */
+function auditRoute(source: string): string[] {
+  const code = stripComments(source);
+  const failures: string[] = [];
+  if (/^\s*import\s/m.test(code) || /\bimport\s*\(|\brequire\s*\(/.test(code)) failures.push('route.ts imports something');
+  const exported = [...code.matchAll(/^export\s+(?:type|const|function)\s+(\w+)/gm)].map((match) => match[1]).sort();
+  if (JSON.stringify(exported) !== JSON.stringify(['ROUTE_PATHS', 'Route', 'resolveRoute'])) failures.push(`route.ts exports ${JSON.stringify(exported)}, not Route, ROUTE_PATHS and resolveRoute alone`);
+  if (/'\/[^']*fallback/i.test(code)) failures.push('a path says fallback');
+  if (/'\/scene'/.test(code)) failures.push('a /scene path — the root is this machine’s surface');
+  return failures;
+}
+
+test('route.ts holds Route, ROUTE_PATHS and resolveRoute alone, and imports nothing', () => {
+  const real = readFileSync(ROUTE_TS, 'utf8').replace(/\r\n/g, '\n');
+  assert.deepEqual(auditRoute(real), []);
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['an import', (s) => `import { navigationStore } from './state.ts';\n${s}`],
+    ['the router moved back in', (s) => `${s}\nexport function createRouter(): void {}\n`],
+    ['a fallback path', (s) => s.replace("chart: '/chart',", "chart: '/fallback',")],
+    ['a scene path', (s) => s.replace("home: '/',", "home: '/scene',")],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
+    assert.notDeepEqual(auditRoute(mutated), [], `"${name}" must be rejected`);
+  }
+  assert.ok(readFileSync(MOUNT_TSX, 'utf8').includes("from './router.ts'"), 'the mount still makes the router');
 });
 
 // --- Purity ---------------------------------------------------------------------------------
 
 /**
- * `router.ts` imports nothing — no React, no store, no preference — and names no
- * door other than its injected position hooks: Focus, flight and the store are
- * not its to touch (AD-5). Its paths never say "fallback".
+ * `router.ts` imports nothing but `route.ts` — no React, no store, no
+ * preference — and names no door other than its injected position hooks:
+ * Focus, flight and the store are not its to touch (AD-5). Its paths never say
+ * "fallback", and it re-exports nothing of `route.ts` (4.5). `navigate` saves,
+ * then pushes the position inside a guard that returns before the route
+ * changes; every write is guarded; the keep-current save is one pending write
+ * at a time, scheduled through `later`.
  */
 function auditRouter(source: string): string[] {
   const code = stripComments(source);
   const failures: string[] = [];
-  if (/^\s*import\s/m.test(code) || /\bimport\s*\(|\brequire\s*\(/.test(code)) failures.push('router.ts imports something');
+  const imports = [...code.matchAll(/^\s*import\s[^;]*?from\s*'([^']+)'/gm)].map((match) => match[1]);
+  const statements = (code.match(/^\s*import\s/gm) ?? []).length;
+  if (JSON.stringify(imports) !== JSON.stringify(['./route.ts']) || statements !== 1 || /\bimport\s*\(|\brequire\s*\(/.test(code)) {
+    failures.push('router.ts imports something other than ./route.ts');
+  }
+  if (/^\s*export\s*(?:type\s*)?\{[^}]*\}\s*from|^\s*export\s*\*/m.test(code)) failures.push('router.ts re-exports — the routes are route.ts’s to export');
+  if (
+    !/const\s+save\s*=\s*\(\)\s*:\s*void\s*=>\s*\{\s*try\s*\{\s*history\.save\(\s*here\(\)\s*\)\s*;\s*\}\s*catch\s*\(\s*(\w+)\s*\)\s*\{\s*if\s*\(\s*!saveLogged\s*\)\s*console\.error\(\s*\1\s*\)\s*;\s*saveLogged\s*=\s*true\s*;\s*\}\s*\}/.test(code)
+  ) {
+    failures.push('save is not a guarded replaceState, its first refusal logged');
+  }
+  if (
+    !/position\.subscribe\(\s*\(\)\s*=>\s*\{\s*if\s*\(\s*pending\s*\)\s*return\s*;\s*pending\s*=\s*true\s*;\s*const\s+scheduled\s*=\s*pops\s*;\s*history\.later\(\s*\(\)\s*=>\s*\{\s*pending\s*=\s*false\s*;\s*if\s*\(\s*live\s*&&\s*scheduled\s*===\s*pops\s*\)\s*save\(\)\s*;\s*\}\s*\)/.test(code)
+  ) {
+    failures.push('the keep-current save is not one pending write at a time, scheduled by later, and cancelled by a pop');
+  }
+  if (!/if\s*\(\s*next\s*===\s*current\s*\)\s*return\s*;\s*pops\s*\+=\s*1\s*;\s*restore\(\s*state\s*\)/.test(code)) failures.push('a route-changing pop does not cancel the pending write before it restores');
+  if ((code.match(/\bhistory\.(?:save|push|canonicalize)\(/g) ?? []).length !== 3) failures.push('router.ts writes the history other than through its three guarded calls');
   if (/\breact\b|\buse[A-Z]\w*\(/i.test(code)) failures.push('router.ts reaches React');
   if (/reduced-motion|motion-preference|reducedMotion|prefers-reduced/i.test(code)) failures.push('router.ts reads the motion preference');
   if (/\b(?:releaseFocus|focusProject|releaseLayer|enterRail|enterFreeFlight|advanceScroll|navigationStore|setState)\b/.test(code)) {
     failures.push('router.ts touches the store or a door');
   }
   if (/'\/[^']*fallback/i.test(code)) failures.push('a path says fallback');
-  if (!/if\s*\(\s*to\s*===\s*current\s*\)\s*return\s*;\s*save\(\)\s*;\s*history\.push\(\s*ROUTE_PATHS\[to\]\s*\)\s*;/.test(code)) {
-    failures.push('navigate is not: same route returns, then save, then push');
+  if (
+    !/if\s*\(\s*to\s*===\s*current\s*\)\s*return\s+true\s*;\s*save\(\)\s*;\s*try\s*\{\s*history\.push\(\s*ROUTE_PATHS\[to\]\s*,\s*here\(\)\s*\)\s*;\s*\}\s*catch\s*\(\s*(\w+)\s*\)\s*\{\s*console\.error\(\s*\1\s*\)\s*;\s*return\s+false\s*;\s*\}\s*go\(\s*to\s*\)\s*;\s*return\s+true\s*;/.test(code)
+  ) {
+    failures.push('navigate is not: same route returns true, then save, then a guarded push carrying the position (false on refusal), the route changed only after it, then true');
   }
   if (!/history\.listen\(\s*'pagehide'\s*,\s*save\s*\)/.test(code)) failures.push('pagehide does not save the position');
   return failures;
@@ -483,9 +774,22 @@ test('the router audit rejects the real module with any one reach added', () => 
     ['a dynamic import', (s) => s.replace('export function browserHistory', "export const later = () => import('./state.ts');\nexport function browserHistory")],
     ['the preference', (s) => s.replace('export function browserHistory', "export const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)');\nexport function browserHistory")],
     ['Focus released on pop', (s) => s.replace('      restore(state);\n', '      releaseFocus();\n      restore(state);\n')],
-    ['a fallback path', (s) => s.replace("chart: '/chart',", "chart: '/fallback',")],
-    ['the same-route guard dropped', (s) => s.replace('      if (to === current) return;\n', '')],
-    ['pushed before saving', (s) => s.replace('      save();\n      history.push(ROUTE_PATHS[to]);', '      history.push(ROUTE_PATHS[to]);\n      save();')],
+    ['a fallback path', (s) => s.replace('history.canonicalize(ROUTE_PATHS[current]);', "history.canonicalize('/fallback');")],
+    ['the same-route guard dropped', (s) => s.replace('      if (to === current) return true;\n', '')],
+    ['a refused push reported as taken', (s) => s.replace('        console.error(error);\n        return false;\n', '        console.error(error);\n        return true;\n')],
+    ['a pop not cancelling the pending write', (s) => s.replace('      pops += 1;\n', '')],
+    ['a stale write saved anyway', (s) => s.replace('if (live && scheduled === pops) save();', 'if (live) save();')],
+    ['every refusal logged', (s) => s.replace('if (!saveLogged) console.error(error);', 'console.error(error);')],
+    ['pushed before saving', (s) => s.replace('      save();\n      try {\n        history.push(ROUTE_PATHS[to], here());', '      try {\n        history.push(ROUTE_PATHS[to], here());\n        save();')],
+    ['a push carrying no state', (s) => s.replace('history.push(ROUTE_PATHS[to], here());', 'history.push(ROUTE_PATHS[to], null as never);')],
+    ['a failed push still changes the route', (s) => s.replace('        console.error(error);\n        return false;\n', '        console.error(error);\n')],
+    ['a push unguarded', (s) => s.replace(/try \{\n {8}history\.push\(ROUTE_PATHS\[to\], here\(\)\);\n {6}\} catch \(error\) \{\n {8}console\.error\(error\);\n {8}return false;\n {6}\}/, 'history.push(ROUTE_PATHS[to], here());')],
+    ['a save unguarded', (s) => s.replace(/const save = \(\): void => \{\n {4}try \{\n {6}history\.save\(here\(\)\);\n {4}\} catch \(error\) \{\n {6}if \(!saveLogged\) console\.error\(error\);\n {6}saveLogged = true;\n {4}\}\n {2}\};/, 'const save = (): void => history.save(here());')],
+    ['a save on every change', (s) => s.replace('      if (pending) return;\n', '')],
+    ['the keep-current save dropped', (s) => s.replace(/\n {4}\/\/ Keep the current entry current[\s\S]*?\n {4}\}\),\n/, '\n')],
+    ['an unguarded write of its own', (s) => s.replace('  restore(history.state());', '  restore(history.state());\n  history.save({ scrollProgress: 0 });')],
+    ['a re-export', (s) => `${s}\nexport { resolveRoute } from './route.ts';\n`],
+    ['a second import', (s) => s.replace("import { ROUTE_PATHS, resolveRoute, type Route } from './route.ts';", "import { ROUTE_PATHS, resolveRoute, type Route } from './route.ts';\nimport { SLOT_TEXT } from './chrome-model.ts';")],
     ['pagehide not saving', (s) => s.replace("history.listen('pagehide', save)", "history.listen('pagehide', () => undefined)")],
   ];
   for (const [name, mutate] of mutations) {
@@ -567,7 +871,9 @@ test('the colophon is reached only from src/shell/colophon-host.tsx, and holds o
  * — the one import of the chart anywhere — behind an error boundary that logs
  * and renders `null`, around `<Suspense fallback={null}>`, the artifact handed
  * through and its shape restated (a type-only import of the chart is an edge the
- * boundary gate forbids). Nothing static from the chart, no render-scene.
+ * boundary gate forbids). Nothing static from the chart, no render-scene. 4.5:
+ * the chart's links built here, once, by `chartLinks(surface, router.navigate)`
+ * — the machine's surface, never the shown one — and handed through.
  */
 function auditFallbackHost(source: string): string[] {
   const code = stripComments(source);
@@ -582,8 +888,11 @@ function auditFallbackHost(source: string): string[] {
   if (JSON.stringify(tags) !== JSON.stringify(['FallbackBoundary', 'Suspense', 'Chart'])) {
     failures.push(`the nesting is ${JSON.stringify(tags)}, not boundary, Suspense, Chart`);
   }
-  if (!/<Chart\s+artifact=\{\s*artifact\s*\}\s*\/>/.test(code)) failures.push('the chart is not handed the artifact');
-  if (!/export\s+function\s+FallbackHost\(\s*\{\s*artifact\s*\}\s*:\s*FallbackHostProps\s*\)/.test(code)) failures.push('the host does not take the artifact as its one prop');
+  if (!/<Chart\s+artifact=\{\s*artifact\s*\}\s+links=\{\s*links\s*\}\s*\/>/.test(code)) failures.push('the chart is not handed the artifact and the links');
+  if (!/export\s+function\s+FallbackHost\(\s*\{\s*artifact\s*,\s*surface\s*,\s*router\s*\}\s*:\s*FallbackHostProps\s*\)/.test(code)) failures.push('the host does not take the artifact, the surface and the router as its props');
+  if (!/const\s+links\s*=\s*chartLinks\(\s*surface\s*,\s*router\.navigate\s*\)\s*;/.test(code)) failures.push('the links are not chartLinks(surface, router.navigate)');
+  if (!/import\s*\{\s*chartLinks\s*\}\s*from\s*'\.\/route-link\.ts'/.test(code)) failures.push('the links are not route-link.ts’s');
+  if (/\bnavigate\(|\bfollowRoute\b|\bROUTE_PATHS\b/.test(code)) failures.push('the host builds a link of its own');
   if (!/interface\s+FallbackHostArtifact\b/.test(code)) failures.push('the artifact shape is not restated');
   const shape = /interface\s+FallbackHostArtifact[\s\S]*?\n\}/.exec(code);
   if (shape !== null && /\n\s+(?!readonly)[a-zA-Z_]+\s*[?:]/.test(shape[0])) failures.push('a member of the restated shape is not readonly');
@@ -605,13 +914,18 @@ test('the fallback host audit rejects the real host with any one guarantee remov
     ['a static import', (s) => s.replace("const Chart = lazy(() => import('../render-fallback/chart.tsx'));", "import Chart from '../render-fallback/chart.tsx';")],
     ['the scene instead', (s) => s.replace("import('../render-fallback/chart.tsx')", "import('../render-scene/scene.tsx')")],
     ['a second import', (s) => `${s}\nvoid import('../render-fallback/chart.tsx');\n`],
-    ['the boundary inside Suspense', (s) => s.replace(/<FallbackBoundary>\s*<Suspense fallback=\{null\}>\s*<Chart artifact=\{artifact\} \/>\s*<\/Suspense>\s*<\/FallbackBoundary>/, '<Suspense fallback={null}>\n      <FallbackBoundary>\n        <Chart artifact={artifact} />\n      </FallbackBoundary>\n    </Suspense>')],
+    ['the boundary inside Suspense', (s) => s.replace(/<FallbackBoundary>\s*<Suspense fallback=\{null\}>\s*<Chart artifact=\{artifact\} links=\{links\} \/>\s*<\/Suspense>\s*<\/FallbackBoundary>/, '<Suspense fallback={null}>\n      <FallbackBoundary>\n        <Chart artifact={artifact} links={links} />\n      </FallbackBoundary>\n    </Suspense>')],
     ['a loading copy', (s) => s.replace(/(\n\s*)<Suspense fallback=\{null\}>/, '$1<Suspense fallback={<p>loading</p>}>')],
     ['not logged', (s) => s.replace(/console\.error\(/, 'void (')],
     ['a failure rendered', (s) => s.replace('this.state.failed ? null :', 'this.state.failed ? this.props.children :')],
     ['retried', (s) => s.replace('return { failed: true };', 'setTimeout(() => location.reload(), 1000);\n    return { failed: true };')],
-    ['the artifact dropped', (s) => s.replace('<Chart artifact={artifact} />', '<Chart artifact={{ clients: [] }} />')],
+    ['the artifact dropped', (s) => s.replace('<Chart artifact={artifact} links={links} />', '<Chart artifact={{ clients: [] }} links={links} />')],
     ['a mutable member', (s) => s.replace('readonly timeAxis: number;', 'timeAxis: number;')],
+    ['a mutable span', (s) => s.replace('readonly end: string | null;\n    };', 'end: string | null;\n    };')],
+    ['the links dropped', (s) => s.replace('<Chart artifact={artifact} links={links} />', '<Chart artifact={artifact} links={{ model: links.model, routes: [] }} />')],
+    ['the links on a fixed surface', (s) => s.replace('chartLinks(surface, router.navigate)', "chartLinks('scene', router.navigate)")],
+    ['a link of its own', (s) => s.replace('const links = chartLinks(surface, router.navigate);', "const links = { ...chartLinks(surface, router.navigate), extra: () => router.navigate('home') };")],
+    ['the surface not a prop', (s) => s.replace('FallbackHost({ artifact, surface, router }: FallbackHostProps)', "FallbackHost({ artifact, router }: FallbackHostProps & { surface?: never }) {\n  const surface = 'scene';\n  return null;\n}\nfunction Unused({ artifact, surface, router }: FallbackHostProps)")],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);
@@ -663,28 +977,39 @@ function advanceScrollCallers(files: Readonly<Record<string, string>>): string[]
     .sort();
 }
 
-test('mount.tsx is advanceScroll’s one caller in the shell outside scene-host.tsx and activate.ts, through the restore hook', () => {
+test('position-hooks.ts is advanceScroll’s one caller in the shell outside scene-host.tsx and activate.ts, through the restore hook, and mount.tsx binds it', () => {
   const files = Object.fromEntries(
     sourceFilesUnder(SHELL)
       .filter((path) => !isTestFile(path))
       .map((path) => [path.slice(SHELL.length).replace(/\\/g, '/'), readFileSync(path, 'utf8')]),
   );
-  assert.deepEqual(advanceScrollCallers(files), ['activate.ts', 'mount.tsx', 'scene-host.tsx']);
+  assert.deepEqual(advanceScrollCallers(files), ['activate.ts', 'position-hooks.ts', 'scene-host.tsx']);
+  const hooks = stripComments(files['position-hooks.ts'] ?? '');
+  assert.equal((hooks.match(/\badvanceScroll\(/g) ?? []).length, 1, 'once');
+  assert.match(hooks, /restore:\s*\(\s*progress\s*\)\s*=>\s*advanceScroll\(\s*progress\s*\)/, 'as the router’s restore hook');
+  assert.match(hooks, /read:\s*\(\s*\)\s*=>\s*navigationStore\.getState\(\)\.scrollProgress/, 'and the read hook is the store’s progress');
+  // 4.5: the mount binds the shipped factory — the one the real-store rows run — and no hook of its own.
   const mount = stripComments(files['mount.tsx'] ?? '');
-  assert.equal((mount.match(/\badvanceScroll\(/g) ?? []).length, 1, 'once');
-  assert.match(mount, /restore:\s*\(\s*progress\s*\)\s*=>\s*advanceScroll\(\s*progress\s*\)/, 'as the router’s restore hook');
-  assert.match(mount, /read:\s*\(\s*\)\s*=>\s*navigationStore\.getState\(\)\.scrollProgress/, 'and the read hook is the store’s progress');
+  assert.match(mount, /createRouter\(\s*browserHistory\(\)\s*,\s*route\s*,\s*storePositionHooks\(\)\s*\)/, 'the mount hands createRouter storePositionHooks()');
+  assert.match(mount, /import\s*\{\s*storePositionHooks\s*\}\s*from\s*'\.\/position-hooks\.ts'/);
+  assert.doesNotMatch(mount, /\b(?:advanceScroll|navigationStore)\b/, 'the mount reaches the store through the factory alone');
+  // 4.5: the subscribe hook hears the store's progress changes alone, and writes nothing.
+  assert.match(
+    hooks,
+    /subscribe:\s*\(\s*(\w+)\s*\)\s*=>\s*navigationStore\.subscribe\(\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)\s*=>\s*\{\s*if\s*\(\s*\2\.scrollProgress\s*!==\s*\3\.scrollProgress\s*\)\s*\1\(\)\s*;?\s*\}\s*\)/,
+    'and the subscribe hook tells the router of a scrollProgress change, and of nothing else',
+  );
   // A fourth caller is red, whether it calls the door or hands it on by reference.
   for (const reach of ['advanceScroll(0);', 'const hooks = { restore: advanceScroll };', 'const door = advanceScroll; door(0);', 'advanceScroll.call(null, 0);']) {
     assert.deepEqual(
       advanceScrollCallers({ ...files, 'router.ts': `${files['router.ts'] ?? ''}\n${reach}\n` }),
-      ['activate.ts', 'mount.tsx', 'router.ts', 'scene-host.tsx'],
+      ['activate.ts', 'position-hooks.ts', 'router.ts', 'scene-host.tsx'],
       reach,
     );
   }
   // An import alone is no caller.
   assert.deepEqual(
     advanceScrollCallers({ ...files, 'router.ts': `import { advanceScroll } from './state.ts';\n${files['router.ts'] ?? ''}` }),
-    ['activate.ts', 'mount.tsx', 'scene-host.tsx'],
+    ['activate.ts', 'position-hooks.ts', 'scene-host.tsx'],
   );
 });

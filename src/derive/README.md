@@ -201,6 +201,10 @@ The scene and the Fallback project the same data two ways, so the one thing they
 
 This is bound **by test, not by comment.** An earlier implementation of this story derived `timeAxis` from `duration.start` while `luminanceBand` ranked recency, and passed 191 tests with the two inverted, because every fixture happened to have a start order agreeing with its recency order. `artifact.test.ts` fixes a set where the two deliberately oppose, and asserts the orderings are identical over it. There is also one ranking function — `recencyRanks`, exported from `entities.ts` — rather than two implementations mirroring each other: replacing its key with `duration.start` fails the suite.
 
+### A Client's `span` is its calendar, and `timeAxis` is not
+
+`timeAxis` is a recency **rank**, so its spacing says nothing about years: linear year marks laid along it would lie. The Fallback still dates every Client (4.5), so each emitted Client carries `span: { start, end }` — the earliest of its Projects' `duration.start` and the latest `duration.end`, or `null` while any Project is ongoing. It is derived once, by `clientSpanOf` in `entities.ts` beside the Client's `timeAxis`, emitted by `artifact.ts`, required by the schema (`SCHEMA_VERSION` 9), and refined there against the Projects the Client carries, so a document whose span disagrees with its own dates fails the gate naming the Client. The chart reads it and never aggregates Project dates itself (AD-3).
+
 ## The destination set
 
 The artifact carries **one** `destinations` list, and it is the only enumeration of what an input path may address. Both future consumers — the DOM index the keyboard walks and the pointer raycast target set (AD-15) — build from it and from nothing else. **There is no second enumeration anywhere**, and adding one is the failure this list exists to prevent, not an optimization.

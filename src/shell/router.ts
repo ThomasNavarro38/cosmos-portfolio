@@ -1,59 +1,68 @@
 /**
- * The router (4.2, AD-18, UX-DR54): three addressable routes and real browser
- * history between them.
+ * The router (4.2, AD-18, UX-DR54): real browser history between the three
+ * addressable routes `route.ts` declares (`home` `/`, `chart` `/chart`,
+ * `colophon` `/colophon`).
  *
- * | Route | Path | Surface |
- * | --- | --- | --- |
- * | `home` | `/` | this machine's surface — the scene where it is capable, else the flat chart |
- * | `chart` | `/chart` | the flat chart, on any machine |
- * | `colophon` | `/colophon` | the Colophon |
- *
- * There is no `/scene`: the root *is* this machine's surface, so a capable
- * visitor choosing the scene from the chart (4.5) is `navigate('home')`. Any
- * other path, or a non-canonical one (`/chart/`), resolves to its route and is
- * given the canonical path by `replaceState` — no new entry — with its search and
- * fragment kept. Fragments are never read here and never pushed (their
+ * A non-canonical path (`/chart/`, or an unknown one resolving to `home`) is
+ * given the canonical path by `replaceState` — no new entry — with its search
+ * and fragment kept. Fragments are never read here and never pushed (their
  * consumption is 4.3's).
  *
  * **The whole history contract.** `navigate(to)` to the current route does
  * nothing. Otherwise it saves the departing position into the current entry
- * (`replaceState`, URL unchanged), then `pushState`s the target's path. A
- * `popstate` resolves the route from the path; if the route changed, the entry's
- * saved position is restored — only from a well-formed `{ scrollProgress: finite
- * ≥ 0 }`, anything else writes nothing — and subscribers are told. A pop that
- * leaves the route unchanged (a fragment-only pop) writes nothing. On `pagehide`
- * the position is saved into the current entry as well, so a return across
- * documents (Back into a reloaded page) restores it too, at creation.
+ * (`replaceState`, URL unchanged), then `pushState`s the target's path carrying
+ * the same `{ scrollProgress }` (4.5), so no entry the router pushes holds
+ * `null`. A `popstate` resolves the route from the path; if the route changed,
+ * the entry's saved position is restored — only from a well-formed
+ * `{ scrollProgress: finite ≥ 0 }`, anything else writes nothing — and
+ * subscribers are told. A pop that leaves the route unchanged (a fragment-only
+ * pop) writes nothing. On `pagehide` the position is saved into the current
+ * entry as well, so a return across documents (Back into a reloaded page)
+ * restores it too, at creation.
+ *
+ * **The current entry is kept current** (4.5). A `popstate` has already moved
+ * the browser to the reached entry when it fires, so the entry being left by a
+ * Back or Forward cannot be written then. Instead the router hears the
+ * position hook's `subscribe` and saves the current entry on a trailing
+ * schedule — at most one pending write, flushed by the injected `later` after
+ * `SAVE_INTERVAL_MS`. Safari caps `replaceState` near 100 calls per 10
+ * seconds, and the Rail writes `scrollProgress` about 60 times a second; one
+ * write per 300 ms is at most about 33. **The limit:** a route-changing pop
+ * cancels the write still pending (it would otherwise land in the entry just
+ * reached, stamping it with the position of the entry left), so the last
+ * `SAVE_INTERVAL_MS` or less of movement before a Back or Forward is not saved
+ * into the departing entry; that entry holds the position of its last flushed
+ * write. A pending write that lands after a `navigate` stamps the new entry
+ * with the store's current value, which is the value that entry was pushed
+ * with anyway.
+ *
+ * **Every write is guarded** (4.5). A `replaceState` or `pushState` that throws
+ * (a `SecurityError` in a sandboxed, opaque-origin frame; Safari's rate limit)
+ * is caught and logged, the bare error with no message of its own — a refused
+ * `replaceState` once, however many trailing saves keep trying, so a sandbox
+ * does not log three errors a second while the Rail moves. A refused push
+ * leaves the route, the URL and the subscribers as they were, nothing throws
+ * into the click that asked for it, and `navigate` returns `false`, so the
+ * link leaves the browser to follow its `href` as a full load.
  *
  * **The route is not in the navigation store, and Focus is not a route.** The
  * router writes the store through exactly one door, the position hook its
  * caller hands it (`mount.tsx` binds it to `advanceScroll`): no Focus, flight or
  * other store event ever creates an entry, and a `popstate` never releases Focus.
- * Escape does that, through the store (AD-16).
+ * Escape does that, through the store (AD-16). The hook's `subscribe` is heard,
+ * never written through.
  *
- * **Pure and injectable.** It imports nothing — not React, not the store, not the
- * motion preference — so the thin entry can import `resolveRoute` without
- * growing, and every rule is executed against an injected `RouteHistory` in
- * `router.test.ts`. `browserHistory()` is the real one.
+ * **Pure and injectable.** It imports nothing but `route.ts` — not React, not
+ * the store, not the motion preference — and every rule is executed against an
+ * injected `RouteHistory` in `router.test.ts`. `browserHistory()` is the real
+ * one. Since 4.5 it is off the entry chunk: the entry takes `resolveRoute` from
+ * `route.ts`, and this module is reached from the mount alone.
  */
 
-/** The three addressable routes. */
-export type Route = 'home' | 'chart' | 'colophon';
+import { ROUTE_PATHS, resolveRoute, type Route } from './route.ts';
 
-/** Each route's one canonical path. */
-export const ROUTE_PATHS: Readonly<Record<Route, string>> = {
-  home: '/',
-  chart: '/chart',
-  colophon: '/colophon',
-};
-
-/** The route a path names: trailing slashes ignored, anything unknown is `home`. */
-export function resolveRoute(pathname: string): Route {
-  const path = pathname.replace(/\/+$/, '');
-  if (path === ROUTE_PATHS.chart) return 'chart';
-  if (path === ROUTE_PATHS.colophon) return 'colophon';
-  return 'home';
-}
+/** The trailing schedule of the keep-current save: at most one `replaceState` per this many milliseconds. */
+export const SAVE_INTERVAL_MS = 300;
 
 /**
  * What is shown for a route on this machine: the Colophon on `colophon`, the
@@ -71,10 +80,12 @@ export interface PositionState {
   readonly scrollProgress: number;
 }
 
-/** The scene's position, read when an entry is left and restored when it is reached again. */
+/** The scene's position, read when an entry is left, heard while it changes, and restored when it is reached again. */
 export interface PositionHooks {
   read(): number;
   restore(progress: number): void;
+  /** Hear every change of the position; returns the unsubscribe. */
+  subscribe(listener: () => void): () => void;
 }
 
 /** A saved position, or `null` for anything that is not `{ scrollProgress: finite ≥ 0 }`. */
@@ -98,8 +109,10 @@ export interface RouteHistory {
   save(state: PositionState): void;
   /** `replaceState` to `path` with the current search and fragment, the entry's state unchanged. No new entry. */
   canonicalize(path: string): void;
-  /** `pushState` a fresh entry at `path`, with no fragment. */
-  push(path: string): void;
+  /** `pushState` a fresh entry at `path` carrying `state`, with no fragment. */
+  push(path: string, state: PositionState): void;
+  /** Run `fn` once, later — the browser's `setTimeout(fn, SAVE_INTERVAL_MS)`. */
+  later(fn: () => void): void;
   /** Hear `type`, with the reached entry's state on `popstate`; returns the removal. */
   listen(type: HistoryEvent, listener: (state: unknown) => void): () => void;
 }
@@ -109,8 +122,12 @@ export interface Router {
   readonly route: () => Route;
   /** Told after every route change; returns the unsubscribe. */
   readonly subscribe: (listener: () => void) => () => void;
-  /** A real history entry to `to`, or nothing when `to` is the current route. */
-  readonly navigate: (to: Route) => void;
+  /**
+   * A real history entry to `to`, or nothing when `to` is the current route.
+   * `true` when the route changed or was already current, `false` when the
+   * push was refused.
+   */
+  readonly navigate: (to: Route) => boolean;
   /** Stop listening to the history. */
   readonly dispose: () => void;
 }
@@ -125,22 +142,32 @@ export interface Router {
  */
 export function createRouter(history: RouteHistory, initial: Route, position: PositionHooks): Router {
   let current = initial;
+  let live = true;
+  let pending = false;
+  // Bumped by every route-changing pop: a write scheduled before it is stale.
+  let pops = 0;
+  let saveLogged = false;
   const listeners = new Set<() => void>();
   const restore = (state: unknown): void => {
     const progress = savedPosition(state);
     if (progress !== null) position.restore(progress);
   };
-  const save = (): void => history.save({ scrollProgress: position.read() });
+  const here = (): PositionState => ({ scrollProgress: position.read() });
+  const save = (): void => {
+    try {
+      history.save(here());
+    } catch (error) {
+      if (!saveLogged) console.error(error);
+      saveLogged = true;
+    }
+  };
   const go = (next: Route): void => {
     current = next;
     listeners.forEach((listener) => listener());
   };
 
-  // A refused rewrite (a `SecurityError` in a sandboxed, opaque-origin frame)
-  // leaves the URL non-canonical and nothing worse: this runs before
-  // `createRoot`, so a throw here would render nothing. The bare error is
-  // logged, with no message of its own: this module ships on the entry chunk,
-  // whose budget has no room for one.
+  // A refused rewrite leaves the URL non-canonical and nothing worse: this runs
+  // before `createRoot`, so a throw here would render nothing.
   if (history.pathname() !== ROUTE_PATHS[current]) {
     try {
       history.canonicalize(ROUTE_PATHS[current]);
@@ -155,10 +182,21 @@ export function createRouter(history: RouteHistory, initial: Route, position: Po
       const next = resolveRoute(history.pathname());
       // A fragment-only pop leaves the route, and the store, alone.
       if (next === current) return;
+      pops += 1;
       restore(state);
       go(next);
     }),
     history.listen('pagehide', save),
+    // Keep the current entry current: one pending write at a time, flushed later.
+    position.subscribe(() => {
+      if (pending) return;
+      pending = true;
+      const scheduled = pops;
+      history.later(() => {
+        pending = false;
+        if (live && scheduled === pops) save();
+      });
+    }),
   ];
 
   return {
@@ -168,12 +206,19 @@ export function createRouter(history: RouteHistory, initial: Route, position: Po
       return () => listeners.delete(listener);
     },
     navigate: (to) => {
-      if (to === current) return;
+      if (to === current) return true;
       save();
-      history.push(ROUTE_PATHS[to]);
+      try {
+        history.push(ROUTE_PATHS[to], here());
+      } catch (error) {
+        console.error(error);
+        return false;
+      }
       go(to);
+      return true;
     },
     dispose: () => {
+      live = false;
       stops.forEach((stop) => stop());
       listeners.clear();
     },
@@ -187,7 +232,10 @@ export function browserHistory(): RouteHistory {
     state: () => history.state as unknown,
     save: (state) => history.replaceState(state, ''),
     canonicalize: (path) => history.replaceState(history.state, '', path + location.search + location.hash),
-    push: (path) => history.pushState(null, '', path),
+    push: (path, state) => history.pushState(state, '', path),
+    later: (fn) => {
+      setTimeout(fn, SAVE_INTERVAL_MS);
+    },
     listen: (type, listener) => {
       const heard = (event: Event): void => listener((event as PopStateEvent).state);
       addEventListener(type, heard);
