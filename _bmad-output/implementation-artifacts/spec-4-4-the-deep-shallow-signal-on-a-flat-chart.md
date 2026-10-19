@@ -85,6 +85,14 @@ A two-entry legend under the plates says what the Ring is.
 - Given the chart is inspected, when Deep and Shallow markers are compared, then their radius, class, fill and stroke are identical, and only the Ring differs.
 - Given `npm test` and `npm run build`, when they run, then all suites pass and the entry stays within its budget (the chart chunk alone grows).
 
+### Review Findings
+
+- [x] [Review][Patch] The never-drawn guarantee bans only the constant's name: `<span>{row.notable.label}</span>` in the Notable cell would draw `No notable` and pass every test. Pin `row.notable.label` to exactly one occurrence, as the glyph's `aria-label`, and `<Glyph ` to exactly two uses (index, legend) so no record gains a ring, with mutation rows [src/render-fallback/chart-model.test.ts:736]
+- [x] [Review][Patch] The flip test asserts only the other records unchanged, though its comment claims the flipped record's reading position follows `isDeep`; and it flips two hand-picked IDs. Flip every committed Project and assert the flipped record's reading position changes [src/render-fallback/chart-model.test.ts:377]
+- [x] [Review][Patch] The ring-clearance tie exemption (`elsewhere`) skips any circle at the Ring's centre, of any class or entity. Narrow it to another Project's marker or Ring tied on `timeAxis` in the same Client [src/render-fallback/chart-model.test.ts:442]
+- [x] [Review][Patch] The messages "chart.css strokes .chart-ring at stroke-near / at the hairline" are attached to assertions that only read DESIGN.md. Tie DESIGN.md's `{colors.stroke-near-dark}` / `{components.stroke-weight.hairline}` to `.chart-ring`'s declarations in chart.css [src/render-fallback/chart-model.test.ts:314]
+- [x] [Review][Patch] The `Glyph` switch has no exhaustiveness guard: a third `NotableKind` would render `undefined` with no type error. Add a `never` default [src/render-fallback/chart.tsx:159] — not applied: the three existing switches in `chart.tsx` (block, reading, run) carry no default, and React 19's `JSX` type would need an import from `react`, which `chart.tsx` may not make
+
 ## Design Notes
 
 The leader-start rule is the scene's own: the leader on a Deep Planet starts beyond its Ring (3.3/3.4). Here that is `MARKER_R + 3` for a Shallow mark and `RING_R + 3` for a Deep one. On the across plate's shallow depth the leader is then short (about 1.6), which is acceptable because the label still clears the Ring.

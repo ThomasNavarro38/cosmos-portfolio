@@ -311,9 +311,16 @@ test('the Ring is DESIGN.md’s ring-notable: 2.2 × the marker, stroke-near, ha
   assert.equal(RING_RATIO, 2.2);
   assert.equal(RING_R, 15.4);
   assert.ok(Math.abs(RING_R / MARKER_R - 2.2) < 1e-9, 'RING_R / MARKER_R is 2.2');
-  assert.equal(ring.stroke, '{colors.stroke-near-dark}', 'chart.css strokes .chart-ring at stroke-near');
-  assert.equal(ring.strokeWidth, '{components.stroke-weight.hairline}', 'chart.css strokes .chart-ring at the hairline');
+  assert.equal(ring.stroke, '{colors.stroke-near-dark}', 'DESIGN.md strokes the Ring at stroke-near');
+  assert.equal(ring.strokeWidth, '{components.stroke-weight.hairline}', 'DESIGN.md strokes the Ring at the hairline');
   assert.equal(ring.dash, 'none');
+  // chart.css draws what DESIGN.md names: `{colors.X}` is `--color-X`, `{components.stroke-weight.X}` is `--stroke-X`.
+  const css = readFileSync(join(DIR, 'chart.css'), 'utf8').replace(/\r\n/g, '\n');
+  const rule = /\n\.chart-ring \{\n([^}]*)\}/.exec(css)?.[1] ?? '';
+  assert.match(rule, new RegExp(`^  stroke: var\\(--color-${ring.stroke.replace(/^\{colors\.|\}$/g, '')}\\);$`, 'm'), 'chart.css strokes .chart-ring at DESIGN.md’s colour');
+  assert.match(rule, new RegExp(`^  stroke-width: var\\(--stroke-${ring.strokeWidth.replace(/^\{components\.stroke-weight\.|\}$/g, '')}\\);$`, 'm'), 'chart.css strokes .chart-ring at DESIGN.md’s weight');
+  assert.match(rule, /^ {2}fill: none;$/m, 'chart.css leaves the Ring unfilled');
+  assert.doesNotMatch(rule, /dash/, 'chart.css leaves the Ring undashed');
   assert.deepEqual(INDEX_GLYPH, { size: 20, viewBox: '0 0 20 20', centre: 10, markerR: 4, ringR: 8.8 });
   assert.deepEqual(LEGEND_GLYPH, { size: 40, viewBox: '0 0 40 40', centre: 20, markerR: MARKER_R, ringR: RING_R });
   for (const glyph of [INDEX_GLYPH, LEGEND_GLYPH]) {
@@ -374,10 +381,18 @@ test('Deep/Shallow: both plates draw every marker at one size, one class — onl
   }
 });
 
-test('Deep/Shallow: flipping one isDeep changes only that Project’s ring, leader start and index cell', () => {
+/** A record's reading position kind: `notable` on a Deep Project, `rule` on a Shallow one. */
+function readingKindOf(chart: ChartModel, id: string): string | undefined {
+  const block = chart.sections.flatMap((section) => section.records).find((record) => record.id === id)?.blocks.find((inner) => inner.kind === 'reading');
+  return block !== undefined && block.kind === 'reading' ? block.reading.kind : undefined;
+}
+
+test('Deep/Shallow: flipping one isDeep changes only that Project’s ring, leader start, index cell and reading position', () => {
   const artifact = committed();
   const base = buildChart(artifact);
-  for (const id of ['project:sncf/client-referential', 'project:decathlon/store-labelling-generation']) {
+  const every = artifact.clients.flatMap((entry) => entry.projects.map((inner) => inner.id));
+  assert.ok(every.length > 2, 'every committed Project is flipped in turn');
+  for (const id of every) {
     const after = buildChart(flipped(artifact, id));
     for (const which of ['across', 'down'] as const) {
       const [a, b] = [base[which], after[which]];
@@ -405,6 +420,7 @@ test('Deep/Shallow: flipping one isDeep changes only that Project’s ring, lead
     assert.ok(before !== undefined);
     assert.deepEqual(cellOf(after), before.kind === 'ring' ? cells.plain : cells.ring, `${id}'s cell flips, kind and label`);
     // The flipped record's reading position follows isDeep (the panel's own branch); every other record is untouched.
+    assert.deepEqual([readingKindOf(base, id), readingKindOf(after, id)], before.kind === 'ring' ? ['notable', 'rule'] : ['rule', 'notable'], `${id}'s reading position flips`);
     const others = (chart: ChartModel) => chart.sections.map((section) => section.records.filter((record) => record.id !== id));
     assert.deepEqual(others(after), others(base), 'every other record is unchanged');
   }
@@ -426,6 +442,7 @@ for (const [name, artifact] of [['the committed artifact', committed()], ['the c
     const chart = buildChart(artifact);
     const deep = deepIds(artifact);
     const owner = new Map(artifact.clients.flatMap((entry) => entry.projects.map((inner) => [inner.id, entry.id] as const)));
+    const timeOf = new Map(artifact.clients.flatMap((entry) => entry.projects.map((inner) => [inner.id, inner.timeAxis] as const)));
     for (const [which, plate] of [['across', chart.across], ['down', chart.down]] as const) {
       assert.deepEqual(outside(plate), [], `${which}: everything, rings counted, inside the viewBox`);
       for (const marker of markers(plate)) {
@@ -438,8 +455,11 @@ for (const [name, artifact] of [['the committed artifact', committed()], ['the c
         assert.ok(end - start >= 1, `${which}: ${marker.entity}'s leader shows at least one unit (${end - start})`);
       }
       for (const ring of rings(plate)) {
-        // A mark at the ring's own centre is a tie in timeAxis (4.3 draws tied Projects on one spot), not a ring collision.
-        const elsewhere = (circle: Plate['circles'][number]) => circle.cx !== ring.cx || circle.cy !== ring.cy;
+        // A tie in timeAxis (4.3 draws tied Projects on one spot) is not a ring collision: only a marker or Ring of
+        // another Project of the same Client at the same timeAxis is exempt, never a Star or anything else on the spot.
+        const tied = (circle: Plate['circles'][number]) =>
+          (circle.className === 'chart-marker' || circle.className === 'chart-ring') && owner.get(circle.entity) === owner.get(ring.entity) && timeOf.get(circle.entity) === timeOf.get(ring.entity);
+        const elsewhere = (circle: Plate['circles'][number]) => circle.cx !== ring.cx || circle.cy !== ring.cy || !tied(circle);
         // Every other Star, marker and Ring: the core dot sits inside its Star, so the Star stands for it.
         for (const other of plate.circles.filter((circle) => circle.entity !== ring.entity && circle.className !== 'chart-star-core' && elsewhere(circle))) {
           assert.ok(Math.hypot(ring.cx - other.cx, ring.cy - other.cy) >= ring.r + other.r, `${which}: ${ring.key} is clear of ${other.key}`);
@@ -748,6 +768,10 @@ function auditGlyphMarkup(code: string): string[] {
   }
   if (!/<Glyph glyph=\{LEGEND_GLYPH\} kind=\{entry\.kind\} \/>\s*<\/svg>\s*<span>\{entry\.text\}<\/span>/.test(code)) failures.push('chart.tsx: a legend entry does not draw the model’s kind and text');
   if (!/<Glyph glyph=\{INDEX_GLYPH\} kind=\{row\.notable\.kind\} \/>/.test(code)) failures.push('chart.tsx: an index glyph does not draw the model’s kind');
+  if ((code.match(/row\.notable\.label/g) ?? []).length !== 1 || !/aria-label=\{row\.notable\.label\}/.test(code)) {
+    failures.push('chart.tsx: row.notable.label is not the glyph’s aria-label alone — its name is announced, never drawn');
+  }
+  if ((code.match(/<Glyph /g) ?? []).length !== 2) failures.push('chart.tsx: a Glyph beyond the index and the legend — the records carry no ring');
   return failures;
 }
 
@@ -763,6 +787,8 @@ test('chart.tsx glyph markup: each binding replaced fails with its own line', ()
     [(s) => s.replace('return <circle className="chart-marker" cx={glyph.centre} cy={glyph.centre} r={glyph.markerR} />;', 'return <circle className="chart-marker" cx={glyph.centre} cy={glyph.centre} r={glyph.ringR} />;'), /the plain glyph is not/],
     [(s) => s.replace('<Glyph glyph={LEGEND_GLYPH} kind={entry.kind} />', '<Glyph glyph={LEGEND_GLYPH} kind="ring" />'), /a legend entry does not draw/],
     [(s) => s.replace('<Glyph glyph={INDEX_GLYPH} kind={row.notable.kind} />', '<Glyph glyph={INDEX_GLYPH} kind="plain" />'), /an index glyph does not draw/],
+    [(s) => s.replace('<td className="chart-index-client">{row.client}</td>', '<td className="chart-index-client">{row.client} <span>{row.notable.label}</span></td>'), /row\.notable\.label is not the glyph’s aria-label alone/],
+    [(s) => s.replace('<h3 className="panel-title">{block.text}</h3>', '<h3 className="panel-title">{block.text}</h3>\n          <svg><Glyph glyph={INDEX_GLYPH} kind="ring" /></svg>'), /a Glyph beyond the index and the legend/],
   ];
   for (const [mutate, message] of cases) {
     const mutated = mutate(code);
