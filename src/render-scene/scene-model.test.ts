@@ -3239,6 +3239,114 @@ test('the Mote mount audit rejects the real scene with any one guarantee removed
   }
 });
 
+// --- The frame-time sampler (4.6) ---------------------------------------------
+
+const FRAME_SAMPLER_TSX = fileURLToPath(new URL('./frame-sampler.tsx', import.meta.url));
+
+/**
+ * `frame-sampler.tsx`'s contract, as a pure function over its source: exactly
+ * one `useFrame((_, delta) => { sampleFrame(delta); })`, `return null`, and
+ * nothing else — no state, no effect, no ref, no store read, no DOM, no
+ * navigation, no motion preference, and imports of `useFrame` and `sampleFrame`
+ * alone.
+ */
+function auditFrameSampler(source: string): string[] {
+  const code = stripCommentsAndStrings(source);
+  const quoted = stripComments(source);
+  const failures: string[] = [];
+  const squash = (text: string) => text.replace(/\s+/g, ' ').trim();
+  const body = /export function FrameSampler\(\)\s*\{([\s\S]*)\n\}/.exec(code)?.[1] ?? '';
+  if (squash(body) !== 'useFrame((_, delta) => { sampleFrame(delta); }); return null;') {
+    failures.push('the sampler is not exactly useFrame((_, delta) => { sampleFrame(delta); }) and return null');
+  }
+  if ((code.match(/\buseFrame\s*\(/g) ?? []).length !== 1) failures.push('runs other than one frame loop');
+  if ((code.match(/\bsampleFrame\s*\(/g) ?? []).length !== 1) failures.push('samples other than once per frame');
+  if (/\buse(?!Frame\b)[A-Z]\w*\b/.test(code)) failures.push('holds a hook beyond useFrame — no state, no effect, no ref, no store read');
+  if (/\bnavigationStore\b|\bgetState\b|\bsubscribe\b|['"]zustand/.test(quoted)) failures.push('reads the store');
+  if (/\bwindow\b|\bdocument\b|\bnavigator\b|\bperformance\b|addEventListener|matchMedia/.test(code)) failures.push('reads the DOM or a clock of its own — the delta is R3F’s');
+  if (/\b(?:navigate|history|location|router)\b/i.test(code)) failures.push('names navigation');
+  if (/reducedMotion|motionPace|REDUCED_MOTION/.test(code)) failures.push('reads the motion preference — reduced motion never feeds the monitor');
+  if (/\bresetFrameSampling\b|\bchartOffered\b/.test(code)) failures.push('resets or reads the offer — it only samples');
+  const imports = [...quoted.matchAll(/^import[^\n]*$/gm)].map((match) => squash(match[0]));
+  if (JSON.stringify(imports) !== JSON.stringify(["import { useFrame } from '@react-three/fiber';", "import { sampleFrame } from '../shell/chart-offer.ts';"])) {
+    failures.push(`imports ${JSON.stringify(imports)} — useFrame and sampleFrame alone`);
+  }
+  if (/<[a-zA-Z]/.test(code)) failures.push('draws an element — the sampler renders null');
+  return failures;
+}
+
+test('the frame-time sampler is one useFrame handing its delta to sampleFrame, and renders null', () => {
+  assert.deepEqual(auditFrameSampler(readFileSync(FRAME_SAMPLER_TSX, 'utf8')), []);
+});
+
+test('the sampler audit rejects the real sampler with any one guarantee broken', () => {
+  const real = readFileSync(FRAME_SAMPLER_TSX, 'utf8');
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['the sample dropped', (s) => s.replace('    sampleFrame(delta);\n', '')],
+    ['a fixed delta', (s) => s.replace('sampleFrame(delta);', 'sampleFrame(1 / 60);')],
+    ['the delta paced by the preference', (s) => s.replace('sampleFrame(delta);', 'sampleFrame(delta * motionPace(reducedMotion()));')],
+    ['a second frame loop', (s) => s.replace('  return null;', '  useFrame(() => undefined);\n  return null;')],
+    ['state', (s) => s.replace('  useFrame(', '  const [n] = useState(0);\n  useFrame(')],
+    ['an effect', (s) => s.replace('  return null;', '  useEffect(() => resetFrameSampling(), []);\n  return null;')],
+    ['a store read', (s) => s.replace('sampleFrame(delta);', 'if (navigationStore.getState().mode === "rail") sampleFrame(delta);')],
+    ['a clock of its own', (s) => s.replace('sampleFrame(delta);', 'sampleFrame(performance.now());')],
+    ['the document read', (s) => s.replace('sampleFrame(delta);', 'if (!document.hidden) sampleFrame(delta);')],
+    ['a navigation', (s) => s.replace('sampleFrame(delta);', "sampleFrame(delta);\n    if (chartOffered()) location.assign('/chart');")],
+    ['an element drawn', (s) => s.replace('  return null;', '  return <group />;')],
+    ['another import', (s) => s.replace("import { sampleFrame } from '../shell/chart-offer.ts';", "import { sampleFrame } from '../shell/chart-offer.ts';\nimport { navigationStore } from '../shell/state.ts';")],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped sampler`);
+    assert.notDeepEqual(auditFrameSampler(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
+/**
+ * The sampler's mount in `scene.tsx`: once, inside the `<Canvas>` (outside it
+ * `useFrame` has no loop to join), with no props — and the `<Canvas>` carries no
+ * performance setting: `dpr`, `gl`, `frameloop` and `performance` stay R3F's, so
+ * a slow machine draws exactly what a fast one does.
+ */
+function auditSamplerMount(source: string): string[] {
+  const code = stripCommentsAndStrings(source);
+  const failures: string[] = [];
+  const inside = /<Canvas\b[\s\S]*<\/Canvas>/.exec(code)?.[0] ?? '';
+  if (!/<FrameSampler\s*\/>/.test(inside)) failures.push('the sampler is not mounted inside the Canvas, with no props');
+  if ((code.match(/<FrameSampler\b/g) ?? []).length !== 1) failures.push('the sampler is mounted other than once');
+  // An unconditional direct child: no `&&`, `?`, `:` or `{` immediately before it.
+  if (/(?:&&|\?|:|\{)\s*<FrameSampler\b/.test(code)) failures.push('the sampler is mounted conditionally — it must be an unconditional direct child of the Canvas');
+  if (!/import\s*\{\s*FrameSampler\s*\}\s*from\s*'\.\/frame-sampler\.tsx'/.test(stripComments(source))) failures.push('FrameSampler is not imported');
+  if (/\b(?:dpr|gl|frameloop|performance)\s*=/.test(code)) failures.push('a <Canvas> performance setting — quality holds, frames drop');
+  return failures;
+}
+
+test('the scene mounts the sampler once inside the Canvas, and sets no performance prop', () => {
+  assert.deepEqual(auditSamplerMount(readFileSync(SCENE_TSX, 'utf8')), []);
+});
+
+test('the sampler mount audit rejects the real scene with any one guarantee removed', () => {
+  const real = readFileSync(SCENE_TSX, 'utf8');
+  const MOUNT = '<FrameSampler />';
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['unmounted', (s) => s.replace(MOUNT, '')],
+    ['outside the Canvas', (s) => s.replace(MOUNT, '').replace('</Canvas>', `</Canvas>\n      ${MOUNT}`)],
+    ['mounted twice', (s) => s.replace(MOUNT, `${MOUNT}\n        ${MOUNT}`)],
+    ['mounted behind &&', (s) => s.replace(MOUNT, `{false && ${MOUNT}}`)],
+    ['mounted behind a ternary', (s) => s.replace(MOUNT, `{bodies.length > 0 ? ${MOUNT} : null}`)],
+    ['mounted in the ternary’s else', (s) => s.replace(MOUNT, `{bodies.length === 0 ? null : ${MOUNT}}`)],
+    ['a lowered DPR', (s) => s.replace('        flat\n', '        flat\n        dpr={1}\n')],
+    ['antialiasing off', (s) => s.replace('        flat\n', '        flat\n        gl={{ antialias: false }}\n')],
+    ['an adaptive performance', (s) => s.replace('        flat\n', '        flat\n        performance={{ min: 0.5 }}\n')],
+    ['a demand frameloop', (s) => s.replace('        flat\n', '        flat\n        frameloop="demand"\n')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped scene`);
+    assert.notDeepEqual(auditSamplerMount(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
 // --- The Moons (3.3) --------------------------------------------------------
 
 /**

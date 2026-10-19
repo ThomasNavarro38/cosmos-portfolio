@@ -260,6 +260,10 @@ const ROLES: readonly Role[] = [
   // The scene's link to the chart (4.5) takes the line's ink at rest (`inherit`,
   // measured as `chrome` above) and the raised ink on hover and focus.
   { role: 'chrome chart link, raised', floor: 4.5, ink: { css: CHROME_CSS, selector: '.chrome-route:hover, .chrome-route:focus-visible' }, ground: 'page' },
+  // The offer (4.6): the same link raised at rest once the scene has run below the floor.
+  { role: 'chrome chart link, offered', floor: 4.5, ink: { css: CHROME_CSS, selector: '.chrome-route-offered' }, ground: 'page' },
+  // Its hover and focus step past that rest, to ink-lift (WCAG 2.4.7).
+  { role: 'chrome chart link, offered, raised', floor: 4.5, ink: { css: CHROME_CSS, selector: '.chrome-route-offered:hover, .chrome-route-offered:focus-visible' }, ground: 'page' },
   {
     role: 'affordance title',
     floor: 4.5,
@@ -424,6 +428,14 @@ test('contrast: a role moved to a dimmer ink, or one whose ink cannot be read, f
   assert.match(
     failing(CHROME_CSS, (s) => s.replace(/(\.chrome-route:focus-visible \{\n  color: )var\(--color-ink-prose-dark\)/, '$1var(--color-ink-faint-dark)')),
     /^contrast: chrome chart link, raised is ink-faint-dark on surface-base-dark/,
+  );
+  assert.match(
+    failing(CHROME_CSS, (s) => s.replace(/(\.chrome-route-offered \{\n  color: )var\(--color-ink-prose-dark\)/, '$1var(--color-ink-faint-dark)')),
+    /^contrast: chrome chart link, offered is ink-faint-dark on surface-base-dark/,
+  );
+  assert.match(
+    failing(CHROME_CSS, (s) => s.replace(/(\.chrome-route-offered:focus-visible \{\n  color: )var\(--color-ink-lift-dark\)/, '$1var(--color-ink-faint-dark)')),
+    /^contrast: chrome chart link, offered, raised is ink-faint-dark on surface-base-dark/,
   );
   assert.match(
     auditContrast(real, 'var(--color-stroke-active-dark)').join('\n'),

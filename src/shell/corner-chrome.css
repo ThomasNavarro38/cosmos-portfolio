@@ -14,7 +14,14 @@
  * slot's button. The slot's button does, and mirrors `.panel-release`: no box, no
  * background, no border, the line's type and ink inherited, raised to
  * `ink-prose` on hover and `:focus-visible`, and underlined by a hairline on
- * `:focus-visible` alone.
+ * `:focus-visible` alone. The one exception is the chart link's offer (4.6):
+ * `.chrome-route-offered` holds the raised ink and the hairline at rest, after
+ * `.chrome-route` so it wins at the same specificity. Because that rest state is
+ * the plain link's focus, the offered link's hover and `:focus-visible` step up
+ * once more — `ink-lift` and the heavier `stroke-body-focus` underline — so
+ * keyboard focus stays visible (WCAG 2.4.7) and hover still answers. Under forced
+ * colours the system outline on `.chrome-route:focus-visible` applies to the
+ * offered link too, which keeps the `chrome-route` class.
  */
 
 .chrome-identity,
@@ -60,6 +67,25 @@
   text-decoration-line: underline;
   text-decoration-thickness: var(--stroke-hairline);
   text-underline-offset: var(--space-hair);
+}
+
+/*
+ * The offer (4.6, ruling Q1a): once the scene has run below the sustained floor,
+ * the link reads raised and underlined at rest — `ink-prose`, and the same
+ * hairline as its keyboard focus. The cue is this class alone; nothing moves.
+ */
+.chrome-route-offered {
+  color: var(--color-ink-prose-dark);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--stroke-hairline);
+  text-underline-offset: var(--space-hair);
+}
+
+/* The offered link's hover and focus: one step past its rest, so focus is never invisible. */
+.chrome-route-offered:hover,
+.chrome-route-offered:focus-visible {
+  color: var(--color-ink-lift-dark);
+  text-decoration-thickness: var(--stroke-body-focus);
 }
 
 /* The control inside the slot: the line's own type and ink, no box. */

@@ -46,6 +46,17 @@ export const IDENTITY_NAME = 'THOMAS NAVARRO';
 /** The identity line's last words, `the model`: on the chart, the link to the Colophon (4.5). */
 export const IDENTITY_MODEL = 'the model';
 
+/**
+ * The chart link's class (4.6, ruling Q1a): `chrome-route` at rest, and
+ * `chrome-route chrome-route-offered` once the scene has run below the floor
+ * (`chart-offer.ts`) — raised to `ink-prose` and underlined by a hairline at
+ * rest. The cue is the class alone: no new element, no new copy, no `aria-*`,
+ * and the link's text and `href` are unchanged. The offer arrives as an argument.
+ */
+export function chartRouteClass(offered: boolean): string {
+  return offered ? 'chrome-route chrome-route-offered' : 'chrome-route';
+}
+
 /** The slot's three texts, verbatim (DESIGN.md §7.9). `↓` and `↩` are the permitted instruction glyphs. */
 export const SLOT_TEXT = {
   instruction: 'scroll ↓ — time runs backward',

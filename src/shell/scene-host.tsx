@@ -62,6 +62,13 @@
  * `false` they drop every Rail answer, and the handlers leave the event alone.
  * `Escape` and the wheel's panel answer are kept — they are not Rail input.
  *
+ * **The chart offer's resets are here** (4.6). The listeners' effect calls
+ * `resetFrameSampling()` when it runs — the host mounting, and the scene
+ * committing — and a `document` `visibilitychange` listener calls it again
+ * whenever the page becomes visible, so the monitor's warm-up runs afresh and a
+ * background tab never counts as slow frames. The sampler itself is
+ * `render-scene/frame-sampler.tsx`; nothing here reads the offer or navigates.
+ *
  * **The reduced-motion preference's writer is not here** (4.1). It moved to
  * `mount.tsx`, page-wide and ahead of the first render, because the preference is
  * the page's and not the scene's: the fallback surface renders the panel and the
@@ -75,6 +82,7 @@
 
 import { Component, Suspense, lazy, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { FOCUS_PANEL_ID } from './panel-model.ts';
+import { resetFrameSampling } from './chart-offer.ts';
 import { goHome, releaseLayer } from './activate.ts';
 import { keyAction, railStopCount, wheelIntent } from './rail-input.ts';
 import { advanceScroll, navigationStore } from './state.ts';
@@ -246,6 +254,12 @@ export function SceneHost({ artifact }: SceneHostProps) {
     const element = host.current;
     if (element === null) return undefined;
     const toRail = (progress: number): void => advanceScroll(progress);
+    // The chart offer's monitor (4.6) samples afresh here, and whenever the page
+    // comes back into view: a background tab, and the long delta after it, never count.
+    resetFrameSampling();
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') resetFrameSampling();
+    };
     const onWheel = (event: WheelEvent): void => {
       const { mode, focusedProjectId, scrollProgress } = navigationStore.getState();
       const intent = wheelIntent(mode, focusedProjectId, scrollProgress, event, stopCount, window.innerHeight, sceneMounted);
@@ -285,9 +299,11 @@ export function SceneHost({ artifact }: SceneHostProps) {
     };
     element.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('keydown', onKeyDown);
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       element.removeEventListener('wheel', onWheel);
       window.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [stopCount, sceneMounted]);
 

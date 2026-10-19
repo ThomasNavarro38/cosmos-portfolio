@@ -41,6 +41,13 @@
  * Rail's progress are the store's and survive the round trip. `the model`
  * stays text here until 5.1. The router arrives as the one prop.
  *
+ * **The offer** (4.6, ruling Q1a). When the scene has run below the sustained
+ * floor, `chart-offer.ts` latches, and the link reads it with
+ * `useSyncExternalStore(subscribeChartOffer, chartOffered)` — as the pace is
+ * read — taking its class from `chartRouteClass(offered)`: raised and
+ * underlined at rest. Only the class changes: no element, no copy, no `aria-*`,
+ * and nothing here navigates on the offer — the visitor's click is the route.
+ *
  * **Exactly two lines, and one persistent slot.** The slot is one `<p>` mounted
  * in every state, carrying the position and the `right` transition, so the
  * transition runs on every change of Focus — Rail ↔ Focus included — and the
@@ -76,7 +83,8 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { useStore } from 'zustand/react';
 import { releaseLayer, returnToRail } from './activate.ts';
-import { IDENTITY_LINE, chromeSlot, slotStyle } from './chrome-model.ts';
+import { chartOffered, subscribeChartOffer } from './chart-offer.ts';
+import { IDENTITY_LINE, chartRouteClass, chromeSlot, slotStyle } from './chrome-model.ts';
 import { OVERVIEW_ID } from './index-model.ts';
 import { motionPace, reducedMotion, subscribeReducedMotion } from './motion-preference.ts';
 import { ROUTE_PATHS } from './route.ts';
@@ -90,6 +98,7 @@ export function CornerChrome({ router }: { readonly router: Router }) {
   const mode = useStore(navigationStore, (state) => state.mode);
   const focusedProjectId = useStore(navigationStore, (state) => state.focusedProjectId);
   const pace = motionPace(useSyncExternalStore(subscribeReducedMotion, reducedMotion));
+  const offered = useSyncExternalStore(subscribeChartOffer, chartOffered);
   const slot = chromeSlot(mode, focusedProjectId);
   const style = slotStyle(focusedProjectId !== null, pace);
   // Stable, so React calls its cleanup only when the button unmounts — an inline
@@ -104,7 +113,7 @@ export function CornerChrome({ router }: { readonly router: Router }) {
   return (
     <>
       <p className="chrome-identity">
-        {IDENTITY_LINE} · <a className="chrome-route" href={ROUTE_PATHS.chart} onClick={(event) => followRoute(event, router.navigate, 'chart')}>{CHART_LINK_TEXT}</a>
+        {IDENTITY_LINE} · <a className={chartRouteClass(offered)} href={ROUTE_PATHS.chart} onClick={(event) => followRoute(event, router.navigate, 'chart')}>{CHART_LINK_TEXT}</a>
       </p>
       <p className="chrome-slot" style={style}>
         {slot.kind === 'control' ? (

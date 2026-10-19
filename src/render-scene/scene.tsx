@@ -44,7 +44,10 @@
  * last, an overlay over the vignette — every rule in `affordance-model.ts`. The
  * `camera` prop stays keyframe 0; the rig's frame callback runs before the
  * first draw and seeds at the store's progress (4.2), so a scene remounted
- * after a return through history opens at the stop it was left at.
+ * after a return through history opens at the stop it was left at. The
+ * frame-time sampler (`<FrameSampler>`, 4.6) is mounted after the affordance: it
+ * hands each frame's delta to the chart offer's monitor and draws nothing — the
+ * `<Canvas>` and every child are the same on any machine at any framerate.
  *
  * **Dust is drawn strictly behind every Body** (FR-15). The model in
  * `dust-model.ts` decides what Dust exists; this file only guarantees the Dust's
@@ -88,6 +91,7 @@ import {
 } from './dust-model.ts';
 import { AffordanceField } from './affordance-field.tsx';
 import type { AffordanceArtifact } from './affordance-model.ts';
+import { FrameSampler } from './frame-sampler.tsx';
 import { MoonField } from './moon-field.tsx';
 import { MoteField } from './mote-field.tsx';
 import type { MoteArtifact } from './mote-model.ts';
@@ -210,6 +214,8 @@ export function Scene({ artifact }: SceneProps) {
         <MoonField bodies={bodies} />
         {/* The affordance (3.4): the approached Project's leader and label, in an overlay over the vignette. It writes no store field itself; its per-frame re-pick reaches the hover only through `hoverBody` / `leaveBody`. */}
         <AffordanceField artifact={artifact} bodies={bodies} />
+        {/* The frame-time sampler (4.6): counts frames for the chart offer, draws nothing, changes nothing. */}
+        <FrameSampler />
       </Canvas>
       {/* The vignette: the ground over the frame's edge, 0 inside 42% rising to 0.9. Inert, and not narrated. */}
       <div aria-hidden="true" style={vignetteStyle()} />
