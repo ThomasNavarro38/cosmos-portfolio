@@ -6,8 +6,9 @@
  * slot a control, and where the slot sits while the panel is open all live in
  * `chrome-model.ts`, which is pure and executed under `node --test`. This file
  * cannot be loaded by that runner (`.tsx`), so it is kept thin enough that
- * reading it suffices, and `chrome-model.test.ts` scans it for anything that
- * would be a rule of its own.
+ * reading it suffices, and `corner-chrome.test.ts` scans it for anything that
+ * would be a rule of its own, and renders it (`scripts/render.ts`) before and
+ * after the offer.
  *
  * What it holds, and why each is here rather than in the model:
  *

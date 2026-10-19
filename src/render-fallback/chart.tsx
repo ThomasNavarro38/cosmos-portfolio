@@ -6,7 +6,8 @@
  * and the fragment rule live in `chart-model.ts`, which is pure and executed
  * under `node --test`. This file cannot be loaded by that runner (`.tsx`), so it
  * is kept thin enough that reading it suffices, and `chart-model.test.ts` scans
- * it: no sort, no filter, no conditional operator.
+ * it: no sort, no filter, no conditional operator. `chart.test.ts` renders it
+ * (`scripts/render.ts`) and holds its links and anchors in the markup.
  *
  * A conventional document, top to bottom: the chrome row — the `<h1>` (the
  * identity line, `the model` its link to the Colophon) and the route line

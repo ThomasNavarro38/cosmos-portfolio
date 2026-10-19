@@ -2,9 +2,10 @@
  * The router (4.2, AD-18, AD-5): every row of the story's I/O matrix executed
  * against an injected `RouteHistory` and position hooks (the Focus rows against
  * the real navigation store), `browserHistory()` against stubbed `window`
- * globals, and source scans pinning `router.ts`'s purity, the colophon host's
- * lazy edge, the fallback host's (4.3) and the chart reached from it alone, and
- * the shell's callers of `advanceScroll` — each driven red by a mutation of the
+ * globals, and source scans pinning `router.ts`'s purity, the Colophon and the
+ * chart each reached from its host alone (the hosts' own audits are
+ * `colophon-host.test.ts`'s and `fallback-host.test.ts`'s since 4.7), and the
+ * shell's callers of `advanceScroll` — each driven red by a mutation of the
  * real file.
  */
 
@@ -31,8 +32,6 @@ const SHELL = fileURLToPath(new URL('.', import.meta.url));
 const ROUTER_TS = join(SHELL, 'router.ts');
 const ROUTE_TS = join(SHELL, 'route.ts');
 const MOUNT_TSX = join(SHELL, 'mount.tsx');
-const COLOPHON_HOST_TSX = join(SHELL, 'colophon-host.tsx');
-const FALLBACK_HOST_TSX = join(SHELL, 'fallback-host.tsx');
 const COLOPHON_TSX = fileURLToPath(new URL('../colophon/colophon.tsx', import.meta.url));
 
 interface Entry {
@@ -799,56 +798,8 @@ test('the router audit rejects the real module with any one reach added', () => 
   }
 });
 
-// --- The colophon's lazy edge --------------------------------------------------------------
-
-/**
- * `colophon-host.tsx`: `lazy(() => import('../colophon/colophon.tsx'))` — the one
- * import of the colophon anywhere — behind an error boundary that logs and
- * renders `null`, around `<Suspense fallback={null}>`. Nothing static from the
- * colophon, no render-scene.
- */
-function auditColophonHost(source: string): string[] {
-  const code = stripComments(source);
-  const failures: string[] = [];
-  if (!/const\s+Colophon\s*=\s*lazy\(\s*\(\s*\)\s*=>\s*import\(\s*'\.\.\/colophon\/colophon\.tsx'\s*\)\s*\)\s*;/.test(code)) {
-    failures.push("the colophon is not lazy(() => import('../colophon/colophon.tsx'))");
-  }
-  if ((code.match(/\bimport\s*\(/g) ?? []).length !== 1) failures.push('the host holds other than one dynamic import');
-  if (/^\s*import\s[^\n]*from\s*'\.\.\/colophon\//m.test(code)) failures.push('the colophon is imported statically');
-  if (/render-scene|render-fallback/.test(code)) failures.push('the colophon host reaches a renderer');
-  const tags = (code.match(/<(?:ColophonBoundary|Suspense|Colophon)\b[^>]*>/g) ?? []).map((tag) => tag.replace(/^<(\w+)[\s\S]*$/, '$1'));
-  if (JSON.stringify(tags) !== JSON.stringify(['ColophonBoundary', 'Suspense', 'Colophon'])) {
-    failures.push(`the nesting is ${JSON.stringify(tags)}, not boundary, Suspense, Colophon`);
-  }
-  if (!/<Suspense\s+fallback=\{\s*null\s*\}\s*>/.test(code)) failures.push('the suspense edge shows something while loading');
-  if (!/static\s+getDerivedStateFromError\s*\(/.test(code)) failures.push('the boundary does not stop the unmount');
-  if (!/\bcomponentDidCatch\s*\([^)]*\)\s*:\s*void\s*\{\s*console\.error\(/.test(code)) failures.push('a failed colophon is not logged');
-  if (!/this\.state\.failed\s*\?\s*null\s*:/.test(code)) failures.push('a failed colophon does not render null');
-  if (/retry|setTimeout|setInterval|location\.reload/.test(code)) failures.push('a failed colophon is retried');
-  return failures;
-}
-
-test('the colophon host is a lazy edge behind a logging boundary, nothing else', () => {
-  assert.deepEqual(auditColophonHost(readFileSync(COLOPHON_HOST_TSX, 'utf8')), []);
-});
-
-test('the colophon host audit rejects the real host with any one guarantee removed', () => {
-  const real = readFileSync(COLOPHON_HOST_TSX, 'utf8').replace(/\r\n/g, '\n');
-  const mutations: readonly (readonly [string, (source: string) => string])[] = [
-    ['a static import', (s) => s.replace("const Colophon = lazy(() => import('../colophon/colophon.tsx'));", "import Colophon from '../colophon/colophon.tsx';")],
-    ['the scene instead', (s) => s.replace("import('../colophon/colophon.tsx')", "import('../render-scene/scene.tsx')")],
-    ['a second import', (s) => `${s}\nvoid import('../colophon/colophon.tsx');\n`],
-    ['the boundary inside Suspense', (s) => s.replace(/<ColophonBoundary>\s*<Suspense fallback=\{null\}>\s*<Colophon \/>\s*<\/Suspense>\s*<\/ColophonBoundary>/, '<Suspense fallback={null}>\n      <ColophonBoundary>\n        <Colophon />\n      </ColophonBoundary>\n    </Suspense>')],
-    ['a loading copy', (s) => s.replace(/(\n\s*)<Suspense fallback=\{null\}>/, '$1<Suspense fallback={<p>loading</p>}>')],
-    ['not logged', (s) => s.replace(/console\.error\(/, 'void (')],
-    ['a failure rendered', (s) => s.replace('this.state.failed ? null :', 'this.state.failed ? this.props.children :')],
-  ];
-  for (const [name, mutate] of mutations) {
-    const mutated = mutate(real);
-    assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
-    assert.notDeepEqual(auditColophonHost(mutated), [], `"${name}" must be rejected`);
-  }
-});
+// --- The Colophon's one reach ---------------------------------------------------------------
+// (`colophon-host.tsx`'s own audit is `colophon-host.test.ts`'s since 4.7.)
 
 test('the colophon is reached only from src/shell/colophon-host.tsx, and holds one <h1> and no shell or preference', () => {
   const src = fileURLToPath(new URL('..', import.meta.url));
@@ -864,75 +815,8 @@ test('the colophon is reached only from src/shell/colophon-host.tsx, and holds o
   assert.match(colophon, /export\s+default\s+function\s+Colophon\(\)/, 'a default export for lazy()');
 });
 
-// --- The chart's lazy edge (4.3) -------------------------------------------------------------
-
-/**
- * `fallback-host.tsx`, the colophon host's twin: `lazy(() => import('../render-fallback/chart.tsx'))`
- * — the one import of the chart anywhere — behind an error boundary that logs
- * and renders `null`, around `<Suspense fallback={null}>`, the artifact handed
- * through and its shape restated (a type-only import of the chart is an edge the
- * boundary gate forbids). Nothing static from the chart, no render-scene. 4.5:
- * the chart's links built here, once, by `chartLinks(surface, router.navigate)`
- * — the machine's surface, never the shown one — and handed through.
- */
-function auditFallbackHost(source: string): string[] {
-  const code = stripComments(source);
-  const failures: string[] = [];
-  if (!/const\s+Chart\s*=\s*lazy\(\s*\(\s*\)\s*=>\s*import\(\s*'\.\.\/render-fallback\/chart\.tsx'\s*\)\s*\)\s*;/.test(code)) {
-    failures.push("the chart is not lazy(() => import('../render-fallback/chart.tsx'))");
-  }
-  if ((code.match(/\bimport\s*\(/g) ?? []).length !== 1) failures.push('the host holds other than one dynamic import');
-  if (/^\s*import\s[^\n]*from\s*'\.\.\/render-fallback\//m.test(code)) failures.push('the chart is imported statically');
-  if (/render-scene|colophon\//.test(code)) failures.push('the fallback host reaches another surface');
-  const tags = (code.match(/<(?:FallbackBoundary|Suspense|Chart)\b[^>]*>/g) ?? []).map((tag) => tag.replace(/^<(\w+)[\s\S]*$/, '$1'));
-  if (JSON.stringify(tags) !== JSON.stringify(['FallbackBoundary', 'Suspense', 'Chart'])) {
-    failures.push(`the nesting is ${JSON.stringify(tags)}, not boundary, Suspense, Chart`);
-  }
-  if (!/<Chart\s+artifact=\{\s*artifact\s*\}\s+links=\{\s*links\s*\}\s*\/>/.test(code)) failures.push('the chart is not handed the artifact and the links');
-  if (!/export\s+function\s+FallbackHost\(\s*\{\s*artifact\s*,\s*surface\s*,\s*router\s*\}\s*:\s*FallbackHostProps\s*\)/.test(code)) failures.push('the host does not take the artifact, the surface and the router as its props');
-  if (!/const\s+links\s*=\s*chartLinks\(\s*surface\s*,\s*router\.navigate\s*\)\s*;/.test(code)) failures.push('the links are not chartLinks(surface, router.navigate)');
-  if (!/import\s*\{\s*chartLinks\s*\}\s*from\s*'\.\/route-link\.ts'/.test(code)) failures.push('the links are not route-link.ts’s');
-  if (/\bnavigate\(|\bfollowRoute\b|\bROUTE_PATHS\b/.test(code)) failures.push('the host builds a link of its own');
-  if (!/interface\s+FallbackHostArtifact\b/.test(code)) failures.push('the artifact shape is not restated');
-  const shape = /interface\s+FallbackHostArtifact[\s\S]*?\n\}/.exec(code);
-  if (shape !== null && /\n\s+(?!readonly)[a-zA-Z_]+\s*[?:]/.test(shape[0])) failures.push('a member of the restated shape is not readonly');
-  if (!/<Suspense\s+fallback=\{\s*null\s*\}\s*>/.test(code)) failures.push('the suspense edge shows something while loading');
-  if (!/static\s+getDerivedStateFromError\s*\(/.test(code)) failures.push('the boundary does not stop the unmount');
-  if (!/\bcomponentDidCatch\s*\([^)]*\)\s*:\s*void\s*\{\s*console\.error\(/.test(code)) failures.push('a failed chart is not logged');
-  if (!/this\.state\.failed\s*\?\s*null\s*:/.test(code)) failures.push('a failed chart does not render null');
-  if (/retry|setTimeout|setInterval|location\.reload/.test(code)) failures.push('a failed chart is retried');
-  return failures;
-}
-
-test('the fallback host is a lazy edge behind a logging boundary, handing the artifact through', () => {
-  assert.deepEqual(auditFallbackHost(readFileSync(FALLBACK_HOST_TSX, 'utf8')), []);
-});
-
-test('the fallback host audit rejects the real host with any one guarantee removed', () => {
-  const real = readFileSync(FALLBACK_HOST_TSX, 'utf8').replace(/\r\n/g, '\n');
-  const mutations: readonly (readonly [string, (source: string) => string])[] = [
-    ['a static import', (s) => s.replace("const Chart = lazy(() => import('../render-fallback/chart.tsx'));", "import Chart from '../render-fallback/chart.tsx';")],
-    ['the scene instead', (s) => s.replace("import('../render-fallback/chart.tsx')", "import('../render-scene/scene.tsx')")],
-    ['a second import', (s) => `${s}\nvoid import('../render-fallback/chart.tsx');\n`],
-    ['the boundary inside Suspense', (s) => s.replace(/<FallbackBoundary>\s*<Suspense fallback=\{null\}>\s*<Chart artifact=\{artifact\} links=\{links\} \/>\s*<\/Suspense>\s*<\/FallbackBoundary>/, '<Suspense fallback={null}>\n      <FallbackBoundary>\n        <Chart artifact={artifact} links={links} />\n      </FallbackBoundary>\n    </Suspense>')],
-    ['a loading copy', (s) => s.replace(/(\n\s*)<Suspense fallback=\{null\}>/, '$1<Suspense fallback={<p>loading</p>}>')],
-    ['not logged', (s) => s.replace(/console\.error\(/, 'void (')],
-    ['a failure rendered', (s) => s.replace('this.state.failed ? null :', 'this.state.failed ? this.props.children :')],
-    ['retried', (s) => s.replace('return { failed: true };', 'setTimeout(() => location.reload(), 1000);\n    return { failed: true };')],
-    ['the artifact dropped', (s) => s.replace('<Chart artifact={artifact} links={links} />', '<Chart artifact={{ clients: [] }} links={links} />')],
-    ['a mutable member', (s) => s.replace('readonly timeAxis: number;', 'timeAxis: number;')],
-    ['a mutable span', (s) => s.replace('readonly end: string | null;\n    };', 'end: string | null;\n    };')],
-    ['the links dropped', (s) => s.replace('<Chart artifact={artifact} links={links} />', '<Chart artifact={artifact} links={{ model: links.model, routes: [] }} />')],
-    ['the links on a fixed surface', (s) => s.replace('chartLinks(surface, router.navigate)', "chartLinks('scene', router.navigate)")],
-    ['a link of its own', (s) => s.replace('const links = chartLinks(surface, router.navigate);', "const links = { ...chartLinks(surface, router.navigate), extra: () => router.navigate('home') };")],
-    ['the surface not a prop', (s) => s.replace('FallbackHost({ artifact, surface, router }: FallbackHostProps)', "FallbackHost({ artifact, router }: FallbackHostProps & { surface?: never }) {\n  const surface = 'scene';\n  return null;\n}\nfunction Unused({ artifact, surface, router }: FallbackHostProps)")],
-  ];
-  for (const [name, mutate] of mutations) {
-    const mutated = mutate(real);
-    assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
-    assert.notDeepEqual(auditFallbackHost(mutated), [], `"${name}" must be rejected`);
-  }
-});
+// --- The chart's one reach (4.3) -----------------------------------------------------------
+// (`fallback-host.tsx`'s own audit, and its render, are `fallback-host.test.ts`'s since 4.7.)
 
 /**
  * The shipped source files outside `src/render-fallback/` importing from it —

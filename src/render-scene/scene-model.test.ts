@@ -2591,35 +2591,22 @@ test('the host restates the artifact shape rather than importing the scene’s t
   assert.doesNotMatch(shape[0], /\n\s+(?!readonly)[a-zA-Z]+\s*[?:]/, 'every member readonly, matching SceneBodiesArtifact');
 });
 
-// --- App.tsx mounts it, pinned positively ----------------------------------
+// --- App.tsx imports it, pinned positively ---------------------------------
 
-test('App.tsx imports the scene host and renders it after the index', () => {
+test('App.tsx imports the scene host, gates it with no && or ternary, and reaches no renderer statically', () => {
   // **Proven by deletion:** removing both the import and the element left 487/487
   // green, typecheck clean and the gate clean, while the story's entire deliverable
   // disappeared. No test read this file's contents, so nothing observed it.
   //
-  // The ordering half is AD-4, which the file's own header claims: the index is in
-  // the document first, and document order is what a screen reader and the tab key
-  // walk.
+  // The rendered half — the scene host once, after the index (AD-4: document
+  // order is what a screen reader and the tab key walk), and absent on the chart
+  // and the Colophon — is `src/App.test.ts`'s since 4.7, rendered through the
+  // harness. What a render cannot see stays here: where the host comes from, that
+  // no `&&` or ternary gates it (each other surface is its own early return), and
+  // that App.tsx, a root file, reaches no renderer or 3D package statically.
   const code = quotedCodeOf(APP_TSX);
   assert.match(code, /import\s*\{\s*SceneHost\s*\}\s*from\s*'\.\/shell\/scene-host\.tsx'/, 'the host is imported');
-  assert.match(code, /<SceneHost\b/, 'and rendered');
-  // 4.1: on the scene surface alone — the fallback never requests render-scene. 4.2:
-  // the surface the route shows, so `/chart` and `/colophon` never request it either.
-  // 4.3: the Colophon and the chart are each their own early return, so the scene
-  // host, ungated, renders in what is left: `shown === 'scene'`.
-  assert.match(code, /const\s+shown\s*=\s*surfaceOf\(\s*route\s*,\s*surface\s*\)\s*;/, 'shown is the route’s surface on this machine');
-  assert.equal((code.match(/<SceneHost\b/g) ?? []).length, 1, 'once');
-  for (const other of ['colophon', 'fallback']) {
-    const branch = new RegExp(`if\\s*\\(\\s*shown\\s*===\\s*'${other}'\\s*\\)\\s*\\{\\s*return\\b`).exec(code);
-    assert.ok(branch !== null && branch.index < code.indexOf('<SceneHost'), `the ${other} surface returns before the scene host`);
-  }
-  assert.doesNotMatch(code, /(?:&&|\?)\s*<SceneHost\b/, 'and nothing else gates it');
-  assert.match(code, /<DestinationNav\b/, 'beside the index, which still renders synchronously');
-  assert.ok(
-    code.indexOf('<DestinationNav') < code.indexOf('<SceneHost'),
-    'the index must precede the scene in document order (AD-4)',
-  );
+  assert.doesNotMatch(code, /(?:&&|\?)\s*<SceneHost\b/, 'and nothing gates it');
   assert.doesNotMatch(
     code,
     /from\s*['"](?:three|@react-three\/)|from\s*['"]\.\/render-scene\//,
