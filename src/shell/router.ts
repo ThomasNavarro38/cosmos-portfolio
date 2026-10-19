@@ -16,9 +16,10 @@
  * the entry's saved position is restored — only from a well-formed
  * `{ scrollProgress: finite ≥ 0 }`, anything else writes nothing — and
  * subscribers are told. A pop that leaves the route unchanged (a fragment-only
- * pop) writes nothing. On `pagehide` the position is saved into the current
- * entry as well, so a return across documents (Back into a reloaded page)
- * restores it too, at creation.
+ * pop) writes nothing and tells no one; it only cancels a pending write (4.8).
+ * On `pagehide` the position is saved into the current entry as well, so a
+ * return across documents (Back into a reloaded page) restores it too, at
+ * creation.
  *
  * **The current entry is kept current** (4.5). A `popstate` has already moved
  * the browser to the reached entry when it fires, so the entry being left by a
@@ -27,12 +28,15 @@
  * schedule — at most one pending write, flushed by the injected `later` after
  * `SAVE_INTERVAL_MS`. Safari caps `replaceState` near 100 calls per 10
  * seconds, and the Rail writes `scrollProgress` about 60 times a second; one
- * write per 300 ms is at most about 33. **The limit:** a route-changing pop
- * cancels the write still pending (it would otherwise land in the entry just
- * reached, stamping it with the position of the entry left), so the last
- * `SAVE_INTERVAL_MS` or less of movement before a Back or Forward is not saved
- * into the departing entry; that entry holds the position of its last flushed
- * write. A pending write that lands after a `navigate` stamps the new entry
+ * write per 300 ms is at most about 33. **The limit:** every pop cancels the
+ * write still pending — a same-route one too (`history.go(-2)` between two
+ * `/` entries, a fragment-only pop), since it would otherwise land in the
+ * entry just reached, stamping it with the position of the entry left — so
+ * the last `SAVE_INTERVAL_MS` or less of movement before a Back or Forward is
+ * not saved into the departing entry; that entry holds the position of its
+ * last flushed write. A pop also clears the pending flag, so movement after it
+ * schedules a fresh write at once; the stale callback, when it fires, leaves
+ * the flag alone. A pending write that lands after a `navigate` stamps the new entry
  * with the store's current value, which is the value that entry was pushed
  * with anyway.
  *
@@ -144,7 +148,8 @@ export function createRouter(history: RouteHistory, initial: Route, position: Po
   let current = initial;
   let live = true;
   let pending = false;
-  // Bumped by every route-changing pop: a write scheduled before it is stale.
+  // Bumped by every pop, same-route ones included: a write scheduled before it
+  // is stale.
   let pops = 0;
   let saveLogged = false;
   const listeners = new Set<() => void>();
@@ -180,9 +185,13 @@ export function createRouter(history: RouteHistory, initial: Route, position: Po
   const stops = [
     history.listen('popstate', (state) => {
       const next = resolveRoute(history.pathname());
-      // A fragment-only pop leaves the route, and the store, alone.
-      if (next === current) return;
+      // Every pop cancels the pending write, a same-route one included: it would
+      // land in the entry just reached. The next movement schedules afresh.
       pops += 1;
+      pending = false;
+      // Any same-route pop (a fragment-only one, `history.go(-2)` between two `/`
+      // entries) leaves the route, and the store, alone: it only cancels the write.
+      if (next === current) return;
       restore(state);
       go(next);
     }),
@@ -193,8 +202,10 @@ export function createRouter(history: RouteHistory, initial: Route, position: Po
       pending = true;
       const scheduled = pops;
       history.later(() => {
+        // A stale write leaves `pending` alone: it may belong to a newer write.
+        if (scheduled !== pops) return;
         pending = false;
-        if (live && scheduled === pops) save();
+        if (live) save();
       });
     }),
   ];

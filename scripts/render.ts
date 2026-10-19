@@ -32,6 +32,27 @@
  * when this module is imported — before any Vite-loaded module binds it. The
  * shipped call shapes are unchanged, and their audits still pin them.
  *
+ * **The recorders** (4.8). Markup shows no handler and no subscription, so two
+ * more wraps, installed the same way and at the same time — before any
+ * Vite-loaded module binds the export — record what a render's components hand
+ * React. The element recorder wraps `createElement` and the automatic runtimes
+ * (`jsx`/`jsxs`, and `jsxDEV`, which Vite's dev transform emits): every host
+ * element (a string tag) created while a render pass runs is kept with the props
+ * it was handed, its `onClick` included — `elements(tag?)`. The subscription
+ * recorder is the `useSyncExternalStore` wrap: every `subscribe` argument —
+ * `subscriptions()`. Both are emptied when each pass starts, record nothing
+ * outside one, and are emptied again when `render()` rejects, so they hold the
+ * last successful render pass in this process alone; neither changes the markup.
+ * They live on `globalThis` under a `Symbol.for` key, beside the wrap guard, so
+ * a second instance of this module — whose wraps the guard skips — reads the
+ * same recordings. What they hold is what was *created* during the pass, which
+ * can include an element of a branch React then discarded (a suspended attempt,
+ * say), not only what reached the markup. The props are as the factory received
+ * them: the automatic runtimes' (`jsx`, `jsxDEV`) carry `children`, while
+ * `createElement`'s are its config, children passed beside it and not recorded.
+ * `corner-chrome.test.ts` and `fallback-host.test.ts` run the route links' click
+ * rule on the rendered handlers, and the chrome's subscription to the offer.
+ *
  * **Fully resolved, or a failure.** `render(element)` uses
  * `prerenderToNodeStream`, which waits for every suspended boundary. A resolved
  * boundary can still arrive out of line — a `<template id="B:0">` placeholder
@@ -70,21 +91,71 @@ export const React = requireFromRoot('react') as typeof ReactTypes;
 
 const { prerenderToNodeStream } = requireFromRoot('react-dom/static') as typeof StaticTypes;
 
-type Subscribe = (onChange: () => void) => () => void;
+/** A `useSyncExternalStore` subscribe argument. */
+export type Subscribe = (onChange: () => void) => () => void;
 type UseSyncExternalStore = <T>(subscribe: Subscribe, getSnapshot: () => T, getServerSnapshot?: () => T) => T;
 
-/** Marks the wrapped export, so a second import of this module wraps nothing. */
-const WRAPPED = Symbol.for('cosmos-portfolio.render.useSyncExternalStore');
+/** One host element a rendered component created: its tag and the props it was handed, functions included. */
+export interface RecordedElement {
+  readonly tag: string;
+  readonly props: Readonly<Record<string, unknown>>;
+}
+
+/** Marks a wrapped export, so a second import of this module wraps nothing. */
+const WRAPPED = Symbol.for('cosmos-portfolio.render.wrapped');
+
+/** Where the recordings live on `globalThis`: one store per process, whichever instance of this module wrapped React. */
+const RECORDED = Symbol.for('cosmos-portfolio.render.recorded');
+
+interface Recordings {
+  active: boolean;
+  elements: RecordedElement[];
+  subscriptions: Subscribe[];
+}
+
+/**
+ * The recorders (4.8): what a render's components handed React, which the
+ * markup cannot show — a host element's handlers, and the stores a component
+ * subscribes to. Filled only while a render pass runs, cleared when each pass
+ * starts and when a render rejects, so `elements()` and `subscriptions()` hold
+ * the last successful render pass in this process alone.
+ */
+const recorded = ((globalThis as unknown as Record<symbol, Recordings | undefined>)[RECORDED] ??= { active: false, elements: [], subscriptions: [] });
+
+/** `exports[name]`, replaced once by `wrap(original)` — before any Vite-loaded module binds it. */
+function wrapExport(exports: Record<string | symbol, unknown>, name: string, wrap: (original: (...args: never[]) => unknown) => (...args: never[]) => unknown): void {
+  const original = exports[name] as ((...args: never[]) => unknown) & { [WRAPPED]?: true };
+  // `react/jsx-dev-runtime` exports no `jsxDEV` in a production build: nothing to wrap.
+  if (typeof original !== 'function' || original[WRAPPED] === true) return;
+  const wrapped = wrap(original) as ((...args: never[]) => unknown) & { [WRAPPED]?: true };
+  wrapped[WRAPPED] = true;
+  exports[name] = wrapped;
+}
 
 {
   const exports = React as unknown as Record<string | symbol, unknown>;
-  const original = exports['useSyncExternalStore'] as UseSyncExternalStore & { [WRAPPED]?: true };
-  if (original[WRAPPED] !== true) {
-    const wrapped = (<T>(subscribe: Subscribe, getSnapshot: () => T, getServerSnapshot?: () => T): T =>
-      original(subscribe, getSnapshot, getServerSnapshot ?? getSnapshot)) as UseSyncExternalStore & { [WRAPPED]?: true };
-    wrapped[WRAPPED] = true;
-    exports['useSyncExternalStore'] = wrapped;
-  }
+  // A missing server snapshot is the client snapshot; the subscribe argument is recorded.
+  wrapExport(exports, 'useSyncExternalStore', (original) => {
+    const store = original as unknown as UseSyncExternalStore;
+    return (<T>(subscribe: Subscribe, getSnapshot: () => T, getServerSnapshot?: () => T): T => {
+      if (recorded.active) recorded.subscriptions.push(subscribe);
+      return store(subscribe, getSnapshot, getServerSnapshot ?? getSnapshot);
+    }) as never;
+  });
+  // Every element factory a component can reach: `createElement`, and the
+  // automatic runtimes Vite's transform emits (`jsxDEV` in the dev server).
+  const recordHost =
+    (original: (...args: never[]) => unknown) =>
+    (...args: never[]): unknown => {
+      const [type, props] = args as unknown as [unknown, Record<string, unknown> | null | undefined];
+      if (recorded.active && typeof type === 'string') recorded.elements.push({ tag: type, props: props ?? {} });
+      return original(...args);
+    };
+  wrapExport(exports, 'createElement', recordHost);
+  const runtime = requireFromRoot('react/jsx-runtime') as Record<string | symbol, unknown>;
+  wrapExport(runtime, 'jsx', recordHost);
+  wrapExport(runtime, 'jsxs', recordHost);
+  wrapExport(requireFromRoot('react/jsx-dev-runtime') as Record<string | symbol, unknown>, 'jsxDEV', recordHost);
 }
 
 /** The longest a render may take before it fails, in milliseconds. */
@@ -154,6 +225,14 @@ export interface Renderer {
   load<T = Record<string, unknown>>(path: string): Promise<T>;
   /** `element`, rendered to fully resolved markup. Rejects naming the subject on any error, pending boundary or timeout. */
   render(element: ReactTypes.ReactElement, options?: RenderOptions): Promise<string>;
+  /**
+   * The host elements created during the last render pass in this process — by
+   * any renderer, of any instance of this module — `tag`'s alone when given, in
+   * creation order, with the props each was handed. Empty after a rejection.
+   */
+  elements(tag?: string): readonly RecordedElement[];
+  /** The `subscribe` argument of every `useSyncExternalStore` call made during the last render pass in this process, in call order. Empty after a rejection. */
+  subscriptions(): readonly Subscribe[];
   /** Stops the server and removes its cache. */
   close(): Promise<void>;
 }
@@ -184,6 +263,10 @@ async function prerenderOnce(element: ReactTypes.ReactElement, subject: string, 
       reject(new Error(`${subject}: the render did not resolve within ${timeoutMs} ms`));
     }, timeoutMs);
   });
+  // A pass's recordings replace the last's: a repeated pass is the render.
+  recorded.elements = [];
+  recorded.subscriptions = [];
+  recorded.active = true;
   const rendering = (async () => {
     const { prelude } = await prerenderToNodeStream(element, {
       signal: controller.signal,
@@ -204,6 +287,7 @@ async function prerenderOnce(element: ReactTypes.ReactElement, subject: string, 
     if (error instanceof Error && error.message.startsWith(`${subject}:`)) throw error;
     throw new Error(`${subject}: the render failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
   } finally {
+    recorded.active = false;
     clearTimeout(timer);
     // A losing render is aborted, so nothing outlives the test.
     rendering.catch(() => undefined);
@@ -235,15 +319,28 @@ export async function renderer(): Promise<Renderer> {
     async render(element, options = {}) {
       const subject = subjectOf(element, options);
       const timeoutMs = options.timeoutMs ?? RENDER_TIMEOUT_MS;
-      let html = inlineSegments(await prerenderOnce(element, subject, timeoutMs));
-      // A boundary still out of line was pending when the shell flushed and its
-      // completion did not arrive in this pass: its payload has resolved by now,
-      // so a second pass renders it.
-      if (OUT_OF_LINE.test(html)) html = inlineSegments(await prerenderOnce(element, subject, timeoutMs));
-      if (OUT_OF_LINE.test(html) || UNRESOLVED.test(html) || UNHANDLED_SCRIPT.test(html)) {
-        throw new Error(`${subject}: the render left a boundary unresolved`);
+      try {
+        let html = inlineSegments(await prerenderOnce(element, subject, timeoutMs));
+        // A boundary still out of line was pending when the shell flushed and its
+        // completion did not arrive in this pass: its payload has resolved by now,
+        // so a second pass renders it.
+        if (OUT_OF_LINE.test(html)) html = inlineSegments(await prerenderOnce(element, subject, timeoutMs));
+        if (OUT_OF_LINE.test(html) || UNRESOLVED.test(html) || UNHANDLED_SCRIPT.test(html)) {
+          throw new Error(`${subject}: the render left a boundary unresolved`);
+        }
+        return html;
+      } catch (error) {
+        // A failed render returns nothing to read.
+        recorded.elements = [];
+        recorded.subscriptions = [];
+        throw error;
       }
-      return html;
+    },
+    elements(tag) {
+      return tag === undefined ? [...recorded.elements] : recorded.elements.filter((element) => element.tag === tag);
+    },
+    subscriptions() {
+      return [...recorded.subscriptions];
     },
     async close() {
       try {

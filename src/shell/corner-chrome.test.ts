@@ -6,7 +6,11 @@
  * with `chrome-route chrome-route-offered`. The offer's latch and the navigation
  * store are driven through the module instances the harness loaded — the ones
  * the component reads — and reset after each test. Each check is driven red
- * against the other state and against broken markup.
+ * against the other state and against broken markup. Since 4.8, the link's
+ * click — the handler the render handed its `<a>`, read off the harness's
+ * element recorder and run through a recording router — and the subscription to
+ * the offer, read off its subscription recorder; each check red against a
+ * broken handler or subscription list, never a source mutant.
  *
  * Plus the source audit of the renderer, moved here from `chrome-model.test.ts`
  * with its mutation rows: the subscriptions, the pace, the offer read only into
@@ -26,6 +30,9 @@ import { React, elementsOf, parseMarkup, queryAll, renderer, textOf, type Markup
 import { stripComments } from '../../scripts/source-scan.ts';
 import type * as ChartOffer from './chart-offer.ts';
 import type { CornerChrome as CornerChromeComponent } from './corner-chrome.tsx';
+import type * as MotionPreference from './motion-preference.ts';
+import type { Route } from './route.ts';
+import { followRoute, type RouteClick } from './route-link.ts';
 import type { Router } from './router.ts';
 import type * as State from './state.ts';
 
@@ -43,6 +50,7 @@ const { CornerChrome } = await harness.load<{ CornerChrome: typeof CornerChromeC
 // The instances the component imports: state driven through any other copy would never reach it.
 const offer = await harness.load<typeof ChartOffer>('/src/shell/chart-offer.ts');
 const state = await harness.load<typeof State>('/src/shell/state.ts');
+const motion = await harness.load<typeof MotionPreference>('/src/shell/motion-preference.ts');
 
 afterEach(() => {
   offer.resetChartOfferForTest();
@@ -51,8 +59,8 @@ afterEach(() => {
 
 const router: Router = { route: () => 'home', subscribe: () => () => undefined, navigate: () => true, dispose: () => undefined };
 
-async function renderChrome(): Promise<string> {
-  return harness.render(React.createElement(CornerChrome, { router }), { name: 'CornerChrome' });
+async function renderChrome(withRouter: Router = router): Promise<string> {
+  return harness.render(React.createElement(CornerChrome, { router: withRouter }), { name: 'CornerChrome' });
 }
 
 /** Latch the offer the way the scene would: `SUSTAINED_GAPS` frames over the cap in a row. */
@@ -120,6 +128,121 @@ test('the chrome check is red against the other state and against broken markup'
     assert.notEqual(markup, before, `the break "${name}" must apply`);
     assert.notDeepEqual(chromeLink(parseMarkup(markup), 'chrome-route'), [], `"${name}" must be rejected`);
   }
+});
+
+// --- The click and the subscription, rendered (4.8) ----------------------------------------
+
+/** A router whose `navigate` is recorded and answers `accept`: the one the rendered handler is bound to. */
+const recording = { calls: [] as Route[], accept: true };
+const recordingRouter: Router = {
+  route: () => 'home',
+  subscribe: () => () => undefined,
+  navigate: (to) => {
+    recording.calls.push(to);
+    return recording.accept;
+  },
+  dispose: () => undefined,
+};
+
+/** A click as `followRoute` reads it, counting its `preventDefault` calls. */
+function fakeClick(init: Partial<Pick<RouteClick, 'button' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey' | 'defaultPrevented'>> = {}): RouteClick & { prevented: number } {
+  const click = {
+    button: 0,
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    altKey: false,
+    defaultPrevented: false,
+    prevented: 0,
+    ...init,
+    // As a real event: the call is counted, and the event reads prevented from then on.
+    preventDefault() {
+      click.prevented += 1;
+      click.defaultPrevented = true;
+    },
+  };
+  return click;
+}
+
+/**
+ * The click rule, run on `handler` — the `onClick` the link `name` was handed —
+ * through `recording`: a primary click the router takes navigates to `to` once
+ * and prevents the default once; a refused one navigates once and prevents
+ * nothing; a Ctrl-click and a middle click do neither.
+ */
+function followsRouteRule(name: string, handler: unknown, to: Route): string[] {
+  if (typeof handler !== 'function') return [`${name}: no click handler`];
+  const failures: string[] = [];
+  const cases: readonly (readonly [string, boolean, Parameters<typeof fakeClick>[0], readonly Route[], number])[] = [
+    ['a primary click, taken', true, {}, [to], 1],
+    ['a primary click, refused', false, {}, [to], 0],
+    ['a Ctrl-click', true, { ctrlKey: true }, [], 0],
+    ['a Shift-click', true, { shiftKey: true }, [], 0],
+    ['a Meta-click', true, { metaKey: true }, [], 0],
+    ['an Alt-click', true, { altKey: true }, [], 0],
+    ['a middle click', true, { button: 1 }, [], 0],
+    ['a click already prevented', true, { defaultPrevented: true }, [], 0],
+  ];
+  try {
+    for (const [scenario, accept, init, calls, prevented] of cases) {
+      recording.calls = [];
+      recording.accept = accept;
+      const event = fakeClick(init);
+      (handler as (event: RouteClick) => void)(event);
+      if (JSON.stringify(recording.calls) !== JSON.stringify(calls)) failures.push(`${name}: ${scenario} navigates ${JSON.stringify(recording.calls)}, not ${JSON.stringify(calls)}`);
+      if (event.prevented !== prevented) failures.push(`${name}: ${scenario} prevents the default ${event.prevented} times, not ${prevented}`);
+    }
+  } finally {
+    recording.calls = [];
+    recording.accept = true;
+  }
+  return failures;
+}
+
+/** The handler the rendered chrome handed its one `<a href="/chart">`. */
+async function chartLinkHandler(): Promise<unknown> {
+  await renderChrome(recordingRouter);
+  const links = harness.elements('a').filter((element) => element.props['href'] === '/chart');
+  assert.equal(links.length, 1, 'the chrome rendered exactly one link to the chart');
+  return links[0]?.props['onClick'];
+}
+
+test('the chrome’s the chart, clicked: primary → navigate(chart) once and preventDefault once; refused → no preventDefault; Ctrl or middle → neither', async () => {
+  assert.deepEqual(followsRouteRule('the chart', await chartLinkHandler(), 'chart'), []);
+});
+
+test('the click check is red against a broken handler: one that never prevents the default, one to the wrong route, one navigating on every click, none', async () => {
+  assert.notDeepEqual(followsRouteRule('the chart', await chartLinkHandler(), 'colophon'), [], 'the real handler, read as a link to the colophon');
+  const broken: readonly (readonly [string, unknown])[] = [
+    ['never preventDefault', (event: RouteClick) => void (event.button === 0 && recordingRouter.navigate('chart'))],
+    ['the wrong route', (event: RouteClick) => followRoute(event, recordingRouter.navigate, 'colophon')],
+    ['every click navigates', (event: RouteClick) => (recordingRouter.navigate('chart') ? event.preventDefault() : undefined)],
+    ['prevented whatever the router says', (event: RouteClick) => (event.button === 0 && !event.ctrlKey ? (recordingRouter.navigate('chart'), event.preventDefault()) : undefined)],
+    ['no handler', undefined],
+  ];
+  for (const [name, handler] of broken) {
+    const failures = followsRouteRule('the chart', handler, 'chart');
+    assert.notDeepEqual(failures, [], `"${name}" must be rejected`);
+    assert.ok(failures.every((failure) => failure.startsWith('the chart: ')), `"${name}": each failure names the link`);
+  }
+});
+
+/** The rendered chrome subscribes to the offer: `subscribeChartOffer`, the instance the harness loaded, among the stores it hands `useSyncExternalStore`. */
+function subscribesToOffer(subscriptions: readonly unknown[]): string[] {
+  return subscriptions.includes(offer.subscribeChartOffer) ? [] : ['the chrome does not subscribe to the offer — a latch would leave a running scene’s link unoffered'];
+}
+
+test('the chrome subscribes to the offer: subscribeChartOffer, from the loaded chart-offer.ts, is among the stores it hands useSyncExternalStore', async () => {
+  await renderChrome();
+  const subscriptions = harness.subscriptions();
+  assert.deepEqual(subscribesToOffer(subscriptions), []);
+  assert.ok(subscriptions.includes(motion.subscribeReducedMotion), 'and to the preference, as the pace is read');
+});
+
+test('the subscription check is red against a list holding only subscribeReducedMotion, or a store that is not the offer', () => {
+  assert.notDeepEqual(subscribesToOffer([motion.subscribeReducedMotion]), []);
+  assert.notDeepEqual(subscribesToOffer([motion.subscribeReducedMotion, () => () => undefined]), [], 'a store that is not the offer');
+  assert.notDeepEqual(subscribesToOffer([]), []);
 });
 
 // --- The renderer stays thin -----------------------------------------------------------------

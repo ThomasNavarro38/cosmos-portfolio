@@ -93,6 +93,11 @@ function fakeHistory(url: string, state: unknown = null) {
       index -= 1;
       events.get('popstate')?.(at().state);
     },
+    /** `history.go(delta)`: several entries at once, one popstate, as a browser does. */
+    go: (delta: number) => {
+      index += delta;
+      events.get('popstate')?.(at().state);
+    },
     forward: () => {
       index += 1;
       events.get('popstate')?.(at().state);
@@ -574,6 +579,74 @@ test('a pop cancels the pending keep-current write: a stale write never stamps t
   router.dispose();
 });
 
+test('a fragment-only pop cancels the pending keep-current write too: the reached entry is never stamped with the position of the entry left (4.8 P1)', () => {
+  const fake = fakeHistory('/');
+  const position = fakePosition(2);
+  const router = createRouter(fake.history, 'home', position.hooks);
+  let told = 0;
+  router.subscribe(() => (told += 1));
+  fake.fragment('#a'); // a second entry on the same route, reached by a fragment link
+  position.set(3); // the Rail moves: a keep-current write is pending
+  assert.equal(fake.pending(), 1, 'a write is pending');
+  const before = fake.calls.length;
+  fake.back(); // a pop whose path resolves to the current route
+  assert.equal(router.route(), 'home');
+  fake.flush(); // the pending write's timer fires after the pop
+  assert.deepEqual(fake.calls.slice(before), [], 'no save recorded');
+  assert.equal((fake.entries[0] as Entry).state, null, 'the reached entry is not stamped');
+  assert.deepEqual(position.restored, [], 'the store is not written');
+  assert.equal(told, 0, 'no subscriber is told');
+  // The next movement schedules, and lands, as usual.
+  position.set(4);
+  fake.flush();
+  assert.deepEqual((fake.entries[0] as Entry).state, { scrollProgress: 4 });
+  router.dispose();
+});
+
+test('history.go(-2) between two / entries (/ → /chart → /) cancels the pending write: nothing lands, the store unchanged, no one told (4.8 P1)', () => {
+  const fake = fakeHistory('/');
+  const position = fakePosition(2);
+  const router = createRouter(fake.history, 'home', position.hooks);
+  router.navigate('chart');
+  router.navigate('home');
+  assert.equal(fake.length(), 3);
+  let told = 0;
+  router.subscribe(() => (told += 1));
+  const first = structuredClone((fake.entries[0] as Entry).state);
+  position.set(3); // the Rail moves on the second /: a write is pending
+  const before = fake.calls.length;
+  fake.go(-2); // to the first /: a same-route pop
+  assert.equal(router.route(), 'home');
+  while (fake.pending() > 0) fake.flush();
+  assert.deepEqual(fake.calls.slice(before), [], 'no save lands');
+  assert.deepEqual((fake.entries[0] as Entry).state, first, 'the reached entry keeps its own position');
+  assert.deepEqual(position.restored, [], 'the store is not written');
+  assert.equal(told, 0, 'no subscriber is told');
+  router.dispose();
+});
+
+for (const [kind, setup, pop] of [
+  ['a same-route pop', (fake: ReturnType<typeof fakeHistory>) => fake.fragment('#a'), (fake: ReturnType<typeof fakeHistory>) => fake.back()],
+  ['a route-changing pop', (_: ReturnType<typeof fakeHistory>, router: ReturnType<typeof createRouter>) => void router.navigate('chart'), (fake: ReturnType<typeof fakeHistory>) => fake.back()],
+] as const) {
+  test(`movement after ${kind} is kept current: the stale write leaves the pending flag alone, and exactly one save lands, of the post-pop position (4.8 review)`, () => {
+    const fake = fakeHistory('/');
+    const position = fakePosition(2);
+    const router = createRouter(fake.history, 'home', position.hooks);
+    setup(fake, router);
+    while (fake.pending() > 0) fake.flush();
+    position.set(3); // the Rail moves: a write is pending
+    pop(fake);
+    assert.equal(router.route(), 'home');
+    const before = fake.calls.length;
+    position.set(7); // the Rail moves again within the stale write's interval, then stops
+    while (fake.pending() > 0) fake.flush();
+    assert.deepEqual(fake.calls.slice(before), ['save'], 'exactly one save lands');
+    assert.deepEqual((fake.entries[0] as Entry).state, { scrollProgress: 7 }, 'carrying the post-pop position, into the reached entry');
+    router.dispose();
+  });
+}
+
 test('the documented limit: movement within SAVE_INTERVAL_MS before a pop is not saved into the departing entry', () => {
   const fake = fakeHistory('/');
   const position = fakePosition(2);
@@ -740,11 +813,14 @@ function auditRouter(source: string): string[] {
     failures.push('save is not a guarded replaceState, its first refusal logged');
   }
   if (
-    !/position\.subscribe\(\s*\(\)\s*=>\s*\{\s*if\s*\(\s*pending\s*\)\s*return\s*;\s*pending\s*=\s*true\s*;\s*const\s+scheduled\s*=\s*pops\s*;\s*history\.later\(\s*\(\)\s*=>\s*\{\s*pending\s*=\s*false\s*;\s*if\s*\(\s*live\s*&&\s*scheduled\s*===\s*pops\s*\)\s*save\(\)\s*;\s*\}\s*\)/.test(code)
+    !/position\.subscribe\(\s*\(\)\s*=>\s*\{\s*if\s*\(\s*pending\s*\)\s*return\s*;\s*pending\s*=\s*true\s*;\s*const\s+scheduled\s*=\s*pops\s*;\s*history\.later\(\s*\(\)\s*=>\s*\{\s*if\s*\(\s*scheduled\s*!==\s*pops\s*\)\s*return\s*;\s*pending\s*=\s*false\s*;\s*if\s*\(\s*live\s*\)\s*save\(\)\s*;\s*\}\s*\)/.test(code)
   ) {
-    failures.push('the keep-current save is not one pending write at a time, scheduled by later, and cancelled by a pop');
+    failures.push('the keep-current save is not one pending write at a time, scheduled by later, and cancelled by a pop — a stale callback leaving the pending flag alone');
   }
-  if (!/if\s*\(\s*next\s*===\s*current\s*\)\s*return\s*;\s*pops\s*\+=\s*1\s*;\s*restore\(\s*state\s*\)/.test(code)) failures.push('a route-changing pop does not cancel the pending write before it restores');
+  // 4.8: every pop cancels the pending write — counted before the same-route return.
+  if (!/pops\s*\+=\s*1\s*;\s*pending\s*=\s*false\s*;\s*if\s*\(\s*next\s*===\s*current\s*\)\s*return\s*;\s*restore\(\s*state\s*\)/.test(code)) {
+    failures.push('a pop does not cancel the pending write, and clear the pending flag, before the same-route return and the restore');
+  }
   if ((code.match(/\bhistory\.(?:save|push|canonicalize)\(/g) ?? []).length !== 3) failures.push('router.ts writes the history other than through its three guarded calls');
   if (/\breact\b|\buse[A-Z]\w*\(/i.test(code)) failures.push('router.ts reaches React');
   if (/reduced-motion|motion-preference|reducedMotion|prefers-reduced/i.test(code)) failures.push('router.ts reads the motion preference');
@@ -777,7 +853,10 @@ test('the router audit rejects the real module with any one reach added', () => 
     ['the same-route guard dropped', (s) => s.replace('      if (to === current) return true;\n', '')],
     ['a refused push reported as taken', (s) => s.replace('        console.error(error);\n        return false;\n', '        console.error(error);\n        return true;\n')],
     ['a pop not cancelling the pending write', (s) => s.replace('      pops += 1;\n', '')],
-    ['a stale write saved anyway', (s) => s.replace('if (live && scheduled === pops) save();', 'if (live) save();')],
+    ['a same-route pop not cancelling the pending write', (s) => s.replace('      pops += 1;\n      pending = false;\n', '').replace('      if (next === current) return;\n', '      if (next === current) return;\n      pops += 1;\n      pending = false;\n')],
+    ['a stale write saved anyway', (s) => s.replace('        if (scheduled !== pops) return;\n', '')],
+    ['a stale write clearing the pending flag', (s) => s.replace('        if (scheduled !== pops) return;\n        pending = false;\n', '        pending = false;\n        if (scheduled !== pops) return;\n')],
+    ['a pop leaving the pending flag set', (s) => s.replace('      pops += 1;\n      pending = false;\n', '      pops += 1;\n')],
     ['every refusal logged', (s) => s.replace('if (!saveLogged) console.error(error);', 'console.error(error);')],
     ['pushed before saving', (s) => s.replace('      save();\n      try {\n        history.push(ROUTE_PATHS[to], here());', '      try {\n        history.push(ROUTE_PATHS[to], here());\n        save();')],
     ['a push carrying no state', (s) => s.replace('history.push(ROUTE_PATHS[to], here());', 'history.push(ROUTE_PATHS[to], null as never);')],

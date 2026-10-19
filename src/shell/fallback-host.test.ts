@@ -4,6 +4,9 @@
  * through to the lazy chart, which arrives inline: on a `fallback` machine the
  * chart without `the scene`, on a `scene` machine with it — each check driven red
  * against a render with the wrong surface, the wrong artifact or broken markup.
+ * Since 4.8, the chart's `the model` and `the scene` clicked through the host:
+ * the rendered handlers, read off the harness's element recorder, run through a
+ * recording router, red against broken handlers.
  *
  * Plus its structural audit, moved here from `router.test.ts`: the lazy edge,
  * the boundary outside the suspense edge, the logged failure, the restated
@@ -24,6 +27,7 @@ import { stripComments } from '../../scripts/source-scan.ts';
 import type { Surface } from './detect.ts';
 import type { FallbackHost as FallbackHostComponent, FallbackHostArtifact } from './fallback-host.tsx';
 import type { Route } from './route.ts';
+import { followRoute, type RouteClick } from './route-link.ts';
 import type { Router } from './router.ts';
 
 const SHELL = fileURLToPath(new URL('.', import.meta.url));
@@ -41,8 +45,8 @@ const { FallbackHost } = await harness.load<{ FallbackHost: typeof FallbackHostC
 
 const router: Router = { route: (): Route => 'chart', subscribe: () => () => undefined, navigate: () => true, dispose: () => undefined };
 
-async function renderHost(surface: Surface, artifact: FallbackHostArtifact = committed): Promise<MarkupElement> {
-  return parseMarkup(await harness.render(React.createElement(FallbackHost, { artifact, surface, router }), { name: `FallbackHost (${surface})` }));
+async function renderHost(surface: Surface, artifact: FallbackHostArtifact = committed, withRouter: Router = router): Promise<MarkupElement> {
+  return parseMarkup(await harness.render(React.createElement(FallbackHost, { artifact, surface, router: withRouter }), { name: `FallbackHost (${surface})` }));
 }
 
 /**
@@ -90,6 +94,117 @@ test('the pass-through check is red against the wrong surface, the wrong artifac
   ] as const) {
     assert.notEqual(markup, real, `the break "${name}" must apply`);
     assert.notDeepEqual(passesThrough(parseMarkup(markup), 'scene', committed), [], `"${name}" must be rejected`);
+  }
+});
+
+// --- The chart's links, clicked through the host (4.8) ---------------------------------------
+
+/** A router whose `navigate` is recorded and answers `accept`: the one the host binds the chart's links to. */
+const recording = { calls: [] as Route[], accept: true };
+const recordingRouter: Router = {
+  route: () => 'chart',
+  subscribe: () => () => undefined,
+  navigate: (to) => {
+    recording.calls.push(to);
+    return recording.accept;
+  },
+  dispose: () => undefined,
+};
+
+/** A click as `followRoute` reads it, counting its `preventDefault` calls. */
+function fakeClick(init: Partial<Pick<RouteClick, 'button' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey' | 'defaultPrevented'>> = {}): RouteClick & { prevented: number } {
+  const click = {
+    button: 0,
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    altKey: false,
+    defaultPrevented: false,
+    prevented: 0,
+    ...init,
+    // As a real event: the call is counted, and the event reads prevented from then on.
+    preventDefault() {
+      click.prevented += 1;
+      click.defaultPrevented = true;
+    },
+  };
+  return click;
+}
+
+/**
+ * The click rule, run on `handler` — the `onClick` the link `name` was handed —
+ * through `recording`: a primary click the router takes navigates to `to` once
+ * and prevents the default once; a refused one navigates once and prevents
+ * nothing; a Ctrl-click and a middle click do neither. (`corner-chrome.test.ts`
+ * holds its twin, for the chrome's link.)
+ */
+function followsRouteRule(name: string, handler: unknown, to: Route): string[] {
+  if (typeof handler !== 'function') return [`${name}: no click handler`];
+  const failures: string[] = [];
+  const cases: readonly (readonly [string, boolean, Parameters<typeof fakeClick>[0], readonly Route[], number])[] = [
+    ['a primary click, taken', true, {}, [to], 1],
+    ['a primary click, refused', false, {}, [to], 0],
+    ['a Ctrl-click', true, { ctrlKey: true }, [], 0],
+    ['a Shift-click', true, { shiftKey: true }, [], 0],
+    ['a Meta-click', true, { metaKey: true }, [], 0],
+    ['an Alt-click', true, { altKey: true }, [], 0],
+    ['a middle click', true, { button: 1 }, [], 0],
+    ['a click already prevented', true, { defaultPrevented: true }, [], 0],
+  ];
+  try {
+    for (const [scenario, accept, init, calls, prevented] of cases) {
+      recording.calls = [];
+      recording.accept = accept;
+      const event = fakeClick(init);
+      (handler as (event: RouteClick) => void)(event);
+      if (JSON.stringify(recording.calls) !== JSON.stringify(calls)) failures.push(`${name}: ${scenario} navigates ${JSON.stringify(recording.calls)}, not ${JSON.stringify(calls)}`);
+      if (event.prevented !== prevented) failures.push(`${name}: ${scenario} prevents the default ${event.prevented} times, not ${prevented}`);
+    }
+  } finally {
+    recording.calls = [];
+    recording.accept = true;
+  }
+  return failures;
+}
+
+/** The one handler the rendered chart, through the host on a `scene` machine, handed its one `<a href>` to `href`. */
+async function chartHandler(href: string): Promise<unknown> {
+  await renderHost('scene', committed, recordingRouter);
+  const links = harness.elements('a').filter((element) => element.props['href'] === href);
+  assert.equal(links.length, 1, `the chart rendered exactly one <a href="${href}">`);
+  const handler = links[0]?.props['onClick'];
+  assert.equal(typeof handler, 'function', `the <a href="${href}"> was handed a click handler`);
+  return handler;
+}
+
+const CHART_LINKS = [
+  ['the model', '/colophon', 'colophon'],
+  ['the scene', '/', 'home'],
+] as const;
+
+test('the chart’s links through the host: the model → navigate(colophon), the scene → navigate(home), each preventing the default once', async () => {
+  for (const [name, href, to] of CHART_LINKS) assert.deepEqual(followsRouteRule(name, await chartHandler(href), to), []);
+});
+
+test('the host click check is red against a broken handler: the default never prevented, the wrong route, every click navigating, prevented whatever the router says, the real links swapped', async () => {
+  const model = await chartHandler('/colophon');
+  const scene = await chartHandler('/');
+  assert.notDeepEqual(followsRouteRule('the model', scene, 'colophon'), [], 'the scene’s handler on the model');
+  assert.notDeepEqual(followsRouteRule('the scene', model, 'home'), [], 'the model’s handler on the scene');
+  for (const [name, , to] of CHART_LINKS) {
+    const other: Route = to === 'home' ? 'colophon' : 'home';
+    const broken: readonly (readonly [string, unknown])[] = [
+      ['never preventDefault', (event: RouteClick) => void (event.button === 0 && recordingRouter.navigate(to))],
+      ['the wrong route', (event: RouteClick) => followRoute(event, recordingRouter.navigate, other)],
+      ['every click navigates', (event: RouteClick) => (recordingRouter.navigate(to) ? event.preventDefault() : undefined)],
+      ['prevented whatever the router says', (event: RouteClick) => (event.button === 0 && !event.ctrlKey ? (recordingRouter.navigate(to), event.preventDefault()) : undefined)],
+      ['no handler', undefined],
+    ];
+    for (const [breakage, handler] of broken) {
+      const failures = followsRouteRule(name, handler, to);
+      assert.notDeepEqual(failures, [], `${name}: "${breakage}" must be rejected`);
+      assert.ok(failures.every((failure) => failure.startsWith(`${name}: `)), `${name}: "${breakage}": each failure names the link`);
+    }
   }
 });
 

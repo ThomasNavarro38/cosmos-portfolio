@@ -5,6 +5,10 @@
  * subject, a missing server snapshot reads the client's, a Vite-loaded module
  * binds the same React, a large boundary React outlines is put back inline, the
  * markup reader reads React's markup, and nothing is written under the repo.
+ * The recorders (4.8): the props a Vite-compiled component (the `link.tsx`
+ * fixture) and a `createElement` one hand their host elements, and every
+ * `useSyncExternalStore` subscribe argument, readable after `render()`, the
+ * markup unchanged, and both cleared per render.
  */
 
 import { strict as assert } from 'node:assert';
@@ -125,6 +129,95 @@ test('a useSyncExternalStore without a server snapshot reads the client snapshot
     return h('span', null, value);
   }
   assert.equal(await harness.render(h(WithServer)), '<span>server</span>');
+});
+
+// --- The recorders (4.8) -----------------------------------------------------------------------
+
+test('the element recorder: the props a Vite-compiled component hands its <a>, readable after render, the markup unchanged', async () => {
+  const { Link } = await harness.load<{ Link: ComponentType<{ onFollow: (event: unknown) => void }> }>('/scripts/fixtures/render/link.tsx');
+  const onFollow = (): void => undefined;
+  const html = await harness.render(h(Link, { onFollow }));
+  assert.equal(html, '<a href="/chart">the chart</a>', 'the recorder changes no markup');
+  const anchors = harness.elements('a');
+  assert.equal(anchors.length, 1);
+  assert.equal(anchors[0]?.tag, 'a');
+  assert.equal(anchors[0]?.props['href'], '/chart');
+  assert.equal(anchors[0]?.props['onClick'], onFollow, 'the very handler the component handed its host element');
+});
+
+test('the element recorder sees createElement too, records host elements only, and every one with no tag given', async () => {
+  const onClick = (): void => undefined;
+  function Plain() {
+    return h('nav', { className: 'n' }, h('a', { href: '/', onClick }, 'home'), h('button', { type: 'button' }, 'go'));
+  }
+  assert.equal(await harness.render(h(Plain)), '<nav class="n"><a href="/">home</a><button type="button">go</button></nav>');
+  assert.deepEqual(harness.elements().map((element) => element.tag).sort(), ['a', 'button', 'nav']);
+  assert.equal(harness.elements('a')[0]?.props['onClick'], onClick);
+  assert.deepEqual(harness.elements('section'), []);
+});
+
+test('the subscription recorder: the subscribe argument of every useSyncExternalStore call, a Vite-loaded module’s included', async () => {
+  const { Link, subscribeFixture } = await harness.load<{ Link: ComponentType<{ onFollow: () => void }>; subscribeFixture: unknown }>('/scripts/fixtures/render/link.tsx');
+  await harness.render(h(Link, { onFollow: () => undefined }));
+  assert.deepEqual(harness.subscriptions(), [subscribeFixture]);
+  const first = (): (() => void) => () => undefined;
+  const second = (): (() => void) => () => undefined;
+  function Two() {
+    return h('span', null, React.useSyncExternalStore(first, () => 'a'), React.useSyncExternalStore(second, () => 'b', () => 'b'));
+  }
+  assert.equal(await harness.render(h(Two)), '<span>a<!-- -->b</span>', 'the recorder changes no markup');
+  assert.deepEqual(harness.subscriptions(), [first, second]);
+});
+
+test('both recorders are cleared per render: a render holds its own elements and subscriptions alone', async () => {
+  const subscribe = (): (() => void) => () => undefined;
+  function Stored() {
+    return h('a', { href: '/x' }, React.useSyncExternalStore(subscribe, () => 'x'));
+  }
+  await harness.render(h(Stored));
+  assert.equal(harness.elements('a').length, 1);
+  assert.deepEqual(harness.subscriptions(), [subscribe]);
+  h('a', { href: '/created-between-renders' });
+  assert.equal(await harness.render(h('p', null, 'plain')), '<p>plain</p>');
+  assert.deepEqual(harness.elements('a'), [], 'the previous render’s <a> is gone, and an element made outside a render is not recorded');
+  assert.deepEqual(harness.subscriptions(), [], 'the previous render’s subscription is gone');
+});
+
+test('a failed render leaves both recorders empty', async () => {
+  const subscribe = (): (() => void) => () => undefined;
+  function Broken(): never {
+    throw new Error('wrong prop');
+  }
+  function Partial() {
+    React.useSyncExternalStore(subscribe, () => 'x');
+    return h('main', null, h('a', { href: '/before-the-throw' }, 'x'), h(React.Suspense, { fallback: null }, h(Broken)));
+  }
+  await assert.rejects(harness.render(h(Partial)), /wrong prop/);
+  assert.deepEqual(harness.elements(), [], 'a rejected render returns no element');
+  assert.deepEqual(harness.subscriptions(), [], 'a rejected render returns no subscription');
+});
+
+test('a second import of render.ts shares the recordings: its renderer reads what this one recorded, and the reverse', async () => {
+  // A query makes Node load a second instance of the module, whose wraps are skipped by the guard.
+  const second = (await import(new URL('./render.ts?second', import.meta.url).href)) as typeof import('./render.ts');
+  assert.notEqual(second.renderer, renderer, 'a distinct module instance');
+  const other = await second.renderer();
+  try {
+    const subscribe = (): (() => void) => () => undefined;
+    function Stored() {
+      return h('a', { href: '/shared' }, React.useSyncExternalStore(subscribe, () => 'x'));
+    }
+    await harness.render(h(Stored));
+    assert.equal(other.elements('a')[0]?.props['href'], '/shared', 'the second instance reads the first’s render');
+    assert.deepEqual(other.subscriptions(), [subscribe]);
+    function Second() {
+      return h('nav', null, h('a', { href: '/second' }, 'y'));
+    }
+    await other.render(h(Second));
+    assert.equal(harness.elements('a')[0]?.props['href'], '/second', 'and the first reads the second’s');
+  } finally {
+    await other.close();
+  }
 });
 
 test('the server is closed and nothing was written under the repo', async () => {
