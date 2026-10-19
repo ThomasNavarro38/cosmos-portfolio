@@ -1989,6 +1989,108 @@ So that I judge the real thing rather than a stripped-down version of it.
 **Then** it is measured on a three-year-old laptop with integrated graphics at 1080p
 **And** **never on the dev machine and never on current Apple silicon**
 
+**Remediation note (added 2026-10-19).** Stories 4.7–4.10 schedule the four action items Thomas accepted from the Epic 4 retrospective (`epic-4-retro-10-19-2026.md`, `sprint-status.yaml` `action_items` `epic-4-retro-item-34` … `-37`). Epic 4's verdict is **accepted-with-open-items** (Thomas's override of a machine *rejected*: AC 4.4 #5 and AC 4.6 #6 have no evidence yet, and no action item tracks them by his choice). All four precede Story 5.1.
+
+### Story 4.7: The render harness
+
+As Thomas the maintainer,
+I want the epic's React wiring executed by a test rather than matched as source text,
+So that a wrong prop or a dropped mount fails the suite, and a behaviour-preserving refactor does not.
+
+Closes `epic-4-retro-item-34` (retro AV-1) and the five render deferrals it widened: `deferred-work.md` "What `App` renders per route", the mount and entry wiring, "Nothing renders `Chart`", and the 4.5 and 4.6 frontmatter deferrals (`spec-4-5`, `spec-4-6`).
+
+**Acceptance Criteria:**
+
+**Given** `node --test` cannot load `.tsx`
+**When** the harness is added
+**Then** a script test renders the shipped components to markup (`renderToStaticMarkup` or an equivalent server render), with no new runtime dependency and nothing added to any shipped chunk
+
+**Given** `App` chooses what shows from (route, surface)
+**When** it is rendered for every route on both surfaces
+**Then** the scene surface at `/` holds the scene host, index, chrome and panel, the fallback surface and `/chart` hold the chart alone, and `/colophon` holds the Colophon host alone
+
+**Given** the chart's links and anchors
+**When** `Chart` is rendered with `chartLinks('scene')` and `chartLinks('fallback')`
+**Then** every index `href` resolves to an element id in the same markup, `the model` points at `/colophon`, and `the scene` is present only on the capable machine
+
+**Given** the offer latch (4.6)
+**When** `CornerChrome` is rendered before and after `chartOffered()` latches
+**Then** `the chart` carries `chrome-route-offered` only after the latch, and its `href` is `/chart` in both
+
+**Given** the source-text audits the harness replaces
+**When** a rendered assertion covers the same guarantee
+**Then** the regex is retired, and every remaining audit lives in the test file of the module it pins
+
+### Story 4.8: Follow-up review of stories 4.5 and 4.6
+
+As Thomas the maintainer,
+I want the follow-up reviews that stories 4.5 and 4.6 recommended to run before Epic 5 builds on them,
+So that the epic's only timer-driven and frame-loop state is reviewed as often as the stories before it.
+
+Closes `epic-4-retro-item-35` (retro AV-3 and the retro's narrowed diff-scope pass).
+
+**Acceptance Criteria:**
+
+**Given** `spec-4-5` (score 14) and `spec-4-6` (score 10) carry `followup_review_recommended: true`
+**When** `bmad-code-review` runs over `6582786^..cd61915`
+**Then** its findings are triaged into patch, defer or dismiss, each patch applied red-then-green, and each deferral written to `deferred-work.md`
+
+**Given** the retro reviewed only the seams between stories inline
+**When** the review runs
+**Then** it includes the adversarial, edge-case and verification-gap lenses over the full range, weighting the 4.2 × 4.5 router seam and the 4.5 × 4.6 link seam
+
+**Given** the review is closed
+**When** both specs are updated
+**Then** `followup_review_recommended` is `false` in each, and the review is recorded in each spec's review section
+
+### Story 4.9: Deferred-work register housekeeping
+
+As Thomas the maintainer,
+I want every deferral in one register, filed under its own story,
+So that each new story spec pulls in every deferral addressed to it (`epic-3-retro-item-7`).
+
+Closes `epic-4-retro-item-36` (retro AV-4).
+
+**Acceptance Criteria:**
+
+**Given** the 4.5 and 4.6 deferrals live only in their specs' `deferred:` frontmatter
+**When** the register is reconciled
+**Then** `deferred-work.md` carries a section for each, with `source_spec`, `summary` and `evidence`
+
+**Given** the 4.3 entries filed under the 4.2 second-round header and the 4.4 entries under the 4.3 header
+**When** the log is refiled
+**Then** each entry sits under a header naming its own spec, with no entry's text changed
+
+**Given** two places now record deferrals
+**When** Thomas decides the register
+**Then** the build workflow states it in one sentence (the log, or the frontmatter with the log generated from it), and the decision is recorded in `deferred-work.md`'s header
+
+### Story 4.10: Fallback accessibility
+
+As a visitor for whom the scene is hostile,
+I want the flat chart to work with a keyboard, a screen reader and a phone's assistive technology,
+So that the accessibility floor's floor (AC 4.3) holds in practice, not only in its content.
+
+Closes `epic-4-retro-item-37` (retro AV-5) and the `deferred-work.md` items it names.
+
+**Acceptance Criteria:**
+
+**Given** a route change inside the document (4.5's links, Back and Forward)
+**When** the new surface renders
+**Then** focus moves to the new surface's first heading (or its main region), `document.title` names the surface, and the change is announced once
+
+**Given** the phone layout sets table parts to `display: block` (WebKit drops their semantics)
+**When** the index table and the record field tables render at 640px and below
+**Then** they keep table semantics, through explicit roles if the CSS must stay, so each cell keeps its column and row header
+
+**Given** a `/chart#<id>` landing
+**When** the record is scrolled into view
+**Then** focus and the sequential-focus starting point move to that record, with no visible focus ring forced on a pointer visitor
+
+**Given** the identity audit measures text roles only
+**When** it gains non-text rows
+**Then** the index link underline, the focus outline, the Ring and the Notable glyphs each meet 3:1 against the page ground (WCAG 1.4.11), or the token changes and DESIGN.md follows
+
 ---
 
 ## Epic 5: The Colophon
