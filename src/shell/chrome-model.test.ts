@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 // line keeps its number.
 import { stripComments } from '../../scripts/source-scan.ts';
 import { tokens } from '../tokens/tokens.ts';
-import { IDENTITY_LINE, SLOT_TEXT, chromeSlot, slotStyle, type ChromeSlot } from './chrome-model.ts';
+import { IDENTITY_LINE, SLOT_TEXT, chartRouteClass, chromeSlot, slotStyle, type ChromeSlot } from './chrome-model.ts';
 import { FOCUS_SECONDS, focusEasingCss } from './focus-motion.ts';
 import { contrast } from './contrast.ts';
 import { REDUCED_MOTION_PACE, motionPace } from './motion-preference.ts';
@@ -109,6 +109,14 @@ test('a pace that is not a positive finite number reads as 1 — never a 0s cut 
   for (const pace of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
     assert.equal(slotStyle(true, pace).transition, `right ${FOCUS_SECONDS}s ${focusEasingCss()}`, `pace ${pace}`);
   }
+});
+
+// --- The offer (4.6) ---------------------------------------------------------------------
+
+test('the cue: the chart link is chrome-route at rest, and chrome-route chrome-route-offered once offered', () => {
+  assert.equal(chartRouteClass(false), 'chrome-route');
+  assert.equal(chartRouteClass(true), 'chrome-route chrome-route-offered');
+  assert.ok(chartRouteClass(true).split(' ').includes(chartRouteClass(false)), 'the offered link keeps every rest declaration');
 });
 
 // --- Contrast ----------------------------------------------------------------------------
@@ -229,6 +237,8 @@ const FOCUSED = '.chrome-slot-control:focus-visible';
 const ROUTE = '.chrome-route';
 const ROUTE_RAISED = '.chrome-route:hover, .chrome-route:focus-visible';
 const ROUTE_FOCUSED = '.chrome-route:focus-visible';
+const ROUTE_OFFERED = '.chrome-route-offered';
+const ROUTE_OFFERED_RAISED = '.chrome-route-offered:hover, .chrome-route-offered:focus-visible';
 const TYPE_PROPERTIES = ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing'] as const;
 
 /**
@@ -274,6 +284,15 @@ const EXPECTED: readonly (readonly [string | null, string, string, string])[] = 
   [null, ROUTE_FOCUSED, 'text-decoration-line', 'underline'],
   [null, ROUTE_FOCUSED, 'text-decoration-thickness', 'var(--stroke-hairline)'],
   [null, ROUTE_FOCUSED, 'text-underline-offset', 'var(--space-hair)'],
+  // The offer (4.6, ruling Q1a): raised and underlined at rest, by the focus hairline's own declarations.
+  [null, ROUTE_OFFERED, 'color', 'var(--color-ink-prose-dark)'],
+  [null, ROUTE_OFFERED, 'text-decoration-line', 'underline'],
+  [null, ROUTE_OFFERED, 'text-decoration-thickness', 'var(--stroke-hairline)'],
+  [null, ROUTE_OFFERED, 'text-underline-offset', 'var(--space-hair)'],
+  // Its hover and focus step past that rest — which is the plain link's focus —
+  // so keyboard focus on an offered link stays visible (WCAG 2.4.7).
+  [null, ROUTE_OFFERED_RAISED, 'color', 'var(--color-ink-lift-dark)'],
+  [null, ROUTE_OFFERED_RAISED, 'text-decoration-thickness', 'var(--stroke-body-focus)'],
   // Forced colours flatten the ink step, so keyboard focus there is the system outline.
   [FORCED_COLORS, '.chrome-route:focus-visible, .chrome-slot-control:focus-visible', 'outline', '1px solid CanvasText'],
 ];
@@ -317,6 +336,25 @@ function auditStylesheet(css: string, tokensCss: string): string[] {
   }
   for (const media of new Set(declarations.map((d) => d.media))) {
     if (media !== null && media !== FORCED_COLORS) failures.push(`an @media ${media} beyond forced colours`);
+  }
+  // The offer (4.6) wins over the rest state at the same specificity only by
+  // coming after it; and its underline is the focus hairline's, declaration for declaration.
+  const order = declarations.map((d) => d.selector);
+  if (!(order.lastIndexOf(ROUTE) < order.indexOf(ROUTE_OFFERED))) failures.push('the offer is not after .chrome-route — the rest state would win');
+  if (!(order.lastIndexOf(ROUTE_OFFERED) < order.indexOf(ROUTE_OFFERED_RAISED))) failures.push('the offered link’s hover and focus are not after its rest');
+  for (const property of ['color', 'text-decoration-thickness']) {
+    const rest = find(null, ROUTE_OFFERED, property);
+    const raised = find(null, ROUTE_OFFERED_RAISED, property);
+    if (raised.length === 0 || JSON.stringify(raised) === JSON.stringify(rest)) failures.push(`the offered link’s focus ${property} equals its rest — focus would be invisible`);
+  }
+  // Forced colours: the system outline on the link's focus covers the offered link (it keeps .chrome-route).
+  if (!declarations.some((d) => d.media === FORCED_COLORS && d.selector.split(', ').includes(ROUTE_FOCUSED) && d.property === 'outline')) {
+    failures.push('forced colours draw no outline on the chart link’s focus, offered or not');
+  }
+  for (const property of ['text-decoration-line', 'text-decoration-thickness', 'text-underline-offset']) {
+    if (JSON.stringify(find(null, ROUTE_OFFERED, property)) !== JSON.stringify(find(null, ROUTE_FOCUSED, property))) {
+      failures.push(`the offer's ${property} is not the focus hairline's`);
+    }
   }
   return failures;
 }
@@ -381,6 +419,22 @@ test('the stylesheet audit rejects the real stylesheet with any one departure', 
     ['the link focus by colour alone', (s) => s.replace(/\n\.chrome-route:focus-visible \{[^}]*text-decoration-line[^}]*\}\n/, '\n')],
     ['the link boxed', (s) => s.replace('  text-decoration: none;\n  pointer-events: auto;', '  text-decoration: none;\n  pointer-events: auto;\n  border: 1px solid var(--color-surface-edge-dark);')],
     ['no forced-colours focus on the link', (s) => s.replace('.chrome-route:focus-visible,\n  .chrome-slot-control:focus-visible {', '.chrome-slot-control:focus-visible {')],
+    // 4.6: the offer.
+    ['the offer dropped', (s) => s.replace(/\n\.chrome-route-offered \{[^}]*\}\n/, '\n')],
+    ['the offer not raised', (s) => s.replace('.chrome-route-offered {\n  color: var(--color-ink-prose-dark);', '.chrome-route-offered {\n  color: inherit;')],
+    ['the offer not underlined', (s) => s.replace('.chrome-route-offered {\n  color: var(--color-ink-prose-dark);\n  text-decoration-line: underline;', '.chrome-route-offered {\n  color: var(--color-ink-prose-dark);')],
+    ['the offer heavier than the hairline', (s) => s.replace(/(\.chrome-route-offered \{[^}]*?)text-decoration-thickness: var\(--stroke-hairline\);/, '$1text-decoration-thickness: var(--stroke-medium);')],
+    ['the offer in another ink', (s) => s.replace('.chrome-route-offered {\n  color: var(--color-ink-prose-dark);', '.chrome-route-offered {\n  color: var(--color-ink-lift-dark);')],
+    ['the offer boxed', (s) => s.replace('.chrome-route-offered {\n', '.chrome-route-offered {\n  border: 1px solid var(--color-surface-edge-dark);\n')],
+    ['the offered focus dropped', (s) => s.replace(/\n\.chrome-route-offered:hover,\n\.chrome-route-offered:focus-visible \{[^}]*\}\n/, '\n')],
+    ['the offered focus equal to its rest', (s) => s.replace('  color: var(--color-ink-lift-dark);\n  text-decoration-thickness: var(--stroke-body-focus);', '  color: var(--color-ink-prose-dark);\n  text-decoration-thickness: var(--stroke-hairline);')],
+    ['the offered focus not raised', (s) => s.replace('  color: var(--color-ink-lift-dark);\n  text-decoration-thickness: var(--stroke-body-focus);', '  color: var(--color-ink-prose-dark);\n  text-decoration-thickness: var(--stroke-body-focus);')],
+    ['the offered focus thickness dropped', (s) => s.replace('  color: var(--color-ink-lift-dark);\n  text-decoration-thickness: var(--stroke-body-focus);', '  color: var(--color-ink-lift-dark);')],
+    ['the offered focus on hover alone', (s) => s.replace('.chrome-route-offered:hover,\n.chrome-route-offered:focus-visible {', '.chrome-route-offered:hover {')],
+    ['the offer before the rest state', (s) => {
+      const block = /\n\.chrome-route-offered \{[^}]*\}\n/.exec(s)?.[0] ?? '';
+      return s.replace(block, '\n').replace('.chrome-route {', `${block.trim()}\n\n.chrome-route {`);
+    }],
     ['a missing token', (s) => s.replace('var(--color-ink-label-dark)', 'var(--color-ink-chrome-dark)')],
     ['a declaration with no colon', (s) => s.replace('cursor: pointer;', 'cursor pointer;')],
   ];
@@ -419,7 +473,15 @@ function auditChrome(source: string): string[] {
   if (!/const\s+pace\s*=\s*motionPace\(\s*useSyncExternalStore\(\s*subscribeReducedMotion\s*,\s*reducedMotion\s*\)\s*\)\s*;/.test(code)) {
     failures.push('the pace is not motionPace of the preference, read through useSyncExternalStore');
   }
-  if ((code.match(/\buseSyncExternalStore\s*\(/g) ?? []).length !== 1) failures.push('the preference is read other than once');
+  // 4.6: the offer, read the same way, and only into the link's class.
+  if (!/const\s+offered\s*=\s*useSyncExternalStore\(\s*subscribeChartOffer\s*,\s*chartOffered\s*\)\s*;/.test(code)) {
+    failures.push('the offer is not chartOffered, read through useSyncExternalStore');
+  }
+  if (!/import\s*\{\s*chartOffered\s*,\s*subscribeChartOffer\s*\}\s*from\s*'\.\/chart-offer\.ts'/.test(code)) failures.push('the offer is not chart-offer.ts’s');
+  if (!/import\s*\{[^}]*\bchartRouteClass\b[^}]*\}\s*from\s*'\.\/chrome-model\.ts'/.test(code)) failures.push('the link’s class is not the model’s chartRouteClass');
+  if ((code.match(/\boffered\b/g) ?? []).length !== 2) failures.push('the offer is read for something other than the link’s class');
+  if (/\b(?:sampleFrame|resetFrameSampling)\b/.test(code)) failures.push('the chrome samples or resets the monitor — it only reads the offer');
+  if ((code.match(/\buseSyncExternalStore\s*\(/g) ?? []).length !== 2) failures.push('the preference and the offer are read other than once each');
   if (/\bsetReducedMotion\b/.test(code)) failures.push('the chrome writes the preference — mount.tsx is its one writer');
   if (!/const\s+slot\s*=\s*chromeSlot\(\s*mode\s*,\s*focusedProjectId\s*\)\s*;/.test(code)) failures.push('the slot is not chromeSlot(mode, focusedProjectId)');
   if (!/const\s+style\s*=\s*slotStyle\(\s*focusedProjectId\s*!==\s*null\s*,\s*pace\s*\)\s*;/.test(code)) failures.push('the style is not slotStyle(focused, pace)');
@@ -430,7 +492,7 @@ function auditChrome(source: string): string[] {
   if (!/<p\s+className="chrome-identity"\s*>\s*\{\s*IDENTITY_LINE\s*\}\s*·\s*<a\b[^\n]*>\s*\{\s*CHART_LINK_TEXT\s*\}\s*<\/a>\s*<\/p>/.test(code)) {
     failures.push('the identity line is not one <p class="chrome-identity"> of IDENTITY_LINE, ` · ` and the chart link');
   }
-  if (!/<a\s+className="chrome-route"\s+href=\{\s*ROUTE_PATHS\.chart\s*\}\s+onClick=\{\(\s*(\w+)\s*\)\s*=>\s*followRoute\(\s*\1\s*,\s*router\.navigate\s*,\s*'chart'\s*\)\}\s*>/.test(code)) {
+  if (!/<a\s+className=\{\s*chartRouteClass\(\s*offered\s*\)\s*\}\s+href=\{\s*ROUTE_PATHS\.chart\s*\}\s+onClick=\{\(\s*(\w+)\s*\)\s*=>\s*followRoute\(\s*\1\s*,\s*router\.navigate\s*,\s*'chart'\s*\)\}\s*>/.test(code)) {
     failures.push('the chart link is not <a class="chrome-route" href={ROUTE_PATHS.chart}> whose click is followRoute(event, router.navigate, \'chart\')');
   }
   if (!/export\s+function\s+CornerChrome\(\s*\{\s*router\s*\}\s*:\s*\{\s*readonly\s+router\s*:\s*Router\s*\}\s*\)/.test(code)) failures.push('the chrome does not take the router as its one prop');
@@ -449,7 +511,7 @@ function auditChrome(source: string): string[] {
     (code.match(/className="chrome-identity"/g) ?? []).length !== 1 ||
     (code.match(/className="chrome-slot"/g) ?? []).length !== 1 ||
     (code.match(/className="chrome-slot-control"/g) ?? []).length !== 1 ||
-    (code.match(/className="chrome-route"/g) ?? []).length !== 1
+    (code.match(/className=\{chartRouteClass\(/g) ?? []).length !== 1
   ) {
     failures.push('a third chrome line, or a slot drawn twice');
   }
@@ -579,6 +641,15 @@ const CHROME_TARGETS: ReadonlyMap<string, string> = new Map([
   ['local state', 'keeps state or effects of its own'],
   ['a hover handler', 'reacts to hover, pointer, keys or focus'],
   ['a viewport read', 'reads the viewport'],
+  // 4.6: the offer.
+  ['the offer never read', 'the offer is not chartOffered'],
+  ['the offer read off the store', 'the offer is not chartOffered'],
+  ['the class written out', 'the chart link is not <a class="chrome-route"'],
+  ['the class always offered', 'the chart link is not <a class="chrome-route"'],
+  ['the offer drawn as a line', 'the offer is read for something other than the link’s class'],
+  ['the offer named', 'an ARIA or title attribute'],
+  ['the chrome samples frames', 'the chrome samples or resets the monitor'],
+  ['the class not the model’s', 'the link’s class is not the model’s chartRouteClass'],
 ]);
 
 test('the chrome audit rejects the real renderer with any one guarantee broken', () => {
@@ -600,7 +671,7 @@ test('the chrome audit rejects the real renderer with any one guarantee broken',
     ['the chart link navigating on every click', (s) => s.replace("onClick={(event) => followRoute(event, router.navigate, 'chart')}", "onClick={() => router.navigate('chart')}")],
     ['the chart link to the colophon', (s) => s.replace("followRoute(event, router.navigate, 'chart')", "followRoute(event, router.navigate, 'colophon')")],
     ['the chart link written out', (s) => s.replace('>{CHART_LINK_TEXT}</a>', '>the chart</a>')],
-    ['the chart link a button', (s) => s.replace(/<a className="chrome-route"[^\n]*<\/a>/, '<button type="button">{CHART_LINK_TEXT}</button>')],
+    ['the chart link a button', (s) => s.replace(/<a className=\{chartRouteClass\(offered\)\}[^\n]*<\/a>/, '<button type="button">{CHART_LINK_TEXT}</button>')],
     ['the router not a prop', (s) => s.replace('export function CornerChrome({ router }: { readonly router: Router }) {', 'export function CornerChrome() {\n  const router = window.router as Router;')],
     ['a click rule of its own', (s) => s.replace("onClick={(event) => followRoute(event, router.navigate, 'chart')}", "onClick={(event) => (event.button === 0 ? (event.preventDefault(), router.navigate('chart')) : undefined)}")],
     ['the identity a button', (s) => s.replace('<p className="chrome-identity">', '<button className="chrome-identity">').replace('{CHART_LINK_TEXT}</a>\n      </p>', '{CHART_LINK_TEXT}</a>\n      </button>')],
@@ -659,6 +730,14 @@ test('the chrome audit rejects the real renderer with any one guarantee broken',
     ['local state', (s) => s.replace('const slot =', 'const [open] = useState(false);\n  const slot =')],
     ['a hover handler', (s) => s.replace('type="button"', 'type="button" onMouseEnter={() => releaseLayer()}')],
     ['a viewport read', (s) => s.replace('const slot =', 'const wide = window.innerWidth > 1200;\n  const slot =')],
+    ['the offer never read', (s) => s.replace('const offered = useSyncExternalStore(subscribeChartOffer, chartOffered);', 'const offered = false;')],
+    ['the offer read off the store', (s) => s.replace('const offered = useSyncExternalStore(subscribeChartOffer, chartOffered);', 'const offered = useStore(navigationStore, (state) => state.mode === "freeflight");')],
+    ['the class written out', (s) => s.replace('className={chartRouteClass(offered)}', 'className={offered ? "chrome-route chrome-route-offered" : "chrome-route"}')],
+    ['the class always offered', (s) => s.replace('className={chartRouteClass(offered)}', 'className={chartRouteClass(true)}')],
+    ['the offer drawn as a line', (s) => s.replace('{CHART_LINK_TEXT}</a>\n      </p>', '{CHART_LINK_TEXT}</a>\n      {offered ? CHART_LINK_TEXT : null}\n      </p>')],
+    ['the offer named', (s) => s.replace('className={chartRouteClass(offered)}', 'className={chartRouteClass(offered)} aria-describedby="offer"')],
+    ['the chrome samples frames', (s) => s.replace('const slot =', 'sampleFrame(1);\n  const slot =')],
+    ['the class not the model’s', (s) => s.replace('import { IDENTITY_LINE, chartRouteClass, chromeSlot, slotStyle }', 'import { IDENTITY_LINE, chromeSlot, slotStyle }').replace('const slot =', 'const chartRouteClass = (o: boolean) => (o ? "chrome-route chrome-route-offered" : "chrome-route");\n  const slot =')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);
