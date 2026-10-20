@@ -1,0 +1,5 @@
+# Story 4.9 (Thomas, ruling Q1 (a), 2026-10-20): deferred-work.md is the one deferral register.
+[workflow]
+persistent_facts = [
+  "Deferral register (Thomas, ruling Q1 (a), 2026-10-20): deferred-work.md is the one deferral register, so whenever a review defers a finding, besides the spec's deferred: frontmatter (only that spec's copy), also append it to _bmad-output/implementation-artifacts/deferred-work.md as a \"- source_spec / summary / evidence\" entry (plus location and severity when the review gives them) under a new section at the end of the file headed \"## Deferred from: code review of <spec-file>.md[, <round>] (<review date>)\".",
+]
