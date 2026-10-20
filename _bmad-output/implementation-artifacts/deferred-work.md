@@ -7,6 +7,15 @@ re-copied. Grouped by the mechanism each item belongs to, because that is how
 they will be picked up — several were originally recorded separately from
 different reviews but close together.
 
+This log is the one deferral register (Thomas, ruling Q1 (a), 2026-10-20, story
+4.9): every finding deferred in a review is appended here, under a header naming
+its spec. The `deferred:` lists in a spec's frontmatter, which `bmad-build-auto`
+writes, are that spec's own copies, not a second register. The rule is stated to
+both workflows as a persistent fact in `_bmad/custom/bmad-build.toml` and
+`_bmad/custom/bmad-build-auto.toml`: each deferral goes into a new section at the
+end of this file. Swept on 2026-10-20: of the specs carrying a `deferred:` list
+(4.3 onward), only spec-4-5 and spec-4-6 held items missing here.
+
 ## Packaging enforcement
 
 Four rules a README claims and nothing enforces. Deferred from stories 1.1 and
@@ -1000,6 +1009,9 @@ Still open after 3.5:
   summary: Thomas ruled (2026-10-16) that the position is saved on every route, not only `/`, so a pop to `/chart` or `/colophon` restores the position that entry was left with — picked up with the 4.5 pop-departure deferral above.
   evidence: `src/shell/router.ts:133,150,161` save on every route; `:143-148` restore on any route-changing pop. Sequence: `/` at 2.4 → `/chart` → Back to `/`, scroll to 5 → Forward to `/chart` restores 2.4 → a later `navigate('home')` opens at 2.4, not 5. Unreachable in 4.2 (no `navigate` caller); 4.5 resolves it together with keeping the current entry's state current while scrolling.
   update (story 4.5, 2026-10-19): **closed** with the pop-departure item above: every route's entry is kept current, so a pop to `/chart` or `/colophon` restores the position that entry was left at.
+
+## Deferred from: code review of spec-4-3-the-fallback-star-chart.md, first round (2026-10-18)
+
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-the-fallback-star-chart.md`
   summary: Landing on a `/chart#<id>` fragment scrolls the record into view but does not move focus or the sequential-focus starting point, so keyboard and screen-reader visitors still start at the top of the document.
   evidence: the chart is lazy, so the browser's own fragment navigation runs before the target exists; the landing calls `scrollIntoView()` only (`src/render-fallback/chart.tsx`, the ref callback). Fixing it means `tabindex="-1"` on the targets and a `focus({ preventScroll: true })`, which is a markup and focus-ring decision for the UX spec.
@@ -1023,12 +1035,35 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-the-fallback-star-chart.md`
   summary: The plate geometry has no fallback for a dense row or an over-long word. Three or more Projects at close `timeAxis` in one row put labels i and i+2 on the same depth (`LABEL_DEPTHS[index % 2]`). A single word wider than the down plate's room overflows the viewBox.
   evidence: `src/render-fallback/chart-model.ts:249`, `:259-274`. Today's committed data is clean. The label-box non-intersection and inside-viewBox tests run on the committed artifact, so data that triggers either case fails the suite instead of shipping.
+
+## Deferred from: code review of spec-4-4-the-deep-shallow-signal-on-a-flat-chart.md (2026-10-18)
+
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-4-the-deep-shallow-signal-on-a-flat-chart.md`
   summary: A Deep Project tied on `timeAxis` with a Shallow Project in the same Client is drawn on the same spot, so one Ring encircles both coincident markers and the plate can't say which one carries the Notable. The Shallow Project's leader also starts inside that Ring.
   evidence: `src/render-fallback/chart-model.ts` `acrossPlate`/`downPlate` place tied Projects at one centre (4.3), and the ring-clearance test exempts marks at the same centre. The committed artifact has no such tie. The index's Notable column still gives each row its own glyph, so the signal survives in the table. Fixing it needs a tie-separation rule in the plate geometry (4.4's Ask First).
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-4-the-deep-shallow-signal-on-a-flat-chart.md`
   summary: The Ring and the index and legend glyph marks are hairlines at `stroke-near` on the page ground, with no 3:1 non-text contrast check (WCAG 1.4.11). This extends the 4.3 deferral on the index link's non-text contrast.
   evidence: `src/identity-audit.test.ts` `ROLES` measures text roles only (the legend's text was added in 4.4); `.chart-ring` is `stroke: var(--color-stroke-near-dark)` at `--stroke-hairline`. The Notable column's accessible name and the legend phrases carry the signal redundantly, so the Ring isn't the only carrier.
+
+## Deferred from: code review of spec-4-5-one-click-movement-between-surfaces.md (2026-10-19)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-5-one-click-movement-between-surfaces.md`
+  summary: The 4.5 surface links (the chart, the model, the scene) and their wiring through App, FallbackHost, Chart and CornerChrome are checked only by source-text regexes; nothing renders them or clicks a mounted anchor.
+  evidence: The pure layer (followRoute, chartRoutes, chartLinks) is executed in route-link.test.ts, but auditChrome (chart-model.test.ts, chrome-model.test.ts), auditFallbackHost (router.test.ts) and auditMount (panel-model.test.ts) match text only; node --test cannot load .tsx. A wrong prop or a rebound navigate that keeps the audited text would pass. This widens the existing 4.2/4.3 render deferrals (deferred-work.md "What App renders per route" and "Nothing renders Chart"); a renderToStaticMarkup script test over Chart with chartLinks('scene'|'fallback') would close it.
+  location: src/shell/fallback-host.tsx, src/render-fallback/chart.tsx, src/shell/corner-chrome.tsx, src/App.tsx
+  severity: medium
+  update (story 4.9, 2026-10-20): filed here late: `bmad-build-auto` wrote this deferral only to the spec's `deferred:` frontmatter, so it never reached the log. The evidence's "What App renders per route" is the 4.2 entry beginning "What `App` renders per route"; "Nothing renders Chart" is the 4.3 code-review entry.
+  update (story 4.7, 2026-10-19): **closed.** The links are now rendered through the render harness (`scripts/render.ts`): `src/render-fallback/chart.test.ts` renders the chart's links on capable and incapable machines and checks every `href` handed in; `src/shell/fallback-host.test.ts` renders the host's pass-through; `src/App.test.ts` renders every route × surface; `src/shell/corner-chrome.test.ts` renders the chrome's `the chart` link, and its "clicked" rows (`:210-214`) drive the rendered `onClick`.
+
+## Deferred from: code review of spec-4-6-performance-offers-never-forces.md (2026-10-19)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-6-performance-offers-never-forces.md`
+  summary: The 4.6 wiring (FrameSampler inside the Canvas, scene-host's resets, CornerChrome's useSyncExternalStore read into chartRouteClass) is held only by source-text audits; nothing renders it or drives a real frame loop or visibilitychange.
+  evidence: chart-offer.test.ts executes the monitor on synthetic deltas and chrome-model.test.ts executes chartRouteClass, but auditSamplerMount, auditFrameSampler, auditResets and the auditChrome additions match source text only; node --test cannot load .tsx and the repo has no DOM harness. This widens the 4.3/4.5 render deferrals ("Nothing renders Chart", "links verified by source scans only"); a renderToStaticMarkup or DOM-harness test of CornerChrome before and after the latch would close the chrome half.
+  location: src/render-scene/frame-sampler.tsx, src/render-scene/scene.tsx, src/shell/scene-host.tsx, src/shell/corner-chrome.tsx
+  severity: medium
+  update (story 4.9, 2026-10-20): filed here late: `bmad-build-auto` wrote this deferral only to the spec's `deferred:` frontmatter, so it never reached the log. The evidence's "links verified by source scans only" is the spec-4-5 section above.
+  update (stories 4.7 and 4.8, 2026-10-19): **narrowed.** The chrome half was closed by story 4.7: `src/shell/corner-chrome.test.ts:97-112` renders `CornerChrome` before and after the latch. The subscription was closed by story 4.8 (P3): `corner-chrome.test.ts:235-242` checks that the chrome subscribes to the offer. Still open: `FrameSampler`'s feed from inside `<Canvas>` and `scene-host.tsx`'s resets, carried as D2 of the 4.8 follow-up section below.
 
 ## Deferred from: follow-up code review of spec-4-5 and spec-4-6 (story 4.8, 2026-10-19)
 
@@ -1044,3 +1079,11 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-5-one-click-movement-between-surfaces.md`
   summary: (D4, medium) The chart's window scroll on Back and Forward is unmanaged. The chart re-renders lazily after a pop, so the browser's `auto` scroll restoration can run before the content exists and leave the visitor at the top. There is no `history.scrollRestoration` decision. (Related to the 4.3 document-scroll deferral above, which concerns saving the position; this one concerns when the browser restores it.)
   evidence: no `scrollRestoration` anywhere under `src/`; `src/shell/fallback-host.tsx` loads the chart through `lazy(() => import('../render-fallback/chart.tsx'))` behind `<Suspense fallback={null}>`, so the document is momentarily short when the pop's restoration runs.
+
+## Deferred from: code review of spec-4-9-deferred-work-register-housekeeping.md (2026-10-20)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-9-deferred-work-register-housekeeping.md`
+  summary: Nothing checks that every item in a spec's `deferred:` frontmatter also has an entry here, so a run that ignores the register fact would let the two registers drift apart again unnoticed.
+  evidence: the register rule is a persistent fact read by the model (`_bmad/custom/bmad-build-auto.toml`), while the shipped `bmad-build-auto` step-04 defer branch still names only the frontmatter; the 4.9 refile was a one-time manual reconciliation. A lightweight check (a script comparing each spec's `deferred:` summaries against this file's `summary:` lines) would catch it; a generator was ruled out (ruling Q1 (a)).
+  location: _bmad/custom/bmad-build-auto.toml, .claude/skills/bmad-build-auto/step-04-review.md
+  severity: low
