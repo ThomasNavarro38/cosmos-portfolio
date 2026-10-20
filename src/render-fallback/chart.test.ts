@@ -4,8 +4,11 @@
  * model` to the Colophon in its `<h1>`, `the scene` on its route line on a
  * capable machine and nothing there otherwise, every `href` and text the link's
  * own — and its anchors — every index link names an `id` in the same markup,
- * every Client and Project `id` once — each check driven red against a render
- * with the wrong links or broken markup.
+ * every Client and Project `id` once — and, since 4.10, its accessibility
+ * markup: the explicit ARIA table roles on the index and on every record's
+ * field table (WebKit drops table semantics under the phone width's
+ * `display: block`), and `tabindex="-1"` on every fragment target — each check
+ * driven red against a render with the wrong links or broken markup.
  *
  * Plus the source audits of `chart.tsx` that no render shows, moved here from
  * `chart-model.test.ts` with their mutation rows: what the markup is bound to
@@ -95,6 +98,55 @@ function anchorsHold(root: MarkupElement, artifact: ChartArtifact): string[] {
   return failures;
 }
 
+/** The roles each table's parts carry (4.10): the index's columns are headed, a record's rows are. */
+const TABLE_ROLES = {
+  index: { table: 'table', thead: 'rowgroup', tbody: 'rowgroup', tr: 'row', th: 'columnheader', td: 'cell' },
+  fields: { table: 'table', thead: 'rowgroup', tbody: 'rowgroup', tr: 'row', th: 'rowheader', td: 'cell' },
+} as const;
+
+/**
+ * The chart's tables keep their semantics at every width (4.10): the index
+ * (`table.chart-index`) and every record's field table (`table.panel-fields`,
+ * one per Project), each part carrying its explicit ARIA role.
+ */
+function tableRolesHold(root: MarkupElement, projects: number): string[] {
+  const failures: string[] = [];
+  const check = (table: MarkupElement, kind: keyof typeof TABLE_ROLES, where: string): void => {
+    const roles = TABLE_ROLES[kind];
+    if (table.attrs['role'] !== roles.table) failures.push(`${where}: the <table> has role ${JSON.stringify(table.attrs['role'] ?? null)}, not "table"`);
+    for (const part of ['thead', 'tbody', 'tr', 'th', 'td'] as const) {
+      for (const node of queryAll(table, part)) {
+        if (node.attrs['role'] !== roles[part]) failures.push(`${where}: a <${part}> has role ${JSON.stringify(node.attrs['role'] ?? null)}, not ${JSON.stringify(roles[part])}`);
+      }
+    }
+    if (queryAll(table, 'td').length === 0) failures.push(`${where}: no cell`);
+  };
+  const index = queryAll(root, 'table.chart-index');
+  if (index.length !== 1) failures.push(`${index.length} index tables, not one`);
+  for (const table of index) check(table, 'index', 'the index');
+  const fields = queryAll(root, 'article.chart-record table.panel-fields');
+  if (fields.length !== projects) failures.push(`${fields.length} field tables, not one per Project (${projects})`);
+  for (const table of fields) check(table, 'fields', 'a field table');
+  return failures;
+}
+
+/**
+ * The fragment targets (4.10): every Client `<section>` and Project `<article>`
+ * is focusable by script alone (`tabindex="-1"`), so a `/chart#<id>` landing
+ * can focus it; nothing else in the chart carries a tabindex.
+ */
+function targetsFocusable(root: MarkupElement): string[] {
+  const failures: string[] = [];
+  const targets = [...queryAll(root, 'section.chart-section'), ...queryAll(root, 'article.chart-record')];
+  if (targets.length === 0) failures.push('no fragment target');
+  for (const node of targets) {
+    if (node.attrs['tabindex'] !== '-1') failures.push(`the target ${node.attrs['id']} has tabindex ${JSON.stringify(node.attrs['tabindex'] ?? null)}, not "-1"`);
+  }
+  const others = queryAll(root, '[tabindex]').filter((node) => !targets.includes(node));
+  if (others.length !== 0) failures.push(`${others.length} other elements carry a tabindex`);
+  return failures;
+}
+
 // --- The links, rendered ----------------------------------------------------------------------
 
 test('the chart’s links on a capable machine: the model to /colophon in the <h1>, the scene to / on the route line', async () => {
@@ -147,18 +199,61 @@ test('the anchors check is red against another artifact and broken markup', asyn
   const first = committed.clients[0];
   assert.ok(first !== undefined);
   assert.notDeepEqual(anchorsHold(parseMarkup(await renderChart(chartLinks('scene', navigate), { clients: [first] })), committed), [], 'another artifact drawn');
-  const section = /<section id="([^"]+)" class="chart-section">/.exec(real);
-  const article = /<article id="([^"]+)" class="chart-record">/.exec(real);
+  const section = /<section id="([^"]+)" class="chart-section" tabindex="-1">/.exec(real);
+  const article = /<article id="([^"]+)" class="chart-record" tabindex="-1">/.exec(real);
   assert.ok(section !== null && article !== null);
   for (const [name, markup] of [
-    ['a section without its id', real.replace(section[0], '<section class="chart-section">')],
-    ['a record without its id', real.replace(article[0], '<article class="chart-record">')],
+    ['a section without its id', real.replace(section[0], '<section class="chart-section" tabindex="-1">')],
+    ['a record without its id', real.replace(article[0], '<article class="chart-record" tabindex="-1">')],
     ['a record id twice', real.replace(article[0], `<span id="${article[1]}"></span>${article[0]}`)],
     ['an index link to nowhere', real.replace(`<a href="#${article[1]}">`, '<a href="#project:nowhere">')],
     ['an index link without its fragment', real.replace(`<a href="#${article[1]}">`, '<a>')],
   ] as const) {
     assert.notEqual(markup, real, `the break "${name}" must apply`);
     assert.notDeepEqual(anchorsHold(parseMarkup(markup), committed), [], `"${name}" must be rejected`);
+  }
+});
+
+// --- The accessibility markup, rendered (4.10) ----------------------------------------------------
+
+const PROJECTS = committed.clients.reduce((sum, client) => sum + client.projects.length, 0);
+
+test('the chart’s tables carry explicit ARIA roles at every width: the index’s column headers, each record’s row headers', async () => {
+  assert.deepEqual(tableRolesHold(parseMarkup(await renderChart(chartLinks('scene', navigate))), PROJECTS), []);
+});
+
+test('every fragment target is focusable by script alone, and nothing else in the chart carries a tabindex', async () => {
+  assert.deepEqual(targetsFocusable(parseMarkup(await renderChart(chartLinks('scene', navigate)))), []);
+});
+
+test('the roles and targets checks are red against a dropped or wrong role and a missing or wrong tabindex', async () => {
+  const real = await renderChart(chartLinks('scene', navigate));
+  const article = /<article id="[^"]+" class="chart-record" tabindex="-1">/.exec(real)?.[0] ?? '';
+  const section = /<section id="[^"]+" class="chart-section" tabindex="-1">/.exec(real)?.[0] ?? '';
+  assert.ok(article !== '' && section !== '');
+  for (const [name, markup] of [
+    ['the index table’s role dropped', real.replace('<table class="chart-index" role="table">', '<table class="chart-index">')],
+    ['a column header’s role dropped', real.replace('<th scope="col" role="columnheader">', '<th scope="col">')],
+    ['a column header as a row header', real.replace('<th scope="col" role="columnheader">', '<th scope="col" role="rowheader">')],
+    ['the header row group’s role dropped', real.replace('<thead role="rowgroup">', '<thead>')],
+    ['an index row’s role dropped', real.replace('<tr role="row"><td class="chart-index-notable" role="cell">', '<tr><td class="chart-index-notable" role="cell">')],
+    ['an index cell’s role dropped', real.replace('<td class="chart-index-client" role="cell">', '<td class="chart-index-client">')],
+    ['a field table’s role dropped', real.replace('<table class="panel-fields" role="table">', '<table class="panel-fields">')],
+    ['a row header’s role dropped', real.replace('<th scope="row" role="rowheader">', '<th scope="row">')],
+    ['a field value’s role dropped', real.replace(/(<th scope="row" role="rowheader">[^<]*<\/th>)<td role="cell">/, '$1<td>')],
+    ['a field table gone', real.replace(/<table class="panel-fields"[\s\S]*?<\/table>/, '')],
+  ] as const) {
+    assert.notEqual(markup, real, `the break "${name}" must apply`);
+    assert.notDeepEqual(tableRolesHold(parseMarkup(markup), PROJECTS), [], `"${name}" must be rejected`);
+  }
+  for (const [name, markup] of [
+    ['a record’s tabindex dropped', real.replace(article, article.replace(' tabindex="-1"', ''))],
+    ['a section’s tabindex dropped', real.replace(section, section.replace(' tabindex="-1"', ''))],
+    ['a record as a tab stop', real.replace(article, article.replace('tabindex="-1"', 'tabindex="0"'))],
+    ['a stray tabindex', real.replace('<div class="chart-legend"', '<div tabindex="-1" class="chart-legend"')],
+  ] as const) {
+    assert.notEqual(markup, real, `the break "${name}" must apply`);
+    assert.notDeepEqual(targetsFocusable(parseMarkup(markup)), [], `"${name}" must be rejected`);
   }
 });
 
@@ -185,12 +280,12 @@ test('chart.tsx draws the model: the headings, the plates aria-hidden, the fragm
   assert.equal((code.match(/<Dates dates=/g) ?? []).length, 2, 'the index row and the record fields both draw Dates');
   assert.match(code, /^import '\.\.\/shell\/focus-panel\.css';$/m);
   // The Deep/Shallow signal (4.4): the Notable column first, its glyph an image named by the model, the legend after both plates.
-  const headers = [...code.matchAll(/<th scope="col">\{(\w+\.\w+)\}<\/th>/g)].map((match) => match[1]);
+  const headers = [...code.matchAll(/<th scope="col" role="columnheader">\{(\w+\.\w+)\}<\/th>/g)].map((match) => match[1]);
   assert.deepEqual(headers, ['CHART_LABELS.notable', 'CHART_LABELS.client', 'CHART_LABELS.project', 'FIELD_LABELS.role', 'CHART_LABELS.dates'], 'Notable, Client, Project, Role, Dates');
-  assert.match(code, /<tr key=\{row\.id\}>\s*<td className="chart-index-notable">\s*<svg className="chart-glyph" viewBox=\{INDEX_GLYPH\.viewBox\} width=\{INDEX_GLYPH\.size\} height=\{INDEX_GLYPH\.size\} role="img" aria-label=\{row\.notable\.label\} focusable="false">\s*<Glyph glyph=\{INDEX_GLYPH\} kind=\{row\.notable\.kind\} \/>/, 'the first cell of each row: the glyph, an image named by the model');
+  assert.match(code, /<tr key=\{row\.id\} role="row">\s*<td className="chart-index-notable" role="cell">\s*<svg className="chart-glyph" viewBox=\{INDEX_GLYPH\.viewBox\} width=\{INDEX_GLYPH\.size\} height=\{INDEX_GLYPH\.size\} role="img" aria-label=\{row\.notable\.label\} focusable="false">\s*<Glyph glyph=\{INDEX_GLYPH\} kind=\{row\.notable\.kind\} \/>/, 'the first cell of each row: the glyph, an image named by the model');
   assert.match(code, /switch \(kind\) \{\s*case 'ring':[\s\S]*?className="chart-marker"[\s\S]*?className="chart-ring"[\s\S]*?case 'plain':[\s\S]*?className="chart-marker"/, 'ring versus plain is the model’s kind, mapped by switch, reusing the plate’s classes');
   assert.match(code, /<PlateView plate=\{chart\.down\} className="chart-plate chart-plate-down" \/>\s*<div className="chart-legend" aria-hidden="true">\s*\{chart\.legend\.map\(/, 'the legend once, after both plates, before the table, aria-hidden');
-  assert.match(code, /<div className="chart-legend" aria-hidden="true">[\s\S]*?<\/div>\s*<table className="chart-index">/, 'the legend sits above the table');
+  assert.match(code, /<div className="chart-legend" aria-hidden="true">[\s\S]*?<\/div>\s*<table className="chart-index" role="table">/, 'the legend sits above the table');
   assert.equal((code.match(/className="chart-ring"/g) ?? []).length, 1, 'one ring mapping, used by the index glyph and the legend alike');
   assert.doesNotMatch(code, /isDeep|content\.notable|row\.notable\b(?!\.)/, 'the renderer reads no isDeep and no notable: the kind is the model’s');
   assert.deepEqual(auditGlyphMarkup(code), []);
@@ -273,7 +368,7 @@ test('chart.tsx glyph markup: each binding replaced fails with its own line', ()
     [(s) => s.replace('return <circle className="chart-marker" cx={glyph.centre} cy={glyph.centre} r={glyph.markerR} />;', 'return <circle className="chart-marker" cx={glyph.centre} cy={glyph.centre} r={glyph.ringR} />;'), /the plain glyph is not/],
     [(s) => s.replace('<Glyph glyph={LEGEND_GLYPH} kind={entry.kind} />', '<Glyph glyph={LEGEND_GLYPH} kind="ring" />'), /a legend entry does not draw/],
     [(s) => s.replace('<Glyph glyph={INDEX_GLYPH} kind={row.notable.kind} />', '<Glyph glyph={INDEX_GLYPH} kind="plain" />'), /an index glyph does not draw/],
-    [(s) => s.replace('<td className="chart-index-client">{row.client}</td>', '<td className="chart-index-client">{row.client} <span>{row.notable.label}</span></td>'), /row\.notable\.label is not the glyph’s aria-label alone/],
+    [(s) => s.replace('<td className="chart-index-client" role="cell">{row.client}</td>', '<td className="chart-index-client" role="cell">{row.client} <span>{row.notable.label}</span></td>'), /row\.notable\.label is not the glyph’s aria-label alone/],
     [(s) => s.replace('<h3 className="panel-title">{block.text}</h3>', '<h3 className="panel-title">{block.text}</h3>\n          <svg><Glyph glyph={INDEX_GLYPH} kind="ring" /></svg>'), /a Glyph beyond the index and the legend/],
   ];
   for (const [mutate, message] of cases) {

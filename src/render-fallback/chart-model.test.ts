@@ -307,19 +307,27 @@ function designComponent(name: string): Record<string, string> {
   return Object.fromEntries([...block.matchAll(/^    ([\w-]+):\s*(.+?)\s*$/gm)].map((match) => [match[1] ?? '', (match[2] ?? '').replace(/^"|"$/g, '')]));
 }
 
-test('the Ring is DESIGN.md’s ring-notable: 2.2 × the marker, stroke-near, hairline, undashed — and the glyphs keep the ratio', () => {
+test('the Ring is DESIGN.md’s ring-notable-chart: ring-notable’s geometry, 2.2 × the marker, hairline, undashed, at ink-label — and the glyphs keep the ratio', () => {
+  // The geometry is the scene's `ring-notable`; the chart's colour is its own
+  // variant, `ring-notable-chart` (4.10, ruling Q1 (b)): `stroke-near` is 2.11:1
+  // on the page ground, under the 3:1 non-text floor, so the chart strokes at
+  // `ink-label`. The two agree on every key but `stroke`.
   const ring = designComponent('ring-notable');
+  const chart = designComponent('ring-notable-chart');
+  assert.deepEqual(Object.keys(chart).sort(), Object.keys(ring).sort(), 'the chart variant carries ring-notable’s keys');
+  for (const key of Object.keys(ring).filter((name) => name !== 'stroke')) assert.equal(chart[key], ring[key], `ring-notable-chart.${key} is ring-notable’s`);
+  assert.equal(ring.stroke, '{colors.stroke-near-dark}', 'the scene’s Ring stays at stroke-near');
   assert.equal(Number(ring.radiusRatio), RING_RATIO);
   assert.equal(RING_RATIO, 2.2);
   assert.equal(RING_R, 15.4);
   assert.ok(Math.abs(RING_R / MARKER_R - 2.2) < 1e-9, 'RING_R / MARKER_R is 2.2');
-  assert.equal(ring.stroke, '{colors.stroke-near-dark}', 'DESIGN.md strokes the Ring at stroke-near');
+  assert.equal(chart.stroke, '{colors.ink-label-dark}', 'DESIGN.md strokes the chart’s Ring at ink-label');
   assert.equal(ring.strokeWidth, '{components.stroke-weight.hairline}', 'DESIGN.md strokes the Ring at the hairline');
   assert.equal(ring.dash, 'none');
   // chart.css draws what DESIGN.md names: `{colors.X}` is `--color-X`, `{components.stroke-weight.X}` is `--stroke-X`.
   const css = readFileSync(join(DIR, 'chart.css'), 'utf8').replace(/\r\n/g, '\n');
   const rule = /\n\.chart-ring \{\n([^}]*)\}/.exec(css)?.[1] ?? '';
-  assert.match(rule, new RegExp(`^  stroke: var\\(--color-${ring.stroke.replace(/^\{colors\.|\}$/g, '')}\\);$`, 'm'), 'chart.css strokes .chart-ring at DESIGN.md’s colour');
+  assert.match(rule, new RegExp(`^  stroke: var\\(--color-${chart.stroke.replace(/^\{colors\.|\}$/g, '')}\\);$`, 'm'), 'chart.css strokes .chart-ring at DESIGN.md’s colour');
   assert.match(rule, new RegExp(`^  stroke-width: var\\(--stroke-${ring.strokeWidth.replace(/^\{components\.stroke-weight\.|\}$/g, '')}\\);$`, 'm'), 'chart.css strokes .chart-ring at DESIGN.md’s weight');
   assert.match(rule, /^ {2}fill: none;$/m, 'chart.css leaves the Ring unfilled');
   assert.doesNotMatch(rule, /dash/, 'chart.css leaves the Ring undashed');
@@ -608,11 +616,25 @@ test('fragmentTarget: an entity ID on the chart, decoded; anything else is no ta
   }
 });
 
-/** A lookup that records every scroll asked of an element it hands out. */
-function spyLookup(present: readonly string[]): { readonly lookup: (id: string) => { scrollIntoView(): void } | null; readonly scrolled: string[] } {
+/** A lookup that records every scroll and every focus asked of an element it hands out, in order. */
+function spyLookup(present: readonly string[]): {
+  readonly lookup: (id: string) => { scrollIntoView(): void; focus(options: { readonly preventScroll: boolean }): void } | null;
+  readonly scrolled: string[];
+  readonly calls: string[];
+} {
   const scrolled: string[] = [];
-  const lookup = (id: string) => (present.includes(id) ? { scrollIntoView: () => void scrolled.push(id) } : null);
-  return { lookup, scrolled };
+  const calls: string[] = [];
+  const lookup = (id: string) =>
+    present.includes(id)
+      ? {
+          scrollIntoView: () => {
+            scrolled.push(id);
+            calls.push(`scroll ${id}`);
+          },
+          focus: (options: { readonly preventScroll: boolean }) => void calls.push(`focus ${id} preventScroll=${options.preventScroll}`),
+        }
+      : null;
+  return { lookup, scrolled, calls };
 }
 
 test('landOnFragment: a chart Project or Client fragment scrolls it into view once per root; anything else scrolls nothing', () => {
@@ -652,6 +674,39 @@ test('landOnFragment: a chart Project or Client fragment scrolls it into view on
     assert.deepEqual(scrolled, ['client:sncf'], 'a second attach of the same root does not scroll again');
     landOnFragment({}, '#client:sncf', ids, lookup, landed);
     assert.deepEqual(scrolled, ['client:sncf', 'client:sncf'], 'another root lands on its own');
+  }
+});
+
+test('landOnFragment focuses the target (4.10): once, after the scroll, with preventScroll — never for no target or a re-attached root', () => {
+  const ids = buildChart(committed()).ids;
+  const everything = [...ids, 'nope'];
+  for (const id of ['project:sncf/client-referential', 'client:sncf']) {
+    const { lookup, calls } = spyLookup(everything);
+    landOnFragment({}, `#${id}`, ids, lookup, new WeakSet());
+    assert.deepEqual(calls, [`scroll ${id}`, `focus ${id} preventScroll=true`], `${id}: scrolled, then focused without a second scroll`);
+  }
+  for (const hash of ['#nope', '#%E0%A4%A', '#', '']) {
+    const { lookup, calls } = spyLookup(everything);
+    landOnFragment({}, hash, ids, lookup, new WeakSet());
+    assert.deepEqual(calls, [], `${JSON.stringify(hash)} focuses nothing`);
+  }
+  {
+    const { lookup, calls } = spyLookup([]);
+    assert.doesNotThrow(() => landOnFragment({}, '#client:sncf', ids, lookup, new WeakSet()));
+    assert.deepEqual(calls, [], 'an absent element focuses nothing');
+  }
+  {
+    const { lookup, calls } = spyLookup(everything);
+    landOnFragment(null, '#client:sncf', ids, lookup, new WeakSet());
+    assert.deepEqual(calls, [], 'a null root focuses nothing');
+  }
+  {
+    const { lookup, calls } = spyLookup(everything);
+    const landed = new WeakSet<object>();
+    const root = {};
+    landOnFragment(root, '#client:sncf', ids, lookup, landed);
+    landOnFragment(root, '#client:sncf', ids, lookup, landed);
+    assert.deepEqual(calls, ['scroll client:sncf', 'focus client:sncf preventScroll=true'], 'a re-attached root focuses nothing more');
   }
 });
 

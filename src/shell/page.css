@@ -45,3 +45,15 @@ body {
   position: fixed;
   inset: 0;
 }
+
+/*
+ * The page's one `<main>` (4.10, `surface-main.tsx`) is focused by script when
+ * the shown surface changes — the arrival a screen reader hears — and is never
+ * a tab stop (`tabindex="-1"`). It is not an operable control, so it draws no
+ * outline (WCAG 2.4.7 is about operable components): a pointer visitor never
+ * sees a ring around the whole page. Every link keeps its own `:focus-visible`
+ * outline.
+ */
+main:focus {
+  outline: none;
+}

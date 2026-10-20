@@ -38,6 +38,13 @@
  * are walked first; before the scene and the panel. So the document order is
  * index, chrome, scene host, panel.
  *
+ * Each branch's root is `./shell/surface-main.tsx` (4.10), the page's one
+ * `<main>`, handed `shown`: the same component in every branch, so React keeps
+ * its element across surface changes. It names the surface (`aria-label`, and
+ * `document.title`) and, when the shown surface changes, moves focus to itself —
+ * the arrival a screen reader hears. The responsibility is its; here it is one
+ * element per branch, as the hosts are.
+ *
  * The page itself (3.9) is `./shell/page.css`: the ground edge to edge, no page
  * scroll while the scene host is in the document (4.3: the chart and the
  * Colophon scroll natively), and the scene host fixed to the viewport. Since 4.1 it is imported by
@@ -65,6 +72,7 @@ import { DestinationNav } from './shell/index-nav.tsx';
 import type { Surface } from './shell/detect.ts';
 import { surfaceOf, type Router } from './shell/router.ts';
 import { SceneHost } from './shell/scene-host.tsx';
+import { SurfaceMain } from './shell/surface-main.tsx';
 
 export function App({ surface, router }: { readonly surface: Surface; readonly router: Router }) {
   // The route (4.2) is the router's, never the navigation store's. What it shows
@@ -74,16 +82,16 @@ export function App({ surface, router }: { readonly surface: Surface; readonly r
   const shown = surfaceOf(route, surface);
   if (shown === 'colophon') {
     return (
-      <main>
+      <SurfaceMain shown={shown}>
         <ColophonHost />
-      </main>
+      </SurfaceMain>
     );
   }
   if (shown === 'fallback') {
     return (
-      <main>
+      <SurfaceMain shown={shown}>
         <FallbackHost artifact={artifact} surface={surface} router={router} />
-      </main>
+      </SurfaceMain>
     );
   }
   // The artifact is JSON, so its inferred type is structural rather than the
@@ -94,11 +102,11 @@ export function App({ surface, router }: { readonly surface: Surface; readonly r
   // may not import it (AD-3), and a `derive/` import for a type alone would be
   // exactly the edge the boundary gate forbids.
   return (
-    <main>
+    <SurfaceMain shown={shown}>
       <DestinationNav artifact={artifact} />
       <CornerChrome router={router} />
       <SceneHost artifact={artifact} />
       <FocusPanel artifact={artifact} />
-    </main>
+    </SurfaceMain>
   );
 }
