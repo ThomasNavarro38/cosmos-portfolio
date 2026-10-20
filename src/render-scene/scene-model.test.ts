@@ -1450,9 +1450,12 @@ test('the ink step below the contrast floor is referenced nowhere under src/ out
 
 // --- No effects: depth is the ladder's, never shading's (3.2) -----------------
 
-/** The forms that put shadow, blur, glow, bloom, a radius or a light into a surface. */
+/**
+ * The forms that put shadow, blur, glow, bloom, a radius or a light into a surface.
+ * `blur(` with an argument only: the DOM's argumentless `blur()` moves focus.
+ */
 const EFFECTS =
-  /box-shadow|boxShadow|text-shadow|textShadow|drop-shadow|blur\(|border-radius|borderRadius|castShadow|receiveShadow|shadows|bloom|glow|(?:ambient|directional|point|spot|hemisphere)Light/i;
+  /box-shadow|boxShadow|text-shadow|textShadow|drop-shadow|blur\((?!\s*\))|border-radius|borderRadius|castShadow|receiveShadow|shadows|bloom|glow|(?:ambient|directional|point|spot|hemisphere)Light/i;
 
 /**
  * Every effect in code, each reported as `file:line` — comments blanked (line count
@@ -1502,6 +1505,10 @@ test('the effects audit rejects each form, in code, and ignores comments', () =>
     assert.notDeepEqual(effectsIn([{ path: 'src/shell/x.tsx', source }]), [], `${source} must be rejected`);
   }
   assert.deepEqual(effectsIn([{ path: 'src/shell/x.tsx', source: '// no glow, no bloom, no ambientLight\n/* boxShadow */' }]), []);
+  // The DOM's `blur()` (4.10, `shell/arrival.ts`) moves focus and draws nothing: a
+  // CSS `blur(` always takes a length, so an empty call or declaration is admitted.
+  assert.deepEqual(effectsIn([{ path: 'src/shell/x.tsx', source: 'main.blur();\ninterface T { blur(): void; }' }]), []);
+  assert.notDeepEqual(effectsIn([{ path: 'src/shell/x.tsx', source: "const css = 'filter: blur( 2px)';" }]), [], 'a CSS blur with a space before its length is still rejected');
   // Every match, not the first, each with its line.
   assert.deepEqual(
     effectsIn([{ path: 'src/shell/x.tsx', source: "const a = 1;\n<ambientLight />\n// glow\nstyle={{ boxShadow: 'x', borderRadius: 2 }}" }]),

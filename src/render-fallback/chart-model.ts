@@ -534,25 +534,31 @@ export function fragmentTarget(hash: string, ids: readonly string[]): string | n
   return ids.includes(id) ? id : null;
 }
 
-/** What the chart scrolls into view: an element, as `document.getElementById` returns it. */
+/** What the chart scrolls into view and focuses: an element, as `document.getElementById` returns it. */
 export interface Landable {
   scrollIntoView(): void;
+  focus(options: { readonly preventScroll: boolean }): void;
 }
 
 /**
  * The landing on a fragment, decided once per chart root: when `root` is
  * attached (not `null`) and not already in `landed`, it is marked, and the
- * entity `hash` names — by `fragmentTarget` — is looked up and scrolled into
- * view. No target, or no element by that ID, scrolls nothing. Everything the
- * browser holds is injected (`hash`, `lookup`, `landed`), so the decision runs
- * under `node --test`; `chart.tsx`'s ref callback is one call to it, and
- * `landed` is what keeps a re-attached ref (a development double mount) from
- * scrolling twice.
+ * entity `hash` names — by `fragmentTarget` — is looked up, scrolled into view
+ * and then focused with `preventScroll` (4.10), so the next Tab starts after it
+ * and a screen reader reads from it; the targets carry `tabindex="-1"` and draw
+ * no outline (`chart.css`). No target, or no element by that ID, scrolls and
+ * focuses nothing. Everything the browser holds is injected (`hash`, `lookup`,
+ * `landed`), so the decision runs under `node --test`; `chart.tsx`'s ref
+ * callback is one call to it, and `landed` is what keeps a re-attached ref (a
+ * development double mount) from landing twice.
  */
 export function landOnFragment(root: object | null, hash: string, ids: readonly string[], lookup: (id: string) => Landable | null, landed: WeakSet<object>): void {
   if (root === null || landed.has(root)) return;
   landed.add(root);
   const target = fragmentTarget(hash, ids);
   if (target === null) return;
-  lookup(target)?.scrollIntoView();
+  const element = lookup(target);
+  if (element === null) return;
+  element.scrollIntoView();
+  element.focus({ preventScroll: true });
 }

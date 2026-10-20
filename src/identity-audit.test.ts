@@ -10,7 +10,9 @@
  *   1b). The cool cast (hue ≈ 286°, chroma ≤ 0.016) is deliberate and stays.
  * - **Contrast** — one table maps each text role to its ink and its ground, both
  *   read from the shipping source (a CSS declaration or a model constant), never
- *   restated here.
+ *   restated here; a second maps the chart's non-text indicators — the link
+ *   underline, the focus outline, the Ring and the Notable glyph's marker — to
+ *   theirs, at the 3:1 non-text floor (4.10, WCAG 1.4.11).
  * - **Copy** — every visible literal string shipped from `src/` or `index.html`
  *   is in one closed allowlist; accessible names are a second, separate list.
  * - **Voice** — no work-in-progress, beta or apologetic word in any shipped
@@ -34,6 +36,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { codeOf, languageOf } from '../scripts/colour-literals.ts';
 import { filesUnder } from '../scripts/source-scan.ts';
+import { SURFACE_NAMES, SURFACE_TITLES } from './shell/arrival.ts';
 import { IDENTITY_LINE, IDENTITY_MODEL, IDENTITY_NAME, SLOT_TEXT } from './shell/chrome-model.ts';
 import { contrast, channels, linear } from './shell/contrast.ts';
 import { DEPTH_LABELS } from './shell/index-model.ts';
@@ -224,12 +227,15 @@ function auditBans(label: string, source: string): string[] {
  * SVG text (4.3) — or a model constant.
  */
 type InkSource =
-  | { readonly css: string; readonly selector: string; readonly property?: 'fill' }
+  | { readonly css: string; readonly selector: string; readonly property?: 'fill' | NonTextProperty }
   | { readonly model: string; readonly pattern: RegExp };
+
+/** Where a non-text indicator's colour is set (4.10): a rule, an outline, an SVG stroke. */
+type NonTextProperty = 'border-bottom' | 'border-bottom-color' | 'outline' | 'stroke';
 
 interface Role {
   readonly role: string;
-  readonly floor: 7 | 4.5;
+  readonly floor: 7 | 4.5 | 3;
   readonly ink: InkSource;
   readonly ground: 'panel' | 'page';
 }
@@ -298,8 +304,39 @@ const ROLES: readonly Role[] = [
   { role: 'plate span label', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-label-span', property: 'fill' }, ground: 'page' },
 ];
 
+/**
+ * The chart's non-text indicators (4.10, WCAG 1.4.11 and 2.4.11), each at the
+ * 3:1 floor on the page ground, its colour read off the shipping CSS as `ROLES`
+ * reads an ink: the link underline at rest and raised, the links' focus
+ * outline, the Ring and the Notable glyph's marker (one rule each colours the
+ * plate, the index glyph and the legend glyph). `stroke-near-dark` is 2.11:1
+ * on the ground, so the underline, the Ring and the marker stroke at
+ * `ink-label` (Thomas, ruling Q1 (b)); the scene's `ring-notable` keeps
+ * `stroke-near`, and is not measured here.
+ */
+const NON_TEXT_ROLES: readonly Role[] = [
+  { role: 'index link underline', floor: 3, ink: { css: CHART_CSS, selector: '.chart-index a', property: 'border-bottom' }, ground: 'page' },
+  { role: 'index link underline, raised', floor: 3, ink: { css: CHART_CSS, selector: '.chart-index a:hover, .chart-index a:focus-visible', property: 'border-bottom-color' }, ground: 'page' },
+  { role: 'index link focus outline', floor: 3, ink: { css: CHART_CSS, selector: '.chart-index a:focus-visible', property: 'outline' }, ground: 'page' },
+  { role: 'chart chrome link underline', floor: 3, ink: { css: CHART_CSS, selector: '.chart-chrome a', property: 'border-bottom' }, ground: 'page' },
+  { role: 'chart chrome link underline, raised', floor: 3, ink: { css: CHART_CSS, selector: '.chart-chrome a:hover, .chart-chrome a:focus-visible', property: 'border-bottom-color' }, ground: 'page' },
+  { role: 'chart chrome link focus outline', floor: 3, ink: { css: CHART_CSS, selector: '.chart-chrome a:focus-visible', property: 'outline' }, ground: 'page' },
+  { role: 'chart Ring', floor: 3, ink: { css: CHART_CSS, selector: '.chart-ring', property: 'stroke' }, ground: 'page' },
+  { role: 'Notable glyph marker', floor: 3, ink: { css: CHART_CSS, selector: '.chart-marker', property: 'stroke' }, ground: 'page' },
+];
+
 /** The token key a `var(--color-…)` value names, or undefined. */
 const tokenOfVar = (value: string | undefined): string | undefined => /^var\(--color-([\w-]+)\)$/.exec(value ?? '')?.[1];
+
+/**
+ * The colour token a declaration's value names: the whole value, or the one
+ * space-separated `var(--color-…)` part of a shorthand (`1px solid var(…)`).
+ * Two colours, or none, read as none.
+ */
+const colourTokenOf = (value: string | undefined): string | undefined => {
+  const parts = (value ?? '').split(' ').map(tokenOfVar).filter((key) => key !== undefined);
+  return parts.length === 1 ? parts[0] : undefined;
+};
 
 /**
  * The value `property` takes for `selector`, top level only: every top-level
@@ -322,14 +359,14 @@ function declared(source: string, selector: string, property: string): { readonl
  * its text, so a mutation is a changed map; the panel ground is `panelStyle`'s
  * own background, the page ground `page.css`'s.
  */
-function auditContrast(sources: Readonly<Record<string, string>>, panelBackground: string): string[] {
+function auditContrast(sources: Readonly<Record<string, string>>, panelBackground: string, roles: readonly Role[] = ROLES): string[] {
   const failures: string[] = [];
   const colors = tokens.colors as Readonly<Record<string, string>>;
   const grounds = {
     panel: tokenOfVar(panelBackground),
     page: tokenOfVar(declared(sources[PAGE_CSS] ?? '', 'html, body', 'background').value),
   };
-  for (const { role, floor, ink, ground } of ROLES) {
+  for (const { role, floor, ink, ground } of roles) {
     const where = 'css' in ink ? `${ink.css} \`${ink.selector}\`` : ink.model;
     let inkKey: string | undefined;
     if ('css' in ink) {
@@ -338,7 +375,7 @@ function auditContrast(sources: Readonly<Record<string, string>>, panelBackgroun
         failures.push(`contrast: ${role}'s ink is set by ${rules} top-level rules in ${ink.css} — one rule may set it`);
         continue;
       }
-      inkKey = tokenOfVar(value);
+      inkKey = colourTokenOf(value);
     } else {
       inkKey = ink.pattern.exec(sources[ink.model] ?? '')?.[1];
     }
@@ -444,6 +481,46 @@ test('contrast: a role moved to a dimmer ink, or one whose ink cannot be read, f
   );
 });
 
+test('contrast: every non-text indicator on the chart clears 3:1 on the page ground, read from the shipping source', () => {
+  // The failing step the ruling replaced, measured: stroke-near on the ground.
+  const colors = tokens.colors as Readonly<Record<string, string>>;
+  assert.equal(contrast(colors['stroke-near-dark'] as string, colors['surface-base-dark'] as string).toFixed(2), '2.11', 'stroke-near-dark is 2.11:1 on surface-base-dark');
+  assert.equal(contrast(colors['ink-label-dark'] as string, colors['surface-base-dark'] as string).toFixed(2), '5.85', 'ink-label-dark is 5.85:1 on surface-base-dark');
+  assert.equal(contrast(colors['stroke-focus-dark'] as string, colors['surface-base-dark'] as string).toFixed(2), '17.90', 'stroke-focus-dark is 17.90:1 on surface-base-dark');
+  assert.deepEqual(auditContrast(contrastSources(), panelStyle(true).background, NON_TEXT_ROLES), []);
+});
+
+/**
+ * A non-text row's colour moved to `token` in the shipping CSS: the first
+ * top-level rule written `selector {` (a list one member per line) whose
+ * `property` names a colour token.
+ */
+function retoken(css: string, selector: string, property: NonTextProperty, token: string): string {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/, /g, ',\\n');
+  return css.replace(new RegExp(`(\\n${escaped} \\{[^}]*?\\n  ${property}: [^;\\n]*?)var\\(--color-[\\w-]+\\)`), `$1var(--color-${token})`);
+}
+
+test('contrast: each non-text indicator moved back to stroke-near fails with its own line', () => {
+  const real = contrastSources();
+  for (const { role, ink } of NON_TEXT_ROLES) {
+    assert.ok('css' in ink && ink.property !== undefined && ink.property !== 'fill');
+    const css = retoken(real[ink.css] as string, ink.selector, ink.property, 'stroke-near-dark');
+    assert.notEqual(css, real[ink.css], `the mutation of ${role} must apply`);
+    const failures = auditContrast({ ...real, [ink.css]: css }, panelStyle(true).background, NON_TEXT_ROLES);
+    assert.deepEqual(failures, [`contrast: ${role} is stroke-near-dark on surface-base-dark, 2.11:1 — below its 3:1 floor`], `${role} moved back fails alone`);
+  }
+  // An underline whose colour cannot be read — none, or two — fails as unread, not as a pass.
+  const css = real[CHART_CSS] as string;
+  for (const value of ['1px solid', '1px solid var(--color-ink-label-dark) var(--color-ink-lift-dark)']) {
+    const unread = css.replace('  border-bottom: 1px solid var(--color-ink-label-dark);\n}\n\n.chart-index a:hover', `  border-bottom: ${value};\n}\n\n.chart-index a:hover`);
+    assert.notEqual(unread, css);
+    assert.match(
+      auditContrast({ ...real, [CHART_CSS]: unread }, panelStyle(true).background, NON_TEXT_ROLES).join('\n'),
+      /^contrast: index link underline's ink could not be read off render-fallback\/chart\.css `\.chart-index a` as a colour token$/,
+    );
+  }
+});
+
 // --- Copy (UX-DR45, ruling 3) ----------------------------------------------------------------------
 
 /**
@@ -491,6 +568,11 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
   '–',
   'Cosmos Portfolio',
   'This portfolio needs JavaScript.',
+  // `document.title` per shown surface (4.10, ruling Q2); the `<main>` labels
+  // are the surfaces' names, `the scene`, `the chart` and `the model`, above.
+  'Thomas Navarro · the scene',
+  'Thomas Navarro · the chart',
+  'Thomas Navarro · the model',
 ]);
 
 /** Accessible names — announced, never drawn — listed separately. */
@@ -831,6 +913,8 @@ function copyConstants(): Record<string, string> {
     ...entries('FIELD_LABELS', FIELD_LABELS),
     ...entries('DEPTH_LABELS', DEPTH_LABELS),
     ...entries('CHART_LABELS', chartLabels()),
+    ...entries('SURFACE_TITLES', SURFACE_TITLES),
+    ...entries('SURFACE_NAMES', SURFACE_NAMES),
   ]);
 }
 
@@ -991,7 +1075,7 @@ test('copy: a tooltip, a caption, help text or a narrated noscript fails with it
     /^copy: src\/render-fallback\/chart\.tsx draws the visible text "Best viewed on desktop"/,
   );
   assert.match(
-    failing('render-fallback/chart.tsx', (s) => s.replace('<table className="chart-index">', '<table className="chart-index">\n        <caption>The fallback index</caption>')),
+    failing('render-fallback/chart.tsx', (s) => s.replace('<table className="chart-index" role="table">', '<table className="chart-index" role="table">\n        <caption>The fallback index</caption>')),
     /^copy: src\/render-fallback\/chart\.tsx draws the visible text "The fallback index"/,
   );
   assert.match(
@@ -1133,6 +1217,8 @@ const PAGE_RULES: readonly CssRule[] = [
     declarations: ['color: var(--color-ink-label-dark)', 'font-family: var(--type-chrome-font-family)', 'font-size: var(--type-chrome-font-size)'],
   },
   { at: '', selector: '.scene-host', declarations: ['position: fixed', 'inset: 0'] },
+  // 4.10: the one `<main>`, focused by script on arrival, is not a control and draws no outline.
+  { at: '', selector: 'main:focus', declarations: ['outline: none'] },
 ];
 
 /**
@@ -1178,6 +1264,9 @@ test('page: each guarantee removed fails with its own line', () => {
     ['css', (s) => s.replace('  inset: 0;\n', '  inset: 0;\n  z-index: 3;\n'), /^page: `\.scene-host` carries the unlisted `z-index: 3`$/],
     ['css', (s) => s.replace('  inset: 0;\n', '  inset: 0;\n  text-transform: uppercase;\n'), /^page: text-transform/],
     ['css', (s) => s.replace('  color: var(--color-ink-label-dark);\n', ''), /^page: `body` lacks `color: var\(--color-ink-label-dark\)`$/],
+    // 4.10: the arrival target's outline rule gone, or widened to every focus.
+    ['css', (s) => s.replace('main:focus {\n  outline: none;\n}\n', ''), /^page: the rule `main:focus` is missing$/],
+    ['css', (s) => s.replace('main:focus {', ':focus {'), /^page: the rule `main:focus` is missing\npage: the unlisted rule `:focus`$/],
     // A later rule with a listed selector is checked too, not shadowed by the first.
     ['css', (s) => `${s}\n.scene-host {\n  position: static;\n}\n`, /^page: the rule `\.scene-host` appears 2 times — one rule per selector$/],
     ['entry', (s) => s.replace("import './page.css';\n", ''), /^page: shell\/entry\.ts does not import \.\/page\.css, once$/],
@@ -1318,7 +1407,8 @@ const CHART_RULES: readonly CssRule[] = [
   { at: '', selector: '.chart-heading, .chart-routes', declarations: ['margin: 0', ...CHART_TYPE('chrome'), 'color: var(--color-ink-label-dark)'] },
   // 4.5: the route line, empty on the fallback surface, leaves no gap in the column.
   { at: '', selector: '.chart-routes:empty', declarations: ['display: none'] },
-  { at: '', selector: '.chart-chrome a', declarations: ['color: var(--color-ink-label-dark)', 'text-decoration: none', 'border-bottom: 1px solid var(--color-stroke-near-dark)'] },
+  // 4.10, ruling Q1 (b): every non-text indicator on the chart at ink-label, 3:1 and over (`NON_TEXT_ROLES`).
+  { at: '', selector: '.chart-chrome a', declarations: ['color: var(--color-ink-label-dark)', 'text-decoration: none', 'border-bottom: 1px solid var(--color-ink-label-dark)'] },
   { at: '', selector: '.chart-chrome a:hover, .chart-chrome a:focus-visible', declarations: ['color: var(--color-ink-lift-dark)', 'border-bottom-color: var(--color-stroke-focus-dark)'] },
   { at: '', selector: '.chart-chrome a:focus-visible', declarations: ['outline: 1px solid var(--color-stroke-focus-dark)', 'outline-offset: 3px'] },
   { at: '', selector: '.chart-plate', declarations: ['border: 1px solid var(--color-surface-edge-dark)'] },
@@ -1331,9 +1421,9 @@ const CHART_RULES: readonly CssRule[] = [
   { at: '', selector: '.chart-leader', declarations: ['stroke: var(--color-stroke-rest-dark)', 'stroke-width: var(--stroke-hairline-leader)'] },
   { at: '', selector: '.chart-star', declarations: ['fill: var(--color-surface-base-dark)', 'stroke: var(--color-stroke-active-dark)', 'stroke-width: var(--stroke-body-client)'] },
   { at: '', selector: '.chart-star-core', declarations: ['fill: var(--color-stroke-active-dark)'] },
-  { at: '', selector: '.chart-marker', declarations: ['fill: var(--color-surface-base-dark)', 'stroke: var(--color-stroke-near-dark)', 'stroke-width: var(--stroke-body-near)'] },
-  // DESIGN.md `components.ring-notable` (4.4): stroke-near, the hairline, no fill, no dash.
-  { at: '', selector: '.chart-ring', declarations: ['fill: none', 'stroke: var(--color-stroke-near-dark)', 'stroke-width: var(--stroke-hairline)'] },
+  { at: '', selector: '.chart-marker', declarations: ['fill: var(--color-surface-base-dark)', 'stroke: var(--color-ink-label-dark)', 'stroke-width: var(--stroke-body-near)'] },
+  // DESIGN.md `components.ring-notable-chart` (4.4, 4.10): ink-label, the hairline, no fill, no dash.
+  { at: '', selector: '.chart-ring', declarations: ['fill: none', 'stroke: var(--color-ink-label-dark)', 'stroke-width: var(--stroke-hairline)'] },
   { at: '', selector: '.chart-glyph', declarations: ['display: block'] },
   {
     at: '',
@@ -1366,7 +1456,7 @@ const CHART_RULES: readonly CssRule[] = [
   { at: '', selector: '.chart-index th:first-child', declarations: ['white-space: nowrap'] },
   { at: '', selector: '.chart-index-notable', declarations: ['width: 20px'] },
   { at: '', selector: '.chart-index-dates', declarations: ['white-space: nowrap'] },
-  { at: '', selector: '.chart-index a', declarations: ['color: var(--color-ink-prose-dark)', 'text-decoration: none', 'border-bottom: 1px solid var(--color-stroke-near-dark)'] },
+  { at: '', selector: '.chart-index a', declarations: ['color: var(--color-ink-prose-dark)', 'text-decoration: none', 'border-bottom: 1px solid var(--color-ink-label-dark)'] },
   { at: '', selector: '.chart-index a:hover, .chart-index a:focus-visible', declarations: ['color: var(--color-ink-lift-dark)', 'border-bottom-color: var(--color-stroke-focus-dark)'] },
   { at: '', selector: '.chart-index a:focus-visible', declarations: ['outline: 1px solid var(--color-stroke-focus-dark)', 'outline-offset: 3px'] },
   { at: '', selector: '.chart-section', declarations: ['margin: var(--space-xxl) 0 0'] },
@@ -1381,6 +1471,8 @@ const CHART_RULES: readonly CssRule[] = [
       'border-left: 1px solid var(--color-surface-edge-dark)',
     ],
   },
+  // 4.10: the fragment targets, focused by script on a landing, are not controls and draw no outline.
+  { at: '', selector: '.chart-section:focus, .chart-record:focus', declarations: ['outline: none'] },
   { at: PHONE, selector: '.chart', declarations: ['padding: var(--space-lg) var(--space-md) var(--space-xxl)'] },
   { at: PHONE, selector: '.chart-chrome', declarations: ['flex-direction: column', 'gap: var(--space-xs)'] },
   { at: PHONE, selector: '.chart-plate-across', declarations: ['display: none'] },
@@ -1428,7 +1520,7 @@ function auditChart(css: string, tsx: string): string[] {
   if ((script.match(/^import\s+'\.\.\/shell\/focus-panel\.css'\s*;/gm) ?? []).length !== 1) failures.push('chart: chart.tsx does not import the panel’s stylesheet, once');
   if (!/<div className=\{className\} aria-hidden="true">\s*<svg\b/.test(script)) failures.push('chart: the plate is not an aria-hidden wrapper around its svg');
   if (!/<div className="chart-legend" aria-hidden="true">/.test(script)) failures.push('chart: the legend is not aria-hidden — it decodes the aria-hidden plate');
-  if (!/<td className="chart-index-notable">\s*<svg className="chart-glyph"[^>]*\brole="img" aria-label=\{row\.notable\.label\}/.test(script)) failures.push('chart: the Notable cell is not an image named by the model');
+  if (!/<td className="chart-index-notable" role="cell">\s*<svg className="chart-glyph"[^>]*\brole="img" aria-label=\{row\.notable\.label\}/.test(script)) failures.push('chart: the Notable cell is not an image named by the model');
   if (/\bstyle=\{/.test(script)) failures.push('chart: an inline style — the treatment is the stylesheet’s');
   if (/\b(?:fill|stroke)=/.test(script)) failures.push('chart: a colour on the plate’s markup — fill and stroke are the stylesheet’s');
   return failures;
@@ -1455,13 +1547,13 @@ test('chart: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('  stroke-width: var(--stroke-body-near);\n', '  stroke-width: var(--stroke-body-near);\n  filter: drop-shadow(0 0 4px white);\n'), /chart: a radius, shadow or filter/],
     [(s) => s.replace('font-weight: var(--type-chrome-font-weight)', 'font-weight: 700'), /^chart: a literal font-weight/],
     [(s) => s.replace('  color: var(--color-ink-lift-dark);\n}', '  color: var(--color-ink-lift-dark);\n  text-transform: uppercase;\n}'), /^chart: text-transform/],
-    [(s) => s.replace('  stroke: var(--color-stroke-near-dark);\n', '  stroke: var(--color-stroke-active-dark);\n'), /`\.chart-marker` lacks `stroke: var\(--color-stroke-near-dark\)`/],
+    [(s) => s.replace('  fill: var(--color-surface-base-dark);\n  stroke: var(--color-ink-label-dark);\n  stroke-width: var(--stroke-body-near);', '  fill: var(--color-surface-base-dark);\n  stroke: var(--color-stroke-near-dark);\n  stroke-width: var(--stroke-body-near);'), /`\.chart-marker` lacks `stroke: var\(--color-ink-label-dark\)`/],
     [(s) => s.replace('  background: var(--color-surface-raised-dark);\n', ''), /`\.chart-record` lacks `background: var\(--color-surface-raised-dark\)`/],
-    // The Deep/Shallow signal (4.4) is the Ring alone, undashed, unfilled, at stroke-near.
-    [(s) => s.replace('  fill: none;\n  stroke: var(--color-stroke-near-dark);\n  stroke-width: var(--stroke-hairline);', '  fill: var(--color-stroke-near-dark);\n  stroke: var(--color-stroke-near-dark);\n  stroke-width: var(--stroke-hairline);'), /`\.chart-ring` lacks `fill: none`/],
-    [(s) => s.replace('  fill: none;\n  stroke: var(--color-stroke-near-dark);', '  fill: none;\n  stroke: var(--color-stroke-active-dark);'), /`\.chart-ring` lacks `stroke: var\(--color-stroke-near-dark\)`/],
+    // The Deep/Shallow signal (4.4) is the Ring alone, undashed, unfilled, at ink-label (4.10).
+    [(s) => s.replace('  fill: none;\n  stroke: var(--color-ink-label-dark);\n  stroke-width: var(--stroke-hairline);', '  fill: var(--color-ink-label-dark);\n  stroke: var(--color-ink-label-dark);\n  stroke-width: var(--stroke-hairline);'), /`\.chart-ring` lacks `fill: none`/],
+    [(s) => s.replace('  fill: none;\n  stroke: var(--color-ink-label-dark);', '  fill: none;\n  stroke: var(--color-stroke-near-dark);'), /`\.chart-ring` lacks `stroke: var\(--color-ink-label-dark\)`/],
     [(s) => s.replace('  stroke-width: var(--stroke-hairline);\n}\n\n.chart-glyph', '  stroke-width: var(--stroke-hairline);\n  stroke-dasharray: 2 2;\n}\n\n.chart-glyph'), /`\.chart-ring` carries the unlisted `stroke-dasharray: 2 2`/],
-    [(s) => s.replace('  stroke: var(--color-stroke-near-dark);\n  stroke-width: var(--stroke-hairline);\n}\n\n.chart-glyph', '  stroke: var(--color-stroke-near-dark);\n  stroke-width: var(--stroke-body-near);\n}\n\n.chart-glyph'), /`\.chart-ring` lacks `stroke-width: var\(--stroke-hairline\)`/],
+    [(s) => s.replace('  stroke: var(--color-ink-label-dark);\n  stroke-width: var(--stroke-hairline);\n}\n\n.chart-glyph', '  stroke: var(--color-ink-label-dark);\n  stroke-width: var(--stroke-body-near);\n}\n\n.chart-glyph'), /`\.chart-ring` lacks `stroke-width: var\(--stroke-hairline\)`/],
     [(s) => s.replace('.chart-legend {\n  display: flex;', '.chart-legend {\n  display: none;'), /`\.chart-legend` sets display: none/],
     [(s) => s.replace('  .chart-legend {\n    flex-direction: column;', '  .chart-legend {\n    display: none;\n    flex-direction: column;'), /`@media \(max-width: 640px\) \.chart-legend` sets display: none/],
     [(s) => s.replace('.chart-index th:first-child {\n  white-space: nowrap;\n}\n', ''), /`\.chart-index th:first-child` is missing/],
@@ -1471,7 +1563,12 @@ test('chart: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('.chart-routes:empty {', '.chart-routes {'), /`\.chart-routes` sets display: none/],
     [(s) => s.replace('  .chart-chrome {\n    flex-direction: column;', '  .chart-chrome {\n    flex-direction: row;'), /`@media \(max-width: 640px\) \.chart-chrome` lacks `flex-direction: column`/],
     [(s) => s.replace('.chart-chrome a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;', '.chart-chrome a {\n  color: var(--color-ink-label-dark);\n  text-decoration: underline;'), /`\.chart-chrome a` lacks `text-decoration: none`/],
-    [(s) => s.replace('.chart-chrome a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;\n  border-bottom: 1px solid var(--color-stroke-near-dark);', '.chart-chrome a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;'), /`\.chart-chrome a` lacks `border-bottom/],
+    [(s) => s.replace('.chart-chrome a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;\n  border-bottom: 1px solid var(--color-ink-label-dark);', '.chart-chrome a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;'), /`\.chart-chrome a` lacks `border-bottom/],
+    // 4.10: the links' underline back at stroke-near, 2.11:1.
+    [(s) => s.replace('.chart-index a {\n  color: var(--color-ink-prose-dark);\n  text-decoration: none;\n  border-bottom: 1px solid var(--color-ink-label-dark);', '.chart-index a {\n  color: var(--color-ink-prose-dark);\n  text-decoration: none;\n  border-bottom: 1px solid var(--color-stroke-near-dark);'), /`\.chart-index a` lacks `border-bottom: 1px solid var\(--color-ink-label-dark\)`/],
+    // 4.10: the fragment targets' outline rule gone, or reaching the links' focus too.
+    [(s) => s.replace('.chart-section:focus,\n.chart-record:focus {\n  outline: none;\n}\n', ''), /`\.chart-section:focus, \.chart-record:focus` is missing/],
+    [(s) => s.replace('.chart-section:focus,\n.chart-record:focus {', '.chart-section:focus,\n.chart-record:focus,\n.chart a:focus {'), /the rule `\.chart-section:focus, \.chart-record:focus` is missing/],
     [(s) => s.replace('  .chart-chrome a:focus-visible,\n  .chart-index a:focus-visible {', '  .chart-index a:focus-visible {'), /`@media \(forced-colors: active\) \.chart-chrome a:focus-visible, \.chart-index a:focus-visible` is missing/],
     [(s) => s.replace('  font-size: var(--type-scene-label-secondary-font-size);\n', '  font-size: var(--type-scene-label-project-font-size);\n'), /`\.chart-label-span` lacks `font-size: var\(--type-scene-label-secondary-font-size\)`/],
     [(s) => s.replace('.chart-routes {\n  margin: 0;', '.chart-routes {\n  display: none;\n  margin: 0;'), /sets display: none/],
@@ -1493,6 +1590,8 @@ test('chart: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('<circle key={circle.key} className={circle.className}', '<circle key={circle.key} className={circle.className} fill="white"'), /a colour on the plate’s markup/],
     [(s) => s.replace('<div className="chart-legend" aria-hidden="true">', '<div className="chart-legend">'), /the legend is not aria-hidden/],
     [(s) => s.replace('role="img" aria-label={row.notable.label}', 'aria-hidden="true"'), /the Notable cell is not an image named by the model/],
+    // 4.10: the cell's explicit role is part of the hook.
+    [(s) => s.replace('<td className="chart-index-notable" role="cell">', '<td className="chart-index-notable">'), /the Notable cell is not an image named by the model/],
     [(s) => s.replace('<circle className="chart-ring"', '<circle className="chart-ring" stroke="white"'), /a colour on the plate’s markup/],
   ];
   for (const [mutate, message] of tsxCases) {

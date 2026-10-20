@@ -975,6 +975,7 @@ Still open after 3.5:
   summary: A route change updates neither `document.title` nor focus and announces nothing, so a screen-reader visitor gets no signal on an in-document route change once 4.5 adds one.
   evidence: `src/App.tsx` swaps `<main>` content on `router.subscribe`; nothing moves focus to the new heading. Unreachable in 4.2 (no `navigate` caller), real from 4.5.
   update (story 4.5, 2026-10-19): **still open, by the spec's Never list.** 4.5 adds the first callers (`the chart`, `the scene`, `the model`), so the gap is now reachable; the announcement and focus move stay deferred.
+  update (story 4.10, 2026-10-20): **closed.** `App` renders `src/shell/surface-main.tsx` as every branch's root: one `<main aria-label={SURFACE_NAMES[shown]} tabIndex={-1}>`, kept across surface changes. An effect with no deps array calls, after every render, one tracker created for the component's lifetime (`createArrival` in `src/shell/arrival.ts`, pure, executed over call sequences by `arrival.test.ts`; the wiring audited by `surface-main.test.ts`): `document.title` names the shown surface on every render (`Thomas Navarro · the scene` / `· the chart` / `· the model`, ruling Q2), and focus moves to `<main>` with `preventScroll` only when the shown surface changes (never on first load, a re-render, or `/` ↔ `/chart` on a fallback machine; never over a fragment landing's focus strictly inside `<main>`; blurred and refocused when `<main>` already holds focus, so the move is announced again). No live region: the focus move onto the labelled `<main>` is the one announcement. `main:focus` draws no outline (`page.css`). `App.test.ts` renders the label and `tabindex` on every (surface, route) pair.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
   summary: That the scene's first drawn frame is the restored stop rests on R3F running `useFrame` callbacks before the first draw; nothing pins it, and per-frame work keyed off the `camera` prop (keyframe 0) may compute one frame against a pose never shown.
@@ -1015,9 +1016,11 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-the-fallback-star-chart.md`
   summary: Landing on a `/chart#<id>` fragment scrolls the record into view but does not move focus or the sequential-focus starting point, so keyboard and screen-reader visitors still start at the top of the document.
   evidence: the chart is lazy, so the browser's own fragment navigation runs before the target exists; the landing calls `scrollIntoView()` only (`src/render-fallback/chart.tsx`, the ref callback). Fixing it means `tabindex="-1"` on the targets and a `focus({ preventScroll: true })`, which is a markup and focus-ring decision for the UX spec.
+  update (story 4.10, 2026-10-20): **closed.** Every Client `<section>` and Project `<article>` carries `tabIndex={-1}` (`chart.tsx`), and `landOnFragment` focuses the target with `{ preventScroll: true }` right after `scrollIntoView()` (`chart-model.ts`; `chart-model.test.ts` holds once, after the scroll, never for no target or a re-attached root). `.chart-section:focus, .chart-record:focus` draw no outline, so a pointer visitor sees no ring. `chart.test.ts` renders the `tabindex` on every target.
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-the-fallback-star-chart.md`
   summary: At 640px and below, `chart.css` sets the index table's and the record field table's `table`/`tbody`/`tr`/`td`/`th` to `display: block`, which WebKit drops table semantics for, so cells lose their column and row headers.
   evidence: the phone rules follow the mock (`keyscreen-fallback.html`: rows stacked). Restoring semantics needs explicit `role="table"`/`row`/`cell`/`columnheader`/`rowheader` in `chart.tsx` and the shared `focus-panel` field markup, plus the audits that pin that markup.
+  update (story 4.10, 2026-10-20): **closed.** `chart.tsx` gives both tables explicit ARIA roles at every width — the index `table`/`rowgroup`/`row`/`columnheader`/`cell`, each record's field table `table`/`rowgroup`/`row`/`rowheader`/`cell` — so the phone width's `display: block` (kept, per the mock) no longer costs the cells their headers. The field markup is the chart's own (`chart.tsx`'s `fields` case); `focus-panel.tsx` is untouched, since the scene never reaches the phone width and `focus-panel.css` has no `display: block`. `chart.test.ts` renders every role, red against a dropped or wrong one.
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-the-fallback-star-chart.md`
   summary: The chart's native document scroll is not saved or restored across same-document history (e.g. `/chart` scrolled → `/colophon` → Back reopens the chart at its top, or mid-page if the departing document was scrolled), since the router saves only `scrollProgress`.
   evidence: `src/shell/router.ts` saves and restores `{ scrollProgress }` only; the chart scrolls the document natively (`page.css` locks only `html:has(.scene-host)`). Belongs with the 4.5 pop-departure deferral above.
@@ -1025,6 +1028,7 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-3-the-fallback-star-chart.md`
   summary: The identity audit checks the chart's new text roles against the page ground, but not the non-text indicators it draws there: the link underline and the focus outline/border, against the 3:1 floor (WCAG 1.4.11, 2.4.11).
   evidence: `src/identity-audit.test.ts` `ROLES` covers text roles; `src/render-fallback/chart.css:128-143` draws the index link's underline as a `border-bottom` in `--color-stroke-near-dark` and its `:focus-visible` outline in `--color-stroke-focus-dark`, with no contrast row for either.
+  update (story 4.10, 2026-10-20): **closed.** `identity-audit.test.ts` gains `NON_TEXT_ROLES`, read off `chart.css` at a 3:1 floor on the page ground: the index and chrome link underline at rest and raised, their focus outline (`stroke-focus-dark`, 17.90:1), the Ring and the Notable glyph marker; each moved back to `stroke-near-dark` fails with its own line. By Thomas's ruling Q1 (b) the underline moved from `stroke-near-dark` (2.11:1) to `ink-label-dark` (5.85:1); `stroke-near-dark`'s value is unchanged. DESIGN.md's contrast table carries the non-text rows.
 
 ## Deferred from: code review of spec-4-3-the-fallback-star-chart.md (2026-10-18)
 
@@ -1044,6 +1048,7 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-4-the-deep-shallow-signal-on-a-flat-chart.md`
   summary: The Ring and the index and legend glyph marks are hairlines at `stroke-near` on the page ground, with no 3:1 non-text contrast check (WCAG 1.4.11). This extends the 4.3 deferral on the index link's non-text contrast.
   evidence: `src/identity-audit.test.ts` `ROLES` measures text roles only (the legend's text was added in 4.4); `.chart-ring` is `stroke: var(--color-stroke-near-dark)` at `--stroke-hairline`. The Notable column's accessible name and the legend phrases carry the signal redundantly, so the Ring isn't the only carrier.
+  update (story 4.10, 2026-10-20): **closed.** By Thomas's ruling Q1 (b), `.chart-ring` and `.chart-marker` stroke at `ink-label-dark` (5.85:1 on `surface-base-dark`), one rule each still colouring the plate, the index glyph and the legend glyph; DESIGN.md records the chart's Ring as `components.ring-notable-chart` (stroke `{colors.ink-label-dark}`), and the scene's `ring-notable` keeps `stroke-near-dark`. `identity-audit.test.ts` measures both at the 3:1 non-text floor (`NON_TEXT_ROLES`).
 
 ## Deferred from: code review of spec-4-5-one-click-movement-between-surfaces.md (2026-10-19)
 
@@ -1087,3 +1092,11 @@ Still open after 3.5:
   evidence: the register rule is a persistent fact read by the model (`_bmad/custom/bmad-build-auto.toml`), while the shipped `bmad-build-auto` step-04 defer branch still names only the frontmatter; the 4.9 refile was a one-time manual reconciliation. A lightweight check (a script comparing each spec's `deferred:` summaries against this file's `summary:` lines) would catch it; a generator was ruled out (ruling Q1 (a)).
   location: _bmad/custom/bmad-build-auto.toml, .claude/skills/bmad-build-auto/step-04-review.md
   severity: low
+
+## Deferred from: code review of spec-4-10-fallback-accessibility.md (2026-10-20)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-4-10-fallback-accessibility.md`
+  summary: The script-focused fragment targets (`.chart-section`, `.chart-record`) draw no outline at all, so a keyboard visitor who follows an index link `#id` lands on the record with nothing showing where focus is.
+  evidence: Story 4.10 added `tabIndex={-1}` to every fragment target so the landing could focus it, and the spec's Always rule says script-focused containers draw no outline (`:focus { outline: none }`, `chart.css`), so that a pointer visitor never sees a forced ring on a `/chart#<id>` load (AC 3). The targets now also take native focus when an index link is followed by keyboard. Switching to `:focus:not(:focus-visible)` would keep the ring for keyboard users, but Chrome treats a script focus on load with no prior input as focus-visible, which would bring the ring back on the landing. So this needs a UX ruling (an indicator for the record, or `focus({ focusVisible: false })` where supported), not a patch.
+  location: src/render-fallback/chart.css (.chart-section:focus, .chart-record:focus), src/render-fallback/chart.tsx
+  severity: medium

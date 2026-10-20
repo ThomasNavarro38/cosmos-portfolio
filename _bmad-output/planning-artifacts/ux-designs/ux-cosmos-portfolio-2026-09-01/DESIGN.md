@@ -218,6 +218,13 @@ components:
     radiusRatio: 2.2
     geometry: "continuous concentric circle"
 
+  ring-notable-chart:
+    stroke: "{colors.ink-label-dark}"
+    strokeWidth: "{components.stroke-weight.hairline}"
+    dash: "none"
+    radiusRatio: 2.2
+    geometry: "continuous concentric circle"
+
   affordance-hover:
     geometry: "leader line plus label — NEVER a ring"
     leaderStroke: "{colors.stroke-rest-dark}"
@@ -494,6 +501,10 @@ minimums, not targets. Behavioural accessibility lives in EXPERIENCE.md.
 | Mote labels (tier 3) | ~~`ink-quiet-dark`~~ → `ink-label-dark` on `surface-base-dark` | **5.85:1** | ≥ 4.5:1 — **passes** |
 | Corner chrome | ~~`ink-quiet-dark`~~ → `ink-label-dark` on `surface-base-dark` | **5.85:1** | ≥ 4.5:1 (it is text) — **passes** |
 | Scene labels, secondary | `ink-label-dark` on `surface-base-dark` | **5.85:1** | ≥ 4.5:1 — passes |
+| Chart link underline (index, chrome) — non-text | ~~`stroke-near-dark`~~ (2.11:1) → `ink-label-dark` on `surface-base-dark` | **5.85:1** | ≥ 3:1 (WCAG 1.4.11) — **passes** |
+| Chart Ring (`ring-notable-chart`) — non-text | ~~`stroke-near-dark`~~ (2.11:1) → `ink-label-dark` on `surface-base-dark` | **5.85:1** | ≥ 3:1 (WCAG 1.4.11) — **passes** |
+| Chart Notable glyph marker — non-text | ~~`stroke-near-dark`~~ (2.11:1) → `ink-label-dark` on `surface-base-dark` | **5.85:1** | ≥ 3:1 (WCAG 1.4.11) — **passes** |
+| Chart focus outline — non-text | `stroke-focus-dark` on `surface-base-dark` | **17.90:1** | ≥ 3:1 (WCAG 1.4.11, 2.4.11) — passes |
 
 **Correction, recorded rather than quietly amended.** An earlier draft of this
 table stated the three failing pairs at ~3.6:1 and ~3.8:1 and classified corner
@@ -970,6 +981,12 @@ Its one differing rule: the Deep/Shallow signal cannot rely on a 3D Moon, so on
 the Fallback the **Ring** carries the signal alone, drawn around the Project's
 chart marker. This is exactly why the ratified signal is two redundant channels
 rather than one.
+
+The chart's non-text indicators — the index and chrome link underline, the Ring
+(`components.ring-notable-chart`) and the Notable glyph's marker — take
+`ink-label` (5.85:1), because `stroke-near` measures 2.11:1 on the page ground,
+under the 3:1 non-text floor; the scene's `ring-notable` keeps `stroke-near`
+(Thomas, ruling Q1 (b), 2026-10-20, story 4.10).
 
 `[NOTE FOR UX] The Fallback's visual density, chart projection, and how ten
 Projects across six Clients are laid out on one flat plate are unspecified. The

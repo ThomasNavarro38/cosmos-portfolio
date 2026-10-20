@@ -12,24 +12,28 @@
  * left rule, the panel's own — and their rhythm on the page.
  *
  * The Deep/Shallow signal (4.4): `.chart-ring` is DESIGN.md
- * `components.ring-notable` — `stroke-near` at the hairline, no fill, no dash —
- * and the marker's own rule is the same for Deep and Shallow. The index glyph
- * and the legend glyph reuse `.chart-marker` and `.chart-ring`, so one rule
- * colours the plate, the table and the legend; their size is the model's
- * (`width`/`height` on the glyph's svg). The Notable cell asks for the index
- * glyph's 20px (`INDEX_GLYPH.size`, tied by `chart-model.test.ts`): the column
- * then takes no share of the table's spare width and sits at its narrowest,
- * which is the `Notable` header's own width, not 20px. That header alone is
- * `white-space: nowrap`, because `.chart`'s `overflow-wrap: anywhere` would
- * otherwise break it letter by letter to fit the 20px. The legend's phrases
- * are the field-label role in `ink-label`. At phone width the Notable cell
- * sits in a left gutter of each stacked row, first in it, as the key screen
- * draws it.
+ * `components.ring-notable-chart` — `ink-label` at the hairline, no fill, no
+ * dash — and the marker's own rule is the same for Deep and Shallow. Both
+ * stroke at `ink-label`, not the scene's `stroke-near` (4.10, ruling Q1 (b)):
+ * `stroke-near` is 2.11:1 on the page ground, under the 3:1 non-text floor
+ * (WCAG 1.4.11), and `ink-label` is 5.85:1; the identity audit measures
+ * each. The index glyph and the legend glyph reuse `.chart-marker` and
+ * `.chart-ring`, so one rule colours the plate, the table and the legend;
+ * their size is the model's (`width`/`height` on the glyph's svg). The
+ * Notable cell asks for the index glyph's 20px (`INDEX_GLYPH.size`, tied by
+ * `chart-model.test.ts`): the column then takes no share of the table's spare
+ * width and sits at its narrowest, which is the `Notable` header's own width,
+ * not 20px. That header alone is `white-space: nowrap`, because `.chart`'s
+ * `overflow-wrap: anywhere` would otherwise break it letter by letter to fit
+ * the 20px. The legend's phrases are the field-label role in `ink-label`. At
+ * phone width the Notable cell sits in a left gutter of each stacked row,
+ * first in it, as the key screen draws it.
  *
  * The chrome row (4.5) is the key screen's `.fb-chrome`: the heading and the
  * route line opposite each other, on one baseline, stacked at 640px and below.
  * Both are the `chrome` type role at `ink-label`; their links (`the model`,
- * `the scene`) keep that ink with a 1px `stroke-near` rule under the word,
+ * `the scene`) keep that ink with a 1px `ink-label` rule under the word (as the
+ * index links' rule: 4.10, the 3:1 non-text floor),
  * raised to `ink-lift` and a `stroke-focus` rule on hover and focus, and given
  * the index links' focus outline. A Client's span (`.chart-label-span`) is the
  * `scene-label-secondary` role at `ink-label`, as the key screen sets it.
@@ -53,7 +57,15 @@
  * the width at which it no longer has to. The down plate is capped at 350px and
  * centred, and narrows below that on the narrowest phones. At phone width the index table's rows stack
  * (its header clipped, never removed) and the record's field rows stack, as the
- * key screen draws them.
+ * key screen draws them. The `display: block` there would make WebKit drop the
+ * tables' semantics, so `chart.tsx` gives both tables explicit ARIA table roles,
+ * at every width (4.10).
+ *
+ * The fragment targets — each Client `<section>` and Project `<article>` —
+ * are focused by script on a `/chart#<id>` landing (`tabindex="-1"`, 4.10).
+ * They are not operable controls, so they draw no outline: a pointer visitor
+ * never sees a ring around a record. Every link keeps its `:focus-visible`
+ * outline.
  */
 
 .chart {
@@ -91,7 +103,7 @@
 .chart-chrome a {
   color: var(--color-ink-label-dark);
   text-decoration: none;
-  border-bottom: 1px solid var(--color-stroke-near-dark);
+  border-bottom: 1px solid var(--color-ink-label-dark);
 }
 
 .chart-chrome a:hover,
@@ -156,13 +168,13 @@
 
 .chart-marker {
   fill: var(--color-surface-base-dark);
-  stroke: var(--color-stroke-near-dark);
+  stroke: var(--color-ink-label-dark);
   stroke-width: var(--stroke-body-near);
 }
 
 .chart-ring {
   fill: none;
-  stroke: var(--color-stroke-near-dark);
+  stroke: var(--color-ink-label-dark);
   stroke-width: var(--stroke-hairline);
 }
 
@@ -259,7 +271,7 @@
 .chart-index a {
   color: var(--color-ink-prose-dark);
   text-decoration: none;
-  border-bottom: 1px solid var(--color-stroke-near-dark);
+  border-bottom: 1px solid var(--color-ink-label-dark);
 }
 
 .chart-index a:hover,
@@ -292,6 +304,11 @@
   padding: var(--space-panel-pad-top) var(--space-panel-pad-x) var(--space-panel-pad-bottom);
   background: var(--color-surface-raised-dark);
   border-left: 1px solid var(--color-surface-edge-dark);
+}
+
+.chart-section:focus,
+.chart-record:focus {
+  outline: none;
 }
 
 @media (max-width: 640px) {

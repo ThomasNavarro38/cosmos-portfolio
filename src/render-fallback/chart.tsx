@@ -50,7 +50,17 @@
  * decision is the model's and is executed by `chart-model.test.ts`: a Client or
  * Project the fragment names is scrolled into view, anything else scrolls
  * nothing, and a re-attached ref (a development double mount) does not scroll
- * twice.
+ * twice. The landing then focuses the target with `preventScroll` (4.10): each
+ * `<section>` and `<article>` carries `tabIndex={-1}` — focusable by script,
+ * never a tab stop — so the next Tab starts after the record and a screen
+ * reader reads from it; `chart.css` draws no outline on either.
+ *
+ * **Explicit table roles** (4.10): both tables — the index (`table`,
+ * `rowgroup`, `row`, `columnheader`, `cell`) and each record's field table
+ * (`table`, `rowgroup`, `row`, `rowheader`, `cell`) — carry their ARIA roles at
+ * every width, because `chart.css` stacks them with `display: block` at 640px
+ * and below, which WebKit takes as dropping their table semantics. One markup
+ * shape at every width; `chart.test.ts` holds the roles in the render.
  */
 
 import { IDENTITY_NAME } from '../shell/chrome-model.ts';
@@ -110,30 +120,30 @@ export default function Chart({ artifact, links }: ChartProps) {
           </div>
         ))}
       </div>
-      <table className="chart-index">
-        <thead>
-          <tr>
-            <th scope="col">{CHART_LABELS.notable}</th>
-            <th scope="col">{CHART_LABELS.client}</th>
-            <th scope="col">{CHART_LABELS.project}</th>
-            <th scope="col">{FIELD_LABELS.role}</th>
-            <th scope="col">{CHART_LABELS.dates}</th>
+      <table className="chart-index" role="table">
+        <thead role="rowgroup">
+          <tr role="row">
+            <th scope="col" role="columnheader">{CHART_LABELS.notable}</th>
+            <th scope="col" role="columnheader">{CHART_LABELS.client}</th>
+            <th scope="col" role="columnheader">{CHART_LABELS.project}</th>
+            <th scope="col" role="columnheader">{FIELD_LABELS.role}</th>
+            <th scope="col" role="columnheader">{CHART_LABELS.dates}</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody role="rowgroup">
           {chart.rows.map((row) => (
-            <tr key={row.id}>
-              <td className="chart-index-notable">
+            <tr key={row.id} role="row">
+              <td className="chart-index-notable" role="cell">
                 <svg className="chart-glyph" viewBox={INDEX_GLYPH.viewBox} width={INDEX_GLYPH.size} height={INDEX_GLYPH.size} role="img" aria-label={row.notable.label} focusable="false">
                   <Glyph glyph={INDEX_GLYPH} kind={row.notable.kind} />
                 </svg>
               </td>
-              <td className="chart-index-client">{row.client}</td>
-              <td className="chart-index-project">
+              <td className="chart-index-client" role="cell">{row.client}</td>
+              <td className="chart-index-project" role="cell">
                 <a href={row.href}>{row.title}</a>
               </td>
-              <td className="chart-index-role">{row.role}</td>
-              <td className="chart-index-dates">
+              <td className="chart-index-role" role="cell">{row.role}</td>
+              <td className="chart-index-dates" role="cell">
                 <Dates dates={row.dates} />
               </td>
             </tr>
@@ -141,7 +151,7 @@ export default function Chart({ artifact, links }: ChartProps) {
         </tbody>
       </table>
       {chart.sections.map((section) => (
-        <section key={section.id} id={section.id} className="chart-section">
+        <section key={section.id} id={section.id} className="chart-section" tabIndex={-1}>
           <h2 className="chart-client">{section.name}</h2>
           {section.records.map((record) => (
             <Record key={record.id} record={record} />
@@ -205,7 +215,7 @@ function Dates({ dates }: { readonly dates: ChartDates }) {
 /** One Project's record: the scene panel's blocks, in its order. */
 function Record({ record }: { readonly record: ChartRecord }) {
   return (
-    <article id={record.id} className="chart-record">
+    <article id={record.id} className="chart-record" tabIndex={-1}>
       {record.blocks.map((block) => (
         <RecordBlockView key={block.kind} block={block} dates={record.dates} />
       ))}
@@ -227,17 +237,17 @@ function RecordBlockView({ block, dates }: { readonly block: RecordBlock; readon
       );
     case 'fields':
       return (
-        <table className="panel-fields">
-          <tbody>
+        <table className="panel-fields" role="table">
+          <tbody role="rowgroup">
             {block.rows.map((row) => (
-              <tr key={row.label}>
-                <th scope="row">{row.label}</th>
-                <td>{row.value}</td>
+              <tr key={row.label} role="row">
+                <th scope="row" role="rowheader">{row.label}</th>
+                <td role="cell">{row.value}</td>
               </tr>
             ))}
-            <tr>
-              <th scope="row">{CHART_LABELS.dates}</th>
-              <td>
+            <tr role="row">
+              <th scope="row" role="rowheader">{CHART_LABELS.dates}</th>
+              <td role="cell">
                 <Dates dates={dates} />
               </td>
             </tr>
