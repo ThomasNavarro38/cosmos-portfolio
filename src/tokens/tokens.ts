@@ -40,6 +40,7 @@ export const tokens = {
     fontFamily: {
       sans: '"Helvetica Neue", Helvetica, Arial, sans-serif',
       'sans-light-theme': '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif',
+      mono: 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace',
     },
     chrome: {
       fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif',

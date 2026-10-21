@@ -1,15 +1,21 @@
 /**
- * `colophon.tsx` (5.1, 5.2): `ColophonPage` rendered through the render harness
- * (`scripts/render.ts`). Without exhibits — before the files arrive, or after a
- * failed fetch — the `<h1>` alone. With them, the `<h1>`, career.json verbatim
- * in a `<pre>`, the derivation table (5.2), then layout.generated.json verbatim
- * in a `<pre>`; the files here are the real ones, read from disk, so the check
- * is against the bytes the build publishes. The table's cells are checked
+ * `colophon.tsx` (5.1, 5.2, 5.3): `ColophonPage` rendered through the render
+ * harness (`scripts/render.ts`). Without exhibits — before the files arrive, or
+ * after a failed fetch — the `<h1>` alone. With them, the `<h1>`, career.json
+ * verbatim in a `<pre>`, the derivation table (5.2), then layout.generated.json
+ * verbatim in a `<pre>`; the files here are the real ones, read from disk, so
+ * the check is against the bytes the build publishes. Each `<pre>` (5.3) is a
+ * region named by its file's name, focusable (`tabindex="0"`), classed
+ * `colophon-exhibit`; its decoded text is the file, and its key and value
+ * spans are, as multisets, the file's keys and scalar leaves, read here from
+ * the parsed file. The table's cells are checked
  * against the artifact's own first Project, read here from the parsed file,
  * never a literal, and an altered artifact (an ongoing end among them) is
  * drawn with no code edit. Each check is driven red against broken markup: a
  * `<pre>` or the table missing, the text altered, the order swapped, a row
- * dropped or reordered, a value altered, a `scope` dropped.
+ * dropped or reordered, a value altered, a `scope` dropped, an exhibit's name,
+ * role or `tabindex` dropped, a run dropped or reordered, a span's class
+ * swapped.
  *
  * The default `Colophon`'s effect does not run under the harness (a static
  * render runs no effect), so the fetch is `exhibits.test.ts`'s — `startExhibits`
@@ -24,7 +30,7 @@ import { after, test } from 'node:test';
 import { stripComments } from '../../scripts/source-scan.ts';
 import { React, elementsOf, parseMarkup, queryAll, renderer, textOf, type MarkupElement, type Renderer } from '../../scripts/render.ts';
 import type { ColophonPage as ColophonPageComponent } from './colophon.tsx';
-import type { Exhibits } from './exhibits.ts';
+import { EXHIBIT_PATHS, type Exhibits } from './exhibits.ts';
 
 const CAREER = readFileSync(new URL('../data/career.json', import.meta.url), 'utf8');
 const LAYOUT = readFileSync(new URL('../../generated/layout.generated.json', import.meta.url), 'utf8');
@@ -100,11 +106,76 @@ function derivationTable(table: MarkupElement, layoutText: string): string[] {
   return failures;
 }
 
+/** Every key of a parsed value as `JSON.stringify` writes it, and every scalar leaf in one comparable form (numbers by `Number`). */
+function keysAndLeaves(value: unknown, keys: string[] = [], leaves: string[] = []): { keys: string[]; leaves: string[] } {
+  if (Array.isArray(value)) for (const item of value) keysAndLeaves(item, keys, leaves);
+  else if (value !== null && typeof value === 'object') {
+    for (const [key, item] of Object.entries(value)) {
+      keys.push(JSON.stringify(key));
+      keysAndLeaves(item, keys, leaves);
+    }
+  } else leaves.push(typeof value === 'number' ? `number ${value}` : `text ${JSON.stringify(value)}`);
+  return { keys, leaves };
+}
+
+/** A run's own text read as JSON, so an escape written differently from `JSON.stringify`'s (`—`, `\/`) still compares equal; a run that does not parse never does. */
+function parsedRun(text: string): { readonly ok: true; readonly value: unknown } | { readonly ok: false } {
+  try {
+    return { ok: true, value: JSON.parse(text) };
+  } catch {
+    return { ok: false };
+  }
+}
+const keyOfRun = (text: string): string => {
+  const run = parsedRun(text);
+  return run.ok ? JSON.stringify(run.value) : `unparsed ${text}`;
+};
+const leafOfRun = (text: string): string => {
+  const run = parsedRun(text);
+  if (!run.ok) return `unparsed ${text}`;
+  return typeof run.value === 'number' ? `number ${run.value}` : `text ${JSON.stringify(run.value)}`;
+};
+const sameMultiset = (a: readonly string[], b: readonly string[]): boolean => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+
+/**
+ * One exhibit against its file: a `<pre class="colophon-exhibit" role="region"
+ * aria-label={name} tabindex="0">`, nothing else on it; its children text (the
+ * structure) and spans of one text each, classed `colophon-json-key` or
+ * `colophon-json-value`; its text the file, byte for byte; its key spans the
+ * file's keys and its value spans its scalar leaves, as multisets.
+ */
+function exhibit(pre: MarkupElement, name: string, text: string): string[] {
+  const failures: string[] = [];
+  const want = { class: 'colophon-exhibit', role: 'region', 'aria-label': name, tabindex: '0' };
+  if (JSON.stringify(pre.attrs) !== JSON.stringify(want)) failures.push(`the ${name} <pre> carries ${JSON.stringify(pre.attrs)}, not ${JSON.stringify(want)}`);
+  if (textOf(pre) !== text) failures.push(`the ${name} <pre> is not ${name}, verbatim`);
+  const keys: string[] = [];
+  const values: string[] = [];
+  for (const span of elementsOf(pre)) {
+    const kind = span.tag === 'span' && Object.keys(span.attrs).length === 1 && elementsOf(span).length === 0 ? span.attrs['class'] : undefined;
+    if (kind === 'colophon-json-key') keys.push(textOf(span));
+    else if (kind === 'colophon-json-value') values.push(textOf(span));
+    else failures.push(`the ${name} <pre> holds ${span.tag}${JSON.stringify(span.attrs)}, not a key or value span`);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return [...failures, `${name} is not JSON`];
+  }
+  const expected = keysAndLeaves(parsed);
+  if (!sameMultiset(keys.map(keyOfRun), expected.keys)) failures.push(`the ${name} <pre>'s ${keys.length} key spans are not its ${expected.keys.length} keys`);
+  if (!sameMultiset(values.map(leafOfRun), expected.leaves)) failures.push(`the ${name} <pre>'s ${values.length} value spans are not its ${expected.leaves.length} scalar leaves`);
+  return failures;
+}
+
+const CAREER_NAME = EXHIBIT_PATHS.career.slice(1);
+const LAYOUT_NAME = EXHIBIT_PATHS.layout.slice(1);
+
 /**
  * The page's elements: `<h1>the model</h1>`, then, when `expected` is given,
- * `<pre>` holding its career text verbatim, the derivation table worked on its
- * layout's first Project, and `<pre>` holding its layout text verbatim — and
- * nothing else.
+ * the career exhibit, the derivation table worked on its layout's first
+ * Project, and the layout exhibit — and nothing else.
  */
 function colophonPage(html: string, expected: Exhibits | null): string[] {
   const children = elementsOf(parseMarkup(html));
@@ -115,10 +186,9 @@ function colophonPage(html: string, expected: Exhibits | null): string[] {
   const [heading, career, table, layout] = children as [MarkupElement, MarkupElement, MarkupElement, MarkupElement];
   if (textOf(heading) !== 'the model') failures.push(`the heading reads ${JSON.stringify(textOf(heading))}`);
   if (expected !== null) {
-    if (textOf(career) !== expected.career) failures.push('the first <pre> is not career.json, verbatim');
+    failures.push(...exhibit(career, CAREER_NAME, expected.career));
     failures.push(...derivationTable(table, expected.layout));
-    if (textOf(layout) !== expected.layout) failures.push('the second <pre> is not layout.generated.json, verbatim');
-    for (const pre of [career, layout]) if (Object.keys(pre.attrs).length > 0) failures.push(`a <pre> carries ${Object.keys(pre.attrs).join(', ')} — unset in 5.1`);
+    failures.push(...exhibit(layout, LAYOUT_NAME, expected.layout));
   }
   return failures;
 }
@@ -136,7 +206,10 @@ test('without exhibits: the <h1> alone', async () => {
 
 test('with exhibits: the <h1>, career.json verbatim in a <pre>, the derivation table, then layout.generated.json verbatim in a <pre>', async () => {
   assert.ok(CAREER.length > 0 && LAYOUT.length > 0, 'the real files were read');
+  assert.deepEqual([CAREER_NAME, LAYOUT_NAME], ['career.json', 'layout.generated.json'], 'the names are the published files’');
   assert.deepEqual(colophonPage(await renderPage(EXHIBITS), EXHIBITS), []);
+  const pres = queryAll(parseMarkup(await renderPage(EXHIBITS)), 'pre');
+  assert.ok(queryAll(pres[0] as MarkupElement, 'span').length > 0 && queryAll(pres[1] as MarkupElement, 'span').length > 0, 'both files are set in spans');
 });
 
 test('the table follows the data: an altered first Project is drawn with no code edit, an ongoing end as `{start} –`', async () => {
@@ -172,8 +245,8 @@ test('the page check is red against broken markup', async () => {
   const full = await renderPage(EXHIBITS);
   assert.notDeepEqual(colophonPage(full, null), [], 'the files drawn where none had arrived');
   assert.notDeepEqual(colophonPage(bare, EXHIBITS), [], 'the files missing once arrived');
-  const firstPre = full.indexOf('<pre>');
-  const secondPre = full.indexOf('<pre>', firstPre + 1);
+  const firstPre = full.indexOf('<pre ');
+  const secondPre = full.indexOf('<pre ', firstPre + 1);
   const firstEnd = full.indexOf('</pre>') + '</pre>'.length;
   const careerPre = full.slice(firstPre, firstEnd);
   const layoutPre = full.slice(secondPre, full.indexOf('</pre>', secondPre) + '</pre>'.length);
@@ -184,6 +257,11 @@ test('the page check is red against broken markup', async () => {
   const bodyRows = [...table.matchAll(/<tr><th scope="row">[\s\S]*?<\/tr>/g)].map((match) => match[0]);
   const [massRow, bandRow] = bodyRows as [string, string, string];
   const derived = /<td class="colophon-derived">([^<]*)<\/td>/.exec(massRow)?.[1] ?? '';
+  const careerOpen = /^<pre [^>]*>/.exec(careerPre)?.[0] ?? '';
+  const firstKey = /<span class="colophon-json-key">[^<]*<\/span>/.exec(careerPre)?.[0] ?? '';
+  assert.ok(careerOpen !== '' && firstKey !== '', 'the career <pre> opens and holds a key span');
+  // A function replacement: the file's own text may hold `$&` or `$'`, which a string replacement would expand.
+  const inCareer = (edit: (pre: string) => string): string => full.replace(careerPre, () => edit(careerPre));
   for (const [name, markup] of [
     ['the table missing', full.replace(table, '')],
     ['the table after the layout', full.replace(table, '').replace(/<\/pre>$/, `</pre>${table}`)],
@@ -197,12 +275,23 @@ test('the page check is red against broken markup', async () => {
     ['a caption added', full.replace('<thead>', '<caption>How the layout is derived</caption><thead>')],
     ['the career <pre> missing', full.replace(careerPre, '')],
     ['the layout <pre> missing', full.replace(layoutPre, '')],
-    ['the career text altered', full.replace(careerPre, careerPre.replace(/\n/, '\n  '))],
-    ['the layout text truncated', full.replace(layoutPre, `${layoutPre.slice(0, 200)}</pre>`)],
+    ['the career text altered', inCareer((pre) => pre.replace(/\n/, '\n  '))],
+    ['the layout text truncated', full.replace(layoutPre, () => layoutPre.replace(/<span[^>]*>[^<]*<\/span>[^<]*<\/pre>$/, '</pre>'))],
     ['the order swapped', swapped],
     ['the heading renamed', full.replace('<h1>the model</h1>', '<h1>The model</h1>')],
     ['a third <pre>', `${full}<pre>x</pre>`],
-    ['a named <pre>', full.replace('<pre>', '<pre aria-label="career.json">')],
+    ['an exhibit’s name dropped', inCareer((pre) => pre.replace(' aria-label="career.json"', ''))],
+    ['the exhibits’ names swapped', inCareer((pre) => pre.replace('aria-label="career.json"', 'aria-label="layout.generated.json"'))],
+    ['an exhibit’s region role dropped', inCareer((pre) => pre.replace(' role="region"', ''))],
+    ['an exhibit’s tabindex dropped', inCareer((pre) => pre.replace(' tabindex="0"', ''))],
+    ['an exhibit’s class dropped', inCareer((pre) => pre.replace(' class="colophon-exhibit"', ''))],
+    ['a run dropped', inCareer((pre) => pre.replace(firstKey, ''))],
+    ['runs reordered', inCareer((pre) => pre.replace(/(<span class="colophon-json-key">[^<]*<\/span>)([^<]*)(<span class="colophon-json-value">[^<]*<\/span>)/, '$3$2$1'))],
+    ['a key span classed as a value', inCareer((pre) => pre.replace('<span class="colophon-json-key">', '<span class="colophon-json-value">'))],
+    ['a value span classed as a key', inCareer((pre) => pre.replace('<span class="colophon-json-value">', '<span class="colophon-json-key">'))],
+    ['a key left unset', inCareer((pre) => pre.replace(firstKey, firstKey.replace(/<\/?span[^>]*>/g, '')))],
+    ['a run in a <code>', inCareer((pre) => pre.replace(firstKey, `<code>${firstKey}</code>`))],
+    ['the career <pre> unset', full.replace(careerOpen, '<pre>')],
     ['wrapped', `<div>${full}</div>`],
   ] as const) {
     assert.notEqual(markup, full, `the break "${name}" must apply`);

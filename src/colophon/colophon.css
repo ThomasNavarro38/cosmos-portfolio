@@ -1,10 +1,11 @@
 /*
- * The Colophon's derivation table (5.2): DESIGN.md
- * `components.colophon-derivation`. Every colour, family, size, weight and
- * space is a token custom property from `src/tokens/tokens.css`; the only
- * literal length is the 1px rule between rows, as the chart index's. No hue,
- * no radius, no shadow and no glow. `identity-audit.test.ts` holds each
- * declaration.
+ * The Colophon's derivation table (5.2) and its two exhibits (5.3): DESIGN.md
+ * `components.colophon-derivation` and `components.colophon-json`. Every
+ * colour, family, size, weight and space is a token custom property from
+ * `src/tokens/tokens.css`; the only literal lengths are the 1px rules (between
+ * rows, and the exhibits' left edge) and the focus outline's 1px and 3px
+ * offset, as the chart's. No hue, no radius, no shadow and no glow.
+ * `identity-audit.test.ts` holds each declaration.
  *
  * The headers and each row's rule name (`th`) are the `field-label` role at
  * `ink-label`, as the chart index sets its headers. The values (`td`) are the
@@ -16,7 +17,17 @@
  * its cells may break anywhere (as `.chart` does): the page never scrolls
  * sideways.
  *
- * The `<pre>`s are 5.3's, and unset here.
+ * The exhibits (`.colophon-exhibit`, 5.3) are each file in full on the raised
+ * ground, a 1px `surface-edge` rule on the left, at the `field-value` role but
+ * in `--font-mono`, the system mono stack — the one rule in the product
+ * that sets it. The syntax setting is luminance only: keys
+ * (`.colophon-json-key`) at `ink-lift`, scalar values (`.colophon-json-value`)
+ * at `ink-prose`, structure at the block's own `ink-label`. No hue. The text
+ * runs to its natural width, never wrapped and never cut short: a long line
+ * scrolls inside the block (`overflow-x: auto` on a block-level box held to its
+ * container), so the page never scrolls sideways, and the block takes keyboard
+ * focus to be scrolled, drawing the chart's focus outline (a system outline
+ * under forced colours). No height limit, no fold.
  */
 
 .colophon-derivations {
@@ -61,4 +72,41 @@
 
 .colophon-derivations .colophon-derived {
   color: var(--color-ink-lift-dark);
+}
+
+.colophon-exhibit {
+  margin: 0;
+  padding: var(--space-md) var(--space-lg);
+  overflow-x: auto;
+  background: var(--color-surface-raised-dark);
+  border-left: 1px solid var(--color-surface-edge-dark);
+  font-family: var(--font-mono);
+  font-size: var(--type-field-value-font-size);
+  font-weight: var(--type-field-value-font-weight);
+  line-height: var(--type-field-value-line-height);
+  letter-spacing: var(--type-field-value-letter-spacing);
+  color: var(--color-ink-label-dark);
+}
+
+.colophon-exhibit:focus-visible {
+  outline: 1px solid var(--color-stroke-focus-dark);
+  outline-offset: 3px;
+}
+
+.colophon-exhibit .colophon-json-key {
+  color: var(--color-ink-lift-dark);
+}
+
+.colophon-exhibit .colophon-json-value {
+  color: var(--color-ink-prose-dark);
+}
+
+/*
+ * Forced colours flatten the ink steps: there, keyboard focus on an exhibit
+ * keeps a system-coloured outline, as the chart's links do.
+ */
+@media (forced-colors: active) {
+  .colophon-exhibit:focus-visible {
+    outline: 1px solid CanvasText;
+  }
 }

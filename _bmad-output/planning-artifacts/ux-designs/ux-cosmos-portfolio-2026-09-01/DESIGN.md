@@ -69,6 +69,7 @@ typography:
   fontFamily:
     sans: '"Helvetica Neue", Helvetica, Arial, sans-serif'
     sans-light-theme: '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif'
+    mono: 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace'
 
   chrome:
     fontFamily: "{typography.fontFamily.sans}"
@@ -542,8 +543,10 @@ verification on the greybox at M1.]`
 
 One family. `"Helvetica Neue", Helvetica, Arial, sans-serif` — a light
 grotesque, weight 200–300 throughout, never above 400. There is no second
-family at M2. The serif recorded in `typography.fontFamily.sans-light-theme` is
-for the future light theme only and must not appear in the dark build.
+family at M2, with one exception: the Colophon's JSON body is set in the system
+monospace stack, `typography.fontFamily.mono`, and nowhere else (§7.11). The
+serif recorded in `typography.fontFamily.sans-light-theme` is for the future
+light theme only and must not appear in the dark build.
 
 **Weight is not an emphasis channel.** Bold does not exist in this system. This
 is not stylistic fastidiousness — it is load-bearing for the ratified Notable
