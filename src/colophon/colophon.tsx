@@ -1,5 +1,5 @@
 /**
- * The Colophon (4.2, 5.1, 5.2): the `/colophon` route's surface, reached only through
+ * The Colophon (4.2, 5.1, 5.2, 5.3): the `/colophon` route's surface, reached only through
  * `lazy(() => import('./colophon.tsx'))` in `src/shell/colophon-host.tsx`, so it
  * is its own chunk and never on the entry graph or the scene's.
  *
@@ -13,9 +13,19 @@
  * abort is swallowed silently.
  *
  * `ColophonPage` draws: the `<h1>`, then, once the files have arrived, each
- * file's text verbatim in its own `<pre>`, career first. The `<pre>`s are
- * deliberately unset in 5.1 — no name, no measure, no syntax setting; 5.3 owns
- * their treatment.
+ * file's text verbatim and in full in its own `<pre>`, career first.
+ *
+ * **The exhibits, set** (5.3, DESIGN.md `components.colophon-json`). Each
+ * `<pre>` is a named, keyboard-scrollable region — `role="region"`, its
+ * `aria-label` the file's name read off `EXHIBIT_PATHS` (`career.json`,
+ * `layout.generated.json`), `tabIndex={0}` — since a bare `<pre>` is generic
+ * and cannot be named, and a box that scrolls sideways must be reachable from
+ * the keyboard. Its text is `jsonRuns` (`json-setting.ts`): key runs in
+ * `span.colophon-json-key`, scalar value runs in `span.colophon-json-value`,
+ * structure as bare text — spans marked over the bytes, never a parse, so the
+ * `<pre>`'s text content is the fetched file exactly, with no fold and no
+ * truncation. The luminance setting, the raised ground and the mono family
+ * are `colophon.css`'s.
  *
  * **The derivations** (5.2). Between the two `<pre>`s, a real `<table>`: one
  * row per mapping rule, each worked on the artifact's first Project, its input
@@ -27,16 +37,18 @@
  * rows cannot be read from throws, naming the field, into the
  * `colophon-host` error boundary. The treatment (DESIGN.md
  * `components.colophon-derivation`) is `colophon.css`'s. The table's copy is
- * `DERIVATION_LABELS` alone; no other copy (5.3–5.5).
+ * `DERIVATION_LABELS` alone; no other copy (5.4–5.5): the exhibits are named
+ * by their files' names, with no visible heading or caption.
  *
- * It imports React, `exhibits.ts`, `derivations.ts` and `colophon.css`, and
- * nothing else: not the shell, not the motion preference, never `src/data/`,
- * `generated/` or `src/derive/`.
+ * It imports React, `exhibits.ts`, `derivations.ts`, `json-setting.ts` and
+ * `colophon.css`, and nothing else: not the shell, not the motion preference,
+ * never `src/data/`, `generated/` or `src/derive/`.
  */
 
 import { useEffect, useState } from 'react';
-import { startExhibits, type Exhibits } from './exhibits.ts';
+import { EXHIBIT_PATHS, startExhibits, type Exhibits } from './exhibits.ts';
 import { DERIVATION_LABELS, derivationRows, type DerivationInput } from './derivations.ts';
+import { jsonRuns } from './json-setting.ts';
 import './colophon.css';
 
 /** A rule's input: the weight as `String(weight)`, or the duration as `start – end`, `start –` while ongoing. */
@@ -78,6 +90,22 @@ function Derivations({ layout }: { readonly layout: string }) {
   );
 }
 
+/**
+ * One file, verbatim and in full: a named, focusable region whose text is the
+ * file's runs — keys and scalar values in their spans, structure bare.
+ */
+function Exhibit({ name, text }: { readonly name: string; readonly text: string }) {
+  return (
+    <pre className="colophon-exhibit" role="region" aria-label={name} tabIndex={0}>
+      {jsonRuns(text).map((run, index) => {
+        if (run.kind === 'key') return <span key={index} className="colophon-json-key">{run.text}</span>;
+        if (run.kind === 'value') return <span key={index} className="colophon-json-value">{run.text}</span>;
+        return run.text;
+      })}
+    </pre>
+  );
+}
+
 /** The surface as drawn: the heading, and, once the files have arrived, the two files with the derivations between them. */
 export function ColophonPage({ exhibits }: { readonly exhibits: Exhibits | null }) {
   return (
@@ -85,9 +113,9 @@ export function ColophonPage({ exhibits }: { readonly exhibits: Exhibits | null 
       <h1>the model</h1>
       {exhibits === null ? null : (
         <>
-          <pre>{exhibits.career}</pre>
+          <Exhibit name={EXHIBIT_PATHS.career.slice(1)} text={exhibits.career} />
           <Derivations layout={exhibits.layout} />
-          <pre>{exhibits.layout}</pre>
+          <Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />
         </>
       )}
     </>

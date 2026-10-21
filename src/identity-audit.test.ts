@@ -23,10 +23,16 @@
  *   hidden until keyboard focus (ruling 8a), as exact declaration sets.
  * - **Chart** — the flat star chart's stylesheet (4.3), as an exact declaration
  *   set, its two `display: none` admitted only on the plates, by width.
- * - **Colophon** — the derivation table's stylesheet (5.2), as an exact
- *   declaration set, and its markup's hooks: rule labels and headers at
- *   field-label/ink-label, values at field-value/ink-prose, the derived value
- *   lifted to ink-lift.
+ * - **Colophon** — the derivation table's stylesheet (5.2) and the exhibits'
+ *   (5.3), as an exact declaration set, and its markup's hooks: rule labels and
+ *   headers at field-label/ink-label, values at field-value/ink-prose, the
+ *   derived value lifted to ink-lift; each exhibit a named, focusable region on
+ *   surface-raised, keys at ink-lift, values at ink-prose, structure at
+ *   ink-label.
+ * - **Monospace** — `--font-mono` set by the one exhibit rule and named by no
+ *   other shipped file, the word `monospace` nowhere under `src/` but the
+ *   tokens, no `<code>`/`<kbd>`/`<samp>`/`<tt>` drawn and `<pre>` drawn only by
+ *   the Colophon (5.3); and every `var(--…)` a stylesheet reads is a token.
  *
  * This file sits directly in `src/`, so the root-file boundary row governs it:
  * `src/render-scene/`, `src/render-fallback/` and `src/data/` are read here as
@@ -241,7 +247,7 @@ interface Role {
   readonly role: string;
   readonly floor: 7 | 4.5 | 3;
   readonly ink: InkSource;
-  readonly ground: 'panel' | 'page';
+  readonly ground: 'panel' | 'page' | 'exhibit';
 }
 
 const PANEL_CSS = 'shell/focus-panel.css';
@@ -313,6 +319,13 @@ const ROLES: readonly Role[] = [
   { role: 'derivation headers and rules', floor: 4.5, ink: { css: COLOPHON_CSS, selector: '.colophon-derivations th' }, ground: 'page' },
   { role: 'derivation values', floor: 7, ink: { css: COLOPHON_CSS, selector: '.colophon-derivations td' }, ground: 'page' },
   { role: 'derivation derived values', floor: 7, ink: { css: COLOPHON_CSS, selector: '.colophon-derivations .colophon-derived' }, ground: 'page' },
+  // The Colophon's exhibits (5.3), on their own raised ground (read off
+  // `.colophon-exhibit`'s background): keys at ink-lift and values at ink-prose,
+  // both field-value text at the derivation values' floor, and the structure at
+  // the block's own ink-label (DESIGN.md `components.colophon-json`).
+  { role: 'exhibit keys', floor: 7, ink: { css: COLOPHON_CSS, selector: '.colophon-exhibit .colophon-json-key' }, ground: 'exhibit' },
+  { role: 'exhibit values', floor: 7, ink: { css: COLOPHON_CSS, selector: '.colophon-exhibit .colophon-json-value' }, ground: 'exhibit' },
+  { role: 'exhibit structure', floor: 4.5, ink: { css: COLOPHON_CSS, selector: '.colophon-exhibit' }, ground: 'exhibit' },
 ];
 
 /**
@@ -334,6 +347,8 @@ const NON_TEXT_ROLES: readonly Role[] = [
   { role: 'chart chrome link focus outline', floor: 3, ink: { css: CHART_CSS, selector: '.chart-chrome a:focus-visible', property: 'outline' }, ground: 'page' },
   { role: 'chart Ring', floor: 3, ink: { css: CHART_CSS, selector: '.chart-ring', property: 'stroke' }, ground: 'page' },
   { role: 'Notable glyph marker', floor: 3, ink: { css: CHART_CSS, selector: '.chart-marker', property: 'stroke' }, ground: 'page' },
+  // The Colophon's exhibit focus outline (5.3), drawn 3px outside the block, on the page ground.
+  { role: 'exhibit focus outline', floor: 3, ink: { css: COLOPHON_CSS, selector: '.colophon-exhibit:focus-visible', property: 'outline' }, ground: 'page' },
 ];
 
 /** The token key a `var(--color-…)` value names, or undefined. */
@@ -376,6 +391,7 @@ function auditContrast(sources: Readonly<Record<string, string>>, panelBackgroun
   const grounds = {
     panel: tokenOfVar(panelBackground),
     page: tokenOfVar(declared(sources[PAGE_CSS] ?? '', 'html, body', 'background').value),
+    exhibit: tokenOfVar(declared(sources[COLOPHON_CSS] ?? '', '.colophon-exhibit', 'background').value),
   };
   for (const { role, floor, ink, ground } of roles) {
     const where = 'css' in ink ? `${ink.css} \`${ink.selector}\`` : ink.model;
@@ -497,6 +513,27 @@ test('contrast: a role moved to a dimmer ink, or one whose ink cannot be read, f
   assert.match(
     failing(COLOPHON_CSS, (s) => s.replace(/(\.colophon-derivations th \{[^}]*)color: var\(--color-ink-label-dark\);/, '$1')),
     /^contrast: derivation headers and rules's ink could not be read off colophon\/colophon\.css/,
+  );
+  // 5.3: the exhibits' keys and values at ink-label, under 7 on the raised ground; the structure at the quiet step; the ground lightened or unread.
+  assert.match(
+    failing(COLOPHON_CSS, (s) => s.replace(/(\.colophon-exhibit \.colophon-json-key \{\n  color: )var\(--color-ink-lift-dark\)/, '$1var(--color-ink-label-dark)')),
+    /^contrast: exhibit keys is ink-label-dark on surface-raised-dark, \d\.\d\d:1 — below its 7:1 floor$/,
+  );
+  assert.match(
+    failing(COLOPHON_CSS, (s) => s.replace(/(\.colophon-exhibit \.colophon-json-value \{\n  color: )var\(--color-ink-prose-dark\)/, '$1var(--color-ink-label-dark)')),
+    /^contrast: exhibit values is ink-label-dark on surface-raised-dark, \d\.\d\d:1 — below its 7:1 floor$/,
+  );
+  assert.match(
+    failing(COLOPHON_CSS, (s) => s.replace(/(\.colophon-exhibit \{[^}]*color: )var\(--color-ink-label-dark\)/, '$1var(--color-ink-quiet-dark)')),
+    /^contrast: exhibit structure is ink-quiet-dark on surface-raised-dark/,
+  );
+  assert.match(
+    failing(COLOPHON_CSS, (s) => s.replace('  background: var(--color-surface-raised-dark);\n', '  background: var(--color-stroke-active-dark);\n')),
+    /contrast: exhibit keys is ink-lift-dark on stroke-active-dark/,
+  );
+  assert.match(
+    failing(COLOPHON_CSS, (s) => s.replace('  background: var(--color-surface-raised-dark);\n', '')),
+    /^contrast: the exhibit ground could not be read as a colour token$/m,
   );
   assert.match(
     auditContrast(real, 'var(--color-stroke-active-dark)').join('\n'),
@@ -1683,6 +1720,27 @@ const COLOPHON_RULES: readonly CssRule[] = [
   { at: '', selector: '.colophon-derivations tbody th, .colophon-derivations td', declarations: ['border-top: 1px solid var(--color-surface-edge-dark)'] },
   // The derived quantity, lifted to ink-lift — the device the Notable uses.
   { at: '', selector: '.colophon-derivations .colophon-derived', declarations: ['color: var(--color-ink-lift-dark)'] },
+  // The exhibits (5.3, `components.colophon-json`): the raised ground and its
+  // 1px left edge, the field-value role in the mono family, structure at
+  // ink-label, and a long line scrolling inside the block, never the page.
+  {
+    at: '',
+    selector: '.colophon-exhibit',
+    declarations: [
+      'margin: 0',
+      'padding: var(--space-md) var(--space-lg)',
+      'overflow-x: auto',
+      'background: var(--color-surface-raised-dark)',
+      'border-left: 1px solid var(--color-surface-edge-dark)',
+      'font-family: var(--font-mono)',
+      ...CHART_TYPE('field-value').filter((line) => !line.startsWith('font-family')),
+      'color: var(--color-ink-label-dark)',
+    ],
+  },
+  { at: '', selector: '.colophon-exhibit:focus-visible', declarations: ['outline: 1px solid var(--color-stroke-focus-dark)', 'outline-offset: 3px'] },
+  { at: '', selector: '.colophon-exhibit .colophon-json-key', declarations: ['color: var(--color-ink-lift-dark)'] },
+  { at: '', selector: '.colophon-exhibit .colophon-json-value', declarations: ['color: var(--color-ink-prose-dark)'] },
+  { at: '@media (forced-colors: active)', selector: '.colophon-exhibit:focus-visible', declarations: ['outline: 1px solid CanvasText'] },
 ];
 
 /**
@@ -1691,7 +1749,11 @@ const COLOPHON_RULES: readonly CssRule[] = [
  * the markup's hooks: the table's class, four `th scope="col"` drawn from
  * `DERIVATION_LABELS`, each row's rule a `th scope="row"`, the Project and
  * Input cells plain value cells, and the derived cell marked
- * `colophon-derived`. No inline style.
+ * `colophon-derived`. The exhibits (5.3): one `<pre>` drawn, a region named by
+ * its `name`, focusable, classed `colophon-exhibit`, its runs `jsonRuns(text)`
+ * — keys in `span.colophon-json-key`, values in `span.colophon-json-value`,
+ * structure bare — and the two drawn career, table, layout, each named off
+ * `EXHIBIT_PATHS`. No inline style.
  */
 function auditColophon(css: string, tsx: string): string[] {
   const failures = [...auditBans('colophon', css), ...auditDeclarations('colophon', css, COLOPHON_RULES)];
@@ -1706,6 +1768,15 @@ function auditColophon(css: string, tsx: string): string[] {
   if (!/<th scope="row">\{row\.rule\}<\/th>/.test(script)) failures.push('colophon: the rule label is not a th scope="row"');
   if (!/<td>\{row\.project\}<\/td>\s*<td>\s*<Input input=\{row\.input\} \/>\s*<\/td>/.test(script)) failures.push('colophon: the Project and Input cells are not plain value cells');
   if (!/<td className="colophon-derived">\{String\(row\.output\)\}<\/td>/.test(script)) failures.push('colophon: the derived cell is not marked colophon-derived');
+  if ((script.match(/<pre\b/g) ?? []).length !== 1 || !/<pre className="colophon-exhibit" role="region" aria-label=\{name\} tabIndex=\{0\}>/.test(script)) {
+    failures.push('colophon: the exhibit is not one <pre className="colophon-exhibit" role="region" aria-label={name} tabIndex={0}>');
+  }
+  if (!/\{jsonRuns\(text\)\.map\(/.test(script) || !/^import \{ jsonRuns \} from '\.\/json-setting\.ts';$/m.test(script)) failures.push('colophon: the exhibit’s text is not jsonRuns(text), from ./json-setting.ts');
+  if (!/if \(run\.kind === 'key'\) return <span key=\{index\} className="colophon-json-key">\{run\.text\}<\/span>;/.test(script)) failures.push('colophon: a key run is not a span.colophon-json-key');
+  if (!/if \(run\.kind === 'value'\) return <span key=\{index\} className="colophon-json-value">\{run\.text\}<\/span>;\s*return run\.text;/.test(script)) failures.push('colophon: a value run is not a span.colophon-json-value, or structure is not bare text');
+  if (!/<Exhibit name=\{EXHIBIT_PATHS\.career\.slice\(1\)\} text=\{exhibits\.career\} \/>\s*<Derivations layout=\{exhibits\.layout\} \/>\s*<Exhibit name=\{EXHIBIT_PATHS\.layout\.slice\(1\)\} text=\{exhibits\.layout\} \/>/.test(script)) {
+    failures.push('colophon: the exhibits are not career, table, layout, each named off EXHIBIT_PATHS');
+  }
   if (/\bstyle=\{/.test(script)) failures.push('colophon: an inline style — the treatment is the stylesheet’s');
   return failures;
 }
@@ -1737,6 +1808,21 @@ test('colophon: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('font-weight: var(--type-field-label-font-weight)', 'font-weight: 700'), /^colophon: a literal font-weight/],
     [(s) => s.replace('  text-align: left;\n', '  text-align: left;\n  text-transform: uppercase;\n'), /^colophon: text-transform/],
     [(s) => `${s}\n.colophon-derivations caption {\n  color: var(--color-ink-label-dark);\n}\n`, /^colophon: the unlisted rule `\.colophon-derivations caption`$/m],
+    // 5.3: the exhibit off its ground, its edge, its family, its role, its scroll; folded or wrapped; its focus outline or the forced-colours one gone; a key or value off its ink.
+    [(s) => s.replace('  background: var(--color-surface-raised-dark);\n', ''), /`\.colophon-exhibit` lacks `background: var\(--color-surface-raised-dark\)`/],
+    [(s) => s.replace('  border-left: 1px solid var(--color-surface-edge-dark);\n  font-family', '  border-left: 2px solid var(--color-surface-edge-dark);\n  font-family'), /`\.colophon-exhibit` lacks `border-left: 1px solid var\(--color-surface-edge-dark\)`/],
+    [(s) => s.replace('  font-family: var(--font-mono);\n', '  font-family: var(--type-field-value-font-family);\n'), /`\.colophon-exhibit` lacks `font-family: var\(--font-mono\)`/],
+    [(s) => s.replace('  overflow-x: auto;\n', ''), /`\.colophon-exhibit` lacks `overflow-x: auto`/],
+    [(s) => s.replace('  overflow-x: auto;\n', '  overflow-x: auto;\n  max-height: 40em;\n  overflow-y: auto;\n'), /`\.colophon-exhibit` carries the unlisted `max-height: 40em`/],
+    [(s) => s.replace('  overflow-x: auto;\n', '  overflow-x: auto;\n  white-space: pre-wrap;\n'), /`\.colophon-exhibit` carries the unlisted `white-space: pre-wrap`/],
+    [(s) => s.replace('  margin: 0;\n  padding: var(--space-md) var(--space-lg);\n', '  margin: 0;\n  padding: var(--space-md);\n'), /`\.colophon-exhibit` lacks `padding: var\(--space-md\) var\(--space-lg\)`/],
+    [(s) => s.replace('  line-height: var(--type-field-value-line-height);\n  letter-spacing: var(--type-field-value-letter-spacing);\n  color: var(--color-ink-label-dark);', '  line-height: 1.7;\n  letter-spacing: var(--type-field-value-letter-spacing);\n  color: var(--color-ink-label-dark);'), /`\.colophon-exhibit` lacks `line-height: var\(--type-field-value-line-height\)`/],
+    [(s) => s.replace('.colophon-exhibit:focus-visible {\n  outline: 1px solid var(--color-stroke-focus-dark);', '.colophon-exhibit:focus-visible {\n  outline: none;'), /`\.colophon-exhibit:focus-visible` lacks `outline: 1px solid var\(--color-stroke-focus-dark\)`/],
+    [(s) => s.replace('    outline: 1px solid CanvasText;\n', ''), /`@media \(forced-colors: active\) \.colophon-exhibit:focus-visible` lacks `outline: 1px solid CanvasText`/],
+    [(s) => s.replace('.colophon-exhibit .colophon-json-key {\n  color: var(--color-ink-lift-dark);', '.colophon-exhibit .colophon-json-key {\n  color: var(--color-ink-prose-dark);'), /`\.colophon-exhibit \.colophon-json-key` lacks `color: var\(--color-ink-lift-dark\)`/],
+    [(s) => s.replace('.colophon-exhibit .colophon-json-value {\n  color: var(--color-ink-prose-dark);', '.colophon-exhibit .colophon-json-value {\n  color: var(--color-ink-lift-dark);'), /`\.colophon-exhibit \.colophon-json-value` lacks `color: var\(--color-ink-prose-dark\)`/],
+    [(s) => s.replace('  border-left: 1px solid var(--color-surface-edge-dark);\n  font-family', '  border-left: 1px solid var(--color-surface-edge-dark);\n  border-radius: 2px;\n  font-family'), /colophon: a radius, shadow or filter/],
+    [(s) => `${s}\n.colophon-exhibit .colophon-json-key {\n  color: #7FB8FF;\n}\n`, /colophon: a hex colour/],
   ];
   for (const [mutate, message] of cssCases) {
     const mutated = mutate(css);
@@ -1752,10 +1838,114 @@ test('colophon: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('<td>\n              <Input input={row.input} />', '<td className="colophon-derived">\n              <Input input={row.input} />'), /the Project and Input cells are not plain value cells/],
     [(s) => s.replace('<td className="colophon-derived">{String(row.output)}</td>', '<td>{String(row.output)}</td>'), /the derived cell is not marked colophon-derived/],
     [(s) => s.replace('<table className="colophon-derivations">', '<table className="colophon-derivations" style={{ margin: 0 }}>'), /an inline style/],
+    // 5.3: the exhibit's name, role, focus or class dropped; a second <pre>; its runs unset; a span class swapped; the names or the order off.
+    [(s) => s.replace(' aria-label={name}', ''), /the exhibit is not one <pre className="colophon-exhibit"/],
+    [(s) => s.replace(' role="region"', ''), /the exhibit is not one <pre className="colophon-exhibit"/],
+    [(s) => s.replace(' tabIndex={0}', ''), /the exhibit is not one <pre className="colophon-exhibit"/],
+    [(s) => s.replace('<pre className="colophon-exhibit"', '<pre'), /the exhibit is not one <pre className="colophon-exhibit"/],
+    [(s) => s.replace('<Derivations layout={exhibits.layout} />', '<Derivations layout={exhibits.layout} />\n          <pre>{exhibits.layout}</pre>'), /the exhibit is not one <pre className="colophon-exhibit"/],
+    [(s) => s.replace('{jsonRuns(text).map(', '{[{ kind: \'structure\', text }].map('), /the exhibit’s text is not jsonRuns\(text\)/],
+    [(s) => s.replace('className="colophon-json-key"', 'className="colophon-json-value"'), /a key run is not a span\.colophon-json-key/],
+    [(s) => s.replace('className="colophon-json-value"', 'className="colophon-json-key"'), /a value run is not a span\.colophon-json-value/],
+    [(s) => s.replace('return run.text;', 'return <span key={index}>{run.text}</span>;'), /structure is not bare text/],
+    [(s) => s.replace('<Exhibit name={EXHIBIT_PATHS.career.slice(1)}', '<Exhibit name="career.json"'), /the exhibits are not career, table, layout/],
+    [(s) => s.replace('<Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />', '<Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.career} />'), /the exhibits are not career, table, layout/],
   ];
   for (const [mutate, message] of tsxCases) {
     const mutated = mutate(tsx);
     assert.notEqual(mutated, tsx, `the mutation ${String(message)} must apply`);
     assert.match(auditColophon(css, mutated).join('\n'), message);
   }
+});
+
+// --- Monospace: the exhibits alone (5.3) ------------------------------------------------------------
+
+/** The one rule that may set the mono family. */
+const MONO_RULE = { path: COLOPHON_CSS, selector: '.colophon-exhibit' } as const;
+
+/**
+ * The mono family is the Colophon's JSON body's, and nowhere else's
+ * (DESIGN.md §3, §7.11): over every shipped file under `src/` (`shippedFiles`,
+ * the tokens skipped), `--font-mono` is named exactly once, by the one
+ * `.colophon-exhibit` rule's `font-family`; the word `monospace` appears in no
+ * file at all, comments included; no `.tsx` draws `<code>`, `<kbd>`, `<samp>`
+ * or `<tt>`, and only `colophon.tsx` draws `<pre>`; no model reads the mono
+ * family off the tokens; and every `var(--…)` a stylesheet reads is a custom
+ * property `tokens.css` defines, so the family named is a real token.
+ */
+function auditMonospace(files: Readonly<Record<string, string>>, tokensCss: string): string[] {
+  const failures: string[] = [];
+  const tokenNames = new Set([...codeOf(tokensCss, 'css').matchAll(/(--[\w-]+)\s*:/g)].map((match) => match[1]));
+  let named = 0;
+  for (const [path, source] of Object.entries(files)) {
+    const where = `src/${path}`;
+    if (/monospace/i.test(source)) failures.push(`monospace: ${where} names monospace — the family is the token's, and the exhibits' alone`);
+    const language = languageOf(path);
+    if (language === undefined) continue;
+    const code = codeOf(source, language);
+    const mentions = (code.match(/--font-mono\b/g) ?? []).length;
+    named += mentions;
+    if (mentions > 0 && path !== MONO_RULE.path) failures.push(`monospace: ${where} names --font-mono — only ${MONO_RULE.selector} sets it`);
+    if (language === 'css') {
+      for (const rule of parseCss(source)) {
+        for (const declaration of rule.declarations) {
+          for (const [, name] of declaration.matchAll(/var\(\s*(--[\w-]+)/g)) {
+            if (!tokenNames.has(name)) failures.push(`monospace: ${where} \`${rule.selector}\` reads ${name}, which no token defines`);
+          }
+          if (/--font-mono\b/.test(declaration) && !(path === MONO_RULE.path && rule.at === '' && rule.selector === MONO_RULE.selector && declaration === 'font-family: var(--font-mono)')) {
+            failures.push(`monospace: ${where} \`${rule.at === '' ? '' : `${rule.at} `}${rule.selector}\` sets ${declaration} — only ${MONO_RULE.selector}'s font-family is the mono family`);
+          }
+        }
+      }
+    }
+    if (language === 'script') {
+      if (/\bfontFamily\s*(?:\.\s*mono\b|\[\s*['"]mono['"]\s*\])/.test(code)) failures.push(`monospace: ${where} reads the mono family off the tokens — only ${MONO_RULE.selector} sets it`);
+      if (path.endsWith('.tsx')) {
+        const tag = /<(code|kbd|samp|tt)\b/.exec(code);
+        if (tag !== null) failures.push(`monospace: ${where} draws <${tag[1]}> — set in a mono face by the browser`);
+        if (/<pre\b/.test(code) && path !== 'colophon/colophon.tsx') failures.push(`monospace: ${where} draws <pre> — only the Colophon's exhibits do`);
+      }
+    }
+  }
+  if (named !== 1) failures.push(`monospace: --font-mono is named ${named} times in shipped source — exactly once, by ${MONO_RULE.selector}`);
+  return failures;
+}
+
+test('monospace: the mono family is the exhibits’ alone, and every var(--…) a stylesheet reads is a token', () => {
+  const files = shippedFiles();
+  assert.ok(COLOPHON_CSS in files && 'render-fallback/chart.tsx' in files && 'colophon/json-setting.ts' in files, 'the walk reaches the stylesheets, the renderers and the setting');
+  assert.ok(!Object.keys(files).some((path) => path.startsWith('tokens/')), 'the tokens, which define the family, are skipped');
+  assert.equal(tokens.typography.fontFamily.mono, 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace', 'the family is the system mono stack, a token');
+  assert.deepEqual(auditMonospace(files, read('./tokens/tokens.css')), []);
+});
+
+test('monospace: each guarantee removed fails with its own line', () => {
+  const files = shippedFiles();
+  const tokensCss = read('./tokens/tokens.css');
+  const edit = (path: string, change: (source: string) => string): Record<string, string> => {
+    const source = files[path];
+    assert.ok(source !== undefined, `${path} is shipped`);
+    const changed = change(source);
+    assert.notEqual(changed, source, `the mutation of ${path} must apply`);
+    return { ...files, [path]: changed };
+  };
+  for (const [name, mutated, message] of [
+    ['the family on a second rule', edit(CHART_CSS, (s) => `${s}\n.chart-index td {\n  font-family: var(--font-mono);\n}\n`), /^monospace: src\/render-fallback\/chart\.css names --font-mono/m],
+    ['the family on another Colophon rule', edit(COLOPHON_CSS, (s) => s.replace('.colophon-derivations td {\n  padding', '.colophon-derivations td {\n  font-family: var(--font-mono);\n  padding')), /^monospace: src\/colophon\/colophon\.css `\.colophon-derivations td` sets font-family: var\(--font-mono\)/m],
+    ['the family dropped', edit(COLOPHON_CSS, (s) => s.replace('  font-family: var(--font-mono);\n', '  font-family: var(--type-field-value-font-family);\n')), /^monospace: --font-mono is named 0 times in shipped source/m],
+    ['a literal stack', edit(CHART_CSS, (s) => `${s}\n.chart-index td {\n  font-family: Menlo, monospace;\n}\n`), /^monospace: src\/render-fallback\/chart\.css names monospace/m],
+    ['the word in a comment', edit('colophon/colophon.tsx', (s) => s.replace('/** The surface as drawn:', '/** In a monospace face. The surface as drawn:')), /^monospace: src\/colophon\/colophon\.tsx names monospace/m],
+    ['the family in a model', edit(AFFORDANCE_TS, (s) => s.replace('fontFamily: type.fontFamily,', 'fontFamily: tokens.typography.fontFamily.mono,')), /^monospace: src\/render-scene\/affordance-model\.ts reads the mono family off the tokens/m],
+    ['a <code> drawn', edit('render-fallback/chart.tsx', (s) => s.replace('<h1 className="chart-heading">', '<code>x</code>\n<h1 className="chart-heading">')), /^monospace: src\/render-fallback\/chart\.tsx draws <code>/m],
+    ['a <kbd> drawn', edit('shell/index-nav.tsx', (s) => s.replace('<button type="button" id={OVERVIEW_ID}', '<kbd>Tab</kbd><button type="button" id={OVERVIEW_ID}')), /^monospace: src\/shell\/index-nav\.tsx draws <kbd>/m],
+    ['a <samp> drawn', edit('colophon/colophon.tsx', (s) => s.replace('<h1>the model</h1>', '<samp>x</samp><h1>the model</h1>')), /^monospace: src\/colophon\/colophon\.tsx draws <samp>/m],
+    ['a <tt> drawn', edit('colophon/colophon.tsx', (s) => s.replace('<h1>the model</h1>', '<tt>x</tt><h1>the model</h1>')), /^monospace: src\/colophon\/colophon\.tsx draws <tt>/m],
+    ['a <pre> elsewhere', edit('render-fallback/chart.tsx', (s) => s.replace('<h1 className="chart-heading">', '<pre>x</pre>\n<h1 className="chart-heading">')), /^monospace: src\/render-fallback\/chart\.tsx draws <pre>/m],
+    ['an undefined family', edit(COLOPHON_CSS, (s) => s.replace('  font-family: var(--font-mono);\n', '  font-family: var(--font-code);\n')), /^monospace: src\/colophon\/colophon\.css `\.colophon-exhibit` reads --font-code, which no token defines/m],
+    ['an undefined colour', edit(CHART_CSS, (s) => s.replace('var(--color-ink-prose-dark)', 'var(--color-ink-prose-darker)')), /^monospace: src\/render-fallback\/chart\.css `[^`]+` reads --color-ink-prose-darker, which no token defines/m],
+  ] as const) {
+    assert.match(auditMonospace(mutated, tokensCss).join('\n'), message, `"${name}" must be rejected`);
+  }
+  // The token itself gone: the one reference names nothing.
+  assert.match(auditMonospace(files, tokensCss.replace(/\n\s*--font-mono:[^;]*;/, '')).join('\n'), /reads --font-mono, which no token defines/);
 });
