@@ -326,6 +326,10 @@ const ROLES: readonly Role[] = [
   { role: 'exhibit keys', floor: 7, ink: { css: COLOPHON_CSS, selector: '.colophon-exhibit .colophon-json-key' }, ground: 'exhibit' },
   { role: 'exhibit values', floor: 7, ink: { css: COLOPHON_CSS, selector: '.colophon-exhibit .colophon-json-value' }, ground: 'exhibit' },
   { role: 'exhibit structure', floor: 4.5, ink: { css: COLOPHON_CSS, selector: '.colophon-exhibit' }, ground: 'exhibit' },
+  // What is not there (5.4), on the page ground: the heading at field-label/ink-label,
+  // the prose at notable-prose/ink-prose, the Notable prose's floor.
+  { role: 'absences heading', floor: 4.5, ink: { css: COLOPHON_CSS, selector: '.colophon-heading' }, ground: 'page' },
+  { role: 'absences prose', floor: 7, ink: { css: COLOPHON_CSS, selector: '.colophon-prose' }, ground: 'page' },
 ];
 
 /**
@@ -535,6 +539,15 @@ test('contrast: a role moved to a dimmer ink, or one whose ink cannot be read, f
     failing(COLOPHON_CSS, (s) => s.replace('  background: var(--color-surface-raised-dark);\n', '')),
     /^contrast: the exhibit ground could not be read as a colour token$/m,
   );
+  // 5.4: the prose at ink-label, under 7 on the page ground; the heading at the quiet step.
+  assert.match(
+    failing(COLOPHON_CSS, (s) => s.replace(/(\.colophon-prose \{[^}]*color: )var\(--color-ink-prose-dark\)/, '$1var(--color-ink-label-dark)')),
+    /^contrast: absences prose is ink-label-dark on surface-base-dark, \d\.\d\d:1 — below its 7:1 floor$/m,
+  );
+  assert.match(
+    failing(COLOPHON_CSS, (s) => s.replace(/(\.colophon-heading \{[^}]*color: )var\(--color-ink-label-dark\)/, '$1var(--color-ink-quiet-dark)')),
+    /^contrast: absences heading is ink-quiet-dark on surface-base-dark/m,
+  );
   assert.match(
     auditContrast(real, 'var(--color-stroke-active-dark)').join('\n'),
     /contrast: panel title is ink-lift-dark on stroke-active-dark/,
@@ -643,6 +656,16 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
   'mass ← duration',
   'brightness ← recency',
   'distance from the Rail ← weight',
+  // The Colophon's statement of what is not there (5.4, ruling Q1 (a)): its
+  // heading and five paragraphs, verbatim — the absences and the Shot
+  // contract, each checkable against the files above it (`absences.test.ts`),
+  // under the rule annotations' copy place (EXPERIENCE.md §3, place 4).
+  'what is not there',
+  'The layout is never authored; the camera is.',
+  'There is no backend and no CMS. The two files above are all the data there is: career.json is written by hand, and layout.generated.json is produced from it and never edited. This page fetched both from this site as static files.',
+  'There are no position overrides. career.json holds no coordinate, and no entry can pin its own place: every position in layout.generated.json is solved from the three rules above.',
+  'Shots name entities, never coordinates. Each shot gives a subject, an angle and a distance, so when a solve moves a Client, its shot moves with it.',
+  'There is no per-entry camera work. Every shot’s subject is a Client; a Project is framed at its Client’s stop, never on its own.',
 ]);
 
 /** Accessible names — announced, never drawn — listed separately. */
@@ -655,7 +678,7 @@ const ACCESSIBLE_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 /** The constants the renderers draw copy from; any other upper-case constant drawn as text fails. */
-const COPY_CONSTANTS: ReadonlySet<string> = new Set(['IDENTITY_LINE', 'IDENTITY_NAME', 'IDENTITY_MODEL', 'CHART_LINK_TEXT', 'SCENE_LINK_TEXT', 'SLOT_TEXT', 'EDITORIAL_RULE', 'RELEASE_LABEL', 'FIELD_LABELS', 'DEPTH_LABELS', 'CHART_LABELS', 'DERIVATION_LABELS']);
+const COPY_CONSTANTS: ReadonlySet<string> = new Set(['IDENTITY_LINE', 'IDENTITY_NAME', 'IDENTITY_MODEL', 'CHART_LINK_TEXT', 'SCENE_LINK_TEXT', 'SLOT_TEXT', 'EDITORIAL_RULE', 'RELEASE_LABEL', 'FIELD_LABELS', 'DEPTH_LABELS', 'CHART_LABELS', 'DERIVATION_LABELS', 'ABSENCES_HEADING', 'ABSENCES']);
 
 /**
  * The separators a template sets between data, and nothing else: whitespace
@@ -979,6 +1002,22 @@ function derivationLabels(): Record<string, string> {
   return Object.fromEntries([...literal.matchAll(/(\w+):\s*'([^']*)'/g)].map(([, key, value]) => [key as string, value as string]));
 }
 
+/**
+ * The Colophon's statement of what is not there (5.4), read off
+ * `colophon/absences.ts` as text, as the derivation labels are: the heading's
+ * one string, and every `key: 'value'` pair of the paragraphs' one-line object
+ * literal; none found reads as empty, which fails the checks below.
+ */
+function absencesHeading(): Record<string, string> {
+  const value = /export const ABSENCES_HEADING = '([^']*)';/.exec(codeOf(read('./colophon/absences.ts'), 'script'))?.[1];
+  return value === undefined ? {} : { ABSENCES_HEADING: value };
+}
+
+function absences(): Record<string, string> {
+  const literal = /export const ABSENCES = \{([^}]*)\} as const;/.exec(codeOf(read('./colophon/absences.ts'), 'script'))?.[1] ?? '';
+  return Object.fromEntries([...literal.matchAll(/(\w+):\s*'([^']*)'/g)].map(([, key, value]) => [key as string, value as string]));
+}
+
 function copyConstants(): Record<string, string> {
   const entries = (name: string, record: Readonly<Record<string, string>>) => Object.entries(record).map(([key, value]) => [`${name}.${key}`, value] as const);
   return Object.fromEntries([
@@ -994,6 +1033,8 @@ function copyConstants(): Record<string, string> {
     ...entries('DEPTH_LABELS', DEPTH_LABELS),
     ...entries('CHART_LABELS', chartLabels()),
     ...entries('DERIVATION_LABELS', derivationLabels()),
+    ...Object.entries(absencesHeading()),
+    ...entries('ABSENCES', absences()),
     ...entries('SURFACE_TITLES', SURFACE_TITLES),
     ...entries('SURFACE_NAMES', SURFACE_NAMES),
   ]);
@@ -1011,6 +1052,17 @@ test('copy: the copy constants are each in the closed allowlist', () => {
   assert.deepEqual(Object.keys(derivationLabels()), ['rule', 'project', 'input', 'output', 'mass', 'brightness', 'distance'], 'the derivation table’s labels are read off its module (5.2)');
   // 5.2: a rule annotated beyond its name, or a fourth rule, is not in the allowlist.
   for (const [name, value] of [['DERIVATION_LABELS.mass', 'mass ← duration (in months)'], ['DERIVATION_LABELS.distance', 'size ← skills']] as const) {
+    assert.deepEqual(auditCopyConstants({ ...constants, [name]: value }), [`copy: the constant ${name} is ${JSON.stringify(value)}, which is not in the closed allowlist`]);
+  }
+  // 5.4: the heading and the five paragraphs, read off their module; a paragraph reworded, or a sixth, is not in the allowlist.
+  assert.deepEqual(Object.keys(absencesHeading()), ['ABSENCES_HEADING'], 'the absences heading is read off its module (5.4)');
+  assert.deepEqual(Object.keys(absences()), ['thesis', 'data', 'positions', 'shots', 'camera'], 'the absences are read off their module (5.4)');
+  for (const [name, value] of [
+    ['ABSENCES_HEADING', 'What is not there'],
+    ['ABSENCES.data', 'There is no backend and no CMS.'],
+    ['ABSENCES.thesis', 'The layout is never authored; the camera is'],
+    ['ABSENCES.boast', 'Built with care and attention to maintainability.'],
+  ] as const) {
     assert.deepEqual(auditCopyConstants({ ...constants, [name]: value }), [`copy: the constant ${name} is ${JSON.stringify(value)}, which is not in the closed allowlist`]);
   }
   assert.deepEqual(auditCopyConstants(constants), []);
@@ -1063,6 +1115,13 @@ test('copy: every visible literal shipped from src/ and index.html is in the clo
   const colophon = jsxDrawn(codeOf(scripts['colophon/colophon.tsx'] as string, 'script'));
   assert.ok(colophon.some((drawn) => drawn.kind === 'constant' && drawn.text === 'DERIVATION_LABELS'), 'the derivation table’s headers are read');
   assert.ok(colophon.some((drawn) => drawn.kind === 'text' && drawn.text === '–'), 'the duration separator is read');
+  // 5.4: the absences heading is drawn as a constant; a line of prose written into the markup is not admitted.
+  assert.ok(colophon.some((drawn) => drawn.kind === 'constant' && drawn.text === 'ABSENCES_HEADING'), 'the absences heading is read');
+  assert.match(
+    auditCopy({ ...scripts, 'colophon/colophon.tsx': (scripts['colophon/colophon.tsx'] as string).replace('<h2 className="colophon-heading">{ABSENCES_HEADING}</h2>', '<h2 className="colophon-heading">{ABSENCES_HEADING}</h2>\n          <p className="colophon-prose">Everything here is open source.</p>') }, read('../index.html')).join('\n'),
+    /^copy: src\/colophon\/colophon\.tsx draws the visible text "Everything here is open source\."/,
+    'a paragraph written beside the ruled copy fails',
+  );
   assert.match(
     auditCopy({ ...scripts, 'colophon/colophon.tsx': (scripts['colophon/colophon.tsx'] as string).replace('<thead>', '<caption>How the layout is derived</caption>\n      <thead>') }, read('../index.html')).join('\n'),
     /^copy: src\/colophon\/colophon\.tsx draws the visible text "How the layout is derived"/,
@@ -1740,6 +1799,10 @@ const COLOPHON_RULES: readonly CssRule[] = [
   { at: '', selector: '.colophon-exhibit:focus-visible', declarations: ['outline: 1px solid var(--color-stroke-focus-dark)', 'outline-offset: 3px'] },
   { at: '', selector: '.colophon-exhibit .colophon-json-key', declarations: ['color: var(--color-ink-lift-dark)'] },
   { at: '', selector: '.colophon-exhibit .colophon-json-value', declarations: ['color: var(--color-ink-prose-dark)'] },
+  // What is not there (5.4, ruling Q2 (a)): the heading at field-label/ink-label,
+  // the prose at notable-prose/ink-prose held to measure-prose, as `.panel-prose`.
+  { at: '', selector: '.colophon-heading', declarations: ['margin: var(--space-xxl) 0 var(--space-md)', ...CHART_TYPE('field-label'), 'color: var(--color-ink-label-dark)'] },
+  { at: '', selector: '.colophon-prose', declarations: ['margin: 0 0 var(--space-md)', 'max-width: var(--space-measure-prose)', ...CHART_TYPE('notable-prose'), 'color: var(--color-ink-prose-dark)'] },
   { at: '@media (forced-colors: active)', selector: '.colophon-exhibit:focus-visible', declarations: ['outline: 1px solid CanvasText'] },
 ];
 
@@ -1753,7 +1816,10 @@ const COLOPHON_RULES: readonly CssRule[] = [
  * its `name`, focusable, classed `colophon-exhibit`, its runs `jsonRuns(text)`
  * — keys in `span.colophon-json-key`, values in `span.colophon-json-value`,
  * structure bare — and the two drawn career, table, layout, each named off
- * `EXHIBIT_PATHS`. No inline style.
+ * `EXHIBIT_PATHS`. What is not there (5.4): after the layout exhibit, one
+ * `<h2 className="colophon-heading">{ABSENCES_HEADING}</h2>`, then one
+ * `<p className="colophon-prose">` per `ABSENCES` entry, keyed by its name,
+ * from `./absences.ts`; no `<section>`. No inline style.
  */
 function auditColophon(css: string, tsx: string): string[] {
   const failures = [...auditBans('colophon', css), ...auditDeclarations('colophon', css, COLOPHON_RULES)];
@@ -1777,6 +1843,14 @@ function auditColophon(css: string, tsx: string): string[] {
   if (!/<Exhibit name=\{EXHIBIT_PATHS\.career\.slice\(1\)\} text=\{exhibits\.career\} \/>\s*<Derivations layout=\{exhibits\.layout\} \/>\s*<Exhibit name=\{EXHIBIT_PATHS\.layout\.slice\(1\)\} text=\{exhibits\.layout\} \/>/.test(script)) {
     failures.push('colophon: the exhibits are not career, table, layout, each named off EXHIBIT_PATHS');
   }
+  if (
+    !/<Exhibit name=\{EXHIBIT_PATHS\.layout\.slice\(1\)\} text=\{exhibits\.layout\} \/>\s*<h2 className="colophon-heading">\{ABSENCES_HEADING\}<\/h2>\s*\{Object\.entries\(ABSENCES\)\.map\(\(\[key, text\]\) => \(\s*<p key=\{key\} className="colophon-prose">\s*\{text\}\s*<\/p>\s*\)\)\}\s*<\/>/.test(script)
+  ) {
+    failures.push('colophon: what is not there is not the h2.colophon-heading then one p.colophon-prose per ABSENCES entry, after the layout exhibit');
+  }
+  if ((script.match(/<h2\b/g) ?? []).length !== 1 || (script.match(/<p\b/g) ?? []).length !== 1) failures.push('colophon: a heading or paragraph other than the absences’');
+  if (/<section\b/.test(script)) failures.push('colophon: a <section> — the page’s one landmark is the host’s <main>');
+  if (!/^import \{ ABSENCES, ABSENCES_HEADING \} from '\.\/absences\.ts';$/m.test(script)) failures.push('colophon: the absences are not read from ./absences.ts');
   if (/\bstyle=\{/.test(script)) failures.push('colophon: an inline style — the treatment is the stylesheet’s');
   return failures;
 }
@@ -1823,6 +1897,18 @@ test('colophon: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('.colophon-exhibit .colophon-json-value {\n  color: var(--color-ink-prose-dark);', '.colophon-exhibit .colophon-json-value {\n  color: var(--color-ink-lift-dark);'), /`\.colophon-exhibit \.colophon-json-value` lacks `color: var\(--color-ink-prose-dark\)`/],
     [(s) => s.replace('  border-left: 1px solid var(--color-surface-edge-dark);\n  font-family', '  border-left: 1px solid var(--color-surface-edge-dark);\n  border-radius: 2px;\n  font-family'), /colophon: a radius, shadow or filter/],
     [(s) => `${s}\n.colophon-exhibit .colophon-json-key {\n  color: #7FB8FF;\n}\n`, /colophon: a hex colour/],
+    // 5.4: the heading off field-label, ink-label or its margin; the prose off notable-prose, ink-prose or the measure; bold, a transform.
+    [(s) => s.replace('.colophon-heading {\n  margin: var(--space-xxl) 0 var(--space-md);', '.colophon-heading {\n  margin: var(--space-xl) 0 var(--space-md);'), /`\.colophon-heading` lacks `margin: var\(--space-xxl\) 0 var\(--space-md\)`/],
+    [(s) => s.replace(/(\.colophon-heading \{[^}]*)font-size: var\(--type-field-label-font-size\)/, '$1font-size: var(--type-notable-prose-font-size)'), /`\.colophon-heading` lacks `font-size: var\(--type-field-label-font-size\)`/],
+    [(s) => s.replace(/(\.colophon-heading \{[^}]*color: )var\(--color-ink-label-dark\)/, '$1var(--color-ink-lift-dark)'), /`\.colophon-heading` lacks `color: var\(--color-ink-label-dark\)`/],
+    [(s) => s.replace(/(\.colophon-heading \{[^}]*)font-weight: var\(--type-field-label-font-weight\)/, '$1font-weight: bold'), /`\.colophon-heading` lacks `font-weight: var\(--type-field-label-font-weight\)`/],
+    [(s) => s.replace('.colophon-heading {\n', '.colophon-heading {\n  text-transform: uppercase;\n'), /^colophon: text-transform/m],
+    [(s) => s.replace('  max-width: var(--space-measure-prose);\n', ''), /`\.colophon-prose` lacks `max-width: var\(--space-measure-prose\)`/],
+    [(s) => s.replace(/(\.colophon-prose \{[^}]*)font-family: var\(--type-notable-prose-font-family\)/, '$1font-family: var(--type-field-value-font-family)'), /`\.colophon-prose` lacks `font-family: var\(--type-notable-prose-font-family\)`/],
+    [(s) => s.replace(/(\.colophon-prose \{[^}]*)line-height: var\(--type-notable-prose-line-height\)/, '$1line-height: 1.5'), /`\.colophon-prose` lacks `line-height: var\(--type-notable-prose-line-height\)`/],
+    [(s) => s.replace(/(\.colophon-prose \{[^}]*color: )var\(--color-ink-prose-dark\)/, '$1var(--color-ink-lift-dark)'), /`\.colophon-prose` lacks `color: var\(--color-ink-prose-dark\)`/],
+    [(s) => s.replace('.colophon-prose {\n  margin: 0 0 var(--space-md);', '.colophon-prose {\n  margin: 0;'), /`\.colophon-prose` lacks `margin: 0 0 var\(--space-md\)`/],
+    [(s) => `${s}\n.colophon-prose strong {\n  color: var(--color-ink-lift-dark);\n}\n`, /^colophon: the unlisted rule `\.colophon-prose strong`$/m],
   ];
   for (const [mutate, message] of cssCases) {
     const mutated = mutate(css);
@@ -1850,6 +1936,18 @@ test('colophon: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('return run.text;', 'return <span key={index}>{run.text}</span>;'), /structure is not bare text/],
     [(s) => s.replace('<Exhibit name={EXHIBIT_PATHS.career.slice(1)}', '<Exhibit name="career.json"'), /the exhibits are not career, table, layout/],
     [(s) => s.replace('<Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />', '<Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.career} />'), /the exhibits are not career, table, layout/],
+    // 5.4: the heading unclassed, an h3, its constant replaced; the prose unclassed, drawn from elsewhere, before the layout; a second paragraph; a section; the import off.
+    [(s) => s.replace('<h2 className="colophon-heading">', '<h2>'), /what is not there is not the h2\.colophon-heading/],
+    [(s) => s.replace('<h2 className="colophon-heading">{ABSENCES_HEADING}</h2>', '<h3 className="colophon-heading">{ABSENCES_HEADING}</h3>'), /what is not there is not the h2\.colophon-heading/],
+    [(s) => s.replace('<p key={key} className="colophon-prose">', '<p key={key}>'), /what is not there is not the h2\.colophon-heading/],
+    [(s) => s.replace('{Object.entries(ABSENCES).map(', '{Object.entries(DERIVATION_LABELS).map('), /what is not there is not the h2\.colophon-heading/],
+    [
+      (s) => s.replace('<Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />\n          <h2', '<h2').replace('          ))}\n        </>', '          ))}\n          <Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />\n        </>'),
+      /what is not there is not the h2\.colophon-heading/,
+    ],
+    [(s) => s.replace('<h1>the model</h1>', '<h1>the model</h1>\n      <p className="colophon-prose">{ABSENCES.thesis}</p>'), /a heading or paragraph other than the absences’/],
+    [(s) => s.replace('<h2 className="colophon-heading">', '<section>\n          <h2 className="colophon-heading">').replace('          ))}\n        </>', '          ))}\n          </section>\n        </>'), /a <section>/],
+    [(s) => s.replace("import { ABSENCES, ABSENCES_HEADING } from './absences.ts';", "import { ABSENCES, ABSENCES_HEADING } from './copy.ts';"), /the absences are not read from \.\/absences\.ts/],
   ];
   for (const [mutate, message] of tsxCases) {
     const mutated = mutate(tsx);

@@ -1,5 +1,6 @@
 /*
- * The Colophon's derivation table (5.2) and its two exhibits (5.3): DESIGN.md
+ * The Colophon's derivation table (5.2), its two exhibits (5.3) and its
+ * statement of what is not there (5.4): DESIGN.md
  * `components.colophon-derivation` and `components.colophon-json`. Every
  * colour, family, size, weight and space is a token custom property from
  * `src/tokens/tokens.css`; the only literal lengths are the 1px rules (between
@@ -28,6 +29,12 @@
  * container), so the page never scrolls sideways, and the block takes keyboard
  * focus to be scrolled, drawing the chart's focus outline (a system outline
  * under forced colours). No height limit, no fold.
+ *
+ * What is not there (5.4, ruling Q2 (a)): the heading (`.colophon-heading`, an
+ * `<h2>`) is the `field-label` role at `ink-label`, as the table's headers;
+ * the paragraphs (`.colophon-prose`) are the `notable-prose` role at
+ * `ink-prose`, held to `measure-prose`, as the panel's `.panel-prose`. No
+ * bold, no transform.
  */
 
 .colophon-derivations {
@@ -98,6 +105,27 @@
 }
 
 .colophon-exhibit .colophon-json-value {
+  color: var(--color-ink-prose-dark);
+}
+
+.colophon-heading {
+  margin: var(--space-xxl) 0 var(--space-md);
+  font-family: var(--type-field-label-font-family);
+  font-size: var(--type-field-label-font-size);
+  font-weight: var(--type-field-label-font-weight);
+  line-height: var(--type-field-label-line-height);
+  letter-spacing: var(--type-field-label-letter-spacing);
+  color: var(--color-ink-label-dark);
+}
+
+.colophon-prose {
+  margin: 0 0 var(--space-md);
+  max-width: var(--space-measure-prose);
+  font-family: var(--type-notable-prose-font-family);
+  font-size: var(--type-notable-prose-font-size);
+  font-weight: var(--type-notable-prose-font-weight);
+  line-height: var(--type-notable-prose-line-height);
+  letter-spacing: var(--type-notable-prose-letter-spacing);
   color: var(--color-ink-prose-dark);
 }
 

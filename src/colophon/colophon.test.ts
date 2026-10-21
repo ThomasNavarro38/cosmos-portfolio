@@ -1,9 +1,12 @@
 /**
- * `colophon.tsx` (5.1, 5.2, 5.3): `ColophonPage` rendered through the render
+ * `colophon.tsx` (5.1, 5.2, 5.3, 5.4): `ColophonPage` rendered through the render
  * harness (`scripts/render.ts`). Without exhibits — before the files arrive, or
- * after a failed fetch — the `<h1>` alone. With them, the `<h1>`, career.json
+ * after a failed fetch — the `<h1>` alone, with no prose about files that are
+ * not there. With them, the `<h1>`, career.json
  * verbatim in a `<pre>`, the derivation table (5.2), then layout.generated.json
- * verbatim in a `<pre>`; the files here are the real ones, read from disk, so
+ * verbatim in a `<pre>`, then (5.4) `<h2 class="colophon-heading">` reading
+ * `ABSENCES_HEADING` and one `<p class="colophon-prose">` per `ABSENCES`
+ * entry, verbatim and in order; the files here are the real ones, read from disk, so
  * the check is against the bytes the build publishes. Each `<pre>` (5.3) is a
  * region named by its file's name, focusable (`tabindex="0"`), classed
  * `colophon-exhibit`; its decoded text is the file, and its key and value
@@ -15,7 +18,8 @@
  * `<pre>` or the table missing, the text altered, the order swapped, a row
  * dropped or reordered, a value altered, a `scope` dropped, an exhibit's name,
  * role or `tabindex` dropped, a run dropped or reordered, a span's class
- * swapped.
+ * swapped; the `<h2>` dropped, renamed or made an `<h3>`, a paragraph dropped,
+ * reordered or altered, the prose drawn before the layout `<pre>`.
  *
  * The default `Colophon`'s effect does not run under the harness (a static
  * render runs no effect), so the fetch is `exhibits.test.ts`'s — `startExhibits`
@@ -31,6 +35,7 @@ import { stripComments } from '../../scripts/source-scan.ts';
 import { React, elementsOf, parseMarkup, queryAll, renderer, textOf, type MarkupElement, type Renderer } from '../../scripts/render.ts';
 import type { ColophonPage as ColophonPageComponent } from './colophon.tsx';
 import { EXHIBIT_PATHS, type Exhibits } from './exhibits.ts';
+import { ABSENCES, ABSENCES_HEADING } from './absences.ts';
 
 const CAREER = readFileSync(new URL('../data/career.json', import.meta.url), 'utf8');
 const LAYOUT = readFileSync(new URL('../../generated/layout.generated.json', import.meta.url), 'utf8');
@@ -172,23 +177,44 @@ function exhibit(pre: MarkupElement, name: string, text: string): string[] {
 const CAREER_NAME = EXHIBIT_PATHS.career.slice(1);
 const LAYOUT_NAME = EXHIBIT_PATHS.layout.slice(1);
 
+const PARAGRAPHS: readonly string[] = Object.values(ABSENCES);
+
+/**
+ * What is not there (5.4): an `<h2 class="colophon-heading">` reading
+ * `ABSENCES_HEADING`, then one `<p class="colophon-prose">` per paragraph, each
+ * reading its paragraph of `ABSENCES`, in order, holding no markup.
+ */
+function absences(heading: MarkupElement, paragraphs: readonly MarkupElement[]): string[] {
+  const failures: string[] = [];
+  if (JSON.stringify(heading.attrs) !== JSON.stringify({ class: 'colophon-heading' })) failures.push(`the <h2> carries ${JSON.stringify(heading.attrs)}`);
+  if (textOf(heading) !== ABSENCES_HEADING) failures.push(`the <h2> reads ${JSON.stringify(textOf(heading))}`);
+  paragraphs.forEach((paragraph, index) => {
+    if (JSON.stringify(paragraph.attrs) !== JSON.stringify({ class: 'colophon-prose' })) failures.push(`paragraph ${index} carries ${JSON.stringify(paragraph.attrs)}`);
+    if (elementsOf(paragraph).length !== 0) failures.push(`paragraph ${index} holds markup`);
+    if (textOf(paragraph) !== PARAGRAPHS[index]) failures.push(`paragraph ${index} reads ${JSON.stringify(textOf(paragraph))}, not ${JSON.stringify(PARAGRAPHS[index])}`);
+  });
+  return failures;
+}
+
 /**
  * The page's elements: `<h1>the model</h1>`, then, when `expected` is given,
  * the career exhibit, the derivation table worked on its layout's first
- * Project, and the layout exhibit — and nothing else.
+ * Project, the layout exhibit, and what is not there — the `<h2>` and five
+ * `<p>` — and nothing else.
  */
 function colophonPage(html: string, expected: Exhibits | null): string[] {
   const children = elementsOf(parseMarkup(html));
   const failures: string[] = [];
   const tags = children.map((child) => child.tag);
-  const want = expected === null ? ['h1'] : ['h1', 'pre', 'table', 'pre'];
+  const want = expected === null ? ['h1'] : ['h1', 'pre', 'table', 'pre', 'h2', ...PARAGRAPHS.map(() => 'p')];
   if (JSON.stringify(tags) !== JSON.stringify(want)) return [`the page renders ${JSON.stringify(tags)}, not ${JSON.stringify(want)}`];
-  const [heading, career, table, layout] = children as [MarkupElement, MarkupElement, MarkupElement, MarkupElement];
+  const [heading, career, table, layout, absencesHeading, ...paragraphs] = children as [MarkupElement, MarkupElement, MarkupElement, MarkupElement, MarkupElement, ...MarkupElement[]];
   if (textOf(heading) !== 'the model') failures.push(`the heading reads ${JSON.stringify(textOf(heading))}`);
   if (expected !== null) {
     failures.push(...exhibit(career, CAREER_NAME, expected.career));
     failures.push(...derivationTable(table, expected.layout));
     failures.push(...exhibit(layout, LAYOUT_NAME, expected.layout));
+    failures.push(...absences(absencesHeading, paragraphs));
   }
   return failures;
 }
@@ -204,7 +230,7 @@ test('without exhibits: the <h1> alone', async () => {
   assert.deepEqual(colophonPage(await renderPage(null), null), []);
 });
 
-test('with exhibits: the <h1>, career.json verbatim in a <pre>, the derivation table, then layout.generated.json verbatim in a <pre>', async () => {
+test('with exhibits: the <h1>, career.json verbatim in a <pre>, the derivation table, layout.generated.json verbatim in a <pre>, then what is not there', async () => {
   assert.ok(CAREER.length > 0 && LAYOUT.length > 0, 'the real files were read');
   assert.deepEqual([CAREER_NAME, LAYOUT_NAME], ['career.json', 'layout.generated.json'], 'the names are the published files’');
   assert.deepEqual(colophonPage(await renderPage(EXHIBITS), EXHIBITS), []);
@@ -262,9 +288,16 @@ test('the page check is red against broken markup', async () => {
   assert.ok(careerOpen !== '' && firstKey !== '', 'the career <pre> opens and holds a key span');
   // A function replacement: the file's own text may hold `$&` or `$'`, which a string replacement would expand.
   const inCareer = (edit: (pre: string) => string): string => full.replace(careerPre, () => edit(careerPre));
+  // 5.4: what is not there, after the layout <pre>.
+  const absencesStart = full.indexOf('<h2 ');
+  const prose = full.slice(absencesStart);
+  const headingMarkup = /^<h2 [^>]*>[^<]*<\/h2>/.exec(prose)?.[0] ?? '';
+  const paragraphMarkup = [...prose.matchAll(/<p class="colophon-prose">[^<]*<\/p>/g)].map((match) => match[0]);
+  const [firstParagraph, secondParagraph] = paragraphMarkup as [string, string];
+  assert.ok(absencesStart > secondPre && headingMarkup !== '' && paragraphMarkup.length === PARAGRAPHS.length, 'the heading and five paragraphs follow the layout <pre>');
   for (const [name, markup] of [
     ['the table missing', full.replace(table, '')],
-    ['the table after the layout', full.replace(table, '').replace(/<\/pre>$/, `</pre>${table}`)],
+    ['the table after the layout', full.replace(table, '').replace(layoutPre, () => `${layoutPre}${table}`)],
     ['a row dropped', full.replace(bandRow, '')],
     ['rows reordered', full.replace(`${massRow}${bandRow}`, `${bandRow}${massRow}`)],
     ['a derived value altered', full.replace(massRow, massRow.replace(`>${derived}</td>`, `>${derived}0</td>`))],
@@ -293,6 +326,17 @@ test('the page check is red against broken markup', async () => {
     ['a run in a <code>', inCareer((pre) => pre.replace(firstKey, `<code>${firstKey}</code>`))],
     ['the career <pre> unset', full.replace(careerOpen, '<pre>')],
     ['wrapped', `<div>${full}</div>`],
+    ['the <h2> dropped', full.replace(headingMarkup, '')],
+    ['the <h2> renamed', full.replace(headingMarkup, headingMarkup.replace(ABSENCES_HEADING, 'What is not there'))],
+    ['the <h2> made an <h3>', full.replace(headingMarkup, headingMarkup.replace(/^<h2/, '<h3').replace(/h2>$/, 'h3>'))],
+    ['the <h2> unclassed', full.replace(headingMarkup, headingMarkup.replace(' class="colophon-heading"', ''))],
+    ['a paragraph dropped', full.replace(secondParagraph, '')],
+    ['paragraphs reordered', full.replace(`${firstParagraph}${secondParagraph}`, `${secondParagraph}${firstParagraph}`)],
+    ['a paragraph altered', full.replace(secondParagraph, secondParagraph.replace('There is no backend and no CMS.', 'There is no backend.'))],
+    ['a paragraph unclassed', full.replace(firstParagraph, firstParagraph.replace(' class="colophon-prose"', ''))],
+    ['a sixth paragraph', `${full}<p class="colophon-prose">Built with care.</p>`],
+    ['the prose before the layout <pre>', full.slice(0, secondPre) + prose + full.slice(secondPre, absencesStart)],
+    ['the prose without the exhibits', `${bare}${prose}`],
   ] as const) {
     assert.notEqual(markup, full, `the break "${name}" must apply`);
     assert.notDeepEqual(colophonPage(markup, EXHIBITS), [], `"${name}" must be rejected`);

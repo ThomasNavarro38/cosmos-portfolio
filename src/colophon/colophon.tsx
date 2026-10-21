@@ -1,5 +1,5 @@
 /**
- * The Colophon (4.2, 5.1, 5.2, 5.3): the `/colophon` route's surface, reached only through
+ * The Colophon (4.2, 5.1, 5.2, 5.3, 5.4): the `/colophon` route's surface, reached only through
  * `lazy(() => import('./colophon.tsx'))` in `src/shell/colophon-host.tsx`, so it
  * is its own chunk and never on the entry graph or the scene's.
  *
@@ -37,11 +37,18 @@
  * rows cannot be read from throws, naming the field, into the
  * `colophon-host` error boundary. The treatment (DESIGN.md
  * `components.colophon-derivation`) is `colophon.css`'s. The table's copy is
- * `DERIVATION_LABELS` alone; no other copy (5.4–5.5): the exhibits are named
- * by their files' names, with no visible heading or caption.
+ * `DERIVATION_LABELS` alone: the exhibits are named by their files' names,
+ * with no visible heading or caption.
  *
- * It imports React, `exhibits.ts`, `derivations.ts`, `json-setting.ts` and
- * `colophon.css`, and nothing else: not the shell, not the motion preference,
+ * **What is not there** (5.4, FR-21, UX-DR53). After the layout `<pre>`, an
+ * `<h2>` (`ABSENCES_HEADING`) and one `<p className="colophon-prose">` per
+ * entry of `ABSENCES` (`absences.ts`), in order — the ruled copy, verbatim,
+ * and the page's only prose. It is drawn with the exhibits and never without
+ * them: every sentence points at "the files above". No `<section>`, no
+ * landmark beyond the host's `<main>`. No other copy (5.5).
+ *
+ * It imports React, `exhibits.ts`, `derivations.ts`, `json-setting.ts`,
+ * `absences.ts` and `colophon.css`, and nothing else: not the shell, not the motion preference,
  * never `src/data/`, `generated/` or `src/derive/`.
  */
 
@@ -49,6 +56,7 @@ import { useEffect, useState } from 'react';
 import { EXHIBIT_PATHS, startExhibits, type Exhibits } from './exhibits.ts';
 import { DERIVATION_LABELS, derivationRows, type DerivationInput } from './derivations.ts';
 import { jsonRuns } from './json-setting.ts';
+import { ABSENCES, ABSENCES_HEADING } from './absences.ts';
 import './colophon.css';
 
 /** A rule's input: the weight as `String(weight)`, or the duration as `start – end`, `start –` while ongoing. */
@@ -106,7 +114,7 @@ function Exhibit({ name, text }: { readonly name: string; readonly text: string 
   );
 }
 
-/** The surface as drawn: the heading, and, once the files have arrived, the two files with the derivations between them. */
+/** The surface as drawn: the heading, and, once the files have arrived, the two files with the derivations between them, then what is not there. */
 export function ColophonPage({ exhibits }: { readonly exhibits: Exhibits | null }) {
   return (
     <>
@@ -116,6 +124,12 @@ export function ColophonPage({ exhibits }: { readonly exhibits: Exhibits | null 
           <Exhibit name={EXHIBIT_PATHS.career.slice(1)} text={exhibits.career} />
           <Derivations layout={exhibits.layout} />
           <Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />
+          <h2 className="colophon-heading">{ABSENCES_HEADING}</h2>
+          {Object.entries(ABSENCES).map(([key, text]) => (
+            <p key={key} className="colophon-prose">
+              {text}
+            </p>
+          ))}
         </>
       )}
     </>
