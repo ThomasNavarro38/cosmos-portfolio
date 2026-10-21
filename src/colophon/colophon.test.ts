@@ -1,11 +1,15 @@
 /**
- * `colophon.tsx` (5.1): `ColophonPage` rendered through the render harness
+ * `colophon.tsx` (5.1, 5.2): `ColophonPage` rendered through the render harness
  * (`scripts/render.ts`). Without exhibits — before the files arrive, or after a
- * failed fetch — the `<h1>` alone. With them, the `<h1>` and then each file's
- * text verbatim in its own `<pre>`, career first; the files here are the real
- * ones, read from disk, so the check is against the bytes the build publishes.
- * Each check is driven red against broken markup: a `<pre>` missing, the text
- * altered, the order swapped.
+ * failed fetch — the `<h1>` alone. With them, the `<h1>`, career.json verbatim
+ * in a `<pre>`, the derivation table (5.2), then layout.generated.json verbatim
+ * in a `<pre>`; the files here are the real ones, read from disk, so the check
+ * is against the bytes the build publishes. The table's cells are checked
+ * against the artifact's own first Project, read here from the parsed file,
+ * never a literal, and an altered artifact (an ongoing end among them) is
+ * drawn with no code edit. Each check is driven red against broken markup: a
+ * `<pre>` or the table missing, the text altered, the order swapped, a row
+ * dropped or reordered, a value altered, a `scope` dropped.
  *
  * The default `Colophon`'s effect does not run under the harness (a static
  * render runs no effect), so the fetch is `exhibits.test.ts`'s — `startExhibits`
@@ -18,7 +22,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { after, test } from 'node:test';
 import { stripComments } from '../../scripts/source-scan.ts';
-import { React, elementsOf, parseMarkup, renderer, textOf, type MarkupElement, type Renderer } from '../../scripts/render.ts';
+import { React, elementsOf, parseMarkup, queryAll, renderer, textOf, type MarkupElement, type Renderer } from '../../scripts/render.ts';
 import type { ColophonPage as ColophonPageComponent } from './colophon.tsx';
 import type { Exhibits } from './exhibits.ts';
 
@@ -37,34 +41,130 @@ async function renderPage(exhibits: Exhibits | null): Promise<string> {
   return harness.render(React.createElement(ColophonPage, { exhibits }), { name: 'ColophonPage' });
 }
 
+/** The artifact's first Project, as the test reads it from the parsed text. */
+interface FirstProject {
+  readonly mass: number;
+  readonly luminanceBand: string;
+  readonly railDistance: number;
+  readonly content: { readonly project: string; readonly duration: { readonly start: string; readonly end: string | null }; readonly weight: number };
+}
+
+type LayoutDocument = { clients: { projects: FirstProject[] }[] };
+
+const firstOf = (layout: LayoutDocument): FirstProject => layout.clients[0]?.projects[0] as FirstProject;
+
+/**
+ * The table's cell texts as `layoutText`'s first Project gives them, read here
+ * from the parsed file: one row per rule, `[rule, project, input, output]`,
+ * numbers as `String(value)`, an ongoing duration `{start} –`.
+ */
+function expectedCells(layoutText: string): string[][] {
+  const project = firstOf(JSON.parse(layoutText) as LayoutDocument);
+  const { start, end } = project.content.duration;
+  const span = end === null ? `${start} –` : `${start} – ${end}`;
+  const name = project.content.project;
+  return [
+    ['mass ← duration', name, span, String(project.mass)],
+    ['brightness ← recency', name, span, project.luminanceBand],
+    ['distance from the Rail ← weight', name, String(project.content.weight), String(project.railDistance)],
+  ];
+}
+
+const HEADERS = ['Rule', 'Project', 'Input', 'Output'];
+
+/** The derivation table against `layoutText`: one header row of four `th[scope=col]`, three body rows of `th[scope=row]` and three `td`, the last the derived cell. */
+function derivationTable(table: MarkupElement, layoutText: string): string[] {
+  const failures: string[] = [];
+  if (JSON.stringify(table.attrs) !== JSON.stringify({ class: 'colophon-derivations' })) failures.push(`the table carries ${JSON.stringify(table.attrs)}`);
+  const parts = elementsOf(table);
+  if (JSON.stringify(parts.map((part) => part.tag)) !== JSON.stringify(['thead', 'tbody'])) return [...failures, `the table holds ${JSON.stringify(parts.map((part) => part.tag))}`];
+  const [head, body] = parts as [MarkupElement, MarkupElement];
+  const headRows = elementsOf(head);
+  const headCells = headRows.length === 1 ? elementsOf(headRows[0] as MarkupElement) : [];
+  if (headRows.length !== 1 || headCells.length !== HEADERS.length) failures.push('the head is not one row of four cells');
+  headCells.forEach((cell, index) => {
+    if (cell.tag !== 'th' || JSON.stringify(cell.attrs) !== JSON.stringify({ scope: 'col' })) failures.push(`header ${index} is not a th scope="col"`);
+    if (textOf(cell) !== HEADERS[index]) failures.push(`header ${index} reads ${JSON.stringify(textOf(cell))}`);
+  });
+  const expected = expectedCells(layoutText);
+  const rows = elementsOf(body);
+  if (rows.length !== expected.length) return [...failures, `the body holds ${rows.length} rows, not ${expected.length}`];
+  rows.forEach((row, index) => {
+    const cells = elementsOf(row);
+    const shape = cells.map((cell) => `${cell.tag}${JSON.stringify(cell.attrs)}`);
+    const want = ['th{"scope":"row"}', 'td{}', 'td{}', 'td{"class":"colophon-derived"}'];
+    if (row.tag !== 'tr' || JSON.stringify(shape) !== JSON.stringify(want)) failures.push(`row ${index} is ${JSON.stringify(shape)}, not ${JSON.stringify(want)}`);
+    const texts = cells.map(textOf);
+    if (JSON.stringify(texts) !== JSON.stringify(expected[index])) failures.push(`row ${index} reads ${JSON.stringify(texts)}, not ${JSON.stringify(expected[index])}`);
+  });
+  return failures;
+}
+
 /**
  * The page's elements: `<h1>the model</h1>`, then, when `expected` is given,
- * `<pre>` holding its career text verbatim and `<pre>` holding its layout text
- * verbatim — and nothing else.
+ * `<pre>` holding its career text verbatim, the derivation table worked on its
+ * layout's first Project, and `<pre>` holding its layout text verbatim — and
+ * nothing else.
  */
 function colophonPage(html: string, expected: Exhibits | null): string[] {
   const children = elementsOf(parseMarkup(html));
   const failures: string[] = [];
   const tags = children.map((child) => child.tag);
-  const want = expected === null ? ['h1'] : ['h1', 'pre', 'pre'];
+  const want = expected === null ? ['h1'] : ['h1', 'pre', 'table', 'pre'];
   if (JSON.stringify(tags) !== JSON.stringify(want)) return [`the page renders ${JSON.stringify(tags)}, not ${JSON.stringify(want)}`];
-  const [heading, career, layout] = children as [MarkupElement, MarkupElement, MarkupElement];
+  const [heading, career, table, layout] = children as [MarkupElement, MarkupElement, MarkupElement, MarkupElement];
   if (textOf(heading) !== 'the model') failures.push(`the heading reads ${JSON.stringify(textOf(heading))}`);
   if (expected !== null) {
     if (textOf(career) !== expected.career) failures.push('the first <pre> is not career.json, verbatim');
+    failures.push(...derivationTable(table, expected.layout));
     if (textOf(layout) !== expected.layout) failures.push('the second <pre> is not layout.generated.json, verbatim');
     for (const pre of [career, layout]) if (Object.keys(pre.attrs).length > 0) failures.push(`a <pre> carries ${Object.keys(pre.attrs).join(', ')} — unset in 5.1`);
   }
   return failures;
 }
 
+/** The real layout text, its first Project `edit`ed. */
+function alteredLayout(edit: (project: { mass: unknown; luminanceBand: unknown; railDistance: unknown; content: { project: unknown; duration: { start: unknown; end: unknown }; weight: unknown } }) => void): string {
+  const layout = JSON.parse(LAYOUT) as LayoutDocument;
+  edit(firstOf(layout) as unknown as Parameters<typeof edit>[0]);
+  return JSON.stringify(layout, null, 2);
+}
+
 test('without exhibits: the <h1> alone', async () => {
   assert.deepEqual(colophonPage(await renderPage(null), null), []);
 });
 
-test('with exhibits: the <h1>, then career.json and layout.generated.json verbatim, each in its own <pre>', async () => {
+test('with exhibits: the <h1>, career.json verbatim in a <pre>, the derivation table, then layout.generated.json verbatim in a <pre>', async () => {
   assert.ok(CAREER.length > 0 && LAYOUT.length > 0, 'the real files were read');
   assert.deepEqual(colophonPage(await renderPage(EXHIBITS), EXHIBITS), []);
+});
+
+test('the table follows the data: an altered first Project is drawn with no code edit, an ongoing end as `{start} –`', async () => {
+  const today = expectedCells(LAYOUT);
+  for (const [name, edit] of [
+    ['the name', (p) => (p.content.project = 'Another project')],
+    ['the dates', (p) => ((p.content.duration.start = '2015-02'), (p.content.duration.end = '2018-11'))],
+    ['an ongoing end', (p) => (p.content.duration.end = null)],
+    ['the mass', (p) => (p.mass = 3.7)],
+    ['the band', (p) => (p.luminanceBand = 'stroke-near')],
+    ['the weight', (p) => (p.content.weight = 2.5)],
+    ['the rail distance', (p) => (p.railDistance = 42)],
+  ] as const satisfies readonly (readonly [string, Parameters<typeof alteredLayout>[0]])[]) {
+    const layout = alteredLayout(edit);
+    const exhibits = { career: CAREER, layout };
+    assert.notDeepEqual(expectedCells(layout), today, `the alteration "${name}" must change a cell`);
+    assert.deepEqual(colophonPage(await renderPage(exhibits), exhibits), [], `${name} is drawn`);
+  }
+  const ongoing = alteredLayout((p) => (p.content.duration.end = null));
+  const start = firstOf(JSON.parse(LAYOUT) as LayoutDocument).content.duration.start;
+  const cells = queryAll(parseMarkup(await renderPage({ career: CAREER, layout: ongoing })), 'tbody td');
+  assert.equal(textOf(cells[1] as MarkupElement), `${start} –`, 'an ongoing duration reads {start} –');
+});
+
+test('a layout the rows cannot be read from fails the render, naming the field', async () => {
+  const lacking = alteredLayout((p) => delete (p as { mass?: unknown }).mass);
+  await assert.rejects(renderPage({ career: CAREER, layout: lacking }), /clients\[0\]\.projects\[0\]\.mass/);
+  await assert.rejects(renderPage({ career: CAREER, layout: 'not json' }), /not JSON/);
 });
 
 test('the page check is red against broken markup', async () => {
@@ -77,8 +177,24 @@ test('the page check is red against broken markup', async () => {
   const firstEnd = full.indexOf('</pre>') + '</pre>'.length;
   const careerPre = full.slice(firstPre, firstEnd);
   const layoutPre = full.slice(secondPre, full.indexOf('</pre>', secondPre) + '</pre>'.length);
-  const swapped = await renderPage({ career: LAYOUT, layout: CAREER });
+  // The two files trade places (the layout first): the table, read from the layout text, cannot be rendered from career.json.
+  const swapped = full.slice(0, firstPre) + layoutPre + full.slice(firstEnd, secondPre) + careerPre + full.slice(secondPre + layoutPre.length);
+  const tableStart = full.indexOf('<table');
+  const table = full.slice(tableStart, full.indexOf('</table>') + '</table>'.length);
+  const bodyRows = [...table.matchAll(/<tr><th scope="row">[\s\S]*?<\/tr>/g)].map((match) => match[0]);
+  const [massRow, bandRow] = bodyRows as [string, string, string];
+  const derived = /<td class="colophon-derived">([^<]*)<\/td>/.exec(massRow)?.[1] ?? '';
   for (const [name, markup] of [
+    ['the table missing', full.replace(table, '')],
+    ['the table after the layout', full.replace(table, '').replace(/<\/pre>$/, `</pre>${table}`)],
+    ['a row dropped', full.replace(bandRow, '')],
+    ['rows reordered', full.replace(`${massRow}${bandRow}`, `${bandRow}${massRow}`)],
+    ['a derived value altered', full.replace(massRow, massRow.replace(`>${derived}</td>`, `>${derived}0</td>`))],
+    ['the row scope dropped', full.replace(massRow, massRow.replace('<th scope="row">', '<th>'))],
+    ['a column scope dropped', full.replace('<th scope="col">', '<th>')],
+    ['the derived cell unmarked', full.replace(massRow, massRow.replace('<td class="colophon-derived">', '<td>'))],
+    ['a header renamed', full.replace('<th scope="col">Input</th>', '<th scope="col">Duration</th>')],
+    ['a caption added', full.replace('<thead>', '<caption>How the layout is derived</caption><thead>')],
     ['the career <pre> missing', full.replace(careerPre, '')],
     ['the layout <pre> missing', full.replace(layoutPre, '')],
     ['the career text altered', full.replace(careerPre, careerPre.replace(/\n/, '\n  '))],

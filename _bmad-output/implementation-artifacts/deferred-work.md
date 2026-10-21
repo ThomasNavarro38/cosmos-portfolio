@@ -1108,3 +1108,11 @@ Still open after 3.5:
   evidence: `scripts/render.ts` renders with `react-dom/static`, which runs no effects, so `colophon.test.ts` audits the effect as regexes (`auditEffect`) while `startExhibits` itself is executed in `exhibits.test.ts`; a semantically equivalent rewrite the regexes do not anticipate could ship a `/colophon` that fetches but never draws, or updates after unmount. The same limitation holds every effect in the codebase (cf. 4.10's executed-tracker approach); closing it needs a client-render path in the harness.
   location: src/colophon/colophon.tsx:43-45, src/colophon/colophon.test.ts (auditEffect), scripts/render.ts
   severity: medium
+
+## Deferred from: code review of spec-5-2-the-three-mapping-rules-worked-on-real-entities.md (2026-10-21)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-2-the-three-mapping-rules-worked-on-real-entities.md`
+  summary: No executed test shows that a `derivationRows` throw during the Colophon's render is caught by `ColophonBoundary` (root kept, null drawn, one error logged); only the throw escaping `ColophonPage` is executed.
+  evidence: `colophon.test.ts` ("a layout the rows cannot be read from fails the render") asserts only that the harness render rejects naming the field; `colophon-host.test.ts` renders the host without exhibits, so it never reaches `derivationRows`, and `auditColophonHost` holds the boundary by regex. The harness (`scripts/render.ts`, `prerenderToNodeStream`) runs no client error boundaries; closing it needs the same client-render path as the 5.1 effect-wiring deferral above. The build gate rejects a malformed artifact, so the path is unreachable in a shipped build today.
+  location: src/colophon/colophon.tsx (Derivations), src/shell/colophon-host.tsx:30-44, scripts/render.ts
+  severity: medium

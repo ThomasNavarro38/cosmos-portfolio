@@ -1,0 +1,64 @@
+/*
+ * The Colophon's derivation table (5.2): DESIGN.md
+ * `components.colophon-derivation`. Every colour, family, size, weight and
+ * space is a token custom property from `src/tokens/tokens.css`; the only
+ * literal length is the 1px rule between rows, as the chart index's. No hue,
+ * no radius, no shadow and no glow. `identity-audit.test.ts` holds each
+ * declaration.
+ *
+ * The headers and each row's rule name (`th`) are the `field-label` role at
+ * `ink-label`, as the chart index sets its headers. The values (`td`) are the
+ * `field-value` role at `ink-prose`; the derived quantity
+ * (`.colophon-derived`) lifts to `ink-lift`, the device the Notable uses.
+ *
+ * At phone width (320–375px) the four columns' unbreakable words would push
+ * the table past the viewport, so the table is held to `max-width: 100%` and
+ * its cells may break anywhere (as `.chart` does): the page never scrolls
+ * sideways.
+ *
+ * The `<pre>`s are 5.3's, and unset here.
+ */
+
+.colophon-derivations {
+  max-width: 100%;
+  margin: var(--space-xxl) 0;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.colophon-derivations th {
+  padding: var(--space-sm) var(--space-lg) var(--space-sm) 0;
+  text-align: left;
+  vertical-align: baseline;
+  font-family: var(--type-field-label-font-family);
+  font-size: var(--type-field-label-font-size);
+  font-weight: var(--type-field-label-font-weight);
+  line-height: var(--type-field-label-line-height);
+  letter-spacing: var(--type-field-label-letter-spacing);
+  color: var(--color-ink-label-dark);
+}
+
+.colophon-derivations td {
+  padding: var(--space-sm) var(--space-lg) var(--space-sm) 0;
+  vertical-align: baseline;
+  font-family: var(--type-field-value-font-family);
+  font-size: var(--type-field-value-font-size);
+  font-weight: var(--type-field-value-font-weight);
+  line-height: var(--type-field-value-line-height);
+  letter-spacing: var(--type-field-value-letter-spacing);
+  color: var(--color-ink-prose-dark);
+}
+
+.colophon-derivations th,
+.colophon-derivations td {
+  overflow-wrap: anywhere;
+}
+
+.colophon-derivations tbody th,
+.colophon-derivations td {
+  border-top: 1px solid var(--color-surface-edge-dark);
+}
+
+.colophon-derivations .colophon-derived {
+  color: var(--color-ink-lift-dark);
+}

@@ -23,6 +23,10 @@
  *   hidden until keyboard focus (ruling 8a), as exact declaration sets.
  * - **Chart** — the flat star chart's stylesheet (4.3), as an exact declaration
  *   set, its two `display: none` admitted only on the plates, by width.
+ * - **Colophon** — the derivation table's stylesheet (5.2), as an exact
+ *   declaration set, and its markup's hooks: rule labels and headers at
+ *   field-label/ink-label, values at field-value/ink-prose, the derived value
+ *   lifted to ink-lift.
  *
  * This file sits directly in `src/`, so the root-file boundary row governs it:
  * `src/render-scene/`, `src/render-fallback/` and `src/data/` are read here as
@@ -245,6 +249,7 @@ const CHROME_CSS = 'shell/corner-chrome.css';
 const INDEX_CSS = 'shell/index-nav.css';
 const PAGE_CSS = 'shell/page.css';
 const CHART_CSS = 'render-fallback/chart.css';
+const COLOPHON_CSS = 'colophon/colophon.css';
 const AFFORDANCE_TS = 'render-scene/affordance-model.ts';
 const MOTE_TS = 'render-scene/mote-model.ts';
 
@@ -302,6 +307,12 @@ const ROLES: readonly Role[] = [
   { role: 'plate Project label', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-label-project', property: 'fill' }, ground: 'page' },
   // A Client's date span on the plate (4.5).
   { role: 'plate span label', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-label-span', property: 'fill' }, ground: 'page' },
+  // The Colophon's derivation table (5.2), on the page ground: headers and rule
+  // names at field-label/ink-label, values at field-value/ink-prose, the derived
+  // quantity lifted to ink-lift (DESIGN.md `components.colophon-derivation`).
+  { role: 'derivation headers and rules', floor: 4.5, ink: { css: COLOPHON_CSS, selector: '.colophon-derivations th' }, ground: 'page' },
+  { role: 'derivation values', floor: 7, ink: { css: COLOPHON_CSS, selector: '.colophon-derivations td' }, ground: 'page' },
+  { role: 'derivation derived values', floor: 7, ink: { css: COLOPHON_CSS, selector: '.colophon-derivations .colophon-derived' }, ground: 'page' },
 ];
 
 /**
@@ -395,7 +406,7 @@ function auditContrast(sources: Readonly<Record<string, string>>, panelBackgroun
 }
 
 function contrastSources(): Record<string, string> {
-  return Object.fromEntries([PANEL_CSS, CHROME_CSS, INDEX_CSS, PAGE_CSS, CHART_CSS, AFFORDANCE_TS, MOTE_TS].map((path) => [path, read(`./${path}`)]));
+  return Object.fromEntries([PANEL_CSS, CHROME_CSS, INDEX_CSS, PAGE_CSS, CHART_CSS, COLOPHON_CSS, AFFORDANCE_TS, MOTE_TS].map((path) => [path, read(`./${path}`)]));
 }
 
 test('contrast: every text role clears its floor on its ground, read from the shipping source', () => {
@@ -473,6 +484,19 @@ test('contrast: a role moved to a dimmer ink, or one whose ink cannot be read, f
   assert.match(
     failing(CHROME_CSS, (s) => s.replace(/(\.chrome-route-offered:focus-visible \{\n  color: )var\(--color-ink-lift-dark\)/, '$1var(--color-ink-faint-dark)')),
     /^contrast: chrome chart link, offered, raised is ink-faint-dark on surface-base-dark/,
+  );
+  // 5.2: the derivation table's derived value at ink-label, its values at the quiet step, its labels unread.
+  assert.match(
+    failing(COLOPHON_CSS, (s) => s.replace(/(\.colophon-derivations \.colophon-derived \{\n  color: )var\(--color-ink-lift-dark\)/, '$1var(--color-ink-label-dark)')),
+    /^contrast: derivation derived values is ink-label-dark on surface-base-dark, \d\.\d\d:1 — below its 7:1 floor$/,
+  );
+  assert.match(
+    failing(COLOPHON_CSS, (s) => s.replace(/(\.colophon-derivations td \{[^}]*color: )var\(--color-ink-prose-dark\)/, '$1var(--color-ink-quiet-dark)')),
+    /^contrast: derivation values is ink-quiet-dark on surface-base-dark/,
+  );
+  assert.match(
+    failing(COLOPHON_CSS, (s) => s.replace(/(\.colophon-derivations th \{[^}]*)color: var\(--color-ink-label-dark\);/, '$1')),
+    /^contrast: derivation headers and rules's ink could not be read off colophon\/colophon\.css/,
   );
   assert.match(
     auditContrast(real, 'var(--color-stroke-active-dark)').join('\n'),
@@ -573,6 +597,15 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
   'Thomas Navarro · the scene',
   'Thomas Navarro · the chart',
   'Thomas Navarro · the model',
+  // The Colophon's derivation table (5.2): its headers (`Project` is the
+  // chart's, above) and the three mapping rules' names — the rule annotations,
+  // a sanctioned copy place. The values in it are data, drawn as expressions.
+  'Rule',
+  'Input',
+  'Output',
+  'mass ← duration',
+  'brightness ← recency',
+  'distance from the Rail ← weight',
 ]);
 
 /** Accessible names — announced, never drawn — listed separately. */
@@ -585,7 +618,7 @@ const ACCESSIBLE_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 /** The constants the renderers draw copy from; any other upper-case constant drawn as text fails. */
-const COPY_CONSTANTS: ReadonlySet<string> = new Set(['IDENTITY_LINE', 'IDENTITY_NAME', 'IDENTITY_MODEL', 'CHART_LINK_TEXT', 'SCENE_LINK_TEXT', 'SLOT_TEXT', 'EDITORIAL_RULE', 'RELEASE_LABEL', 'FIELD_LABELS', 'DEPTH_LABELS', 'CHART_LABELS']);
+const COPY_CONSTANTS: ReadonlySet<string> = new Set(['IDENTITY_LINE', 'IDENTITY_NAME', 'IDENTITY_MODEL', 'CHART_LINK_TEXT', 'SCENE_LINK_TEXT', 'SLOT_TEXT', 'EDITORIAL_RULE', 'RELEASE_LABEL', 'FIELD_LABELS', 'DEPTH_LABELS', 'CHART_LABELS', 'DERIVATION_LABELS']);
 
 /**
  * The separators a template sets between data, and nothing else: whitespace
@@ -899,6 +932,16 @@ function chartLabels(): Record<string, string> {
   return Object.fromEntries([...literal.matchAll(/(\w+):\s*'([^']*)'/g)].map(([, key, value]) => [key as string, value as string]));
 }
 
+/**
+ * The Colophon's copy constant (5.2), read off `colophon/derivations.ts` as
+ * text, as the chart's is: every `key: 'value'` pair of the one-line object
+ * literal; none found reads as empty, which fails the key check below.
+ */
+function derivationLabels(): Record<string, string> {
+  const literal = /export const DERIVATION_LABELS = \{([^}]*)\} as const;/.exec(codeOf(read('./colophon/derivations.ts'), 'script'))?.[1] ?? '';
+  return Object.fromEntries([...literal.matchAll(/(\w+):\s*'([^']*)'/g)].map(([, key, value]) => [key as string, value as string]));
+}
+
 function copyConstants(): Record<string, string> {
   const entries = (name: string, record: Readonly<Record<string, string>>) => Object.entries(record).map(([key, value]) => [`${name}.${key}`, value] as const);
   return Object.fromEntries([
@@ -913,6 +956,7 @@ function copyConstants(): Record<string, string> {
     ...entries('FIELD_LABELS', FIELD_LABELS),
     ...entries('DEPTH_LABELS', DEPTH_LABELS),
     ...entries('CHART_LABELS', chartLabels()),
+    ...entries('DERIVATION_LABELS', derivationLabels()),
     ...entries('SURFACE_TITLES', SURFACE_TITLES),
     ...entries('SURFACE_NAMES', SURFACE_NAMES),
   ]);
@@ -927,6 +971,11 @@ test('copy: the copy constants are each in the closed allowlist', () => {
   }
   assert.deepEqual(Object.keys(chartLabels()), ['notable', 'client', 'project', 'dates', 'carries', 'doesNot', 'none'], 'the chart’s labels are read off its model');
   assert.equal(chartLabels().none, 'No notable', 'the Shallow glyph’s name is read off the model');
+  assert.deepEqual(Object.keys(derivationLabels()), ['rule', 'project', 'input', 'output', 'mass', 'brightness', 'distance'], 'the derivation table’s labels are read off its module (5.2)');
+  // 5.2: a rule annotated beyond its name, or a fourth rule, is not in the allowlist.
+  for (const [name, value] of [['DERIVATION_LABELS.mass', 'mass ← duration (in months)'], ['DERIVATION_LABELS.distance', 'size ← skills']] as const) {
+    assert.deepEqual(auditCopyConstants({ ...constants, [name]: value }), [`copy: the constant ${name} is ${JSON.stringify(value)}, which is not in the closed allowlist`]);
+  }
   assert.deepEqual(auditCopyConstants(constants), []);
   assert.deepEqual(
     auditCopyConstants({ ...constants, RELEASE_LABEL: 'Close panel' }),
@@ -973,6 +1022,15 @@ test('copy: every visible literal shipped from src/ and index.html is in the clo
   assert.ok(chart.some((drawn) => drawn.kind === 'constant' && drawn.text === 'CHART_LABELS'), 'the chart’s headers are read');
   assert.ok(chart.some((drawn) => drawn.kind === 'constant' && drawn.text === 'IDENTITY_NAME'), 'the chart’s <h1> is read');
   assert.ok(chart.some((drawn) => drawn.kind === 'text' && drawn.text === '–'), 'the date separator is read');
+  // The Colophon's derivation table (5.2) draws its headers as a constant and its duration separator as a text run.
+  const colophon = jsxDrawn(codeOf(scripts['colophon/colophon.tsx'] as string, 'script'));
+  assert.ok(colophon.some((drawn) => drawn.kind === 'constant' && drawn.text === 'DERIVATION_LABELS'), 'the derivation table’s headers are read');
+  assert.ok(colophon.some((drawn) => drawn.kind === 'text' && drawn.text === '–'), 'the duration separator is read');
+  assert.match(
+    auditCopy({ ...scripts, 'colophon/colophon.tsx': (scripts['colophon/colophon.tsx'] as string).replace('<thead>', '<caption>How the layout is derived</caption>\n      <thead>') }, read('../index.html')).join('\n'),
+    /^copy: src\/colophon\/colophon\.tsx draws the visible text "How the layout is derived"/,
+    'a caption on the derivation table fails',
+  );
   assert.deepEqual(auditCopy(scripts, read('../index.html')), []);
 });
 
@@ -1599,5 +1657,105 @@ test('chart: each guarantee removed fails with its own line', () => {
     const mutated = mutate(tsx);
     assert.notEqual(mutated, tsx, `the mutation ${String(message)} must apply`);
     assert.match(auditChart(css, mutated).join('\n'), message);
+  }
+});
+
+// --- The Colophon's derivation table (5.2) -----------------------------------------------------------
+
+const COLOPHON_TSX = 'colophon/colophon.tsx';
+
+const COLOPHON_RULES: readonly CssRule[] = [
+  { at: '', selector: '.colophon-derivations', declarations: ['max-width: 100%', 'margin: var(--space-xxl) 0', 'border-collapse: collapse', 'border-spacing: 0'] },
+  // Review of 5.2: at phone width the cells break rather than push the page sideways.
+  { at: '', selector: '.colophon-derivations th, .colophon-derivations td', declarations: ['overflow-wrap: anywhere'] },
+  // The rule label and the headers: field-label at ink-label, as the chart index sets its headers.
+  {
+    at: '',
+    selector: '.colophon-derivations th',
+    declarations: ['padding: var(--space-sm) var(--space-lg) var(--space-sm) 0', 'text-align: left', 'vertical-align: baseline', ...CHART_TYPE('field-label'), 'color: var(--color-ink-label-dark)'],
+  },
+  // The Project and Input cells: field-value at ink-prose.
+  {
+    at: '',
+    selector: '.colophon-derivations td',
+    declarations: ['padding: var(--space-sm) var(--space-lg) var(--space-sm) 0', 'vertical-align: baseline', ...CHART_TYPE('field-value'), 'color: var(--color-ink-prose-dark)'],
+  },
+  { at: '', selector: '.colophon-derivations tbody th, .colophon-derivations td', declarations: ['border-top: 1px solid var(--color-surface-edge-dark)'] },
+  // The derived quantity, lifted to ink-lift — the device the Notable uses.
+  { at: '', selector: '.colophon-derivations .colophon-derived', declarations: ['color: var(--color-ink-lift-dark)'] },
+];
+
+/**
+ * The derivation table's treatment: `colophon.css` exactly, with the identity
+ * bans, imported once by `colophon.tsx`; no hex, radius, shadow or filter; and
+ * the markup's hooks: the table's class, four `th scope="col"` drawn from
+ * `DERIVATION_LABELS`, each row's rule a `th scope="row"`, the Project and
+ * Input cells plain value cells, and the derived cell marked
+ * `colophon-derived`. No inline style.
+ */
+function auditColophon(css: string, tsx: string): string[] {
+  const failures = [...auditBans('colophon', css), ...auditDeclarations('colophon', css, COLOPHON_RULES)];
+  const code = codeOf(css, 'css');
+  if (/#[0-9a-f]{3,8}\b/i.test(code)) failures.push('colophon: a hex colour — every colour is a token');
+  if (/\b(?:border-radius|box-shadow|text-shadow|filter)\s*:/.test(code)) failures.push('colophon: a radius, shadow or filter — corners are square and nothing glows');
+  const script = codeOf(tsx, 'script');
+  if ((script.match(/^import\s+'\.\/colophon\.css'\s*;/gm) ?? []).length !== 1) failures.push('colophon: colophon.tsx does not import ./colophon.css, once');
+  if (!/<table className="colophon-derivations">/.test(script)) failures.push('colophon: the derivation table does not carry its class');
+  const headers = [...script.matchAll(/<th scope="col">\{DERIVATION_LABELS\.(\w+)\}<\/th>/g)].map((match) => match[1]);
+  if (JSON.stringify(headers) !== JSON.stringify(['rule', 'project', 'input', 'output'])) failures.push('colophon: the headers are not four th scope="col" from DERIVATION_LABELS, in order');
+  if (!/<th scope="row">\{row\.rule\}<\/th>/.test(script)) failures.push('colophon: the rule label is not a th scope="row"');
+  if (!/<td>\{row\.project\}<\/td>\s*<td>\s*<Input input=\{row\.input\} \/>\s*<\/td>/.test(script)) failures.push('colophon: the Project and Input cells are not plain value cells');
+  if (!/<td className="colophon-derived">\{String\(row\.output\)\}<\/td>/.test(script)) failures.push('colophon: the derived cell is not marked colophon-derived');
+  if (/\bstyle=\{/.test(script)) failures.push('colophon: an inline style — the treatment is the stylesheet’s');
+  return failures;
+}
+
+test('colophon: the derivation table’s stylesheet, declaration by declaration, and its markup’s hooks', () => {
+  assert.deepEqual(auditColophon(read(`./${COLOPHON_CSS}`), read(`./${COLOPHON_TSX}`)), []);
+});
+
+test('colophon: each guarantee removed fails with its own line', () => {
+  const css = read(`./${COLOPHON_CSS}`);
+  const tsx = read(`./${COLOPHON_TSX}`);
+  const cssCases: readonly (readonly [(source: string) => string, RegExp])[] = [
+    // The rule label and headers off field-label or ink-label.
+    [(s) => s.replace('  font-size: var(--type-field-label-font-size);\n', '  font-size: var(--type-field-value-font-size);\n'), /`\.colophon-derivations th` lacks `font-size: var\(--type-field-label-font-size\)`/],
+    [(s) => s.replace(/(\.colophon-derivations th \{[^}]*color: )var\(--color-ink-label-dark\)/, '$1var(--color-ink-prose-dark)'), /`\.colophon-derivations th` lacks `color: var\(--color-ink-label-dark\)`/],
+    // The value cells off field-value or ink-prose.
+    [(s) => s.replace('  font-family: var(--type-field-value-font-family);\n', '  font-family: var(--type-field-label-font-family);\n'), /`\.colophon-derivations td` lacks `font-family: var\(--type-field-value-font-family\)`/],
+    [(s) => s.replace(/(\.colophon-derivations td \{[^}]*color: )var\(--color-ink-prose-dark\)/, '$1var(--color-ink-lift-dark)'), /`\.colophon-derivations td` lacks `color: var\(--color-ink-prose-dark\)`/],
+    // The derived cell not lifted, or its rule weakened below the value cells' specificity.
+    [(s) => s.replace('.colophon-derivations .colophon-derived {\n  color: var(--color-ink-lift-dark);', '.colophon-derivations .colophon-derived {\n  color: var(--color-ink-prose-dark);'), /`\.colophon-derivations \.colophon-derived` lacks `color: var\(--color-ink-lift-dark\)`/],
+    [(s) => s.replace('.colophon-derivations .colophon-derived {', '.colophon-derived {'), /the rule `\.colophon-derivations \.colophon-derived` is missing/],
+    // The narrow-width guard: the table unbounded, or its cells unbreakable.
+    [(s) => s.replace('  max-width: 100%;\n', ''), /`\.colophon-derivations` lacks `max-width: 100%`/],
+    [(s) => s.replace('  overflow-wrap: anywhere;\n', ''), /`\.colophon-derivations th, \.colophon-derivations td` lacks `overflow-wrap: anywhere`/],
+    // A hue, a radius, a shadow, a literal weight, a transform, an unlisted rule.
+    [(s) => s.replace('color: var(--color-ink-lift-dark);', 'color: #F2F2F4;'), /colophon: a hex colour/],
+    [(s) => s.replace('  border-spacing: 0;\n', '  border-spacing: 0;\n  border-radius: 4px;\n'), /colophon: a radius, shadow or filter/],
+    [(s) => s.replace('  color: var(--color-ink-lift-dark);\n', '  color: var(--color-ink-lift-dark);\n  text-shadow: 0 0 4px white;\n'), /colophon: a radius, shadow or filter/],
+    [(s) => s.replace('font-weight: var(--type-field-label-font-weight)', 'font-weight: 700'), /^colophon: a literal font-weight/],
+    [(s) => s.replace('  text-align: left;\n', '  text-align: left;\n  text-transform: uppercase;\n'), /^colophon: text-transform/],
+    [(s) => `${s}\n.colophon-derivations caption {\n  color: var(--color-ink-label-dark);\n}\n`, /^colophon: the unlisted rule `\.colophon-derivations caption`$/m],
+  ];
+  for (const [mutate, message] of cssCases) {
+    const mutated = mutate(css);
+    assert.notEqual(mutated, css, `the mutation ${String(message)} must apply`);
+    assert.match(auditColophon(mutated, tsx).join('\n'), message);
+  }
+  const tsxCases: readonly (readonly [(source: string) => string, RegExp])[] = [
+    [(s) => s.replace("import './colophon.css';\n", ''), /colophon\.tsx does not import \.\/colophon\.css, once/],
+    [(s) => s.replace("import './colophon.css';\n", "import './colophon.css';\nimport './colophon.css';\n"), /colophon\.tsx does not import \.\/colophon\.css, once/],
+    [(s) => s.replace('<table className="colophon-derivations">', '<table>'), /the derivation table does not carry its class/],
+    [(s) => s.replace('<th scope="col">{DERIVATION_LABELS.input}</th>', '<th>{DERIVATION_LABELS.input}</th>'), /the headers are not four th scope="col"/],
+    [(s) => s.replace('<th scope="row">{row.rule}</th>', '<td>{row.rule}</td>'), /the rule label is not a th scope="row"/],
+    [(s) => s.replace('<td>\n              <Input input={row.input} />', '<td className="colophon-derived">\n              <Input input={row.input} />'), /the Project and Input cells are not plain value cells/],
+    [(s) => s.replace('<td className="colophon-derived">{String(row.output)}</td>', '<td>{String(row.output)}</td>'), /the derived cell is not marked colophon-derived/],
+    [(s) => s.replace('<table className="colophon-derivations">', '<table className="colophon-derivations" style={{ margin: 0 }}>'), /an inline style/],
+  ];
+  for (const [mutate, message] of tsxCases) {
+    const mutated = mutate(tsx);
+    assert.notEqual(mutated, tsx, `the mutation ${String(message)} must apply`);
+    assert.match(auditColophon(css, mutated).join('\n'), message);
   }
 });
