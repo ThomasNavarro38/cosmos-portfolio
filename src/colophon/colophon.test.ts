@@ -21,11 +21,26 @@
  * swapped; the `<h2>` dropped, renamed or made an `<h3>`, a paragraph dropped,
  * reordered or altered, the prose drawn before the layout `<pre>`.
  *
+ * The live re-solve (5.5): after the absences, `<h2 class="colophon-heading">`
+ * reading `LIVE_SOLVE.heading`, `<p class="colophon-prose">` reading
+ * `LIVE_SOLVE.framing` and `<button type="button" class="colophon-solve">`
+ * reading `LIVE_SOLVE.action`, its click handler the page's `onSolve` —
+ * idle, `aria-disabled="false"`; running, `aria-disabled="true"` and never
+ * `disabled` (which would drop focus); solved, a final exhibit `<pre>` named
+ * `LIVE_SOLVE.result` whose text is the solved text exactly. (A failure's
+ * transitions are the tracker's, executed in `live-solve.test.ts`.) Driven red
+ * by the button dropped, marked disabled when idle or enabled while running,
+ * given `disabled`, its label altered, the result misnamed, altered or drawn when
+ * none is solved, and the new elements drawn before the absences.
+ *
  * The default `Colophon`'s effect does not run under the harness (a static
  * render runs no effect), so the fetch is `exhibits.test.ts`'s — `startExhibits`
  * executed there — and the default's render — the `<h1>` alone — is
  * `colophon-host.test.ts`'s and `App.test.ts`'s. Here the effect is audited as
- * source: `startExhibits`, its stop the cleanup, run once, the failure logged.
+ * source: `startExhibits`, its stop the cleanup, run once, the failure logged;
+ * and (5.5) the press: a thin binding of `createLiveSolve` built once with the
+ * one dynamic import of `../derive/live.ts` and this component's setters, the
+ * press handing it `exhibits.career`, the unmount calling its stop.
  */
 
 import { strict as assert } from 'node:assert';
@@ -36,6 +51,7 @@ import { React, elementsOf, parseMarkup, queryAll, renderer, textOf, type Markup
 import type { ColophonPage as ColophonPageComponent } from './colophon.tsx';
 import { EXHIBIT_PATHS, type Exhibits } from './exhibits.ts';
 import { ABSENCES, ABSENCES_HEADING } from './absences.ts';
+import { LIVE_SOLVE } from './live-solve.ts';
 
 const CAREER = readFileSync(new URL('../data/career.json', import.meta.url), 'utf8');
 const LAYOUT = readFileSync(new URL('../../generated/layout.generated.json', import.meta.url), 'utf8');
@@ -48,8 +64,19 @@ const harness = (started = await renderer());
 
 const { ColophonPage } = await harness.load<{ ColophonPage: typeof ColophonPageComponent }>('/src/colophon/colophon.tsx');
 
-async function renderPage(exhibits: Exhibits | null): Promise<string> {
-  return harness.render(React.createElement(ColophonPage, { exhibits }), { name: 'ColophonPage' });
+/** The live re-solve's state, as `Colophon` hands it down. */
+interface Live {
+  readonly solved: string | null;
+  readonly running: boolean;
+}
+
+const IDLE: Live = { solved: null, running: false };
+
+/** A handler the page must hand the button, unchanged. */
+const onSolve = (): void => undefined;
+
+async function renderPage(exhibits: Exhibits | null, live: Live = IDLE): Promise<string> {
+  return harness.render(React.createElement(ColophonPage, { exhibits, ...live, onSolve }), { name: 'ColophonPage' });
 }
 
 /** The artifact's first Project, as the test reads it from the parsed text. */
@@ -197,24 +224,52 @@ function absences(heading: MarkupElement, paragraphs: readonly MarkupElement[]):
 }
 
 /**
+ * The live re-solve (5.5): `<h2 class="colophon-heading">` reading
+ * `LIVE_SOLVE.heading`, `<p class="colophon-prose">` reading
+ * `LIVE_SOLVE.framing`, holding no markup, and `<button type="button"
+ * class="colophon-solve">` reading `LIVE_SOLVE.action`, `aria-disabled` true
+ * exactly while `live.running` and never `disabled`; then, exactly when `live.solved` is text, an exhibit
+ * named `LIVE_SOLVE.result` whose text is the solved text.
+ */
+function liveSolve(heading: MarkupElement, framing: MarkupElement, button: MarkupElement, result: MarkupElement | undefined, live: Live): string[] {
+  const failures: string[] = [];
+  if (JSON.stringify(heading.attrs) !== JSON.stringify({ class: 'colophon-heading' })) failures.push(`the live <h2> carries ${JSON.stringify(heading.attrs)}`);
+  if (textOf(heading) !== LIVE_SOLVE.heading) failures.push(`the live <h2> reads ${JSON.stringify(textOf(heading))}`);
+  if (JSON.stringify(framing.attrs) !== JSON.stringify({ class: 'colophon-prose' })) failures.push(`the framing carries ${JSON.stringify(framing.attrs)}`);
+  if (elementsOf(framing).length !== 0) failures.push('the framing holds markup');
+  if (textOf(framing) !== LIVE_SOLVE.framing) failures.push(`the framing reads ${JSON.stringify(textOf(framing))}`);
+  const want = { type: 'button', class: 'colophon-solve', 'aria-disabled': String(live.running) };
+  if (JSON.stringify(button.attrs) !== JSON.stringify(want)) failures.push(`the button carries ${JSON.stringify(button.attrs)}, not ${JSON.stringify(want)}`);
+  if (elementsOf(button).length !== 0 || textOf(button) !== LIVE_SOLVE.action) failures.push(`the button reads ${JSON.stringify(textOf(button))}`);
+  if (live.solved === null) {
+    if (result !== undefined) failures.push('a result is drawn where none was solved');
+  } else if (result === undefined) failures.push('the solved layout is not drawn');
+  else failures.push(...exhibit(result, LIVE_SOLVE.result, live.solved));
+  return failures;
+}
+
+/**
  * The page's elements: `<h1>the model</h1>`, then, when `expected` is given,
  * the career exhibit, the derivation table worked on its layout's first
- * Project, the layout exhibit, and what is not there — the `<h2>` and five
- * `<p>` — and nothing else.
+ * Project, the layout exhibit, what is not there — the `<h2>` and five `<p>` —
+ * and the live re-solve (5.5) — the `<h2>`, the `<p>`, the `<button>`, and the
+ * result `<pre>` when one is solved — and nothing else.
  */
-function colophonPage(html: string, expected: Exhibits | null): string[] {
+function colophonPage(html: string, expected: Exhibits | null, live: Live = IDLE): string[] {
   const children = elementsOf(parseMarkup(html));
   const failures: string[] = [];
   const tags = children.map((child) => child.tag);
-  const want = expected === null ? ['h1'] : ['h1', 'pre', 'table', 'pre', 'h2', ...PARAGRAPHS.map(() => 'p')];
+  const want = expected === null ? ['h1'] : ['h1', 'pre', 'table', 'pre', 'h2', ...PARAGRAPHS.map(() => 'p'), 'h2', 'p', 'button', ...(live.solved === null ? [] : ['pre'])];
   if (JSON.stringify(tags) !== JSON.stringify(want)) return [`the page renders ${JSON.stringify(tags)}, not ${JSON.stringify(want)}`];
-  const [heading, career, table, layout, absencesHeading, ...paragraphs] = children as [MarkupElement, MarkupElement, MarkupElement, MarkupElement, MarkupElement, ...MarkupElement[]];
+  const [heading, career, table, layout, absencesHeading, ...rest] = children as [MarkupElement, MarkupElement, MarkupElement, MarkupElement, MarkupElement, ...MarkupElement[]];
   if (textOf(heading) !== 'the model') failures.push(`the heading reads ${JSON.stringify(textOf(heading))}`);
   if (expected !== null) {
     failures.push(...exhibit(career, CAREER_NAME, expected.career));
     failures.push(...derivationTable(table, expected.layout));
     failures.push(...exhibit(layout, LAYOUT_NAME, expected.layout));
-    failures.push(...absences(absencesHeading, paragraphs));
+    failures.push(...absences(absencesHeading, rest.slice(0, PARAGRAPHS.length)));
+    const [liveHeading, framing, button, result] = rest.slice(PARAGRAPHS.length) as [MarkupElement, MarkupElement, MarkupElement, MarkupElement | undefined];
+    failures.push(...liveSolve(liveHeading, framing, button, result, live));
   }
   return failures;
 }
@@ -230,7 +285,7 @@ test('without exhibits: the <h1> alone', async () => {
   assert.deepEqual(colophonPage(await renderPage(null), null), []);
 });
 
-test('with exhibits: the <h1>, career.json verbatim in a <pre>, the derivation table, layout.generated.json verbatim in a <pre>, then what is not there', async () => {
+test('with exhibits: the <h1>, career.json verbatim in a <pre>, the derivation table, layout.generated.json verbatim in a <pre>, what is not there, then the live re-solve, idle', async () => {
   assert.ok(CAREER.length > 0 && LAYOUT.length > 0, 'the real files were read');
   assert.deepEqual([CAREER_NAME, LAYOUT_NAME], ['career.json', 'layout.generated.json'], 'the names are the published files’');
   assert.deepEqual(colophonPage(await renderPage(EXHIBITS), EXHIBITS), []);
@@ -294,7 +349,7 @@ test('the page check is red against broken markup', async () => {
   const headingMarkup = /^<h2 [^>]*>[^<]*<\/h2>/.exec(prose)?.[0] ?? '';
   const paragraphMarkup = [...prose.matchAll(/<p class="colophon-prose">[^<]*<\/p>/g)].map((match) => match[0]);
   const [firstParagraph, secondParagraph] = paragraphMarkup as [string, string];
-  assert.ok(absencesStart > secondPre && headingMarkup !== '' && paragraphMarkup.length === PARAGRAPHS.length, 'the heading and five paragraphs follow the layout <pre>');
+  assert.ok(absencesStart > secondPre && headingMarkup !== '' && paragraphMarkup.length === PARAGRAPHS.length + 1, 'the heading and five paragraphs follow the layout <pre>, then the framing');
   for (const [name, markup] of [
     ['the table missing', full.replace(table, '')],
     ['the table after the layout', full.replace(table, '').replace(layoutPre, () => `${layoutPre}${table}`)],
@@ -343,6 +398,80 @@ test('the page check is red against broken markup', async () => {
   }
 });
 
+// --- The live re-solve (5.5) -------------------------------------------------------------------
+
+/** A solved text: the committed layout, as a Node solve of the shipped career gives it. */
+const SOLVED = LAYOUT;
+
+test('the live re-solve: idle, running, solved', async () => {
+  assert.deepEqual(colophonPage(await renderPage(EXHIBITS, IDLE), EXHIBITS, IDLE), [], 'idle: the heading, the framing, an enabled button');
+  const running = { solved: null, running: true };
+  assert.deepEqual(colophonPage(await renderPage(EXHIBITS, running), EXHIBITS, running), [], 'running: the button aria-disabled, never disabled');
+  assert.ok(!/<button[^>]* disabled=/.test(await renderPage(EXHIBITS, running)), 'no disabled attribute: focus stays on the button');
+  const solved = { solved: SOLVED, running: false };
+  assert.deepEqual(colophonPage(await renderPage(EXHIBITS, solved), EXHIBITS, solved), [], 'solved: the result in full, named');
+  // A second run in flight keeps the previous result until it succeeds.
+  const again = { solved: SOLVED, running: true };
+  assert.deepEqual(colophonPage(await renderPage(EXHIBITS, again), EXHIBITS, again), [], 'running again: the previous result kept, the button disabled');
+  // A failure's transitions (logged once, the button freed, the result untouched) are the tracker's, executed in live-solve.test.ts.
+  // A browser's solve may differ from the committed one: whatever text arrives is drawn, exactly.
+  const other = { solved: SOLVED.replace(/"x": -?[\d.eE+-]+/, '"x": 123.25'), running: false };
+  assert.notEqual(other.solved, SOLVED, 'the alteration applies');
+  assert.deepEqual(colophonPage(await renderPage(EXHIBITS, other), EXHIBITS, other), [], 'a differing solve is drawn as it is');
+});
+
+test('without exhibits, the live re-solve is not drawn, whatever its state', async () => {
+  for (const live of [IDLE, { solved: null, running: true }, { solved: SOLVED, running: false }]) {
+    assert.deepEqual(colophonPage(await renderPage(null, live), null, live), [], JSON.stringify({ ...live, solved: live.solved === null ? null : 'text' }));
+  }
+});
+
+test('the button hands the page’s onSolve, unchanged, and nothing else', async () => {
+  await renderPage(EXHIBITS);
+  const buttons = harness.elements('button');
+  assert.equal(buttons.length, 1, 'one button');
+  assert.equal((buttons[0] as { props: Record<string, unknown> }).props['onClick'], onSolve, 'its click is onSolve');
+});
+
+test('the live re-solve check is red against broken markup', async () => {
+  const idle = await renderPage(EXHIBITS, IDLE);
+  const running = await renderPage(EXHIBITS, { solved: null, running: true });
+  const solved = await renderPage(EXHIBITS, { solved: SOLVED, running: false });
+  const SOLVED_LIVE = { solved: SOLVED, running: false };
+  const button = /<button [^>]*>[^<]*<\/button>/.exec(idle)?.[0] ?? '';
+  const liveStart = idle.lastIndexOf('<h2 ');
+  const live = idle.slice(liveStart);
+  const absencesStart = idle.indexOf('<h2 ');
+  const resultStart = solved.lastIndexOf('<pre ');
+  const result = solved.slice(resultStart);
+  assert.ok(button !== '' && liveStart > absencesStart && resultStart > solved.indexOf('<button '), 'the button, the live heading and the result were found');
+  for (const [name, markup, state] of [
+    ['the button dropped', idle.replace(button, ''), IDLE],
+    ['the button’s label altered', idle.replace(button, button.replace(`>${LIVE_SOLVE.action}<`, '>Re-run the solver<')), IDLE],
+    ['the button unclassed', idle.replace(button, button.replace(' class="colophon-solve"', '')), IDLE],
+    ['the button made a submit', idle.replace(button, button.replace('type="button"', 'type="submit"')), IDLE],
+    ['the button marked disabled when idle', idle.replace(button, button.replace('aria-disabled="false"', 'aria-disabled="true"')), IDLE],
+    ['the button given disabled when idle', idle.replace(button, button.replace('<button ', '<button disabled="" ')), IDLE],
+    ['the button enabled while running', running.replace('aria-disabled="true"', 'aria-disabled="false"'), { solved: null, running: true }],
+    ['the button disabled outright while running', running.replace('aria-disabled="true"', 'disabled=""'), { solved: null, running: true }],
+    ['a loading indicator', running.replace(`>${LIVE_SOLVE.action}<`, '>solving…<'), { solved: null, running: true }],
+    ['the framing altered', idle.replace(LIVE_SOLVE.framing, LIVE_SOLVE.framing.replace('; it does not reproduce the shipped layout', '')), IDLE],
+    ['the live heading altered', idle.replace(`>${LIVE_SOLVE.heading}<`, '>solve it yourself<'), IDLE],
+    ['the live heading made an <h3>', idle.slice(0, liveStart) + live.replace(/^<h2([^>]*)>([^<]*)<\/h2>/, '<h3$1>$2</h3>'), IDLE],
+    ['the new elements before the absences', idle.slice(0, absencesStart) + live + idle.slice(absencesStart, liveStart), IDLE],
+    ['the result misnamed', solved.replace(`aria-label="${LIVE_SOLVE.result}"`, 'aria-label="layout.generated.json"'), SOLVED_LIVE],
+    ['the result named on screen', solved.replace(result, `<p class="colophon-prose">${LIVE_SOLVE.result}</p>${result}`), SOLVED_LIVE],
+    ['the result truncated', solved.replace(result, () => result.replace(/<span[^>]*>[^<]*<\/span>[^<]*<\/pre>$/, '</pre>')), SOLVED_LIVE],
+    ['the result dropped', solved.replace(result, ''), SOLVED_LIVE],
+    ['a result drawn where none was solved', solved, IDLE],
+    ['the result before the button', solved.slice(0, solved.indexOf('<button ')) + result + solved.slice(solved.indexOf('<button '), resultStart), SOLVED_LIVE],
+    ['a status line', `${solved}<p class="colophon-prose">solved in 412 ms</p>`, SOLVED_LIVE],
+  ] as const) {
+    assert.notEqual(markup, state === IDLE ? idle : state.solved === null ? running : solved, `the break "${name}" must apply`);
+    assert.notDeepEqual(colophonPage(markup, EXHIBITS, state), [], `"${name}" must be rejected`);
+  }
+});
+
 // --- The default's effect, audited -----------------------------------------------------------
 
 const COLOPHON_TSX = new URL('./colophon.tsx', import.meta.url);
@@ -360,10 +489,10 @@ function auditEffect(source: string): string[] {
   if (!/useEffect\(\s*\(\)\s*=>\s*startExhibits\(\s*fetch\s*,\s*setExhibits\s*,\s*\(\s*(\w+)\s*\)\s*=>\s*console\.error\([^)]*\b\1\s*\)\s*\)\s*,\s*\[\s*\]\s*\)/.test(code)) {
     failures.push('the effect is not startExhibits(fetch, setExhibits, logged), its stop the cleanup, run once');
   }
-  if ((code.match(/\buseEffect\(/g) ?? []).length !== 1) failures.push('an effect other than the one');
+  if ((code.match(/\buseEffect\(/g) ?? []).length !== 2) failures.push('an effect other than the two: the exhibits’, and the unmount’s stop of the live re-solve');
   // The state the effect's `show` writes is the state the page is drawn from.
   if (!/const\s*\[\s*exhibits\s*,\s*setExhibits\s*\]\s*=\s*useState<Exhibits\s*\|\s*null>\(\s*null\s*\)\s*;/.test(code)) failures.push('the files are not held as useState<Exhibits | null>(null)');
-  if (!/return\s*<ColophonPage\s+exhibits=\{\s*exhibits\s*\}\s*\/>\s*;/.test(code)) failures.push('the page is not drawn from the held files');
+  if (!/return\s*<ColophonPage\s+exhibits=\{\s*exhibits\s*\}\s+solved=\{\s*solved\s*\}\s+running=\{\s*running\s*\}\s+onSolve=\{\s*onSolve\s*\}\s*\/>\s*;/.test(code)) failures.push('the page is not drawn from the held files and the held re-solve');
   if ((code.match(/\bsetExhibits\b/g) ?? []).length !== 2) failures.push('the setter is used other than as the effect’s show');
   if (/\bAbortController\b|\bloadExhibits\b|\.then\(/.test(code)) failures.push('a fetch rule of its own — the effect is startExhibits’');
   return failures;
@@ -379,7 +508,7 @@ test('the effect audit rejects the real source with its wiring broken', () => {
     ['the stop not returned', (s: string) => s.replace('useEffect(() => startExhibits(', 'useEffect(() => { startExhibits(').replace('error)), []);', 'error)); }, []);')],
     ['run on every render', (s: string) => s.replace('error)), []);', 'error)));')],
     ['the failure swallowed', (s: string) => s.replace(/\(error\) => console\.error\([^)]*\)/, '() => undefined')],
-    ['the page drawn without the files', (s: string) => s.replace('<ColophonPage exhibits={exhibits} />', '<ColophonPage exhibits={null} />')],
+    ['the page drawn without the files', (s: string) => s.replace('<ColophonPage exhibits={exhibits} ', '<ColophonPage exhibits={null} ')],
     ['the files never shown', (s: string) => s.replace('startExhibits(fetch, setExhibits,', 'startExhibits(fetch, () => undefined,')],
     ['the files shown into another state', (s: string) => s.replace('const [exhibits, setExhibits] = useState<Exhibits | null>(null);', 'const [exhibits] = useState<Exhibits | null>(null);\n  const [, setExhibits] = useState<Exhibits | null>(null);')],
     ['a fetch of its own', (s: string) => s.replace('useEffect(() => startExhibits(', 'useEffect(() => { const c = new AbortController(); return () => c.abort(); }, []);\n  useEffect(() => startExhibits(')],
@@ -387,5 +516,56 @@ test('the effect audit rejects the real source with its wiring broken', () => {
     const mutated = mutate(real);
     assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
     assert.notDeepEqual(auditEffect(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
+/**
+ * The press (5.5), as source — a thin binding of the tracker, whose
+ * transitions `live-solve.test.ts` executes: the solved text and the in-flight
+ * flag held in this component's state; the tracker built once, by a lazy
+ * `useState`, from `createLiveSolve(() => import('../derive/live.ts'),
+ * { setSolved, setRunning, log })`, the log `console.error`ing its error; the
+ * unmount's effect calling its stop; `onSolve` handing it `exhibits.career`.
+ * The one dynamic import in the file is that one, and the setters are used
+ * nowhere else.
+ */
+function auditLiveSolve(source: string): string[] {
+  const code = stripComments(source);
+  const failures: string[] = [];
+  if (!/const\s*\[\s*solved\s*,\s*setSolved\s*\]\s*=\s*useState<string\s*\|\s*null>\(\s*null\s*\)\s*;/.test(code)) failures.push('the solved text is not held as useState<string | null>(null)');
+  if (!/const\s*\[\s*running\s*,\s*setRunning\s*\]\s*=\s*useState\(\s*false\s*\)\s*;/.test(code)) failures.push('the in-flight flag is not held as useState(false)');
+  if (!/const \[live\] = useState\(\(\) => createLiveSolve\(\(\) => import\('\.\.\/derive\/live\.ts'\), \{ setSolved, setRunning, log: \((\w+)\) => console\.error\([^)]*\b\1\) \}\)\);/.test(code)) {
+    failures.push("the tracker is not built once as createLiveSolve(() => import('../derive/live.ts'), { setSolved, setRunning, log })");
+  }
+  if (!/useEffect\(\(\) => \(\) => live\.stop\(\), \[live\]\);/.test(code)) failures.push('the unmount does not call the tracker’s stop');
+  if (!/const onSolve = \(\) => \{\s*if \(exhibits !== null\) live\.press\(exhibits\.career\);\s*\};/.test(code)) failures.push('the press does not hand the tracker exhibits.career');
+  if ((code.match(/\bimport\s*\(/g) ?? []).length !== 1) failures.push('a dynamic import other than the solver’s');
+  if ((code.match(/\bsetSolved\b/g) ?? []).length !== 2 || (code.match(/\bsetRunning\b/g) ?? []).length !== 2) failures.push('a setter used other than by the tracker');
+  if (/\bstartLiveSolve\b/.test(code)) failures.push('a run started beside the tracker');
+  if (!/^import \{ LIVE_SOLVE, createLiveSolve \} from '\.\/live-solve\.ts';$/m.test(code)) failures.push('createLiveSolve is not read from ./live-solve.ts');
+  return failures;
+}
+
+test('the default Colophon’s press is the tracker, built with the solver’s dynamic import, handed the career on the page', () => {
+  assert.deepEqual(auditLiveSolve(readFileSync(COLOPHON_TSX, 'utf8')), []);
+});
+
+test('the press audit rejects the real source with its wiring broken', () => {
+  const real = readFileSync(COLOPHON_TSX, 'utf8').replace(/\r\n/g, '\n');
+  for (const [name, mutate] of [
+    ['the unmount’s stop dropped', (s: string) => s.replace('  useEffect(() => () => live.stop(), [live]);\n', '')],
+    ['the tracker rebuilt every render', (s: string) => s.replace('const [live] = useState(() => createLiveSolve(', 'const live = (createLiveSolve(').replace(/(console\.error\('the colophon could not solve[^)]*\) \}\))\);/, '$1);')],
+    ['a failure swallowed', (s: string) => s.replace(/log: \(error\) => console\.error\('the colophon could not solve career\.json here\.', error\)/, 'log: () => undefined')],
+    ['the result never shown', (s: string) => s.replace('{ setSolved, setRunning,', '{ setSolved: () => undefined, setRunning,')],
+    ['the button never freed', (s: string) => s.replace('{ setSolved, setRunning,', '{ setSolved, setRunning: () => undefined,')],
+    ['the layout re-solved instead of the career', (s: string) => s.replace('live.press(exhibits.career)', 'live.press(exhibits.layout)')],
+    ['the gate imported instead', (s: string) => s.replace("createLiveSolve(() => import('../derive/live.ts'),", "createLiveSolve(() => import('../derive/index.ts'),")],
+    ['a second dynamic import', (s: string) => s.replace('    if (exhibits !== null) live.press(exhibits.career);\n', "    if (exhibits !== null) live.press(exhibits.career);\n    void import('../derive/index.ts');\n")],
+    ['a run beside the tracker', (s: string) => s.replace('    if (exhibits !== null) live.press(exhibits.career);\n', "    if (exhibits !== null) live.press(exhibits.career);\n    setRunning(true);\n")],
+    ['the result held elsewhere', (s: string) => s.replace('const [solved, setSolved] = useState<string | null>(null);', 'const solved = useLiveSolveStore((state) => state.solved);\n  const setSolved = useLiveSolveStore.getState().set;')],
+  ] as const) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
+    assert.notDeepEqual(auditLiveSolve(mutated), [], `"${name}" must be rejected`);
   }
 });

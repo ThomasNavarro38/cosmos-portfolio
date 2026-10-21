@@ -196,11 +196,13 @@ const assetBytes = (asset: Rolldown.OutputAsset): Buffer => Buffer.from(typeof a
 /**
  * The exhibits (5.1, AD-17), asserted on a build's output: each emitted at its
  * fixed, unhashed name, byte-identical to its source; no chunk holding a
- * `src/data/` module; the layout artifact held only by the chunk holding
+ * `src/data/` module but the solver's (5.5), which may hold the schema,
+ * `src/data/schema.ts`, and never the data (`career.json`) or its file reader
+ * (`validate.ts`); the layout artifact held only by the chunk holding
  * `src/App.tsx`, its one importer; and the colophon chunk holding only
  * `src/colophon/` modules. Empty when all hold.
  */
-function exhibitFailures(chunks: readonly Pick<Rolldown.OutputChunk, 'fileName' | 'modules'>[], assets: readonly Rolldown.OutputAsset[], colophonFile: string): string[] {
+function exhibitFailures(chunks: readonly Pick<Rolldown.OutputChunk, 'fileName' | 'modules'>[], assets: readonly Rolldown.OutputAsset[], colophonFile: string, solverFile: string): string[] {
   const failures: string[] = [];
   for (const exhibit of EXHIBITS) {
     const fileName = exhibit.path.slice(1);
@@ -212,7 +214,7 @@ function exhibitFailures(chunks: readonly Pick<Rolldown.OutputChunk, 'fileName' 
     if (!assetBytes(emitted[0] as Rolldown.OutputAsset).equals(readFileSync(new URL(`../${exhibit.source}`, import.meta.url)))) failures.push(`${fileName} is not ${exhibit.source}, byte for byte`);
   }
   const ids = (out: Pick<Rolldown.OutputChunk, 'modules'>): string[] => Object.keys(out.modules).map(local);
-  for (const out of chunks) for (const id of ids(out)) if (id.startsWith('src/data/')) failures.push(`${out.fileName} holds ${id}`);
+  for (const out of chunks) for (const id of ids(out)) if (id.startsWith('src/data/') && !(out.fileName === solverFile && id === 'src/data/schema.ts')) failures.push(`${out.fileName} holds ${id}`);
   const holdingLayout = chunks.filter((out) => ids(out).includes('generated/layout.generated.json'));
   if (holdingLayout.length !== 1 || !ids(holdingLayout[0] as Rolldown.OutputChunk).includes('src/App.tsx')) {
     failures.push(`generated/layout.generated.json is held by ${JSON.stringify(holdingLayout.map((out) => out.fileName))}, not by exactly one chunk, the one holding src/App.tsx`);
@@ -312,6 +314,48 @@ function reaching(from: readonly Edges[], start: string, holds: (id: string) => 
   return [...reached].filter((name) => Object.keys(named.get(name)?.modules ?? {}).some(holds));
 }
 
+/**
+ * The solver's own packages: `zod`, `d3-force-3d`, and what `d3-force-3d`
+ * brings with it (`d3-octree`, `d3-quadtree`, `d3-binarytree`, `d3-dispatch`,
+ * `d3-timer`), so the force solve cannot arrive in a renderer through a
+ * dependency of the package alone.
+ */
+const SOLVER_PACKAGES = ['zod', 'd3-force-3d', 'd3-octree', 'd3-quadtree', 'd3-binarytree', 'd3-dispatch', 'd3-timer'] as const;
+
+/**
+ * What a renderer may never carry (5.5, AD-7): the solver and the data — any
+ * `src/derive/` or `src/data/` module — and the solver's own packages.
+ */
+const SOLVER_OR_DATA = (id: string): boolean =>
+  /^src\/(?:derive|data)\//.test(local(id)) || SOLVER_PACKAGES.some((name) => forward(id).includes(`/node_modules/${name}/`));
+
+/** A chunk holding a renderer's own module: the scene's or the chart's. */
+const RENDERER_MODULE = (id: string): boolean => /^src\/render-(?:scene|fallback)\//.test(local(id));
+
+/**
+ * The chunks a renderer reaches — its own chunk, every chunk reached from it
+ * through static imports, however deep, and every chunk a renderer chunk (one
+ * holding a `src/render-scene/` or `src/render-fallback/` module) imports
+ * dynamically — that hold a solver or data module. Dynamic edges are followed
+ * from renderer chunks alone: the mount a renderer loads statically reaches the
+ * Colophon, and so the solver, only behind the route the visitor takes, which
+ * is no renderer's. The live re-solve's output can feed no renderer whose
+ * chunks cannot reach the solver at all.
+ */
+function rendererCarries(from: readonly Edges[], start: string): string[] {
+  const named = new Map(from.map((out) => [out.fileName, out]));
+  const reached = new Set<string>();
+  const pending = [start];
+  for (let name = pending.pop(); name !== undefined; name = pending.pop()) {
+    if (reached.has(name)) continue;
+    reached.add(name);
+    const out = named.get(name);
+    pending.push(...(out?.imports ?? []));
+    if (Object.keys(out?.modules ?? {}).some(RENDERER_MODULE)) pending.push(...(out?.dynamicImports ?? []));
+  }
+  return [...reached].filter((name) => Object.keys(named.get(name)?.modules ?? {}).some(SOLVER_OR_DATA));
+}
+
 /** The mount's own modules: a lazy surface reaching them reaches the whole scene-surface graph the mount loads. */
 const MOUNT_MODULES = /^src\/(?:App\.tsx|shell\/(?:mount|scene-host|fallback-host|colophon-host)\.tsx)$/;
 
@@ -375,11 +419,40 @@ test('the shipped app builds under the assertion, measured within its budget', a
   const colophon = lazySurface(chunks, graph, 'src/colophon/colophon.tsx', 'src/shell/colophon-host.tsx');
   assert.deepEqual(
     Object.keys(colophon.modules).map(local).filter((id) => id.startsWith('src/')).sort(),
-    ['src/colophon/absences.ts', 'src/colophon/colophon.css', 'src/colophon/colophon.tsx', 'src/colophon/derivations.ts', 'src/colophon/exhibits.ts', 'src/colophon/json-setting.ts'],
-    'and holds the colophon alone (5.1: with its exhibits loader; 5.2: its derivation rows and stylesheet; 5.3: its JSON setting; 5.4: its statement of what is not there)',
+    ['src/colophon/absences.ts', 'src/colophon/colophon.css', 'src/colophon/colophon.tsx', 'src/colophon/derivations.ts', 'src/colophon/exhibits.ts', 'src/colophon/json-setting.ts', 'src/colophon/live-solve.ts'],
+    'and holds the colophon alone (5.1: with its exhibits loader; 5.2: its derivation rows and stylesheet; 5.3: its JSON setting; 5.4: its statement of what is not there; 5.5: its live re-solve’s copy and run)',
   );
+  // 5.5: the solver is its own lazy chunk — off the entry graph, reached only by
+  // the colophon chunk's dynamic import (requested on the press, never on load:
+  // no static import reaches it), and reaching neither the scene nor react-dom.
+  const solver = lazySurface(chunks, graph, 'src/derive/live.ts', 'src/colophon/colophon.tsx');
+  assert.notEqual(solver.fileName, colophon.fileName, 'the solver is not in the colophon chunk');
+  assert.ok(colophon.dynamicImports.includes(solver.fileName), 'the colophon chunk imports the solver dynamically');
+  // Its own modules, a closed list: the browser-safe entry, the shared step, the
+  // derive modules it reaches and the schema — never the gate, the file reader
+  // or the data.
+  assert.deepEqual(
+    Object.keys(solver.modules).map(local).filter((id) => id.startsWith('src/') || id.startsWith('generated/')).sort(),
+    [
+      'src/data/schema.ts',
+      'src/derive/artifact-schema.ts',
+      'src/derive/artifact.ts',
+      'src/derive/destinations.ts',
+      'src/derive/dwell.ts',
+      'src/derive/entities.ts',
+      'src/derive/live.ts',
+      'src/derive/pipeline.ts',
+      'src/derive/rail.ts',
+      'src/derive/rules.ts',
+      'src/derive/shots.ts',
+      'src/derive/skills.ts',
+      'src/derive/solve.ts',
+    ],
+    'and holds the solver alone (5.5)',
+  );
+  assert.ok(Object.keys(solver.modules).some((id) => /\/node_modules\/d3-force-3d\//.test(forward(id))), 'the solver chunk carries d3-force-3d, so the renderer checks below are not vacuous');
   // 5.1: the exhibits are emitted data, byte for byte, and no chunk carries them.
-  assert.deepEqual(exhibitFailures(chunks, assets, colophon.fileName), []);
+  assert.deepEqual(exhibitFailures(chunks, assets, colophon.fileName, solver.fileName), []);
   // Red against a mutated copy: each guarantee broken in turn.
   const careerAsset = assets.find((asset) => asset.fileName === 'career.json') as Rolldown.OutputAsset;
   const layoutAsset = assets.find((asset) => asset.fileName === 'layout.generated.json') as Rolldown.OutputAsset;
@@ -398,8 +471,12 @@ test('the shipped app builds under the assertion, measured within its budget', a
     ['the layout in the colophon chunk too', chunks.map((out) => (out === colophon ? { ...out, modules: { ...out.modules, ...fake('generated/layout.generated.json') } } : out)), assets],
     ['the layout moved out of the App chunk', chunks.map((out) => (out === appChunk ? { ...out, modules: Object.fromEntries(Object.entries(out.modules).filter(([id]) => local(id) !== 'generated/layout.generated.json')) } : out)), assets],
     ['a shell module in the colophon chunk', chunks.map((out) => (out === colophon ? { ...out, modules: { ...out.modules, ...fake('src/shell/route.ts') } } : out)), assets],
+    // 5.5: the solver's chunk may hold the schema, and nothing else of src/data/; no other chunk may hold even the schema.
+    ['career.json inlined into the solver chunk', chunks.map((out) => (out === solver ? { ...out, modules: { ...out.modules, ...fake('src/data/career.json') } } : out)), assets],
+    ['the file reader in the solver chunk', chunks.map((out) => (out === solver ? { ...out, modules: { ...out.modules, ...fake('src/data/validate.ts') } } : out)), assets],
+    ['the schema in the colophon chunk', chunks.map((out) => (out === colophon ? { ...out, modules: { ...out.modules, ...fake('src/data/schema.ts') } } : out)), assets],
   ];
-  for (const [name, mutatedChunks, mutatedAssets] of breaks) assert.notDeepEqual(exhibitFailures(mutatedChunks, mutatedAssets, colophon.fileName), [], `"${name}" must be rejected`);
+  for (const [name, mutatedChunks, mutatedAssets] of breaks) assert.notDeepEqual(exhibitFailures(mutatedChunks, mutatedAssets, colophon.fileName, solver.fileName), [], `"${name}" must be rejected`);
   const chart = lazySurface(chunks, graph, 'src/render-fallback/chart.tsx', 'src/shell/fallback-host.tsx');
   assert.ok(
     Object.keys(chart.modules).map(local).some((id) => id === 'src/render-fallback/chart-model.ts'),
@@ -419,6 +496,34 @@ test('the shipped app builds under the assertion, measured within its budget', a
   );
   const mountChunk = chunks.find((out) => Object.keys(out.modules).some((id) => local(id) === 'src/shell/mount.tsx'));
   assert.ok(mountChunk !== undefined, 'the mount was emitted');
+  // 5.5: neither renderer — the scene, the chart — nor anything loading with it
+  // holds a solver or data module, zod or d3-force-3d: the live re-solve's output
+  // cannot feed a renderer, and the committed layout is the only one either reads.
+  const sceneChunk = chunks.find((out) => Object.keys(out.modules).some((id) => local(id) === 'src/render-scene/scene.tsx'));
+  assert.ok(sceneChunk !== undefined, 'the scene was emitted');
+  for (const renderer of [sceneChunk, chart]) {
+    assert.deepEqual(rendererCarries(chunks, renderer.fileName), [], `${renderer.fileName} and what loads with it carry no solver, data, zod or d3-force-3d`);
+    const sharedChunk = chunks.find((out) => renderer.imports.includes(out.fileName)) as Rolldown.OutputChunk;
+    assert.ok(sharedChunk !== undefined, `${renderer.fileName} imports a chunk statically`);
+    for (const id of ['src/derive/live.ts', 'src/derive/pipeline.ts', 'src/data/schema.ts', ...SOLVER_PACKAGES.map((name) => `node_modules/${name}/src/index.js`)]) {
+      for (const target of [renderer, sharedChunk]) {
+        const mutated: Edges[] = chunks.map((out): Edges => (out === target ? { ...out, modules: { ...out.modules, ...fake(id) } } : out));
+        assert.ok(rendererCarries(mutated, renderer.fileName).includes(target.fileName), `${renderer.fileName}: ${id} in ${target === renderer ? 'its own chunk' : target.fileName} is caught`);
+      }
+    }
+    const withSolver: Edges[] = chunks.map((out): Edges => (out === renderer ? { ...out, imports: [...out.imports, solver.fileName] } : out));
+    assert.ok(rendererCarries(withSolver, renderer.fileName).includes(solver.fileName), `${renderer.fileName}: a static edge to the solver's chunk is caught`);
+    // A renderer reaching the solver lazily: directly, or through a chunk it loads dynamically that imports it.
+    const lazily: Edges[] = chunks.map((out): Edges => (out === renderer ? { ...out, dynamicImports: [...out.dynamicImports, solver.fileName] } : out));
+    assert.ok(rendererCarries(lazily, renderer.fileName).includes(solver.fileName), `${renderer.fileName}: a dynamic edge to the solver's chunk is caught`);
+    const between: Edges = { fileName: 'assets/between-mutant.js', imports: [solver.fileName], dynamicImports: [], modules: {} };
+    const throughLazy: Edges[] = [...chunks.map((out): Edges => (out === renderer ? { ...out, dynamicImports: [...out.dynamicImports, between.fileName] } : out)), between];
+    assert.ok(rendererCarries(throughLazy, renderer.fileName).includes(solver.fileName), `${renderer.fileName}: a dynamic edge to a chunk importing the solver is caught`);
+  }
+  // The solver's packages, each one, are what the shipped solver chunk carries: the list is not stale.
+  for (const name of SOLVER_PACKAGES) {
+    assert.ok(Object.keys(solver.modules).some((id) => forward(id).includes(`/node_modules/${name}/`)), `the solver chunk carries ${name}`);
+  }
   for (const surface of [colophon, chart]) {
     assert.deepEqual(reaching(chunks, surface.fileName, (id) => MOUNT_MODULES.test(local(id))), [], `${surface.fileName} reaches no chunk of the mount's`);
     const mutated: Edges[] = chunks.map((out): Edges => (out === surface ? { ...out, imports: [...out.imports, mountChunk.fileName] } : out));

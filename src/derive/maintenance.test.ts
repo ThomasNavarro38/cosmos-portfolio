@@ -32,14 +32,14 @@ import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative, sep } from 'node:path';
+import { join, posix, relative, sep } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { stripBanner } from './artifact.ts';
 import { parseArtifact } from './artifact-schema.ts';
 import { SRC_ROOT, findImports } from './boundaries.ts';
-import { filesUnder, isTestFile, sourceFilesUnder, stripCommentsAndStrings } from '../../scripts/source-scan.ts';
+import { filesUnder, isTestFile, sourceFilesUnder, stripComments, stripCommentsAndStrings } from '../../scripts/source-scan.ts';
 import { DWELL_TEMPOS } from './dwell.ts';
 import { runPipeline } from './index.ts';
 
@@ -676,25 +676,47 @@ test('no test in this suite writes into src/ or generated/', () => {
 });
 
 /**
- * The Colophon's imports (5.1, 5.2, 5.3, 5.4): React for its effect, its own
- * exhibits, derivations, JSON-setting and absences modules and its stylesheet,
- * nothing else, and the exhibits, derivations, setting and absences modules
- * nothing at all (5.2, 5.3, 5.4: not even a type from `src/derive/`, `src/data/` or `generated/`). Read by the boundary scan's own
- * reader, so a side-effect import, either quote, a re-export or a dynamic
- * import counts too. Here rather than beside the router's audit because
- * `src/shell/` may not import `src/derive/`.
+ * The Colophon's imports (5.1, 5.2, 5.3, 5.4, 5.5): React for its effects, its own
+ * exhibits, derivations, JSON-setting, absences and live re-solve modules and
+ * its stylesheet, and (5.5) the one dynamic import of the solver,
+ * `../derive/live.ts`, last, in the press — nothing else; and the exhibits,
+ * derivations, setting, absences and live re-solve modules nothing at all
+ * (5.2, 5.3, 5.4, 5.5: not even a type from `src/derive/`, `src/data/` or
+ * `generated/`; the live re-solve takes its loader as an argument). Read by the
+ * boundary scan's own reader, so a side-effect import, either quote, a
+ * re-export or a dynamic import counts too. Here rather than beside the
+ * router's audit because `src/shell/` may not import `src/derive/`.
  */
-test('the colophon imports React, ./exhibits.ts, ./derivations.ts, ./json-setting.ts, ./absences.ts and ./colophon.css only, and exhibits.ts, derivations.ts, json-setting.ts and absences.ts import nothing', () => {
+test('the colophon imports React, ./exhibits.ts, ./derivations.ts, ./json-setting.ts, ./absences.ts, ./live-solve.ts and ./colophon.css, and ../derive/live.ts dynamically, only; and exhibits.ts, derivations.ts, json-setting.ts, absences.ts and live-solve.ts import nothing', () => {
   const read = (path: string): string => readFileSync(join(SRC_ROOT, path), 'utf8');
   const importsOf = (source: string): (string | null)[] => findImports(source).map((found) => found.specifier);
   const colophon = read('colophon/colophon.tsx');
-  const admitted = ['react', './exhibits.ts', './derivations.ts', './json-setting.ts', './absences.ts', './colophon.css'];
-  assert.deepEqual(importsOf(colophon), admitted, 'the colophon imports React, ./exhibits.ts, ./derivations.ts, ./json-setting.ts, ./absences.ts and ./colophon.css only');
-  for (const extra of ["import '../shell/page.css';", 'import "../shell/state.ts";', "export { x } from '../shell/route.ts';", "const m = await import('../derive/index.ts');", "import type { Artifact } from '../derive/artifact-schema.ts';"]) {
+  const admitted = ['react', './exhibits.ts', './derivations.ts', './json-setting.ts', './absences.ts', './live-solve.ts', './colophon.css', '../derive/live.ts'];
+  assert.deepEqual(importsOf(colophon), admitted, 'the colophon imports React, ./exhibits.ts, ./derivations.ts, ./json-setting.ts, ./absences.ts, ./live-solve.ts and ./colophon.css, and ../derive/live.ts dynamically, only');
+  // 5.5: the solver is reached by a dynamic import alone, never a static one.
+  const solver = findImports(colophon).filter((found) => found.specifier === '../derive/live.ts');
+  assert.equal(solver.length, 1, 'one import of the solver');
+  assert.ok(/\bimport\s*\(\s*$/.test(colophon.slice(0, colophon.indexOf("'../derive/live.ts'", colophon.indexOf('createLiveSolve(')))), 'and it is the dynamic import in the press');
+  for (const extra of [
+    "import '../shell/page.css';",
+    'import "../shell/state.ts";',
+    "export { x } from '../shell/route.ts';",
+    "const m = await import('../derive/index.ts');",
+    "import type { Artifact } from '../derive/artifact-schema.ts';",
+    // 5.5: a second dynamic import of the solver, a dynamic import of the gate, a static import of the solver.
+    "const again = () => import('../derive/live.ts');",
+    "const gate = () => import('../derive/index.ts');",
+    "import { solveLive } from '../derive/live.ts';",
+  ]) {
     assert.notDeepEqual(importsOf(`${colophon}
 ${extra}
 `), admitted, `"${extra}" is seen`);
   }
+  assert.notDeepEqual(
+    importsOf(colophon.replace("() => import('../derive/live.ts'),", "() => import('../derive/index.ts'),")),
+    admitted,
+    'the gate imported in the solver’s place is seen',
+  );
   assert.deepEqual(importsOf(read('colophon/exhibits.ts')), [], 'and exhibits.ts imports nothing');
   const derivations = read('colophon/derivations.ts');
   assert.deepEqual(importsOf(derivations), [], 'and derivations.ts imports nothing');
@@ -715,5 +737,69 @@ ${setting}`), [], `"${extra}" is seen`);
   for (const extra of ["import career from '../data/career.json';", "import { EXHIBIT_PATHS } from './exhibits.ts';", "const d = await import('../derive/index.ts');"]) {
     assert.notDeepEqual(importsOf(`${extra}
 ${absences}`), [], `"${extra}" is seen`);
+  }
+  // 5.5: the run takes its loader as an argument; it names no solver, no data and no exhibit.
+  const liveSolve = read('colophon/live-solve.ts');
+  assert.deepEqual(importsOf(liveSolve), [], 'and live-solve.ts imports nothing');
+  for (const extra of ["import { solveLive } from '../derive/live.ts';", "const l = () => import('../derive/live.ts');", "import type { LiveSolver } from '../derive/live.ts';", "import { EXHIBIT_PATHS } from './exhibits.ts';"]) {
+    assert.notDeepEqual(importsOf(`${extra}
+${liveSolve}`), [], `"${extra}" is seen`);
+  }
+});
+
+/**
+ * The live re-solve's output feeds no renderer (5.5, AD-7): nothing under
+ * `src/` but `src/colophon/colophon.tsx` reaches the solver (`src/derive/live.ts`)
+ * or the run (`src/colophon/live-solve.ts`), so no store, no shell module and no
+ * renderer can reach the solver or what it returns. Two checks, each named in
+ * what it reports: the **text** `derive/live` or `live-solve` in stripped
+ * source (comments are stripped, so a sentence about the module is not a
+ * reference), and any **import** specifier — static, dynamic or re-export,
+ * read by the boundary scan's reader — that resolves to either module, so
+ * `./live.ts` from inside `src/derive/` is caught too. Test files are not
+ * shipped and are excused.
+ */
+const LIVE_MODULES = new Set(['src/derive/live', 'src/colophon/live-solve']);
+
+/** Every file other than the Colophon reaching a live re-solve module, with the check that caught it. */
+function liveReferences(files: readonly { readonly path: string; readonly source: string }[]): string[] {
+  const found: string[] = [];
+  for (const file of files) {
+    if (file.path === 'src/colophon/colophon.tsx') continue;
+    if (/derive\/live(?:\.ts)?\b|live-solve(?:\.ts)?\b/.test(stripComments(file.source))) found.push(`${file.path}: text`);
+    const resolved = findImports(file.source).flatMap((imported) => {
+      const specifier = imported.specifier;
+      if (specifier === null || !specifier.startsWith('.')) return [];
+      return [posix.normalize(posix.join(posix.dirname(file.path), specifier)).replace(/\.[mc]?[jt]sx?$/, '')];
+    });
+    if (resolved.some((target) => LIVE_MODULES.has(target))) found.push(`${file.path}: import`);
+  }
+  return found;
+}
+
+test('nothing but the Colophon references the live re-solve', () => {
+  const files = shippedFilesUnder(SRC_ROOT).map((path) => ({
+    path: `src/${relative(SRC_ROOT, path).split(sep).join('/')}`,
+    source: readFileSync(path, 'utf8'),
+  }));
+  assert.deepEqual(liveReferences(files), [], 'the solver and the run are reached by the Colophon alone');
+  // Not vacuous: the Colophon itself is caught once it is not excused.
+  assert.deepEqual(
+    liveReferences(files.map((file) => (file.path === 'src/colophon/colophon.tsx' ? { ...file, path: 'src/colophon/elsewhere.tsx' } : file))),
+    ['src/colophon/elsewhere.tsx: text', 'src/colophon/elsewhere.tsx: import'],
+  );
+  for (const [path, line, caught] of [
+    ['src/shell/state.ts', "export const solved = () => import('../derive/live.ts');\n", ['text', 'import']],
+    ['src/render-scene/scene.tsx', "import { LIVE_SOLVE } from '../colophon/live-solve.ts';\n", ['text', 'import']],
+    ['src/App.tsx', "const solver = () => import('./derive/live.ts');\n", ['text', 'import']],
+    // Inside src/derive/, the solver is `./live.ts`: no `derive/live` text, caught by the import check alone.
+    ['src/derive/pipeline.ts', "export { solveLive } from './live.ts';\n", ['import']],
+    ['src/derive/solve.ts', "const again = () => import('./live');\n", ['import']],
+    // A string merely naming the run, with no import: caught by the text check alone.
+    ['src/shell/state.ts', "export const NAME = 'live-solve';\n", ['text']],
+  ] as const) {
+    const mutated = files.map((file) => (file.path === path ? { ...file, source: `${file.source}${line}` } : file));
+    assert.ok(mutated.some((file) => file.path === path), `${path} exists`);
+    assert.deepEqual(liveReferences(mutated), caught.map((check) => `${path}: ${check}`), `"${line.trim()}" in ${path} is caught by ${caught.join(' and ')}`);
   }
 });

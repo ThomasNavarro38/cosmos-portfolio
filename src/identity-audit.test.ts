@@ -330,6 +330,11 @@ const ROLES: readonly Role[] = [
   // the prose at notable-prose/ink-prose, the Notable prose's floor.
   { role: 'absences heading', floor: 4.5, ink: { css: COLOPHON_CSS, selector: '.colophon-heading' }, ground: 'page' },
   { role: 'absences prose', floor: 7, ink: { css: COLOPHON_CSS, selector: '.colophon-prose' }, ground: 'page' },
+  // The live re-solve's button (5.5), on the page ground: the panel's release
+  // treatment, ink-label at rest at the chrome floor, ink-prose raised at the
+  // prose floor.
+  { role: 'live re-solve button', floor: 4.5, ink: { css: COLOPHON_CSS, selector: '.colophon-solve' }, ground: 'page' },
+  { role: 'live re-solve button, raised', floor: 7, ink: { css: COLOPHON_CSS, selector: '.colophon-solve:hover:not([aria-disabled="true"]), .colophon-solve:focus-visible:not([aria-disabled="true"])' }, ground: 'page' },
 ];
 
 /**
@@ -666,6 +671,12 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
   'There are no position overrides. career.json holds no coordinate, and no entry can pin its own place: every position in layout.generated.json is solved from the three rules above.',
   'Shots name entities, never coordinates. Each shot gives a subject, an angle and a distance, so when a solve moves a Client, its shot moves with it.',
   'There is no per-entry camera work. Every shot’s subject is a Client; a Project is framed at its Client’s stop, never on its own.',
+  // The live re-solve (5.5, rulings Q2 (a), Q3 (a)): its heading, the one
+  // framing paragraph and the button's label, verbatim — widening the same
+  // copy place (EXPERIENCE.md §3, place 4, ruling Q5 (a)).
+  'solve it here',
+  'This runs the same solver on career.json, here in your browser. It shows the mechanism at work; it does not reproduce the shipped layout, which was solved once and is the only one the scene reads.',
+  'solve it again',
 ]);
 
 /** Accessible names — announced, never drawn — listed separately. */
@@ -675,10 +686,12 @@ const ACCESSIBLE_NAMES: ReadonlySet<string> = new Set([
   // The chart's Notable glyph on a Shallow row (4.4); its Deep name is the
   // visible `Carries a notable`, the legend's phrase.
   'No notable',
+  // The live re-solve's result exhibit (5.5): its name, announced, never drawn.
+  'layout, solved in this browser',
 ]);
 
 /** The constants the renderers draw copy from; any other upper-case constant drawn as text fails. */
-const COPY_CONSTANTS: ReadonlySet<string> = new Set(['IDENTITY_LINE', 'IDENTITY_NAME', 'IDENTITY_MODEL', 'CHART_LINK_TEXT', 'SCENE_LINK_TEXT', 'SLOT_TEXT', 'EDITORIAL_RULE', 'RELEASE_LABEL', 'FIELD_LABELS', 'DEPTH_LABELS', 'CHART_LABELS', 'DERIVATION_LABELS', 'ABSENCES_HEADING', 'ABSENCES']);
+const COPY_CONSTANTS: ReadonlySet<string> = new Set(['IDENTITY_LINE', 'IDENTITY_NAME', 'IDENTITY_MODEL', 'CHART_LINK_TEXT', 'SCENE_LINK_TEXT', 'SLOT_TEXT', 'EDITORIAL_RULE', 'RELEASE_LABEL', 'FIELD_LABELS', 'DEPTH_LABELS', 'CHART_LABELS', 'DERIVATION_LABELS', 'ABSENCES_HEADING', 'ABSENCES', 'LIVE_SOLVE']);
 
 /**
  * The separators a template sets between data, and nothing else: whitespace
@@ -966,8 +979,8 @@ function auditCopy(files: Readonly<Record<string, string>>, html: string): strin
   return failures;
 }
 
-/** The one copy constant announced and never drawn (4.4): the Notable glyph's name on a Shallow row. */
-const ANNOUNCED_CONSTANTS: ReadonlySet<string> = new Set(['CHART_LABELS.none']);
+/** The copy constants announced and never drawn: the Notable glyph's name on a Shallow row (4.4), and the live re-solve's result exhibit's name (5.5). */
+const ANNOUNCED_CONSTANTS: ReadonlySet<string> = new Set(['CHART_LABELS.none', 'LIVE_SOLVE.result']);
 
 /**
  * Each copy constant's value, by name, against the closed allowlist. Only an
@@ -1018,6 +1031,16 @@ function absences(): Record<string, string> {
   return Object.fromEntries([...literal.matchAll(/(\w+):\s*'([^']*)'/g)].map(([, key, value]) => [key as string, value as string]));
 }
 
+/**
+ * The live re-solve's copy (5.5), read off `colophon/live-solve.ts` as text,
+ * as the derivation labels are: every `key: 'value'` pair of the one-line
+ * object literal; none found reads as empty, which fails the key check below.
+ */
+function liveSolve(): Record<string, string> {
+  const literal = /export const LIVE_SOLVE = \{([^}]*)\} as const;/.exec(codeOf(read('./colophon/live-solve.ts'), 'script'))?.[1] ?? '';
+  return Object.fromEntries([...literal.matchAll(/(\w+):\s*'([^']*)'/g)].map(([, key, value]) => [key as string, value as string]));
+}
+
 function copyConstants(): Record<string, string> {
   const entries = (name: string, record: Readonly<Record<string, string>>) => Object.entries(record).map(([key, value]) => [`${name}.${key}`, value] as const);
   return Object.fromEntries([
@@ -1035,6 +1058,7 @@ function copyConstants(): Record<string, string> {
     ...entries('DERIVATION_LABELS', derivationLabels()),
     ...Object.entries(absencesHeading()),
     ...entries('ABSENCES', absences()),
+    ...entries('LIVE_SOLVE', liveSolve()),
     ...entries('SURFACE_TITLES', SURFACE_TITLES),
     ...entries('SURFACE_NAMES', SURFACE_NAMES),
   ]);
@@ -1062,6 +1086,23 @@ test('copy: the copy constants are each in the closed allowlist', () => {
     ['ABSENCES.data', 'There is no backend and no CMS.'],
     ['ABSENCES.thesis', 'The layout is never authored; the camera is'],
     ['ABSENCES.boast', 'Built with care and attention to maintainability.'],
+  ] as const) {
+    assert.deepEqual(auditCopyConstants({ ...constants, [name]: value }), [`copy: the constant ${name} is ${JSON.stringify(value)}, which is not in the closed allowlist`]);
+  }
+  // 5.5: the live re-solve's copy, read off its module, each value held by key —
+  // heading, framing and action as visible copy, result as an accessible name
+  // alone; a framing that apologises or a label that narrates is in neither set,
+  // and the result's name drawn as a label is not admitted.
+  assert.deepEqual(Object.keys(liveSolve()), ['heading', 'framing', 'action', 'result'], 'the live re-solve’s copy is read off its module (5.5)');
+  assert.ok(VISIBLE_COPY.has(liveSolve().heading as string) && VISIBLE_COPY.has(liveSolve().framing as string) && VISIBLE_COPY.has(liveSolve().action as string), 'heading, framing and action are visible copy');
+  assert.ok(ACCESSIBLE_NAMES.has(liveSolve().result as string) && !VISIBLE_COPY.has(liveSolve().result as string), 'the result is an accessible name, never visible copy');
+  for (const [name, value] of [
+    ['LIVE_SOLVE.heading', 'Solve it here'],
+    ['LIVE_SOLVE.framing', 'Note: this is only a demo and may not match the real layout.'],
+    ['LIVE_SOLVE.action', 'Re-run the solver'],
+    ['LIVE_SOLVE.action', 'layout, solved in this browser'],
+    ['LIVE_SOLVE.result', 'solve it again'.replace('again', 'once')],
+    ['LIVE_SOLVE.status', 'solved in 412 ms'],
   ] as const) {
     assert.deepEqual(auditCopyConstants({ ...constants, [name]: value }), [`copy: the constant ${name} is ${JSON.stringify(value)}, which is not in the closed allowlist`]);
   }
@@ -1803,7 +1844,23 @@ const COLOPHON_RULES: readonly CssRule[] = [
   // the prose at notable-prose/ink-prose held to measure-prose, as `.panel-prose`.
   { at: '', selector: '.colophon-heading', declarations: ['margin: var(--space-xxl) 0 var(--space-md)', ...CHART_TYPE('field-label'), 'color: var(--color-ink-label-dark)'] },
   { at: '', selector: '.colophon-prose', declarations: ['margin: 0 0 var(--space-md)', 'max-width: var(--space-measure-prose)', ...CHART_TYPE('notable-prose'), 'color: var(--color-ink-prose-dark)'] },
+  // The live re-solve's button (5.5): `.panel-release` declaration for
+  // declaration, but for its `::before` hairline and the flex layout that
+  // places it — the chrome role set property by property, ink-label at rest,
+  // ink-prose raised — plus the exhibits' focus outline, and no pointer while
+  // a run is in flight.
+  {
+    at: '',
+    selector: '.colophon-solve',
+    declarations: ['margin: var(--space-xl) 0 0', 'padding: 0', 'background: none', 'border: 0', 'cursor: pointer', ...CHART_TYPE('chrome'), 'color: var(--color-ink-label-dark)'],
+  },
+  // Raised only while it can be pressed: no lift while a run is in flight.
+  { at: '', selector: '.colophon-solve:hover:not([aria-disabled="true"]), .colophon-solve:focus-visible:not([aria-disabled="true"])', declarations: ['color: var(--color-ink-prose-dark)'] },
+  { at: '', selector: '.colophon-solve:focus-visible', declarations: ['outline: 1px solid var(--color-stroke-focus-dark)', 'outline-offset: 3px'] },
+  // While a run is in flight the button is aria-disabled (never `disabled`, which drops focus): no pointer.
+  { at: '', selector: '.colophon-solve[aria-disabled="true"]', declarations: ['cursor: default'] },
   { at: '@media (forced-colors: active)', selector: '.colophon-exhibit:focus-visible', declarations: ['outline: 1px solid CanvasText'] },
+  { at: '@media (forced-colors: active)', selector: '.colophon-solve:focus-visible', declarations: ['outline: 1px solid CanvasText'] },
 ];
 
 /**
@@ -1819,7 +1876,13 @@ const COLOPHON_RULES: readonly CssRule[] = [
  * `EXHIBIT_PATHS`. What is not there (5.4): after the layout exhibit, one
  * `<h2 className="colophon-heading">{ABSENCES_HEADING}</h2>`, then one
  * `<p className="colophon-prose">` per `ABSENCES` entry, keyed by its name,
- * from `./absences.ts`; no `<section>`. No inline style.
+ * from `./absences.ts`; no `<section>`. The live re-solve (5.5), last: one
+ * `<h2 className="colophon-heading">{LIVE_SOLVE.heading}</h2>`, one
+ * `<p className="colophon-prose">{LIVE_SOLVE.framing}</p>`, one
+ * `<button type="button" className="colophon-solve" aria-disabled={running}
+ * onClick={onSolve}>{LIVE_SOLVE.action}</button>`, and the result drawn by the
+ * same `Exhibit`, named `LIVE_SOLVE.result`, from `./live-solve.ts`. No inline
+ * style.
  */
 function auditColophon(css: string, tsx: string): string[] {
   const failures = [...auditBans('colophon', css), ...auditDeclarations('colophon', css, COLOPHON_RULES)];
@@ -1844,11 +1907,18 @@ function auditColophon(css: string, tsx: string): string[] {
     failures.push('colophon: the exhibits are not career, table, layout, each named off EXHIBIT_PATHS');
   }
   if (
-    !/<Exhibit name=\{EXHIBIT_PATHS\.layout\.slice\(1\)\} text=\{exhibits\.layout\} \/>\s*<h2 className="colophon-heading">\{ABSENCES_HEADING\}<\/h2>\s*\{Object\.entries\(ABSENCES\)\.map\(\(\[key, text\]\) => \(\s*<p key=\{key\} className="colophon-prose">\s*\{text\}\s*<\/p>\s*\)\)\}\s*<\/>/.test(script)
+    !/<Exhibit name=\{EXHIBIT_PATHS\.layout\.slice\(1\)\} text=\{exhibits\.layout\} \/>\s*<h2 className="colophon-heading">\{ABSENCES_HEADING\}<\/h2>\s*\{Object\.entries\(ABSENCES\)\.map\(\(\[key, text\]\) => \(\s*<p key=\{key\} className="colophon-prose">\s*\{text\}\s*<\/p>\s*\)\)\}\s*<h2 className="colophon-heading">\{LIVE_SOLVE\.heading\}/.test(script)
   ) {
     failures.push('colophon: what is not there is not the h2.colophon-heading then one p.colophon-prose per ABSENCES entry, after the layout exhibit');
   }
-  if ((script.match(/<h2\b/g) ?? []).length !== 1 || (script.match(/<p\b/g) ?? []).length !== 1) failures.push('colophon: a heading or paragraph other than the absences’');
+  if (
+    !/\)\)\}\s*<h2 className="colophon-heading">\{LIVE_SOLVE\.heading\}<\/h2>\s*<p className="colophon-prose">\{LIVE_SOLVE\.framing\}<\/p>\s*<button type="button" className="colophon-solve" aria-disabled=\{running\} onClick=\{onSolve\}>\s*\{LIVE_SOLVE\.action\}\s*<\/button>\s*\{solved === null \? null : <Exhibit name=\{LIVE_SOLVE\.result\} text=\{solved\} \/>\}\s*<\/>/.test(script)
+  ) {
+    failures.push('colophon: the live re-solve is not the h2.colophon-heading, the p.colophon-prose framing, the button.colophon-solve and the result Exhibit named LIVE_SOLVE.result, after what is not there');
+  }
+  if ((script.match(/<h2\b/g) ?? []).length !== 2 || (script.match(/<p\b/g) ?? []).length !== 2) failures.push('colophon: a heading or paragraph other than the absences’ and the live re-solve’s');
+  if ((script.match(/<button\b/g) ?? []).length !== 1) failures.push('colophon: a button other than the live re-solve’s');
+  if (!/^import \{ LIVE_SOLVE, createLiveSolve \} from '\.\/live-solve\.ts';$/m.test(script)) failures.push('colophon: the live re-solve’s copy is not read from ./live-solve.ts');
   if (/<section\b/.test(script)) failures.push('colophon: a <section> — the page’s one landmark is the host’s <main>');
   if (!/^import \{ ABSENCES, ABSENCES_HEADING \} from '\.\/absences\.ts';$/m.test(script)) failures.push('colophon: the absences are not read from ./absences.ts');
   if (/\bstyle=\{/.test(script)) failures.push('colophon: an inline style — the treatment is the stylesheet’s');
@@ -1909,6 +1979,22 @@ test('colophon: each guarantee removed fails with its own line', () => {
     [(s) => s.replace(/(\.colophon-prose \{[^}]*color: )var\(--color-ink-prose-dark\)/, '$1var(--color-ink-lift-dark)'), /`\.colophon-prose` lacks `color: var\(--color-ink-prose-dark\)`/],
     [(s) => s.replace('.colophon-prose {\n  margin: 0 0 var(--space-md);', '.colophon-prose {\n  margin: 0;'), /`\.colophon-prose` lacks `margin: 0 0 var\(--space-md\)`/],
     [(s) => `${s}\n.colophon-prose strong {\n  color: var(--color-ink-lift-dark);\n}\n`, /^colophon: the unlisted rule `\.colophon-prose strong`$/m],
+    // 5.5: the button off the chrome role or ink-label; raised off ink-prose; its focus outline or the forced-colours one gone; the pointer kept while disabled; a box, a bold, a transform, a shorthand.
+    [(s) => s.replace(/(\.colophon-solve \{[^}]*)font-size: var\(--type-chrome-font-size\)/, '$1font-size: var(--type-field-value-font-size)'), /`\.colophon-solve` lacks `font-size: var\(--type-chrome-font-size\)`/],
+    [(s) => s.replace(/(\.colophon-solve \{[^}]*color: )var\(--color-ink-label-dark\)/, '$1var(--color-ink-prose-dark)'), /`\.colophon-solve` lacks `color: var\(--color-ink-label-dark\)`/],
+    [(s) => s.replace('.colophon-solve:focus-visible:not([aria-disabled="true"]) {\n  color: var(--color-ink-prose-dark);', '.colophon-solve:focus-visible:not([aria-disabled="true"]) {\n  color: var(--color-ink-lift-dark);'), /`\.colophon-solve:hover:not\(\[aria-disabled="true"\]\), \.colophon-solve:focus-visible:not\(\[aria-disabled="true"\]\)` lacks `color: var\(--color-ink-prose-dark\)`/],
+    [(s) => s.replace('.colophon-solve:focus-visible {\n  outline: 1px solid var(--color-stroke-focus-dark);', '.colophon-solve:focus-visible {\n  outline: none;'), /`\.colophon-solve:focus-visible` lacks `outline: 1px solid var\(--color-stroke-focus-dark\)`/],
+    [(s) => s.replace('  .colophon-solve:focus-visible {\n    outline: 1px solid CanvasText;\n  }\n', ''), /`@media \(forced-colors: active\) \.colophon-solve:focus-visible` lacks `outline: 1px solid CanvasText`|the rule `@media \(forced-colors: active\) \.colophon-solve:focus-visible` is missing/],
+    [(s) => s.replace('.colophon-solve[aria-disabled="true"] {\n  cursor: default;', '.colophon-solve[aria-disabled="true"] {\n  cursor: pointer;'), /`\.colophon-solve\[aria-disabled="true"\]` lacks `cursor: default`/],
+    // The lift applied while a run is in flight, or the cursor rule keyed on `:disabled` again.
+    [(s) => s.replaceAll(':not([aria-disabled="true"])', ''), /the rule `\.colophon-solve:hover:not\(\[aria-disabled="true"\]\), \.colophon-solve:focus-visible:not\(\[aria-disabled="true"\]\)` is missing/],
+    [(s) => s.replace('.colophon-solve[aria-disabled="true"] {', '.colophon-solve:disabled {'), /the rule `\.colophon-solve\[aria-disabled="true"\]` is missing/],
+    [(s) => s.replace(/(\.colophon-solve \{[^}]*)border: 0;/, '$1border: 1px solid var(--color-stroke-rest-dark);'), /`\.colophon-solve` lacks `border: 0`/],
+    [(s) => s.replace(/(\.colophon-solve \{[^}]*)border: 0;/, '$1border: 0;\n  border-radius: 2px;'), /colophon: a radius, shadow or filter/],
+    [(s) => s.replace(/(\.colophon-solve \{[^}]*)font-weight: var\(--type-chrome-font-weight\)/, '$1font-weight: 600'), /^colophon: a literal font-weight/m],
+    [(s) => s.replace('.colophon-solve {\n', '.colophon-solve {\n  text-transform: lowercase;\n'), /^colophon: text-transform/m],
+    [(s) => s.replace(/(\.colophon-solve \{[^}]*)font-family: var\(--type-chrome-font-family\);\n  font-size: var\(--type-chrome-font-size\);/, '$1font: var(--type-chrome-font-size) var(--type-chrome-font-family);'), /`\.colophon-solve` lacks `font-family: var\(--type-chrome-font-family\)`/],
+    [(s) => `${s}\n.colophon-solve::before {\n  content: '';\n}\n`, /^colophon: the unlisted rule `\.colophon-solve::before`$/m],
   ];
   for (const [mutate, message] of cssCases) {
     const mutated = mutate(css);
@@ -1942,12 +2028,27 @@ test('colophon: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('<p key={key} className="colophon-prose">', '<p key={key}>'), /what is not there is not the h2\.colophon-heading/],
     [(s) => s.replace('{Object.entries(ABSENCES).map(', '{Object.entries(DERIVATION_LABELS).map('), /what is not there is not the h2\.colophon-heading/],
     [
-      (s) => s.replace('<Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />\n          <h2', '<h2').replace('          ))}\n        </>', '          ))}\n          <Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />\n        </>'),
+      (s) => s.replace('<Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />\n          <h2', '<h2').replace('          ))}\n          <h2 className="colophon-heading">{LIVE_SOLVE.heading}', '          ))}\n          <Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />\n          <h2 className="colophon-heading">{LIVE_SOLVE.heading}'),
       /what is not there is not the h2\.colophon-heading/,
     ],
     [(s) => s.replace('<h1>the model</h1>', '<h1>the model</h1>\n      <p className="colophon-prose">{ABSENCES.thesis}</p>'), /a heading or paragraph other than the absences’/],
-    [(s) => s.replace('<h2 className="colophon-heading">', '<section>\n          <h2 className="colophon-heading">').replace('          ))}\n        </>', '          ))}\n          </section>\n        </>'), /a <section>/],
+    [(s) => s.replace('<h2 className="colophon-heading">', '<section>\n          <h2 className="colophon-heading">').replace('          ))}\n          <h2 className="colophon-heading">{LIVE_SOLVE.heading}', '          ))}\n          </section>\n          <h2 className="colophon-heading">{LIVE_SOLVE.heading}'), /a <section>/],
     [(s) => s.replace("import { ABSENCES, ABSENCES_HEADING } from './absences.ts';", "import { ABSENCES, ABSENCES_HEADING } from './copy.ts';"), /the absences are not read from \.\/absences\.ts/],
+    // 5.5: the button dropped, unclassed, a submit, never disabled, unwired; the label or heading off its constant; the result misnamed or drawn in a bare <pre>; the block before the absences; a status line; a second button; the import off.
+    [(s) => s.replace(/\s*<button type="button" className="colophon-solve"[^>]*>\s*\{LIVE_SOLVE\.action\}\s*<\/button>/, ''), /the live re-solve is not the h2\.colophon-heading/],
+    [(s) => s.replace('<button type="button" className="colophon-solve"', '<button type="button"'), /the live re-solve is not the h2\.colophon-heading/],
+    [(s) => s.replace('<button type="button" className="colophon-solve"', '<button type="submit" className="colophon-solve"'), /the live re-solve is not the h2\.colophon-heading/],
+    [(s) => s.replace(' aria-disabled={running}', ''), /the live re-solve is not the h2\.colophon-heading/],
+    // `disabled` would drop keyboard focus from the pressed button.
+    [(s) => s.replace(' aria-disabled={running}', ' disabled={running}'), /the live re-solve is not the h2\.colophon-heading/],
+    [(s) => s.replace(' onClick={onSolve}', ''), /the live re-solve is not the h2\.colophon-heading/],
+    [(s) => s.replace('{LIVE_SOLVE.action}', '{LIVE_SOLVE.heading}'), /the live re-solve is not the h2\.colophon-heading/],
+    [(s) => s.replace('<h2 className="colophon-heading">{LIVE_SOLVE.heading}</h2>', '<h3 className="colophon-heading">{LIVE_SOLVE.heading}</h3>'), /the live re-solve is not the h2\.colophon-heading/],
+    [(s) => s.replace('<Exhibit name={LIVE_SOLVE.result} text={solved} />', '<Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={solved} />'), /the live re-solve is not the h2\.colophon-heading/],
+    [(s) => s.replace('<Exhibit name={LIVE_SOLVE.result} text={solved} />', '<pre aria-label={LIVE_SOLVE.result}>{solved}</pre>'), /the exhibit is not one <pre className="colophon-exhibit"/],
+    [(s) => s.replace('<p className="colophon-prose">{LIVE_SOLVE.framing}</p>', '<p className="colophon-prose">{LIVE_SOLVE.framing}</p>\n          <p className="colophon-prose">{LIVE_SOLVE.result}</p>'), /a heading or paragraph other than the absences’ and the live re-solve’s/],
+    [(s) => s.replace('            {LIVE_SOLVE.action}\n          </button>', '            {LIVE_SOLVE.action}\n          </button>\n          <button type="button">{LIVE_SOLVE.action}</button>'), /a button other than the live re-solve’s/],
+    [(s) => s.replace("import { LIVE_SOLVE, createLiveSolve } from './live-solve.ts';", "import { LIVE_SOLVE, createLiveSolve } from './copy.ts';"), /the live re-solve’s copy is not read from \.\/live-solve\.ts/],
   ];
   for (const [mutate, message] of tsxCases) {
     const mutated = mutate(tsx);
@@ -2032,7 +2133,7 @@ test('monospace: each guarantee removed fails with its own line', () => {
     ['the family on another Colophon rule', edit(COLOPHON_CSS, (s) => s.replace('.colophon-derivations td {\n  padding', '.colophon-derivations td {\n  font-family: var(--font-mono);\n  padding')), /^monospace: src\/colophon\/colophon\.css `\.colophon-derivations td` sets font-family: var\(--font-mono\)/m],
     ['the family dropped', edit(COLOPHON_CSS, (s) => s.replace('  font-family: var(--font-mono);\n', '  font-family: var(--type-field-value-font-family);\n')), /^monospace: --font-mono is named 0 times in shipped source/m],
     ['a literal stack', edit(CHART_CSS, (s) => `${s}\n.chart-index td {\n  font-family: Menlo, monospace;\n}\n`), /^monospace: src\/render-fallback\/chart\.css names monospace/m],
-    ['the word in a comment', edit('colophon/colophon.tsx', (s) => s.replace('/** The surface as drawn:', '/** In a monospace face. The surface as drawn:')), /^monospace: src\/colophon\/colophon\.tsx names monospace/m],
+    ['the word in a comment', edit('colophon/colophon.tsx', (s) => s.replace(' * The surface as drawn:', ' * In a monospace face. The surface as drawn:')), /^monospace: src\/colophon\/colophon\.tsx names monospace/m],
     ['the family in a model', edit(AFFORDANCE_TS, (s) => s.replace('fontFamily: type.fontFamily,', 'fontFamily: tokens.typography.fontFamily.mono,')), /^monospace: src\/render-scene\/affordance-model\.ts reads the mono family off the tokens/m],
     ['a <code> drawn', edit('render-fallback/chart.tsx', (s) => s.replace('<h1 className="chart-heading">', '<code>x</code>\n<h1 className="chart-heading">')), /^monospace: src\/render-fallback\/chart\.tsx draws <code>/m],
     ['a <kbd> drawn', edit('shell/index-nav.tsx', (s) => s.replace('<button type="button" id={OVERVIEW_ID}', '<kbd>Tab</kbd><button type="button" id={OVERVIEW_ID}')), /^monospace: src\/shell\/index-nav\.tsx draws <kbd>/m],

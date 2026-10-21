@@ -18,7 +18,8 @@
  *
  * **Nothing here reads a clock, a random source, or the environment.** The
  * reference month comes from `career.json`, and the solve's randomness is a
- * seeded generator constructed below. Identical input, byte-identical output.
+ * seeded generator constructed in `pipeline.ts`. Identical input,
+ * byte-identical output.
  */
 
 import { createHash } from 'node:crypto';
@@ -27,13 +28,13 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { readCareerFile, validateCareer } from '../data/validate.ts';
-import { BANNER, buildArtifact, serializeArtifact, stripBanner } from './artifact.ts';
+import { BANNER, serializeArtifact, stripBanner } from './artifact.ts';
 import { parseArtifact, validateArtifact, type Artifact } from './artifact-schema.ts';
 import { SRC_ROOT, checkImportBoundaries } from './boundaries.ts';
-import { clientFoldWarnings, deriveEntities, isDeepProject } from './entities.ts';
+import { clientFoldWarnings, isDeepProject } from './entities.ts';
+import { normaliseLineEndings, solveArtifact } from './pipeline.ts';
 import { compareRailKeys, earliestStart } from './rail.ts';
 import { rankSkills, shareCounts } from './skills.ts';
-import { solveLayout } from './solve.ts';
 
 /** The one authored source, read by the solve and held against the artifact by the gate. */
 export const CAREER_JSON = fileURLToPath(new URL('../data/career.json', import.meta.url));
@@ -47,29 +48,6 @@ export const ARTIFACT_PATH = fileURLToPath(
 );
 
 /**
- * The seed the solve's generator starts from.
- *
- * A constant, and deliberately not a clock, an environment variable, or an
- * argument. `solveLayout` requires an injected source; a source that varied
- * between runs would make the committed artifact churn on every solve for no
- * authored change, which is exactly the deliberateness AD-1 is about.
- */
-const SOLVE_SEED = 1;
-
-/**
- * The LCG `d3-force-3d` uses internally, constructed fresh here.
- *
- * Fresh per solve rather than module-level: a generator holding state across
- * calls would make a second solve in one process a different problem from the
- * first, and the byte-identical guarantee would quietly become a
- * first-run-only one.
- */
-function seededRandom(seed: number): () => number {
-  let state = seed;
-  return () => (state = (1664525 * state + 1013904223) % 4294967296) / 4294967296;
-}
-
-/**
  * The digest an artifact records of the `career.json` text it was solved from:
  * sha256, lowercase hex, over the UTF-8 text with every CRLF normalised to LF.
  *
@@ -77,9 +55,11 @@ function seededRandom(seed: number): () => number {
  * clone with `core.autocrlf` carries the same authored content in different
  * bytes, and the build must not tell the two apart. Every other byte counts:
  * the digest is what catches an authored change shipped without a re-solve.
+ * The normalisation is `pipeline.ts`'s, shared with the Colophon's live
+ * re-solve (`live.ts`), which takes the same digest through `crypto.subtle`.
  */
 export function sourceDigestOf(text: string): string {
-  return createHash('sha256').update(text.replace(/\r\n/g, '\n'), 'utf8').digest('hex');
+  return createHash('sha256').update(normaliseLineEndings(text), 'utf8').digest('hex');
 }
 
 /**
@@ -180,13 +160,11 @@ export function runPipeline(careerPath: string = CAREER_JSON): PipelineResult {
 
   let contents: string;
   try {
-    // The reference month is read off the authored file — never `new Date()`,
-    // never an argument. This is the whole reason `asOf` is authored.
-    const graph = deriveEntities(career, { asOf: career.asOf });
-    const layout = solveLayout(graph, { randomSource: seededRandom(SOLVE_SEED) });
-    // The digest of the exact text read above, so the gate can tell whether the
-    // committed artifact was solved from the `career.json` beside it.
-    const artifact = buildArtifact(graph, layout, career.asOf, sourceDigestOf(read.text));
+    // Graph → solve → artifact, the one step the Colophon's live re-solve calls
+    // too (`pipeline.ts`), with the digest of the exact text read above, so the
+    // gate can tell whether the committed artifact was solved from the
+    // `career.json` beside it.
+    const artifact = solveArtifact(career, sourceDigestOf(read.text));
 
     // Every pre-write check, in one place, so the test suite can drive the exact
     // code this path runs. See `checkEmittedArtifact`.
