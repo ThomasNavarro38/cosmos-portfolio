@@ -3,9 +3,10 @@
  * lines the frame carries, and what the stateful one says.
  *
  * **Exactly two lines, in opposite corners.** Top-left, the constant identity
- * line, then ` · ` and one link, `the chart` (4.5, ruling Q1): the scene's one
- * route to the flat chart, present in every state — the panel covers the right
- * edge while Focused, never the left-top. Bottom-right, one slot whose content is read off the
+ * line, its `the model` a link to the Colophon (5.1), then ` · ` and one link,
+ * `the chart` (4.5, ruling Q1): the scene's routes to the Colophon and the flat
+ * chart, present in every state — the panel covers the right edge while
+ * Focused, never the left-top. Bottom-right, one slot whose content is read off the
  * navigation state's `mode` and `focusedProjectId` and nothing else:
  *
  * | State | Text | Element |
@@ -19,10 +20,10 @@
  *
  * **The strings are set as authored.** DESIGN.md sets plate designations in
  * capitals, corner chrome included, but the ratified strings are mixed case
- * (`the model`, `scroll ↓ …`), so no `text-transform` touches them. In the
- * scene, `the model` is plain text until Story 5.1 adds its route (ruled
- * 2026-10-10, 1a); on the chart (4.5) it is already a link to the Colophon, so
- * the line is also given as its two parts, `IDENTITY_NAME` and `IDENTITY_MODEL`.
+ * (`the model`, `scroll ↓ …`), so no `text-transform` touches them. `the model`
+ * is a link to the Colophon in both renderers — on the chart since 4.5, in the
+ * scene's chrome since 5.1 (ruled 2026-10-10, 1a) — so the line is drawn as its
+ * two parts, `IDENTITY_NAME` and `IDENTITY_MODEL`.
  *
  * **The slot moves with the panel** (ruled 3a). While Focused the panel's column
  * covers the right edge, so the slot sits `--space-xl` left of it — the same
@@ -37,13 +38,13 @@
 import { FOCUS_SECONDS, focusEasingCss } from './focus-motion.ts';
 import { panelWidthCss } from './panel-model.ts';
 
-/** The top-left line, verbatim (UX-DR27). In the scene, text — its route is 5.1's. */
+/** The top-left line, verbatim (UX-DR27). Drawn as its two parts, `the model` a link (5.1). */
 export const IDENTITY_LINE = 'THOMAS NAVARRO · the model';
 
-/** The identity line's name, before its ` · `: the chart's heading draws it beside its `the model` link. */
+/** The identity line's name, before its ` · `: the chrome and the chart's heading draw it beside their `the model` link. */
 export const IDENTITY_NAME = 'THOMAS NAVARRO';
 
-/** The identity line's last words, `the model`: on the chart, the link to the Colophon (4.5). */
+/** The identity line's last words, `the model`: the link to the Colophon, on the chart (4.5) and in the scene's chrome (5.1). */
 export const IDENTITY_MODEL = 'the model';
 
 /**

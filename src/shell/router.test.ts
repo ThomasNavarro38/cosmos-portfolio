@@ -888,7 +888,8 @@ test('the colophon is reached only from src/shell/colophon-host.tsx, and holds o
     .map((path) => path.slice(src.length).replace(/\\/g, '/'));
   assert.deepEqual(reaching, ['shell/colophon-host.tsx']);
   const colophon = stripComments(readFileSync(COLOPHON_TSX, 'utf8'));
-  assert.doesNotMatch(colophon, /^\s*import\s/m, 'the minimal colophon imports nothing');
+  // 5.1: what it imports (React and its exhibits, nothing else) is held by
+  // `src/derive/maintenance.test.ts`, which owns the boundary scan's reader.
   assert.doesNotMatch(colophon, /shell\/|motion-preference|reducedMotion/, 'no shell, no preference');
   assert.equal((colophon.match(/<h1\b/g) ?? []).length, 1, 'one <h1>');
   assert.match(colophon, /export\s+default\s+function\s+Colophon\(\)/, 'a default export for lazy()');

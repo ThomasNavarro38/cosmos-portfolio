@@ -59,7 +59,7 @@ development_status:
   2-10-escape-precedence-and-reduced-motion: done
   epic-2-retrospective: done
 
-  epic-3: in-progress
+  epic-3: done
   3-1-generated-design-tokens-from-a-single-source: done
   3-2-the-stroke-and-ink-ladders-applied-to-the-scene: done
   3-3-the-deep-shallow-signal-moon-and-ring: done
@@ -81,7 +81,7 @@ development_status:
   3-19-spec-and-doc-reconciliation-and-housekeeping: done
   epic-3-retrospective: done
 
-  epic-4: in-progress
+  epic-4: done
   4-1-capability-detection-in-the-thin-entry: done
   4-2-surface-routing-with-real-history: done
   4-3-the-fallback-star-chart: done
@@ -94,8 +94,8 @@ development_status:
   4-10-fallback-accessibility: done
   epic-4-retrospective: done
 
-  epic-5: backlog
-  5-1-the-colophon-as-a-fourth-lazy-chunk: backlog
+  epic-5: in-progress
+  5-1-the-colophon-as-a-fourth-lazy-chunk: done
   5-2-the-three-mapping-rules-worked-on-real-entities: backlog
   5-3-the-data-file-rendered-in-full: backlog
   5-4-stating-what-is-not-there: backlog

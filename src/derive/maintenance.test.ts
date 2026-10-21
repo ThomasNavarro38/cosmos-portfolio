@@ -462,10 +462,12 @@ test('the four Shallow forms are one case, so promotion is the only thing that p
  *
  * Word-bounded so `prefetchLink` and `refetch` are not false positives, and
  * `EventSource`/`sendBeacon` included because "no fetch" that a beacon walked
- * around would be no rule at all.
+ * around would be no rule at all. Since 5.1 any reference to `fetch` counts, not
+ * only a call: `fetch` handed to an injectable loader reaches the network as
+ * surely as `fetch(...)`.
  */
 const NETWORK_PATTERNS: readonly { readonly pattern: RegExp; readonly what: string }[] = [
-  { pattern: /\bfetch\s*\(/, what: 'a fetch call' },
+  { pattern: /\bfetch\b/, what: 'a fetch' },
   { pattern: /\bXMLHttpRequest\b/, what: 'an XMLHttpRequest' },
   { pattern: /\bWebSocket\b/, what: 'a WebSocket' },
   { pattern: /\bEventSource\b/, what: 'an EventSource' },
@@ -500,6 +502,30 @@ function shippedFilesUnder(dir: string): string[] {
 }
 
 /**
+ * The one admitted network reach, argued for rather than slipped in (5.1, AD-17):
+ * the Colophon hands `fetch` to `startExhibits` (`src/colophon/exhibits.ts`) to
+ * read the two files the build publishes beside the page, same-origin — emitted
+ * data, not a backend. Admitted by file, by kind and by shape: one line in that
+ * file, whose one `fetch` is `startExhibits(fetch, …)`'s first argument — the
+ * paths are `exhibits.ts`' own, so no URL is written beside it — and only while
+ * the `startExhibits` called is the one imported from `./exhibits.ts`, since a
+ * local one of that name could hand `fetch` anywhere. A second such line, a
+ * `fetch` of any other shape there, any other surface there, and a `fetch`
+ * anywhere else all still fail.
+ */
+const NETWORK_ADMITTED: ReadonlyMap<string, { readonly what: string; readonly shape: RegExp; readonly name: string; readonly from: string }> = new Map([
+  ['src/colophon/colophon.tsx', { what: 'a fetch', shape: /\bstartExhibits\(\s*fetch\s*,/, name: 'startExhibits', from: './exhibits.ts' }],
+]);
+
+/** Whether `source` imports `name` itself, unrenamed, from `from`, and `code` (its stripped text) declares no local `name`. */
+function importsAdmitted(source: string, code: string, name: string, from: string): boolean {
+  const imported = new RegExp(`\\bimport\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\b`).test(code);
+  const renamed = new RegExp(`\\bas\\s+${name}\\b`).test(code);
+  const local = new RegExp(`\\b(?:function|const|let|var|class)\\s+${name}\\b`).test(code);
+  return imported && !renamed && !local && findImports(source).some((found) => found.specifier === from);
+}
+
+/**
  * The network audit itself, exported in spirit as a pure function so the test
  * below can drive it over a fixture as well as over the real tree — a checker
  * only ever run against a clean tree proves nothing about what it would reject.
@@ -508,8 +534,15 @@ function auditNetwork(files: readonly { readonly path: string; readonly source: 
   const failures: string[] = [];
   for (const file of files) {
     const code = stripCommentsAndStrings(file.source);
+    const named = NETWORK_ADMITTED.get(file.path);
+    const admitted = named !== undefined && importsAdmitted(file.source, code, named.name, named.from) ? named : undefined;
+    let admittedLines = 0;
     for (const [index, line] of code.split('\n').entries()) {
       for (const { pattern, what } of NETWORK_PATTERNS) {
+        if (admitted?.what === what && admittedLines === 0 && admitted.shape.test(line) && (line.match(/\bfetch\b/g) ?? []).length === 1) {
+          admittedLines += 1;
+          continue;
+        }
         if (pattern.test(line)) {
           failures.push(`${file.path}:${index + 1} carries ${what} — src/ reaches no network (NFR-6).`);
           break;
@@ -546,6 +579,34 @@ test('nothing under src/ reaches the network', () => {
   }));
   assert.ok(files.length > 0, 'the walk must find source files');
   assert.deepEqual(auditNetwork(files), [], 'a network call under src/ fails the audit');
+  // The admission is not vacuous: the file it names holds the one fetch.
+  const colophon = files.find((file) => file.path === 'src/colophon/colophon.tsx');
+  assert.ok(colophon !== undefined && /\bfetch\b/.test(stripCommentsAndStrings(colophon.source)), 'the admitted file reaches fetch');
+});
+
+test('the admitted fetch is the Colophon’s alone, and admits nothing else there', () => {
+  const imported = "import { startExhibits, type Exhibits } from './exhibits.ts';\n";
+  const line = 'useEffect(() => startExhibits(fetch, setExhibits, (error) => console.error(error)), []);';
+  assert.deepEqual(auditNetwork([{ path: 'src/colophon/colophon.tsx', source: `${imported}${line}\n` }]), []);
+  for (const [name, source] of [
+    ['a second admitted line', `${imported}${line}\n${line}\n`],
+    ['a fetch of another shape', `${imported}const r = fetch('https://elsewhere.example/x');\n`],
+    ['a second fetch on the admitted line', `${imported}useEffect(() => startExhibits(fetch, setExhibits, () => fetch('/beacon')), []);\n`],
+    ['the fetch handed elsewhere', `${imported}loadExhibits(fetch, controller.signal);\n`],
+    ['startExhibits not imported', `${line}\n`],
+    ['startExhibits imported from elsewhere', `import { startExhibits } from './elsewhere.ts';\n${line}\n`],
+    ['a local startExhibits', `${imported}function startExhibits(load: unknown) { return load; }\n${line}\n`],
+    ['another function imported as startExhibits', `import { leak as startExhibits } from './exhibits.ts';\n${line}\n`],
+  ] as const) {
+    assert.equal(auditNetwork([{ path: 'src/colophon/colophon.tsx', source }]).length, 1, `${name} fails in the Colophon`);
+  }
+  for (const path of ['src/colophon/exhibits.ts', 'src/shell/entry.ts', 'src/render-fallback/chart.tsx']) {
+    assert.match(auditNetwork([{ path, source: `${line}\n` }]).join('\n'), new RegExp(`^${path.replace(/[./]/g, '\\$&')}:1 carries a fetch`), `${path} may not`);
+  }
+  for (const other of ['const x = new XMLHttpRequest();', "const s = new WebSocket('wss://x');", "navigator.sendBeacon('/t', '1');"]) {
+    assert.equal(auditNetwork([{ path: 'src/colophon/colophon.tsx', source: `${other}\n` }]).length, 1, `"${other}" still fails in the Colophon`);
+  }
+  assert.equal(auditNetwork([{ path: 'src/colophon/colophon.tsx', source: "import { request } from 'node:https';\n" }]).length, 1, 'and so does a network module');
 });
 
 test('the audit rejects each network surface, naming file and line', () => {
@@ -553,6 +614,8 @@ test('the audit rejects each network surface, naming file and line', () => {
   // pass the test above forever, and the ratchet would hold nothing.
   const cases: [string, RegExp][] = [
     ["const r = await fetch('/api');", /fetch/],
+    ['const load = fetch;', /a fetch/],
+    ['loadExhibits(window.fetch, signal);', /a fetch/],
     ['const x = new XMLHttpRequest();', /XMLHttpRequest/],
     ["const s = new WebSocket('wss://x');", /WebSocket/],
     ["const e = new EventSource('/stream');", /EventSource/],
@@ -610,4 +673,24 @@ test('no test in this suite writes into src/ or generated/', () => {
   assert.doesNotMatch(code, /writeFileSync\s*\(\s*CAREER_JSON/, 'never the committed career.json');
   assert.doesNotMatch(code, /writeFileSync\s*\(\s*(?:SRC_ROOT|GENERATED_ROOT|ARTIFACT_PATH)/, 'nor src/ or generated/');
   assert.doesNotMatch(code, /rmSync\s*\(\s*(?:SRC_ROOT|GENERATED_ROOT|REPO_ROOT)/, 'and nothing is removed from the tree');
+});
+
+/**
+ * The Colophon's imports (5.1): React for its effect and its own exhibits
+ * module, nothing else, and the exhibits module nothing at all. Read by the
+ * boundary scan's own reader, so a side-effect import, either quote, a
+ * re-export or a dynamic import counts too. Here rather than beside the
+ * router's audit because `src/shell/` may not import `src/derive/`.
+ */
+test('the colophon imports React and ./exhibits.ts only, and exhibits.ts imports nothing', () => {
+  const read = (path: string): string => readFileSync(join(SRC_ROOT, path), 'utf8');
+  const importsOf = (source: string): (string | null)[] => findImports(source).map((found) => found.specifier);
+  const colophon = read('colophon/colophon.tsx');
+  assert.deepEqual(importsOf(colophon), ['react', './exhibits.ts'], 'the colophon imports React and ./exhibits.ts only');
+  for (const extra of ["import './colophon.css';", 'import "../shell/state.ts";', "export { x } from '../shell/route.ts';", "const m = await import('../derive/index.ts');"]) {
+    assert.notDeepEqual(importsOf(`${colophon}
+${extra}
+`), ['react', './exhibits.ts'], `"${extra}" is seen`);
+  }
+  assert.deepEqual(importsOf(read('colophon/exhibits.ts')), [], 'and exhibits.ts imports nothing');
 });

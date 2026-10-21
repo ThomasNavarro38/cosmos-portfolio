@@ -1,14 +1,17 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { bundleAssertion } from './scripts/bundle-assertion.ts';
+import { exhibits } from './scripts/exhibits.ts';
 
 // Minimal by design. No env handling, no proxy, no server block:
 // NFR-6 forbids any backend or runtime configuration surface.
 //
-// The one plugin beside React is the AD-7 bundle assertion: the thin entry is a
+// Two plugins beside React. The AD-7 bundle assertion: the thin entry is a
 // property of bundler output, so the build itself refuses an entry graph that
 // reaches a banned package or directory (listed in the plugin), or outgrows its
-// budget.
+// budget. And the exhibits (5.1, AD-17): `career.json` and the layout artifact
+// published byte for byte at fixed paths for the Colophon to fetch: neither
+// imported into the Colophon's chunk, and `career.json` into none.
 //
 // Note: Vite copies `public/` verbatim into `dist/`, so `public/.gitkeep`
 // ships as a harmless empty file. Pruning it would mean a custom hook that
@@ -30,9 +33,11 @@ import { bundleAssertion } from './scripts/bundle-assertion.ts';
 // into a chunk of their own, one more name on that list. All three component
 // stylesheets are in: the mount then has no stylesheet of its own, so the list
 // holds one CSS file, not two. And the name is short, because it is spelled
-// there twice. Measured at 3,993 of 4,000 bytes.
+// there twice. Measured at 3,993 of 4,000 bytes when the group was set (4.3);
+// the figure of record, and why it moved since (a shared `react` chunk in 5.1),
+// is `scripts/bundle-assertion.ts`'s.
 export default defineConfig({
-  plugins: [react(), bundleAssertion()],
+  plugins: [react(), bundleAssertion(), exhibits()],
   build: {
     rolldownOptions: {
       output: {

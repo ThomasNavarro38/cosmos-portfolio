@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 // line keeps its number.
 import { stripComments } from '../../scripts/source-scan.ts';
 import { tokens } from '../tokens/tokens.ts';
-import { IDENTITY_LINE, SLOT_TEXT, chartRouteClass, chromeSlot, slotStyle, type ChromeSlot } from './chrome-model.ts';
+import { IDENTITY_LINE, IDENTITY_MODEL, IDENTITY_NAME, SLOT_TEXT, chartRouteClass, chromeSlot, slotStyle, type ChromeSlot } from './chrome-model.ts';
 import { FOCUS_SECONDS, focusEasingCss } from './focus-motion.ts';
 import { contrast } from './contrast.ts';
 import { REDUCED_MOTION_PACE, motionPace } from './motion-preference.ts';
@@ -34,6 +34,8 @@ const read = (path: string): string => readFileSync(path, 'utf8').replace(/\r\n/
 
 test('the identity line is THOMAS NAVARRO · the model, verbatim', () => {
   assert.equal(IDENTITY_LINE, 'THOMAS NAVARRO · the model');
+  // 5.1: the chrome draws the line as its two parts, so the parts must make the line.
+  assert.equal(`${IDENTITY_NAME} · ${IDENTITY_MODEL}`, IDENTITY_LINE, 'the two parts make the line');
 });
 
 test('the slot follows the table: instruction on the Rail, resume in flight, release while Focused in either mode', () => {

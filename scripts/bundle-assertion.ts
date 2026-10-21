@@ -43,8 +43,11 @@ import type { Plugin } from 'vite';
  * `ui` chunk group (`vite.config.ts`) lengthened the entry's preload list for
  * the mount and reached 3,993. Story 4.5 split `src/shell/route.ts` (the routes,
  * their paths and `resolveRoute`) out of the router (ruling Q3), so the entry
- * imports that alone and the router ships with the mount: the entry measures
- * 3,028, the figure of record, with the budget unchanged.
+ * imports that alone and the router ships with the mount: the entry measured
+ * 3,028. Story 5.1's Colophon imports React's hooks, so React's core leaves the
+ * mount chunk for a shared `react` chunk both load, one more name on the
+ * entry's preload list for the mount: 3,057, the figure of record, with the
+ * budget unchanged.
  */
 export const ENTRY_BUDGET_BYTES = 4_000;
 

@@ -536,7 +536,7 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
   // the scene. Each surface named as a surface, never a fallback or a version.
   'the chart',
   'the scene',
-  // The Colophon's one `<h1>` (4.2), minimal until 5.1 fills the surface in.
+  // The Colophon's `<h1>` (4.2); its exhibits (5.1) are data, drawn as expressions.
   'the model',
   'scroll ↓ — time runs backward',
   '↩ resume the journey',
@@ -956,7 +956,8 @@ test('copy: every visible literal shipped from src/ and index.html is in the clo
   const nav = jsxDrawn(codeOf(scripts['shell/index-nav.tsx'] as string, 'script'));
   assert.ok(nav.some((drawn) => drawn.kind === 'text' && drawn.text === 'overview'), 'the index’s overview text is read');
   const chrome = jsxDrawn(codeOf(scripts['shell/corner-chrome.tsx'] as string, 'script'));
-  assert.ok(chrome.some((drawn) => drawn.kind === 'constant' && drawn.text === 'IDENTITY_LINE'), 'the chrome’s identity constant is read');
+  assert.ok(chrome.some((drawn) => drawn.kind === 'constant' && drawn.text === 'IDENTITY_NAME'), 'the chrome’s identity name is read');
+  assert.ok(chrome.some((drawn) => drawn.kind === 'constant' && drawn.text === 'IDENTITY_MODEL'), 'the chrome’s link to the model is read (5.1)');
   assert.ok(chrome.some((drawn) => drawn.kind === 'constant' && drawn.text === 'CHART_LINK_TEXT'), 'the chrome’s link to the chart is read');
   // The panel draws only expressions, so nothing literal is found in it — and a
   // word planted in its deepest JSX (a `case` block's button) is.

@@ -33,14 +33,18 @@
  *     in free flight turns the button from `esc — release` into `↩ resume the
  *     journey` in place — the same element — and its cleanup does not run.
  *
- * **The route to the chart** (4.5, ruling Q1). The identity line ends ` · ` and
- * one `<a href="/chart">`, `the chart` — present in every state, Rail, free
- * flight and Focused, since the panel covers the right edge and never the
- * left-top. Its click is `followRoute`'s (`route-link.ts`): a primary click is
- * the router's one `navigate('chart')`, any other is the browser's, so a new
- * tab works. Leaving the scene releases nothing: Focus, the mode and the
- * Rail's progress are the store's and survive the round trip. `the model`
- * stays text here until 5.1. The router arrives as the one prop.
+ * **The routes to the model and the chart** (4.5 ruling Q1, 5.1). The identity
+ * line reads `THOMAS NAVARRO · the model · the chart`: `IDENTITY_NAME`, then
+ * ` · ` and one `<a href="/colophon">`, `the model`, then ` · ` and one
+ * `<a href="/chart">`, `the chart` — present in every state, Rail, free flight
+ * and Focused, since the panel covers the right edge and never the left-top.
+ * Each click is `followRoute`'s (`route-link.ts`): a primary click is the
+ * router's one `navigate('colophon')` or `navigate('chart')`, any other is the
+ * browser's, so a new tab works. Leaving the scene releases nothing: Focus, the
+ * mode and the Rail's progress are the store's and survive the round trip, and
+ * the router restores the Rail's position on Back. `the model` takes
+ * `chrome-route` and only that: the offer is the chart link's alone. The router
+ * arrives as the one prop.
  *
  * **The offer** (4.6, ruling Q1a). When the scene has run below the sustained
  * floor, `chart-offer.ts` latches, and the link reads it with
@@ -77,15 +81,15 @@
  * **The treatment is `corner-chrome.css`**: the `chrome` type role at
  * `ink-label`, fixed at the `--space-xl` inset, below the panel. Only the slot's
  * `right` and its transition are inline, because they follow the state. The
- * chart link takes the pointer on a line that otherwise takes none, and mirrors
- * the slot's button.
+ * two route links take the pointer on a line that otherwise takes none, and
+ * mirror the slot's button.
  */
 
 import { useCallback, useSyncExternalStore } from 'react';
 import { useStore } from 'zustand/react';
 import { releaseLayer, returnToRail } from './activate.ts';
 import { chartOffered, subscribeChartOffer } from './chart-offer.ts';
-import { IDENTITY_LINE, chartRouteClass, chromeSlot, slotStyle } from './chrome-model.ts';
+import { IDENTITY_MODEL, IDENTITY_NAME, chartRouteClass, chromeSlot, slotStyle } from './chrome-model.ts';
 import { OVERVIEW_ID } from './index-model.ts';
 import { motionPace, reducedMotion, subscribeReducedMotion } from './motion-preference.ts';
 import { ROUTE_PATHS } from './route.ts';
@@ -114,7 +118,7 @@ export function CornerChrome({ router }: { readonly router: Router }) {
   return (
     <>
       <p className="chrome-identity">
-        {IDENTITY_LINE} · <a className={chartRouteClass(offered)} href={ROUTE_PATHS.chart} onClick={(event) => followRoute(event, router.navigate, 'chart')}>{CHART_LINK_TEXT}</a>
+        {IDENTITY_NAME} · <a className="chrome-route" href={ROUTE_PATHS.colophon} onClick={(event) => followRoute(event, router.navigate, 'colophon')}>{IDENTITY_MODEL}</a> · <a className={chartRouteClass(offered)} href={ROUTE_PATHS.chart} onClick={(event) => followRoute(event, router.navigate, 'chart')}>{CHART_LINK_TEXT}</a>
       </p>
       <p className="chrome-slot" style={style}>
         {slot.kind === 'control' ? (
