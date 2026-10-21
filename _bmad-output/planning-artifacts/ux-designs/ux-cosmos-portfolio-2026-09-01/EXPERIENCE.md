@@ -223,7 +223,7 @@ Copy exists in exactly five places. There is no sixth.
 1. Notables and field values — the record.
 2. The Shallow Project rule line.
 3. Two lines of corner chrome per frame, `{typography.chrome}`.
-4. The Colophon's annotations on the mapping rules, and its statement of what is not there (§4.7).
+4. The Colophon's annotations on the mapping rules, its statement of what is not there, and the framing of its live re-solve (§4.7).
 5. The contact route.
 
 No tooltips. No onboarding. No empty states. No help text. No captions

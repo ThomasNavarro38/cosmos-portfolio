@@ -1,5 +1,5 @@
 /**
- * The Colophon (4.2, 5.1, 5.2, 5.3, 5.4): the `/colophon` route's surface, reached only through
+ * The Colophon (4.2, 5.1, 5.2, 5.3, 5.4, 5.5): the `/colophon` route's surface, reached only through
  * `lazy(() => import('./colophon.tsx'))` in `src/shell/colophon-host.tsx`, so it
  * is its own chunk and never on the entry graph or the scene's.
  *
@@ -45,11 +45,33 @@
  * entry of `ABSENCES` (`absences.ts`), in order — the ruled copy, verbatim,
  * and the page's only prose. It is drawn with the exhibits and never without
  * them: every sentence points at "the files above". No `<section>`, no
- * landmark beyond the host's `<main>`. No other copy (5.5).
+ * landmark beyond the host's `<main>`.
+ *
+ * **The live re-solve** (5.5, FR-21, rulings Q1–Q5 (a)). Last, drawn only with
+ * the exhibits: an `h2.colophon-heading` (`LIVE_SOLVE.heading`), one
+ * `p.colophon-prose` (`LIVE_SOLVE.framing`, the ruled framing) and a
+ * `button.colophon-solve` of type `button` (`LIVE_SOLVE.action`), marked
+ * `aria-disabled` while a run is in flight — never `disabled`, which would
+ * drop keyboard focus from the button just pressed. Pressing it hands
+ * `exhibits.career`, the text already on the page (no second fetch), to the
+ * tracker `createLiveSolve` (`live-solve.ts`, executed in `live-solve.test.ts`),
+ * built once with this file's one dynamic import,
+ * `import('../derive/live.ts')` — the solver's own lazy chunk, requested on
+ * the press and never before — and this component's two setters. A press while
+ * a run is in flight is ignored there. The solved text is held in this
+ * component's state alone and drawn in full as a third exhibit, named
+ * `LIVE_SOLVE.result`; no store, no shell module and no renderer reads it, so
+ * the committed `layout.generated.json` stays the only layout the scene reads.
+ * A new run's stop replaces the old one, and the unmount calls the tracker's
+ * stop; a success replaces the previous result; a failure is logged once with
+ * `console.error` and leaves the page as it was. No loading indicator, no
+ * motion, no live region, and no other copy.
  *
  * It imports React, `exhibits.ts`, `derivations.ts`, `json-setting.ts`,
- * `absences.ts` and `colophon.css`, and nothing else: not the shell, not the motion preference,
- * never `src/data/`, `generated/` or `src/derive/`.
+ * `absences.ts`, `live-solve.ts` and `colophon.css`, and nothing else: not the
+ * shell, not the motion preference, never `src/data/` or `generated/`, and
+ * `src/derive/` only through the one dynamic import of `live.ts`, never
+ * statically.
  */
 
 import { useEffect, useState } from 'react';
@@ -57,6 +79,7 @@ import { EXHIBIT_PATHS, startExhibits, type Exhibits } from './exhibits.ts';
 import { DERIVATION_LABELS, derivationRows, type DerivationInput } from './derivations.ts';
 import { jsonRuns } from './json-setting.ts';
 import { ABSENCES, ABSENCES_HEADING } from './absences.ts';
+import { LIVE_SOLVE, createLiveSolve } from './live-solve.ts';
 import './colophon.css';
 
 /** A rule's input: the weight as `String(weight)`, or the duration as `start – end`, `start –` while ongoing. */
@@ -114,8 +137,20 @@ function Exhibit({ name, text }: { readonly name: string; readonly text: string 
   );
 }
 
-/** The surface as drawn: the heading, and, once the files have arrived, the two files with the derivations between them, then what is not there. */
-export function ColophonPage({ exhibits }: { readonly exhibits: Exhibits | null }) {
+/** What the live re-solve hands the page: the solved text, whether a run is in flight, and the press. */
+export interface LiveSolveState {
+  readonly solved: string | null;
+  readonly running: boolean;
+  readonly onSolve: () => void;
+}
+
+/**
+ * The surface as drawn: the heading, and, once the files have arrived, the two
+ * files with the derivations between them, what is not there, the live
+ * re-solve's heading, framing and button, and its result once a run has
+ * succeeded.
+ */
+export function ColophonPage({ exhibits, solved, running, onSolve }: { readonly exhibits: Exhibits | null } & LiveSolveState) {
   return (
     <>
       <h1>the model</h1>
@@ -130,6 +165,12 @@ export function ColophonPage({ exhibits }: { readonly exhibits: Exhibits | null 
               {text}
             </p>
           ))}
+          <h2 className="colophon-heading">{LIVE_SOLVE.heading}</h2>
+          <p className="colophon-prose">{LIVE_SOLVE.framing}</p>
+          <button type="button" className="colophon-solve" aria-disabled={running} onClick={onSolve}>
+            {LIVE_SOLVE.action}
+          </button>
+          {solved === null ? null : <Exhibit name={LIVE_SOLVE.result} text={solved} />}
         </>
       )}
     </>
@@ -138,6 +179,13 @@ export function ColophonPage({ exhibits }: { readonly exhibits: Exhibits | null 
 
 export default function Colophon() {
   const [exhibits, setExhibits] = useState<Exhibits | null>(null);
+  const [solved, setSolved] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
   useEffect(() => startExhibits(fetch, setExhibits, (error) => console.error('the colophon could not load its exhibits.', error)), []);
-  return <ColophonPage exhibits={exhibits} />;
+  const [live] = useState(() => createLiveSolve(() => import('../derive/live.ts'), { setSolved, setRunning, log: (error) => console.error('the colophon could not solve career.json here.', error) }));
+  useEffect(() => () => live.stop(), [live]);
+  const onSolve = () => {
+    if (exhibits !== null) live.press(exhibits.career);
+  };
+  return <ColophonPage exhibits={exhibits} solved={solved} running={running} onSolve={onSolve} />;
 }

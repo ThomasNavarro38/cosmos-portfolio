@@ -35,6 +35,18 @@
  * the paragraphs (`.colophon-prose`) are the `notable-prose` role at
  * `ink-prose`, held to `measure-prose`, as the panel's `.panel-prose`. No
  * bold, no transform.
+ *
+ * The live re-solve (5.5): its heading and framing are the same two rules.
+ * Its button (`.colophon-solve`) is the panel's in-type text action,
+ * `.panel-release` (`src/shell/focus-panel.css`), declaration for declaration
+ * but for the hairline it draws in its `::before` (and the flex layout that
+ * places that hairline): a bare word in the `chrome` role, no box, at
+ * `ink-label` at rest and `ink-prose` raised. Since there is no hairline to
+ * grow, keyboard focus draws the exhibits' outline (a system one under forced
+ * colours). While a run is in flight it is `aria-disabled="true"` (never
+ * `disabled`, which would drop focus): it keeps its focus outline, drops the
+ * pointer cursor and does not lift; nothing else marks the run: no indicator,
+ * no motion.
  */
 
 .colophon-derivations {
@@ -129,12 +141,45 @@
   color: var(--color-ink-prose-dark);
 }
 
+.colophon-solve {
+  margin: var(--space-xl) 0 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--type-chrome-font-family);
+  font-size: var(--type-chrome-font-size);
+  font-weight: var(--type-chrome-font-weight);
+  line-height: var(--type-chrome-line-height);
+  letter-spacing: var(--type-chrome-letter-spacing);
+  color: var(--color-ink-label-dark);
+}
+
+.colophon-solve:hover:not([aria-disabled="true"]),
+.colophon-solve:focus-visible:not([aria-disabled="true"]) {
+  color: var(--color-ink-prose-dark);
+}
+
+.colophon-solve:focus-visible {
+  outline: 1px solid var(--color-stroke-focus-dark);
+  outline-offset: 3px;
+}
+
+.colophon-solve[aria-disabled="true"] {
+  cursor: default;
+}
+
 /*
  * Forced colours flatten the ink steps: there, keyboard focus on an exhibit
- * keeps a system-coloured outline, as the chart's links do.
+ * or on the re-solve's button keeps a system-coloured outline, as the chart's
+ * links do.
  */
 @media (forced-colors: active) {
   .colophon-exhibit:focus-visible {
+    outline: 1px solid CanvasText;
+  }
+
+  .colophon-solve:focus-visible {
     outline: 1px solid CanvasText;
   }
 }
