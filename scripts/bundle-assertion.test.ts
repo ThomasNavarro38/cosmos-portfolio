@@ -12,6 +12,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { build, createBuilder, createLogger, type Logger, type Rolldown } from 'vite';
 import { ENTRY_BUDGET_BYTES, bundleAssertion, checkBundle, entryBytes, passLine, type BundleView, type ChunkView } from './bundle-assertion.ts';
+import { EXHIBITS } from './exhibits.ts';
 
 const ROOT = 'E:/repo';
 const CONFIG = fileURLToPath(new URL('../vite.config.ts', import.meta.url));
@@ -183,6 +184,45 @@ function chunksOf(result: Awaited<ReturnType<typeof build>>): Rolldown.OutputChu
   return outputs.flatMap(({ output }) => output.filter((item): item is Rolldown.OutputChunk => item.type === 'chunk'));
 }
 
+/** The assets a `write: false` build returned. */
+function assetsOf(result: Awaited<ReturnType<typeof build>>): Rolldown.OutputAsset[] {
+  const outputs = (Array.isArray(result) ? result : [result]) as Rolldown.RolldownOutput[];
+  return outputs.flatMap(({ output }) => output.filter((item): item is Rolldown.OutputAsset => item.type === 'asset'));
+}
+
+/** An asset's bytes, whichever form the bundler handed it in. */
+const assetBytes = (asset: Rolldown.OutputAsset): Buffer => Buffer.from(typeof asset.source === 'string' ? asset.source : asset.source);
+
+/**
+ * The exhibits (5.1, AD-17), asserted on a build's output: each emitted at its
+ * fixed, unhashed name, byte-identical to its source; no chunk holding a
+ * `src/data/` module; the layout artifact held only by the chunk holding
+ * `src/App.tsx`, its one importer; and the colophon chunk holding only
+ * `src/colophon/` modules. Empty when all hold.
+ */
+function exhibitFailures(chunks: readonly Pick<Rolldown.OutputChunk, 'fileName' | 'modules'>[], assets: readonly Rolldown.OutputAsset[], colophonFile: string): string[] {
+  const failures: string[] = [];
+  for (const exhibit of EXHIBITS) {
+    const fileName = exhibit.path.slice(1);
+    const emitted = assets.filter((asset) => asset.fileName === fileName);
+    if (emitted.length !== 1) {
+      failures.push(`${fileName} is emitted ${emitted.length} times, not once`);
+      continue;
+    }
+    if (!assetBytes(emitted[0] as Rolldown.OutputAsset).equals(readFileSync(new URL(`../${exhibit.source}`, import.meta.url)))) failures.push(`${fileName} is not ${exhibit.source}, byte for byte`);
+  }
+  const ids = (out: Pick<Rolldown.OutputChunk, 'modules'>): string[] => Object.keys(out.modules).map(local);
+  for (const out of chunks) for (const id of ids(out)) if (id.startsWith('src/data/')) failures.push(`${out.fileName} holds ${id}`);
+  const holdingLayout = chunks.filter((out) => ids(out).includes('generated/layout.generated.json'));
+  if (holdingLayout.length !== 1 || !ids(holdingLayout[0] as Rolldown.OutputChunk).includes('src/App.tsx')) {
+    failures.push(`generated/layout.generated.json is held by ${JSON.stringify(holdingLayout.map((out) => out.fileName))}, not by exactly one chunk, the one holding src/App.tsx`);
+  }
+  const colophon = chunks.find((out) => out.fileName === colophonFile);
+  const strays = colophon === undefined ? ['(no colophon chunk)'] : ids(colophon).filter((id) => !id.startsWith('src/colophon/') && !/\/node_modules\//.test(`/${id}`));
+  if (strays.length > 0) failures.push(`the colophon chunk holds ${strays.join(', ')}`);
+  return failures;
+}
+
 /** The shipped config, with the input swapped for fixtures: proves the plugin is wired in. */
 async function buildFixtures(names: readonly string[], logger?: Logger): Promise<Rolldown.OutputChunk[]> {
   return chunksOf(await build({
@@ -295,7 +335,9 @@ function lazySurface(chunks: readonly Rolldown.OutputChunk[], graph: ReadonlySet
 
 test('the shipped app builds under the assertion, measured within its budget', async () => {
   const { logger, lines } = capturing();
-  const chunks = chunksOf(await build({ configFile: CONFIG, root: REPO, logLevel: 'silent', customLogger: logger, build: { write: false } }));
+  const result = await build({ configFile: CONFIG, root: REPO, logLevel: 'silent', customLogger: logger, build: { write: false } });
+  const chunks = chunksOf(result);
+  const assets = assetsOf(result);
   const bytes = passedBytes(lines);
   assert.ok(bytes > 0 && bytes <= ENTRY_BUDGET_BYTES, `the app's entry measured ${bytes}`);
   // The app, not a fixture, was measured: its one entry facade is the thin entry.
@@ -332,10 +374,32 @@ test('the shipped app builds under the assertion, measured within its budget', a
   // import, and reaching neither the scene nor React's DOM (`lazySurface`).
   const colophon = lazySurface(chunks, graph, 'src/colophon/colophon.tsx', 'src/shell/colophon-host.tsx');
   assert.deepEqual(
-    Object.keys(colophon.modules).map(local).filter((id) => id.startsWith('src/')),
-    ['src/colophon/colophon.tsx'],
-    'and holds the colophon alone',
+    Object.keys(colophon.modules).map(local).filter((id) => id.startsWith('src/')).sort(),
+    ['src/colophon/colophon.tsx', 'src/colophon/exhibits.ts'],
+    'and holds the colophon alone (5.1: with its exhibits loader)',
   );
+  // 5.1: the exhibits are emitted data, byte for byte, and no chunk carries them.
+  assert.deepEqual(exhibitFailures(chunks, assets, colophon.fileName), []);
+  // Red against a mutated copy: each guarantee broken in turn.
+  const careerAsset = assets.find((asset) => asset.fileName === 'career.json') as Rolldown.OutputAsset;
+  const layoutAsset = assets.find((asset) => asset.fileName === 'layout.generated.json') as Rolldown.OutputAsset;
+  const appChunk = chunks.find((out) => Object.keys(out.modules).some((id) => local(id) === 'src/App.tsx')) as Rolldown.OutputChunk;
+  const fake = (id: string): Record<string, never> => ({ [`${forward(REPO)}${id}`]: {} as never });
+  // One trailing space: a change every file's bytes show, however it is stored.
+  const altered = (target: Rolldown.OutputAsset) => assets.map((asset) => (asset === target ? { ...asset, source: Buffer.concat([assetBytes(asset), Buffer.from(' ')]) } : asset));
+  const breaks: readonly (readonly [string, readonly Pick<Rolldown.OutputChunk, 'fileName' | 'modules'>[], readonly Rolldown.OutputAsset[]])[] = [
+    ['career.json not emitted', chunks, assets.filter((asset) => asset !== careerAsset)],
+    ['career.json altered', chunks, altered(careerAsset)],
+    ['career.json emitted twice', chunks, [...assets, careerAsset]],
+    ['layout.generated.json not emitted', chunks, assets.filter((asset) => asset !== layoutAsset)],
+    ['layout.generated.json altered', chunks, altered(layoutAsset)],
+    ['layout.generated.json emitted twice', chunks, [...assets, layoutAsset]],
+    ['career.json inlined into the colophon chunk', chunks.map((out) => (out === colophon ? { ...out, modules: { ...out.modules, ...fake('src/data/career.json') } } : out)), assets],
+    ['the layout in the colophon chunk too', chunks.map((out) => (out === colophon ? { ...out, modules: { ...out.modules, ...fake('generated/layout.generated.json') } } : out)), assets],
+    ['the layout moved out of the App chunk', chunks.map((out) => (out === appChunk ? { ...out, modules: Object.fromEntries(Object.entries(out.modules).filter(([id]) => local(id) !== 'generated/layout.generated.json')) } : out)), assets],
+    ['a shell module in the colophon chunk', chunks.map((out) => (out === colophon ? { ...out, modules: { ...out.modules, ...fake('src/shell/route.ts') } } : out)), assets],
+  ];
+  for (const [name, mutatedChunks, mutatedAssets] of breaks) assert.notDeepEqual(exhibitFailures(mutatedChunks, mutatedAssets, colophon.fileName), [], `"${name}" must be rejected`);
   const chart = lazySurface(chunks, graph, 'src/render-fallback/chart.tsx', 'src/shell/fallback-host.tsx');
   assert.ok(
     Object.keys(chart.modules).map(local).some((id) => id === 'src/render-fallback/chart-model.ts'),

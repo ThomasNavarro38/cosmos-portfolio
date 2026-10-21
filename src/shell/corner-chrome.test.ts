@@ -1,13 +1,14 @@
 /**
- * `corner-chrome.tsx` (3.8, 4.5, 4.6), rendered through the render harness
- * (`scripts/render.ts`): the identity line and its one link to the chart —
- * `a.chrome-route[href="/chart"]`, `the chart` — before the offer, its class
- * exactly `chrome-route`, and after three gaps latch the offer, the same link
- * with `chrome-route chrome-route-offered`. The offer's latch and the navigation
+ * `corner-chrome.tsx` (3.8, 4.5, 4.6, 5.1), rendered through the render harness
+ * (`scripts/render.ts`): the identity line and its two links — the model,
+ * `a.chrome-route[href="/colophon"]`, its class `chrome-route` in every state
+ * (5.1), then the chart, `a.chrome-route[href="/chart"]` — before the offer,
+ * the chart's class exactly `chrome-route`, and after three gaps latch the
+ * offer, the same link with `chrome-route chrome-route-offered`. The offer's latch and the navigation
  * store are driven through the module instances the harness loaded — the ones
  * the component reads — and reset after each test. Each check is driven red
- * against the other state and against broken markup. Since 4.8, the link's
- * click — the handler the render handed its `<a>`, read off the harness's
+ * against the other state and against broken markup. Since 4.8, each link's
+ * click (the model's since 5.1) — the handler the render handed its `<a>`, read off the harness's
  * element recorder and run through a recording router — and the subscription to
  * the offer, read off its subscription recorder; each check red against a
  * broken handler or subscription list, never a source mutant.
@@ -70,9 +71,10 @@ function latchOffer(): void {
 }
 
 /**
- * The chrome's two lines: the identity `<p>` — `THOMAS NAVARRO · the model · `
- * and one link, `the chart`, to `/chart`, its class exactly `expectedClass` —
- * then the slot `<p>`; and no other link anywhere.
+ * The chrome's two lines: the identity `<p>` — `THOMAS NAVARRO · `, the link
+ * `the model` to `/colophon`, its class exactly `chrome-route` whatever the
+ * offer (5.1), ` · `, and the link `the chart` to `/chart`, its class exactly
+ * `expectedClass` — then the slot `<p>`; and no other link anywhere.
  */
 function chromeLink(root: MarkupElement, expectedClass: string): string[] {
   const failures: string[] = [];
@@ -82,24 +84,27 @@ function chromeLink(root: MarkupElement, expectedClass: string): string[] {
   const identity = lines[0] as MarkupElement;
   if (textOf(identity) !== 'THOMAS NAVARRO · the model · the chart') failures.push(`the identity line reads ${JSON.stringify(textOf(identity))}`);
   const links = queryAll(root, 'a');
-  if (links.length !== 1) failures.push(`${links.length} links in the chrome, not one`);
-  const link = queryAll(identity, 'a')[0];
-  if (link === undefined) return [...failures, 'the identity line holds no link'];
+  if (links.length !== 2) failures.push(`${links.length} links in the chrome, not two`);
+  const [model, link] = queryAll(identity, 'a');
+  if (model === undefined || link === undefined) return [...failures, 'the identity line holds fewer than two links'];
+  if (model.attrs['href'] !== '/colophon') failures.push(`the model link goes to ${model.attrs['href']}, not /colophon`);
+  if (textOf(model) !== 'the model') failures.push(`the model link reads ${JSON.stringify(textOf(model))}`);
+  if (model.attrs['class'] !== 'chrome-route') failures.push(`the model link's class is ${JSON.stringify(model.attrs['class'])}, not "chrome-route": the offer is the chart link's alone`);
   if (link.attrs['href'] !== '/chart') failures.push(`the link goes to ${link.attrs['href']}, not /chart`);
   if (textOf(link) !== 'the chart') failures.push(`the link reads ${JSON.stringify(textOf(link))}`);
   if (link.attrs['class'] !== expectedClass) failures.push(`the link's class is ${JSON.stringify(link.attrs['class'])}, not ${JSON.stringify(expectedClass)}`);
-  if (elementsOf(identity).length !== 1) failures.push('the identity line holds an element beside the link');
+  if (elementsOf(identity).length !== 2) failures.push('the identity line holds an element beside its two links');
   return failures;
 }
 
 // --- The offer, rendered ---------------------------------------------------------------------
 
-test('before the offer: a.chrome-route[href="/chart"], the chart, its class exactly chrome-route', async () => {
+test('before the offer: a.chrome-route[href="/colophon"], the model, then a.chrome-route[href="/chart"], the chart, its class exactly chrome-route', async () => {
   assert.equal(offer.chartOffered(), false);
   assert.deepEqual(chromeLink(parseMarkup(await renderChrome()), 'chrome-route'), []);
 });
 
-test('after the offer: three gaps latch it, and the same link carries chrome-route chrome-route-offered', async () => {
+test('after the offer: three gaps latch it, and the chart link carries chrome-route chrome-route-offered; the model link stays chrome-route', async () => {
   latchOffer();
   assert.deepEqual(chromeLink(parseMarkup(await renderChrome()), 'chrome-route chrome-route-offered'), []);
 });
@@ -117,10 +122,14 @@ test('the chrome check is red against the other state and against broken markup'
   assert.notDeepEqual(chromeLink(parseMarkup(offered), 'chrome-route'), [], 'offered, read as unoffered');
   for (const [name, markup] of [
     ['the link to the colophon', before.replace('href="/chart"', 'href="/colophon"')],
+    ['the model to the chart', before.replace('href="/colophon"', 'href="/chart"')],
+    ['the model renamed', before.replace('>the model</a>', '>model</a>')],
+    ['the model offered', before.replace('<a class="chrome-route" href="/colophon">', '<a class="chrome-route chrome-route-offered" href="/colophon">')],
+    ['the links swapped', before.replace('<a class="chrome-route" href="/colophon">the model</a> · <a class="chrome-route" href="/chart">the chart</a>', '<a class="chrome-route" href="/chart">the chart</a> · <a class="chrome-route" href="/colophon">the model</a>')],
     ['the link renamed', before.replace('>the chart</a>', '>chart</a>')],
     ['the link dropped', before.replace(/<a [^>]*>the chart<\/a>/, 'the chart')],
     ['the link a button', before.replace(/<a ([^>]*)>the chart<\/a>/, '<button $1>the chart</button>')],
-    ['the model a link too', before.replace('THOMAS NAVARRO · the model', 'THOMAS NAVARRO · <a href="/colophon">the model</a>')],
+    ['the model unlinked', before.replace('<a class="chrome-route" href="/colophon">the model</a>', 'the model')],
     ['a link beside the slot', before.replace('<p class="chrome-slot"', '<a href="/">x</a><p class="chrome-slot"')],
     ['the identity rewritten', before.replace('THOMAS NAVARRO', 'Thomas Navarro')],
     ['a third line', `${before}<p class="chrome-hud">rail</p>`],
@@ -199,16 +208,23 @@ function followsRouteRule(name: string, handler: unknown, to: Route): string[] {
   return failures;
 }
 
-/** The handler the rendered chrome handed its one `<a href="/chart">`. */
-async function chartLinkHandler(): Promise<unknown> {
+/** The handler the rendered chrome handed its one `<a href={href}>`. */
+async function linkHandler(href: '/chart' | '/colophon'): Promise<unknown> {
   await renderChrome(recordingRouter);
-  const links = harness.elements('a').filter((element) => element.props['href'] === '/chart');
-  assert.equal(links.length, 1, 'the chrome rendered exactly one link to the chart');
+  const links = harness.elements('a').filter((element) => element.props['href'] === href);
+  assert.equal(links.length, 1, `the chrome rendered exactly one link to ${href}`);
   return links[0]?.props['onClick'];
 }
 
+const chartLinkHandler = (): Promise<unknown> => linkHandler('/chart');
+
 test('the chrome’s the chart, clicked: primary → navigate(chart) once and preventDefault once; refused → no preventDefault; Ctrl or middle → neither', async () => {
   assert.deepEqual(followsRouteRule('the chart', await chartLinkHandler(), 'chart'), []);
+});
+
+test('the chrome’s the model, clicked (5.1): primary → navigate(colophon) once and preventDefault once; refused → no preventDefault; Ctrl or middle → neither', async () => {
+  assert.deepEqual(followsRouteRule('the model', await linkHandler('/colophon'), 'colophon'), []);
+  assert.notDeepEqual(followsRouteRule('the model', await linkHandler('/colophon'), 'chart'), [], 'the real handler, read as a link to the chart');
 });
 
 test('the click check is red against a broken handler: one that never prevents the default, one to the wrong route, one navigating on every click, none', async () => {
@@ -293,6 +309,14 @@ function auditChrome(source: string): string[] {
   if (!/<a\b[^>]*\bonClick=\{\(\s*(\w+)\s*\)\s*=>\s*followRoute\(\s*\1\s*,\s*router\.navigate\s*,\s*'chart'\s*\)\}\s*>/.test(code)) {
     failures.push('the chart link’s click is not followRoute(event, router.navigate, \'chart\')');
   }
+  // 5.1: `the model`, the route to the Colophon: the same click rule, and its
+  // class plain `chrome-route` at the source, since the offer is the chart link's alone.
+  if (!/<a\b[^>]*\bonClick=\{\(\s*(\w+)\s*\)\s*=>\s*followRoute\(\s*\1\s*,\s*router\.navigate\s*,\s*'colophon'\s*\)\}\s*>\s*\{\s*IDENTITY_MODEL\s*\}\s*<\/a>/.test(code)) {
+    failures.push('the model link’s click is not followRoute(event, router.navigate, \'colophon\')');
+  }
+  if (!/<a\s+className="chrome-route"\s+href=\{\s*ROUTE_PATHS\.colophon\s*\}/.test(code) || (code.match(/className="chrome-route"/g) ?? []).length !== 1) {
+    failures.push('the model link’s class is not plain chrome-route');
+  }
   if (!/export\s+function\s+CornerChrome\(\s*\{\s*router\s*\}\s*:\s*\{\s*readonly\s+router\s*:\s*Router\s*\}\s*\)/.test(code)) failures.push('the chrome does not take the router as its one prop');
   if (!/import\s*\{\s*CHART_LINK_TEXT\s*,\s*followRoute\s*\}\s*from\s*'\.\/route-link\.ts'/.test(code)) failures.push('the link text and click are not route-link.ts’s');
   if (/\bnavigate\(/.test(code)) failures.push('the chrome navigates itself — the click is followRoute’s');
@@ -313,7 +337,7 @@ function auditChrome(source: string): string[] {
     failures.push('a third chrome line, or a slot drawn twice');
   }
   const elements = code.match(/<[a-zA-Z][\w.]*/g) ?? [];
-  if (elements.length !== 4) failures.push(`elements other than the identity, its chart link, the slot and its button — found ${elements.join(' ')}`);
+  if (elements.length !== 5) failures.push(`elements other than the identity, its two links, the slot and its button — found ${elements.join(' ')}`);
   // The name is the visible text.
   if (/\baria-[\w-]+=|\btitle=|\balt=/.test(code)) failures.push('an ARIA or title attribute — the name is the visible text');
   if (/\btabIndex=/.test(code)) failures.push('a tabIndex — the instruction is text, the button focusable by default');
@@ -323,7 +347,7 @@ function auditChrome(source: string): string[] {
   }
   if (/\b(?:pullBack|goHome|activateClient|activateProject|approachByKeyboard|leaveByKeyboard)\b/.test(code)) failures.push('a door other than return and release');
   if (!/import\s*\{\s*releaseLayer\s*,\s*returnToRail\s*\}\s*from\s*'\.\/activate\.ts'/.test(code)) failures.push('the doors are not activate.ts’s');
-  if ((code.match(/\bonClick\b/g) ?? []).length !== 2) failures.push('a handler beyond the slot’s and the chart link’s');
+  if ((code.match(/\bonClick\b/g) ?? []).length !== 3) failures.push('a handler beyond the slot’s and the two links’');
   if (/\bon(?:Mouse|Pointer|Key(?!Down=)|Focus|Blur|Wheel|Scroll)\w*=/.test(code) || (code.match(/\bonKeyDown=/g) ?? []).length !== 1) failures.push('reacts to hover, pointer, keys or focus — the slot is a plain control');
   // The hand-back: a stable ref cleanup, focus to overview by its id, exactly when
   // the button held it and its last action was `return`, read off the element.
@@ -381,7 +405,7 @@ const CHROME_TARGETS: ReadonlyMap<string, string> = new Map([
   ['the pace ignoring the preference', 'the pace is not motionPace'],
   ['the style never focused', 'the style is not slotStyle(focused, pace)'],
   ['the style at full motion always', 'the style is not slotStyle(focused, pace)'],
-  ['a third line', 'elements other than the identity, its chart link, the slot and its button'],
+  ['a third line', 'elements other than the identity, its two links, the slot and its button'],
   ['a second button', 'more than one <button>'],
   ['the chart link navigating on every click', 'the chart link’s click is not followRoute'],
   ['the chart link to the colophon', 'the chart link’s click is not followRoute'],
@@ -436,6 +460,13 @@ const CHROME_TARGETS: ReadonlyMap<string, string> = new Map([
   ['the offer named', 'an ARIA or title attribute'],
   ['the chrome samples frames', 'the chrome samples or resets the monitor'],
   ['the class not the model’s', 'the link’s class is not the model’s chartRouteClass'],
+  // 5.1: the model link.
+  ['the model link navigating on every click', 'the model link’s click is not followRoute'],
+  ['the model link to the chart', 'the model link’s click is not followRoute'],
+  ['the model link dropped', 'the model link’s click is not followRoute'],
+  ['the model link offered', 'the model link’s class is not plain chrome-route'],
+  ['the model link with a class of its own', 'the model link’s class is not plain chrome-route'],
+  ['a third link handler', 'a handler beyond the slot’s and the two links’'],
 ]);
 
 test('the chrome audit rejects the real renderer with any one guarantee broken', () => {
@@ -454,7 +485,7 @@ test('the chrome audit rejects the real renderer with any one guarantee broken',
     ['the chart link to the colophon', (s) => s.replace("followRoute(event, router.navigate, 'chart')", "followRoute(event, router.navigate, 'colophon')")],
     ['the router not a prop', (s) => s.replace('export function CornerChrome({ router }: { readonly router: Router }) {', 'export function CornerChrome() {\n  const router = window.router as Router;')],
     ['a click rule of its own', (s) => s.replace("onClick={(event) => followRoute(event, router.navigate, 'chart')}", "onClick={(event) => (event.button === 0 ? (event.preventDefault(), router.navigate('chart')) : undefined)}")],
-    ['the identity recased', (s) => s.replace('{IDENTITY_LINE}', '{IDENTITY_LINE.toUpperCase()}')],
+    ['the identity recased', (s) => s.replace('{IDENTITY_NAME}', '{IDENTITY_NAME.toLowerCase()}')],
     ['an aria-label', (s) => s.replace('className="chrome-slot-control"', 'className="chrome-slot-control"\n            aria-label={slot.text}')],
     ['an aria-labelledby', (s) => s.replace('type="button"', 'type="button" aria-labelledby="chrome"')],
     ['a title', (s) => s.replace('type="button"', 'type="button" title="Escape"')],
@@ -513,7 +544,14 @@ test('the chrome audit rejects the real renderer with any one guarantee broken',
     ['the offer drawn as a line', (s) => s.replace('{CHART_LINK_TEXT}</a>\n      </p>', '{CHART_LINK_TEXT}</a>\n      {offered ? CHART_LINK_TEXT : null}\n      </p>')],
     ['the offer named', (s) => s.replace('className={chartRouteClass(offered)}', 'className={chartRouteClass(offered)} aria-describedby="offer"')],
     ['the chrome samples frames', (s) => s.replace('const slot =', 'sampleFrame(1);\n  const slot =')],
-    ['the class not the model’s', (s) => s.replace('import { IDENTITY_LINE, chartRouteClass, chromeSlot, slotStyle }', 'import { IDENTITY_LINE, chromeSlot, slotStyle }').replace('const slot =', 'const chartRouteClass = (o: boolean) => (o ? "chrome-route chrome-route-offered" : "chrome-route");\n  const slot =')],
+    ['the class not the model’s', (s) => s.replace('import { IDENTITY_MODEL, IDENTITY_NAME, chartRouteClass, chromeSlot, slotStyle }', 'import { IDENTITY_MODEL, IDENTITY_NAME, chromeSlot, slotStyle }').replace('const slot =', 'const chartRouteClass = (o: boolean) => (o ? "chrome-route chrome-route-offered" : "chrome-route");\n  const slot =')],
+    // 5.1: the model link.
+    ['the model link navigating on every click', (s) => s.replace("onClick={(event) => followRoute(event, router.navigate, 'colophon')}", "onClick={() => router.navigate('colophon')}")],
+    ['the model link to the chart', (s) => s.replace("followRoute(event, router.navigate, 'colophon')", "followRoute(event, router.navigate, 'chart')")],
+    ['the model link dropped', (s) => s.replace(/<a className="chrome-route" href=\{ROUTE_PATHS\.colophon\}[^\n]*?\{IDENTITY_MODEL\}<\/a>/, '{IDENTITY_MODEL}')],
+    ['the model link offered', (s) => s.replace('<a className="chrome-route" href={ROUTE_PATHS.colophon}', '<a className={chartRouteClass(offered)} href={ROUTE_PATHS.colophon}')],
+    ['the model link with a class of its own', (s) => s.replace('<a className="chrome-route" href={ROUTE_PATHS.colophon}', '<a className="chrome-model" href={ROUTE_PATHS.colophon}')],
+    ['a third link handler', (s) => s.replace('<p className="chrome-identity">', '<p className="chrome-identity" onClick={() => undefined}>')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);

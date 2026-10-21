@@ -1100,3 +1100,11 @@ Still open after 3.5:
   evidence: Story 4.10 added `tabIndex={-1}` to every fragment target so the landing could focus it, and the spec's Always rule says script-focused containers draw no outline (`:focus { outline: none }`, `chart.css`), so that a pointer visitor never sees a forced ring on a `/chart#<id>` load (AC 3). The targets now also take native focus when an index link is followed by keyboard. Switching to `:focus:not(:focus-visible)` would keep the ring for keyboard users, but Chrome treats a script focus on load with no prior input as focus-visible, which would bring the ring back on the landing. So this needs a UX ruling (an indicator for the record, or `focus({ focusVisible: false })` where supported), not a patch.
   location: src/render-fallback/chart.css (.chart-section:focus, .chart-record:focus), src/render-fallback/chart.tsx
   severity: medium
+
+## Deferred from: code review of spec-5-1-the-colophon-as-a-fourth-lazy-chunk.md (2026-10-21)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-the-colophon-as-a-fourth-lazy-chunk.md`
+  summary: The default Colophon's effect wiring (`startExhibits` as the effect, its stop the cleanup, the files drawn from the held state) is held only by a source-text audit, because the render harness runs no effects.
+  evidence: `scripts/render.ts` renders with `react-dom/static`, which runs no effects, so `colophon.test.ts` audits the effect as regexes (`auditEffect`) while `startExhibits` itself is executed in `exhibits.test.ts`; a semantically equivalent rewrite the regexes do not anticipate could ship a `/colophon` that fetches but never draws, or updates after unmount. The same limitation holds every effect in the codebase (cf. 4.10's executed-tracker approach); closing it needs a client-render path in the harness.
+  location: src/colophon/colophon.tsx:43-45, src/colophon/colophon.test.ts (auditEffect), scripts/render.ts
+  severity: medium

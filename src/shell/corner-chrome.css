@@ -10,8 +10,10 @@
  * state: 40px with nothing focused, 40px left of the panel while Focused.
  *
  * The strings are set as authored — no `text-transform`. The lines take no
- * pointer; the identity line's `the chart` link (4.5) takes it, and mirrors the
- * slot's button. The slot's button does, and mirrors `.panel-release`: no box, no
+ * pointer; the identity line's two links, `the model` (5.1) and `the chart`
+ * (4.5), take it, share `.chrome-route` — its hover, focus and forced-colours
+ * rules — and mirror the slot's button. The offer's class is the chart link's
+ * alone; `the model` never carries it. The slot's button does, and mirrors `.panel-release`: no box, no
  * background, no border, the line's type and ink inherited, raised to
  * `ink-prose` on hover and `:focus-visible`, and underlined by a hairline on
  * `:focus-visible` alone. The one exception is the chart link's offer (4.6):
