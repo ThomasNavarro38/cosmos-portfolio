@@ -676,21 +676,30 @@ test('no test in this suite writes into src/ or generated/', () => {
 });
 
 /**
- * The Colophon's imports (5.1): React for its effect and its own exhibits
- * module, nothing else, and the exhibits module nothing at all. Read by the
- * boundary scan's own reader, so a side-effect import, either quote, a
- * re-export or a dynamic import counts too. Here rather than beside the
- * router's audit because `src/shell/` may not import `src/derive/`.
+ * The Colophon's imports (5.1, 5.2): React for its effect, its own exhibits
+ * and derivations modules and its stylesheet, nothing else, and the exhibits
+ * and derivations modules nothing at all (5.2: not even a type from
+ * `src/derive/`, `src/data/` or `generated/`). Read by the boundary scan's own
+ * reader, so a side-effect import, either quote, a re-export or a dynamic
+ * import counts too. Here rather than beside the router's audit because
+ * `src/shell/` may not import `src/derive/`.
  */
-test('the colophon imports React and ./exhibits.ts only, and exhibits.ts imports nothing', () => {
+test('the colophon imports React, ./exhibits.ts, ./derivations.ts and ./colophon.css only, and exhibits.ts and derivations.ts import nothing', () => {
   const read = (path: string): string => readFileSync(join(SRC_ROOT, path), 'utf8');
   const importsOf = (source: string): (string | null)[] => findImports(source).map((found) => found.specifier);
   const colophon = read('colophon/colophon.tsx');
-  assert.deepEqual(importsOf(colophon), ['react', './exhibits.ts'], 'the colophon imports React and ./exhibits.ts only');
-  for (const extra of ["import './colophon.css';", 'import "../shell/state.ts";', "export { x } from '../shell/route.ts';", "const m = await import('../derive/index.ts');"]) {
+  const admitted = ['react', './exhibits.ts', './derivations.ts', './colophon.css'];
+  assert.deepEqual(importsOf(colophon), admitted, 'the colophon imports React, ./exhibits.ts, ./derivations.ts and ./colophon.css only');
+  for (const extra of ["import '../shell/page.css';", 'import "../shell/state.ts";', "export { x } from '../shell/route.ts';", "const m = await import('../derive/index.ts');", "import type { Artifact } from '../derive/artifact-schema.ts';"]) {
     assert.notDeepEqual(importsOf(`${colophon}
 ${extra}
-`), ['react', './exhibits.ts'], `"${extra}" is seen`);
+`), admitted, `"${extra}" is seen`);
   }
   assert.deepEqual(importsOf(read('colophon/exhibits.ts')), [], 'and exhibits.ts imports nothing');
+  const derivations = read('colophon/derivations.ts');
+  assert.deepEqual(importsOf(derivations), [], 'and derivations.ts imports nothing');
+  for (const extra of ["import type { LayoutArtifact } from '../derive/artifact-schema.ts';", "import { deriveMass } from '../derive/rules.ts';", "import layout from '../../generated/layout.generated.json';"]) {
+    assert.notDeepEqual(importsOf(`${extra}
+${derivations}`), [], `"${extra}" is seen`);
+  }
 });

@@ -375,8 +375,8 @@ test('the shipped app builds under the assertion, measured within its budget', a
   const colophon = lazySurface(chunks, graph, 'src/colophon/colophon.tsx', 'src/shell/colophon-host.tsx');
   assert.deepEqual(
     Object.keys(colophon.modules).map(local).filter((id) => id.startsWith('src/')).sort(),
-    ['src/colophon/colophon.tsx', 'src/colophon/exhibits.ts'],
-    'and holds the colophon alone (5.1: with its exhibits loader)',
+    ['src/colophon/colophon.css', 'src/colophon/colophon.tsx', 'src/colophon/derivations.ts', 'src/colophon/exhibits.ts'],
+    'and holds the colophon alone (5.1: with its exhibits loader; 5.2: its derivation rows and stylesheet)',
   );
   // 5.1: the exhibits are emitted data, byte for byte, and no chunk carries them.
   assert.deepEqual(exhibitFailures(chunks, assets, colophon.fileName), []);
