@@ -15,6 +15,8 @@
  *   theirs, at the 3:1 non-text floor (4.10, WCAG 1.4.11).
  * - **Copy** — every visible literal string shipped from `src/` or `index.html`
  *   is in one closed allowlist; accessible names are a second, separate list.
+ * - **Page metadata** — every copy `<meta>` in `index.html` (description, the
+ *   `og:`/`twitter:` title, description and image alt) is in `META_COPY` (6.1).
  * - **Voice** — no work-in-progress, beta or apologetic word in any shipped
  *   string, in `career.json` or in `index.html`.
  * - **Bands** — no Body in the committed artifact carries `stroke-dust` (ruling
@@ -645,7 +647,8 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
   // data elements. Admitted as copy alone, so a word with a dash at its edge is
   // still that word plus a dash, and fails.
   '–',
-  'Cosmos Portfolio',
+  // `index.html`'s static `<title>` (6.1, ruling Q3 (a)): the link preview's.
+  'Thomas Navarro',
   'This portfolio needs JavaScript.',
   // `document.title` per shown surface (4.10, ruling Q2); the `<main>` labels
   // are the surfaces' names, `the scene`, `the chart` and `the model`, above.
@@ -1124,7 +1127,7 @@ test('copy: the copy constants are each in the closed allowlist', () => {
     auditCopyConstants({ ...constants, 'CHART_LABELS.carries': 'A ring means it opens' }),
     ['copy: the constant CHART_LABELS.carries is "A ring means it opens", which is not in the closed allowlist'],
   );
-  assert.deepEqual(htmlText(read('../index.html')), ['Cosmos Portfolio', 'This portfolio needs JavaScript.'], 'index.html draws its title and its noscript line, and nothing else');
+  assert.deepEqual(htmlText(read('../index.html')), ['Thomas Navarro', 'This portfolio needs JavaScript.'], 'index.html draws its title and its noscript line, and nothing else');
 });
 
 test('copy: every visible literal shipped from src/ and index.html is in the closed allowlist', () => {
@@ -1285,6 +1288,127 @@ test('copy: a tooltip, a caption, help text or a narrated noscript fails with it
   assert.match(
     auditCopy(scripts, html.replace('This portfolio needs JavaScript.', 'This portfolio is rendered client-side by React.')).join('\n'),
     /^copy: index\.html draws the visible text "This portfolio is rendered client-side by React\."/,
+  );
+});
+
+// --- Page metadata (6.1, ruling Q5 (a)(a)) ------------------------------------------------------------
+
+/**
+ * The closed set of page metadata copy: the document's title, its description
+ * and the preview image's alt text (6.1, rulings Q3 (a), Q5 (a)(a)). Never drawn
+ * on any surface, so not a sixth copy place (EXPERIENCE.md §3), and held to the
+ * same voice: the voice audit scans the whole of `index.html`.
+ */
+const META_COPY: ReadonlySet<string> = new Set([
+  'Thomas Navarro',
+  'A work history, mapped.',
+  'Six stars on a dark field, one of them white, joined by a faint line, with smaller bodies in orbit.',
+]);
+
+/** The metadata names whose `content` is copy, by `name` or `property`. */
+const META_COPY_NAMES: ReadonlySet<string> = new Set([
+  'description',
+  'og:title',
+  'og:description',
+  'og:image:alt',
+  'twitter:title',
+  'twitter:description',
+  'twitter:image:alt',
+]);
+
+/**
+ * A tag's attribute value, double- or single-quoted; `undefined` when absent.
+ * The name must follow the tag's start or whitespace, so `data-name=` and
+ * `data-content=` are never read as `name=` or `content=`.
+ */
+function metaAttribute(tag: string, names: string): string | undefined {
+  const match = new RegExp(`(?:^|\\s)(?:${names})\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, 'i').exec(tag);
+  return match === null ? undefined : (match[1] ?? match[2]);
+}
+
+/**
+ * Every `<meta>` whose name is a copy name and whose `content` is not in
+ * `META_COPY` (a copy-named tag with no `content` among them), and every copy
+ * name that does not appear exactly once — so a duplicated tag paired with a
+ * missing one still fails, on both lines.
+ */
+function auditMetaCopy(html: string): string[] {
+  const failures: string[] = [];
+  const counts = new Map<string, number>([...META_COPY_NAMES].map((name) => [name, 0]));
+  for (const [tag] of codeOf(html, 'markup').matchAll(/<meta\b[^>]*>/gi)) {
+    // Compared lower-cased: `og:Title` is still the og:title tag.
+    const name = metaAttribute(tag, 'name|property')?.toLowerCase();
+    if (name === undefined || !META_COPY_NAMES.has(name)) continue;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+    const content = metaAttribute(tag, 'content');
+    if (content === undefined || !META_COPY.has(content)) {
+      failures.push(`copy: index.html's ${name} is ${JSON.stringify(content ?? null)}, which is not in the metadata copy`);
+    }
+  }
+  for (const [name, count] of counts) {
+    if (count !== 1) failures.push(`copy: index.html carries ${name} ${count} times, not once`);
+  }
+  return failures;
+}
+
+test('copy: every page-metadata string in index.html is in META_COPY', () => {
+  const html = read('../index.html');
+  assert.deepEqual(auditMetaCopy(html), []);
+  // The title, too, is metadata copy.
+  assert.ok(META_COPY.has(/<title>([^<]*)<\/title>/.exec(html)?.[1] ?? ''), 'the title is in META_COPY');
+});
+
+test('copy: a praising description, a disclaimer in the alt text or a missing tag fails with its own line', () => {
+  const html = read('../index.html');
+  const mutate = (from: string, to: string): string => {
+    const mutated = html.replace(from, to);
+    assert.notEqual(mutated, html, 'the mutation must apply');
+    return mutated;
+  };
+  assert.deepEqual(
+    auditMetaCopy(mutate('<meta name="description" content="A work history, mapped." />', '<meta name="description" content="An award-winning engineer." />')),
+    [`copy: index.html's description is "An award-winning engineer.", which is not in the metadata copy`],
+  );
+  assert.deepEqual(
+    auditMetaCopy(mutate('<meta property="og:image:alt" content="Six', '<meta property="og:image:alt" content="Best viewed on desktop. Six')),
+    [`copy: index.html's og:image:alt is "Best viewed on desktop. Six stars on a dark field, one of them white, joined by a faint line, with smaller bodies in orbit.", which is not in the metadata copy`],
+  );
+  const twitterTitle = /<meta name="twitter:title"[^>]*>\n\s*/.exec(html)?.[0] ?? '<none>';
+  assert.deepEqual(auditMetaCopy(mutate(twitterTitle, '')), ['copy: index.html carries twitter:title 0 times, not once']);
+  // One tag duplicated and another missing: the total is unchanged, and both still fail.
+  const ogTitle = /<meta property="og:title"[^>]*>\n\s*/.exec(html)?.[0] ?? '<none>';
+  assert.deepEqual(auditMetaCopy(mutate(twitterTitle, ogTitle)), [
+    'copy: index.html carries og:title 2 times, not once',
+    'copy: index.html carries twitter:title 0 times, not once',
+  ]);
+  // Single-quoted attributes are read too: a praising single-quoted description fails.
+  assert.deepEqual(
+    auditMetaCopy(mutate('<meta name="description" content="A work history, mapped." />', `<meta name='description' content='The best engineer.' />`)),
+    [`copy: index.html's description is "The best engineer.", which is not in the metadata copy`],
+  );
+  assert.deepEqual(
+    auditMetaCopy(mutate('<meta name="description" content="A work history, mapped." />', `<meta name='description' content='A work history, mapped.' />`)),
+    [],
+  );
+  // A `data-content=` is not `content=`: a praising description hidden behind one fails.
+  assert.deepEqual(
+    auditMetaCopy(mutate('<meta name="description" content="A work history, mapped." />', '<meta name="description" data-content="A work history, mapped." content="Visionary." />')),
+    [`copy: index.html's description is "Visionary.", which is not in the metadata copy`],
+  );
+  // A `data-name=` is not `name=`: a tag named only through it is no description, so the description is missing.
+  assert.deepEqual(
+    auditMetaCopy(mutate('<meta name="description" content="A work history, mapped." />', '<meta data-name="description" content="A work history, mapped." />')),
+    ['copy: index.html carries description 0 times, not once'],
+  );
+  // Names are read case-insensitively: an upper-cased name is still that tag, and its copy is still held.
+  assert.deepEqual(
+    auditMetaCopy(mutate('<meta property="og:title" content="Thomas Navarro" />', '<meta property="OG:Title" content="Thomas Navarro, award winner" />')),
+    [`copy: index.html's og:title is "Thomas Navarro, award winner", which is not in the metadata copy`],
+  );
+  // A copy-named tag with no content fails rather than being skipped.
+  assert.deepEqual(
+    auditMetaCopy(mutate('<meta name="twitter:description" content="A work history, mapped." />', '<meta name="twitter:description" />')),
+    [`copy: index.html's twitter:description is null, which is not in the metadata copy`],
   );
 });
 

@@ -336,10 +336,22 @@ become live as the inventory grows.
 - **`index.html` carries no `og:`, description, or icon tags**
   [index.html:3-7] — FR-24 shareability. Epic 6 story 6-1 owns the composed
   link preview and `public/preview.png`.
+  **Resolved (6.1, 2026-10-21), except the icon:** title, description, `og:`
+  and `twitter:` tags pointing at the committed `/preview.png`. The icon half
+  stays open, re-appended below.
 - **`public/.gitkeep` ships into `dist/`** — Vite copies `publicDir` verbatim.
   Pruning it costs more than the empty file it removes; the marker becomes
   unnecessary once `preview.png` lands, and should be deleted then. Constraint
   is documented in `vite.config.ts:7-11`.
+  **Resolved (6.1, 2026-10-21):** deleted; `vite.config.ts`'s comment updated.
+
+## Deferred from 6.1 (2026-10-21)
+
+- **og:image/og:url/twitter:image absolute once the production origin is chosen
+  (6.1 Q4 (b)) — 6.5.** `index.html` ships `/preview.png` root-relative; Slack
+  resolves it, LinkedIn and Facebook may show no image until the URL is absolute.
+- **No favicon (open, carried from the `og:`/description/icon item).** No
+  favicon ruled; `/favicon.ico` 404s. `index.html` carries no icon link.
 
 ---
 

@@ -1054,6 +1054,18 @@ must be honest about being a still, not a promise of an interactive scene.
 and no treatment was decided. The forbidden move is any disclaimer (FR-20).
 Genuine gap.]`
 
+**Decided treatment (D-G5, story 6.1, Thomas's rulings 2026-10-21).** Honesty is
+carried by composition and wording, never by a caveat. The image is the opening
+frame — keyframe 0's direction and target, framed at the card's 1.91:1 aspect
+(Q1 (b)); the scene itself is unchanged — drawn by `scripts/preview.ts` from the
+committed artifact, the scene's models and the tokens, and captured once to
+`public/preview.png`. Both corner-chrome lines appear verbatim (Q2 (a)), so the
+still itself shows `the chart`. The title is `Thomas Navarro` and the description
+`A work history, mapped.` (Q3 (a)): "mapped" holds on the scene and on the chart
+alike, and nothing promises 3D or interaction. The image carries plain alt text
+describing what it shows. Page metadata is outside the five copy places
+(EXPERIENCE.md §3) and held to the same voice.
+
 ---
 
 ## 8. Do's and Don'ts
@@ -1127,13 +1139,13 @@ Every unratified proposal and genuine gap in this document, in one place.
 | D-G2 | The approved SNCF Notable's constraint does not lift cleanly as one sentence | §7.7 | §15 content pass |
 | D-G3 | Mote label degradation strategy above ~12 simultaneous labels | §7.4 | Q6 |
 | D-G6 | Colophon page layout — how the JSON block and the three derivations sit together. Last unillustrated surface. | §7.11 | Q11 |
-| D-G5 | Link preview composition: honest about the Fallback without a disclaimer | §7.12 | — |
 
 ### Resolved since drafting
 
 | # | Item | Resolution |
 |---|---|---|
 | ~~D-G4~~ | Fallback visual treatment | **Closed.** Rendered as [`.working/keyscreen-fallback.html`](.working/keyscreen-fallback.html). Time is the axis — horizontal on desktop, transposed to vertical on phone. Deep/Shallow carried by three redundant structural channels: ring on the plate marker, ring repeated per index row, and a real `Notable` text column. Skills are shown (the prohibition is on duplicating the Dust; the Fallback has no Dust to duplicate, and content parity outranks it). Vignette dropped — the plate has no centre and every corner carries content. |
+| ~~D-G5~~ | Link preview composition: honest about the Fallback without a disclaimer | **Closed** (6.1, 2026-10-21). §7.12 — the opening frame framed for the card, both chrome lines verbatim, `Thomas Navarro` / `A work history, mapped.`, plain alt text; honesty by composition and wording, no caveat. |
 | ~~Colophon form~~ | FR-21 launch requirement | **Closed.** §7.11 — a conventional document rendering the live JSON, entered from the left-top identity chrome. Syntax setting is luminance only. |
 
 ### Deferred to M1 greybox tuning — specify shape and ratio, never milliseconds

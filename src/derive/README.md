@@ -157,6 +157,15 @@ What the gate does **not** catch is a hand edit of the artifact that keeps every
 
 The artifact half runs first, so an artifact failure still reports first and the source half never weakens AD-1's guarantee. The shipped CLI always holds the artifact against the real `career.json`; `--check <artifact> <career>` is a test seam, and there is no flag that skips the source half. Deliberateness is a property of the scripts, not of anyone's memory — so `artifact.test.ts` walks the script graph transitively, following `npm run` indirection and npm's implicit `pre`/`post` hooks, and fails if `build` can reach `solve` by any path at any depth.
 
+**A re-solve regenerates the link preview** (6.1). `public/preview.png` is the opening frame composed from this artifact, committed, and never rendered by the build. Recapture it after a re-solve that moves anything, and after any change to the chrome strings it draws (`IDENTITY_LINE`, `CHART_LINK_TEXT`, the Rail's slot text) or to the tokens it reads (the colours, the `chrome` type role, `spacing.xl`): compose it, then capture it with headless Chrome, then delete the SVG:
+
+```sh
+npm run compose:preview -- --out preview.svg
+chrome --headless --screenshot="<repo>/public/preview.png" --window-size=1200,630 --hide-scrollbars --force-device-scale-factor=1 --disable-lcd-text file:///<absolute path>/preview.svg
+```
+
+The first command prints the second filled in and cwd-independent: the `--screenshot` path absolute and quoted, the SVG as a `file:` URL. On Windows, `chrome` means the full path to `chrome.exe`; in PowerShell a quoted path runs only through the call operator, `& "C:\Program Files\Google\Chrome\Application\chrome.exe" --headless …`. The committed capture was made on Windows, where the token font stack falls back to Arial, so a capture elsewhere may set the chrome lines in another face. `scripts/preview.test.ts` then holds the PNG's size, its chroma and its one white Star.
+
 The gate and the emitter live in **one file** rather than two scripts, so the artifact's path and its schema are named in exactly one place. A gate validating a different path from the one the emitter writes would pass while gating nothing. It also keeps the gate under `tsconfig.json`'s `include: ["src"]` — a `scripts/` directory would escape typecheck entirely.
 
 ### The banner

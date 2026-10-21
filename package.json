@@ -14,6 +14,7 @@
     "solve": "node src/derive/index.ts",
     "tokens": "node scripts/tokens.ts",
     "preview": "vite preview",
+    "compose:preview": "node scripts/preview.ts",
     "typecheck": "tsc --noEmit",
     "validate": "node src/data/validate.ts",
     "test": "node --test \"src/**/*.test.ts\" \"scripts/**/*.test.ts\"",
