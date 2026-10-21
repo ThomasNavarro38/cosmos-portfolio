@@ -1128,3 +1128,11 @@ Still open after 3.5:
   evidence: `colophon.test.ts` ("a layout the rows cannot be read from fails the render") asserts only that the harness render rejects naming the field; `colophon-host.test.ts` renders the host without exhibits, so it never reaches `derivationRows`, and `auditColophonHost` holds the boundary by regex. The harness (`scripts/render.ts`, `prerenderToNodeStream`) runs no client error boundaries; closing it needs the same client-render path as the 5.1 effect-wiring deferral above. The build gate rejects a malformed artifact, so the path is unreachable in a shipped build today.
   location: src/colophon/colophon.tsx (Derivations), src/shell/colophon-host.tsx:30-44, scripts/render.ts
   severity: medium
+
+## Deferred from: code review of spec-6-2-preview-drift-guard.md (2026-10-21)
+
+- source_spec: spec-6-2-preview-drift-guard.md
+  summary: src/derive/README.md still says the gate lives in src/ because "a scripts/ directory would escape typecheck entirely", but tsconfig.json now includes scripts/.
+  evidence: Pre-existing at HEAD (53e5fb5); tsconfig.json include is ["src", "scripts", "vite.config.ts"] and `npm run typecheck` checks scripts/preview-drift.ts. Surfaced by the 6.2 blind-hunter review, not caused by it.
+  location: src/derive/README.md:169
+  severity: low

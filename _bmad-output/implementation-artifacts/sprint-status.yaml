@@ -104,7 +104,7 @@ development_status:
 
   epic-6: in-progress
   6-1-the-composed-link-preview: done
-  6-2-preview-drift-guard: backlog
+  6-2-preview-drift-guard: done
   6-3-the-contact-route: backlog
   6-4-first-paint-verified-on-target-hardware: backlog
   6-5-launch-readiness-pass: backlog
