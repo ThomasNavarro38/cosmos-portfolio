@@ -13,10 +13,9 @@ import { exhibits } from './scripts/exhibits.ts';
 // published byte for byte at fixed paths for the Colophon to fetch: neither
 // imported into the Colophon's chunk, and `career.json` into none.
 //
-// Note: Vite copies `public/` verbatim into `dist/`, so `public/.gitkeep`
-// ships as a harmless empty file. Pruning it would mean a custom hook that
-// outlives its purpose — the marker becomes unnecessary as soon as
-// `preview.png` lands in Epic 6, and should be deleted then.
+// Note: Vite copies `public/` verbatim into `dist/`: `_redirects`, and the
+// committed link preview `preview.png` (6.1), composed by `scripts/preview.ts`
+// and captured by hand, never rendered by the build.
 //
 // One manual chunk group (4.3), `ui`: the shell's pure models the chart reuses
 // (`panel-model.ts`, `focus-motion.ts`, `chrome-model.ts`) and the shell's

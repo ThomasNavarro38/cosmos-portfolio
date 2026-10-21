@@ -226,6 +226,8 @@ Copy exists in exactly five places. There is no sixth.
 4. The Colophon's annotations on the mapping rules, its statement of what is not there, and the framing of its live re-solve (§4.7).
 5. The contact route.
 
+Page metadata — the document's title, its description and the preview image's alt text — is never drawn on any surface; it is not a sixth place, and it is held to the same voice.
+
 No tooltips. No onboarding. No empty states. No help text. No captions
 explaining marks — if a mark needs a caption, the mark is wrong.
 
