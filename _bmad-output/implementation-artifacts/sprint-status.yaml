@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 10-20-2026 20:55
+last_updated: 10-21-2026 16:23
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -100,7 +100,7 @@ development_status:
   5-3-the-data-file-rendered-in-full: done
   5-4-stating-what-is-not-there: done
   5-5-the-live-re-solve-honestly-framed: done
-  epic-5-retrospective: optional
+  epic-5-retrospective: done
 
   epic-6: backlog
   6-1-the-composed-link-preview: backlog
@@ -490,14 +490,14 @@ action_items:
       regexes and move audits beside their modules (closes the five widened render
       deferrals)"
     owner: "Thomas"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-10-19-2026.md"
   - id: "epic-4-retro-item-35-run-bmad-code-review-over-6582786-cd6191"
     epic: 4
     action: "Run bmad-code-review over 6582786^..cd61915: the follow-up reviews stories
       4.5 and 4.6 recommended, plus the full-diff lens pass the retro narrowed"
     owner: "Thomas"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-10-19-2026.md"
   - id: "epic-4-retro-item-36-deferred-work-md-housekeeping-add-spec-4"
     epic: 4
@@ -505,7 +505,7 @@ action_items:
       their deferred frontmatter, refile the 4.3 and 4.4 entries under their own headers,
       decide one deferral register"
     owner: "Thomas"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-10-19-2026.md"
   - id: "epic-4-retro-item-37-fallback-accessibility-story-route-chang"
     epic: 4
@@ -513,5 +513,56 @@ action_items:
       table semantics, fragment-landing focus, non-text contrast rows for link underline,
       focus outline, Ring and glyphs"
     owner: "Thomas"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-4-retro-10-19-2026.md"
+  - id: "epic-5-retro-item-38-give-colophon-its-corner-chrome-with-a-r"
+    epic: 5
+    action: "Give /colophon its corner chrome with a route to the scene (and the chart,
+      offered as the chart offers the scene), so AC 5.4 #5 one-click-away holds and
+      a shared /colophon URL is no dead end"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
+  - id: "epic-5-retro-item-39-rule-d-g6-colophon-page-layout-gutter-co"
+    epic: 5
+    action: "Rule D-G6 (Colophon page layout: gutter, column, h1 role) and apply it
+      in colophon.css, held by the identity audit"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
+  - id: "epic-5-retro-item-40-re-rule-the-loose-copy-5-5-framing-does"
+    epic: 5
+    action: "Re-rule the loose copy: 5.5 framing (does not reproduce / solved once
+      / the scene), 5.4 thesis (the camera is), solved from the three rules above;
+      hold each relation in tests"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
+  - id: "epic-5-retro-item-41-run-the-follow-up-bmad-code-review-5-1-5"
+    epic: 5
+    action: "Run the follow-up bmad-code-review 5.1, 5.4 and 5.5 recommended over
+      5782675^..1753811, then clear followup_review_recommended"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
+  - id: "epic-5-retro-item-42-add-a-client-render-path-to-the-render-h"
+    epic: 5
+    action: "Add a client-render path to the render harness (effects and error boundaries
+      executed), closing deferred-work.md 5.1 and 5.2 entries"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
+  - id: "epic-5-retro-item-43-reconcile-epics-md-fourth-lazy-chunk-wor"
+    epic: 5
+    action: "Reconcile epics.md: fourth lazy chunk wording in 5.1/5.5 (solver is fifth)
+      and the no-src/data bundle clause; set epic-5 done in sprint status"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
+  - id: "epic-5-retro-item-44-process-file-carried-retro-obligations-i"
+    epic: 5
+    action: "Process: file carried retro obligations in deferred-work.md, which story-spec
+      creation reads, not only in a retro Open questions"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
