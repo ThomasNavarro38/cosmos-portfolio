@@ -9,7 +9,7 @@
   "packageManager": "npm@11.6.2",
   "scripts": {
     "dev": "vite",
-    "build": "npm run gate && vite build",
+    "build": "npm run gate && node scripts/preview-drift.ts && vite build",
     "gate": "node src/derive/index.ts --check && node scripts/tokens.ts --check && node scripts/check-pins.ts",
     "solve": "node src/derive/index.ts",
     "tokens": "node scripts/tokens.ts",
