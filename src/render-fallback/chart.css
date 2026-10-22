@@ -31,6 +31,13 @@
  *
  * The chrome row (4.5) is the key screen's `.fb-chrome`: the heading and the
  * route line opposite each other, on one baseline, stacked at 640px and below.
+ * Since 6.3 the contact route (`p.contact-route`, `src/shell/contact-route.css`)
+ * sits beside the heading (ruling Q3 (a)): the row packs from the start, the
+ * heading and the route together a `--space-md` gap apart, and the route line
+ * takes the row's remaining space by `margin-inline-start: auto`, so it stays
+ * opposite at the end; stacked, that margin is dropped and all three sit at the
+ * start. The links' rules below name the heading's and the route line's links
+ * alone, so the contact address is styled by its own sheet on both surfaces.
  * Both are the `chrome` type role at `ink-label`; their links (`the model`,
  * `the scene`) keep that ink with a 1px `ink-label` rule under the word (as the
  * index links' rule: 4.10, the 3:1 non-text floor),
@@ -79,7 +86,8 @@
 
 .chart-chrome {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  justify-content: flex-start;
   align-items: baseline;
   gap: var(--space-md);
   margin: 0 0 var(--space-xxl);
@@ -96,23 +104,31 @@
   color: var(--color-ink-label-dark);
 }
 
+.chart-routes {
+  margin-inline-start: auto;
+}
+
 .chart-routes:empty {
   display: none;
 }
 
-.chart-chrome a {
+.chart-heading a,
+.chart-routes a {
   color: var(--color-ink-label-dark);
   text-decoration: none;
   border-bottom: 1px solid var(--color-ink-label-dark);
 }
 
-.chart-chrome a:hover,
-.chart-chrome a:focus-visible {
+.chart-heading a:hover,
+.chart-heading a:focus-visible,
+.chart-routes a:hover,
+.chart-routes a:focus-visible {
   color: var(--color-ink-lift-dark);
   border-bottom-color: var(--color-stroke-focus-dark);
 }
 
-.chart-chrome a:focus-visible {
+.chart-heading a:focus-visible,
+.chart-routes a:focus-visible {
   outline: 1px solid var(--color-stroke-focus-dark);
   outline-offset: 3px;
 }
@@ -321,6 +337,10 @@
     gap: var(--space-xs);
   }
 
+  .chart-routes {
+    margin-inline-start: 0;
+  }
+
   .chart-plate-across {
     display: none;
   }
@@ -392,7 +412,8 @@
  * keyboard focus keeps a system-coloured outline.
  */
 @media (forced-colors: active) {
-  .chart-chrome a:focus-visible,
+  .chart-heading a:focus-visible,
+  .chart-routes a:focus-visible,
   .chart-index a:focus-visible {
     outline: 1px solid CanvasText;
   }

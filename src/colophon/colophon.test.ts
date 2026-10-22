@@ -1,8 +1,9 @@
 /**
- * `colophon.tsx` (5.1, 5.2, 5.3, 5.4): `ColophonPage` rendered through the render
- * harness (`scripts/render.ts`). Without exhibits — before the files arrive, or
- * after a failed fetch — the `<h1>` alone, with no prose about files that are
- * not there. With them, the `<h1>`, career.json
+ * `colophon.tsx` (5.1, 5.2, 5.3, 5.4, 6.3): `ColophonPage` rendered through the
+ * render harness (`scripts/render.ts`). Without exhibits — before the files
+ * arrive, or after a failed fetch — the `<h1>` and the contact route (6.3)
+ * alone, with no prose about files that are not there. With them, the `<h1>`,
+ * the contact route, career.json
  * verbatim in a `<pre>`, the derivation table (5.2), then layout.generated.json
  * verbatim in a `<pre>`, then (5.4) `<h2 class="colophon-heading">` reading
  * `ABSENCES_HEADING` and one `<p class="colophon-prose">` per `ABSENCES`
@@ -33,9 +34,16 @@
  * given `disabled`, its label altered, the result misnamed, altered or drawn when
  * none is solved, and the new elements drawn before the absences.
  *
+ * The contact route (6.3): a `p.contact-route` directly after the `<h1>`,
+ * with or without the exhibits — the mailto address, then the `copy`
+ * button — driven red by the route dropped, moved below the exhibits, its
+ * link or button broken, or a status beside it; the copy button's click is
+ * never `onSolve`.
+ *
  * The default `Colophon`'s effect does not run under the harness (a static
  * render runs no effect), so the fetch is `exhibits.test.ts`'s — `startExhibits`
- * executed there — and the default's render — the `<h1>` alone — is
+ * executed there — and the default's render — the `<h1>` and the contact
+ * route — is
  * `colophon-host.test.ts`'s and `App.test.ts`'s. Here the effect is audited as
  * source: `startExhibits`, its stop the cleanup, run once, the failure logged;
  * and (5.5) the press: a thin binding of `createLiveSolve` built once with the
@@ -52,6 +60,7 @@ import type { ColophonPage as ColophonPageComponent } from './colophon.tsx';
 import { EXHIBIT_PATHS, type Exhibits } from './exhibits.ts';
 import { ABSENCES, ABSENCES_HEADING } from './absences.ts';
 import { LIVE_SOLVE } from './live-solve.ts';
+import { CONTACT } from '../shell/contact.ts';
 
 const CAREER = readFileSync(new URL('../data/career.json', import.meta.url), 'utf8');
 const LAYOUT = readFileSync(new URL('../../generated/layout.generated.json', import.meta.url), 'utf8');
@@ -249,7 +258,26 @@ function liveSolve(heading: MarkupElement, framing: MarkupElement, button: Marku
 }
 
 /**
- * The page's elements: `<h1>the model</h1>`, then, when `expected` is given,
+ * The contact route (6.3), as the Colophon draws it under its `<h1>`: one
+ * `p.contact-route` holding the address as an `a.contact-address` to
+ * `mailto:` and the address, then the `button.contact-copy` (`type="button"`)
+ * reading `copy` — and nothing else. The component's own rows are
+ * `src/shell/contact-route.test.ts`'s.
+ */
+function contactRoute(route: MarkupElement): string[] {
+  const failures: string[] = [];
+  if (JSON.stringify(route.attrs) !== JSON.stringify({ class: 'contact-route' })) failures.push(`the contact route carries ${JSON.stringify(route.attrs)}`);
+  const parts = elementsOf(route);
+  const [link, button] = parts as [MarkupElement | undefined, MarkupElement | undefined];
+  if (parts.length !== 2 || link?.tag !== 'a' || button?.tag !== 'button') return [...failures, `the contact route holds ${JSON.stringify(parts.map((part) => part.tag))}, not a link and a button`];
+  if (JSON.stringify(link.attrs) !== JSON.stringify({ class: 'contact-address', href: `mailto:${CONTACT.address}` }) || elementsOf(link).length !== 0 || textOf(link) !== CONTACT.address) failures.push(`the address link is ${JSON.stringify(link.attrs)} reading ${JSON.stringify(textOf(link))}`);
+  if (JSON.stringify(button.attrs) !== JSON.stringify({ type: 'button', class: 'contact-copy' }) || elementsOf(button).length !== 0 || textOf(button) !== CONTACT.copy) failures.push(`the copy button is ${JSON.stringify(button.attrs)} reading ${JSON.stringify(textOf(button))}`);
+  return failures;
+}
+
+/**
+ * The page's elements: `<h1>the model</h1>`, the contact route (6.3), drawn
+ * whether or not the files have arrived, then, when `expected` is given,
  * the career exhibit, the derivation table worked on its layout's first
  * Project, the layout exhibit, what is not there — the `<h2>` and five `<p>` —
  * and the live re-solve (5.5) — the `<h2>`, the `<p>`, the `<button>`, and the
@@ -259,10 +287,11 @@ function colophonPage(html: string, expected: Exhibits | null, live: Live = IDLE
   const children = elementsOf(parseMarkup(html));
   const failures: string[] = [];
   const tags = children.map((child) => child.tag);
-  const want = expected === null ? ['h1'] : ['h1', 'pre', 'table', 'pre', 'h2', ...PARAGRAPHS.map(() => 'p'), 'h2', 'p', 'button', ...(live.solved === null ? [] : ['pre'])];
+  const want = expected === null ? ['h1', 'p'] : ['h1', 'p', 'pre', 'table', 'pre', 'h2', ...PARAGRAPHS.map(() => 'p'), 'h2', 'p', 'button', ...(live.solved === null ? [] : ['pre'])];
   if (JSON.stringify(tags) !== JSON.stringify(want)) return [`the page renders ${JSON.stringify(tags)}, not ${JSON.stringify(want)}`];
-  const [heading, career, table, layout, absencesHeading, ...rest] = children as [MarkupElement, MarkupElement, MarkupElement, MarkupElement, MarkupElement, ...MarkupElement[]];
+  const [heading, route, career, table, layout, absencesHeading, ...rest] = children as [MarkupElement, MarkupElement, MarkupElement, MarkupElement, MarkupElement, MarkupElement, ...MarkupElement[]];
   if (textOf(heading) !== 'the model') failures.push(`the heading reads ${JSON.stringify(textOf(heading))}`);
+  failures.push(...contactRoute(route));
   if (expected !== null) {
     failures.push(...exhibit(career, CAREER_NAME, expected.career));
     failures.push(...derivationTable(table, expected.layout));
@@ -281,11 +310,11 @@ function alteredLayout(edit: (project: { mass: unknown; luminanceBand: unknown; 
   return JSON.stringify(layout, null, 2);
 }
 
-test('without exhibits: the <h1> alone', async () => {
+test('without exhibits: the <h1> and the contact route alone', async () => {
   assert.deepEqual(colophonPage(await renderPage(null), null), []);
 });
 
-test('with exhibits: the <h1>, career.json verbatim in a <pre>, the derivation table, layout.generated.json verbatim in a <pre>, what is not there, then the live re-solve, idle', async () => {
+test('with exhibits: the <h1>, the contact route, career.json verbatim in a <pre>, the derivation table, layout.generated.json verbatim in a <pre>, what is not there, then the live re-solve, idle', async () => {
   assert.ok(CAREER.length > 0 && LAYOUT.length > 0, 'the real files were read');
   assert.deepEqual([CAREER_NAME, LAYOUT_NAME], ['career.json', 'layout.generated.json'], 'the names are the published files’');
   assert.deepEqual(colophonPage(await renderPage(EXHIBITS), EXHIBITS), []);
@@ -333,6 +362,9 @@ test('the page check is red against broken markup', async () => {
   const layoutPre = full.slice(secondPre, full.indexOf('</pre>', secondPre) + '</pre>'.length);
   // The two files trade places (the layout first): the table, read from the layout text, cannot be rendered from career.json.
   const swapped = full.slice(0, firstPre) + layoutPre + full.slice(firstEnd, secondPre) + careerPre + full.slice(secondPre + layoutPre.length);
+  const contactMarkup = /<p class="contact-route">[\s\S]*?<\/p>/.exec(full)?.[0] ?? '';
+  assert.ok(contactMarkup !== '' && full.indexOf(contactMarkup) < firstPre, 'the contact route is drawn before the exhibits');
+  assert.ok(bare.includes(contactMarkup), 'and before they arrive');
   const tableStart = full.indexOf('<table');
   const table = full.slice(tableStart, full.indexOf('</table>') + '</table>'.length);
   const bodyRows = [...table.matchAll(/<tr><th scope="row">[\s\S]*?<\/tr>/g)].map((match) => match[0]);
@@ -392,6 +424,15 @@ test('the page check is red against broken markup', async () => {
     ['a sixth paragraph', `${full}<p class="colophon-prose">Built with care.</p>`],
     ['the prose before the layout <pre>', full.slice(0, secondPre) + prose + full.slice(secondPre, absencesStart)],
     ['the prose without the exhibits', `${bare}${prose}`],
+    // 6.3: the contact route dropped, moved below the exhibits, its link or button broken, help text beside it.
+    ['the contact route dropped', full.replace(contactMarkup, '')],
+    ['the contact route after the exhibits', full.replace(contactMarkup, '').replace(layoutPre, () => `${layoutPre}${contactMarkup}`)],
+    ['the address not a mailto link', full.replace(`href="mailto:${CONTACT.address}"`, `href="https://example.invalid/contact"`)],
+    ['the address unlinked', full.replace(/<a class="contact-address"[^>]*>([^<]*)<\/a>/, '$1')],
+    ['the address in a <code>', full.replace(`>${CONTACT.address}</a>`, `><code>${CONTACT.address}</code></a>`)],
+    ['the copy button relabelled', full.replace(`>${CONTACT.copy}</button>`, '>Copy email</button>')],
+    ['the copy button disabled', full.replace('<button type="button" class="contact-copy">', '<button type="button" class="contact-copy" disabled="">')],
+    ['a status beside the button', full.replace(`>${CONTACT.copy}</button>`, `>${CONTACT.copy}</button><span role="status"></span>`)],
   ] as const) {
     assert.notEqual(markup, full, `the break "${name}" must apply`);
     assert.notDeepEqual(colophonPage(markup, EXHIBITS), [], `"${name}" must be rejected`);
@@ -428,9 +469,14 @@ test('without exhibits, the live re-solve is not drawn, whatever its state', asy
 
 test('the button hands the page’s onSolve, unchanged, and nothing else', async () => {
   await renderPage(EXHIBITS);
-  const buttons = harness.elements('button');
-  assert.equal(buttons.length, 1, 'one button');
-  assert.equal((buttons[0] as { props: Record<string, unknown> }).props['onClick'], onSolve, 'its click is onSolve');
+  const buttons = harness.elements('button') as readonly { props: Record<string, unknown> }[];
+  // 6.3: the contact route's copy button is the other, its press the route's own.
+  const byClass = (name: string) => buttons.filter((button) => button.props['className'] === name);
+  assert.equal(buttons.length, 2, 'two buttons: the re-solve and the contact route’s copy');
+  assert.equal(byClass('colophon-solve').length, 1, 'one re-solve button');
+  assert.equal(byClass('colophon-solve')[0]?.props['onClick'], onSolve, 'its click is onSolve');
+  assert.equal(byClass('contact-copy').length, 1, 'one copy button');
+  assert.notEqual(byClass('contact-copy')[0]?.props['onClick'], onSolve, 'whose click is not');
 });
 
 test('the live re-solve check is red against broken markup', async () => {
@@ -438,13 +484,14 @@ test('the live re-solve check is red against broken markup', async () => {
   const running = await renderPage(EXHIBITS, { solved: null, running: true });
   const solved = await renderPage(EXHIBITS, { solved: SOLVED, running: false });
   const SOLVED_LIVE = { solved: SOLVED, running: false };
-  const button = /<button [^>]*>[^<]*<\/button>/.exec(idle)?.[0] ?? '';
+  const button = /<button [^>]*class="colophon-solve"[^>]*>[^<]*<\/button>/.exec(idle)?.[0] ?? '';
+  const solveAt = (html: string): number => html.indexOf('<button type="button" class="colophon-solve"');
   const liveStart = idle.lastIndexOf('<h2 ');
   const live = idle.slice(liveStart);
   const absencesStart = idle.indexOf('<h2 ');
   const resultStart = solved.lastIndexOf('<pre ');
   const result = solved.slice(resultStart);
-  assert.ok(button !== '' && liveStart > absencesStart && resultStart > solved.indexOf('<button '), 'the button, the live heading and the result were found');
+  assert.ok(button !== '' && liveStart > absencesStart && resultStart > solveAt(solved), 'the button, the live heading and the result were found');
   for (const [name, markup, state] of [
     ['the button dropped', idle.replace(button, ''), IDLE],
     ['the button’s label altered', idle.replace(button, button.replace(`>${LIVE_SOLVE.action}<`, '>Re-run the solver<')), IDLE],
@@ -464,7 +511,7 @@ test('the live re-solve check is red against broken markup', async () => {
     ['the result truncated', solved.replace(result, () => result.replace(/<span[^>]*>[^<]*<\/span>[^<]*<\/pre>$/, '</pre>')), SOLVED_LIVE],
     ['the result dropped', solved.replace(result, ''), SOLVED_LIVE],
     ['a result drawn where none was solved', solved, IDLE],
-    ['the result before the button', solved.slice(0, solved.indexOf('<button ')) + result + solved.slice(solved.indexOf('<button '), resultStart), SOLVED_LIVE],
+    ['the result before the button', solved.slice(0, solveAt(solved)) + result + solved.slice(solveAt(solved), resultStart), SOLVED_LIVE],
     ['a status line', `${solved}<p class="colophon-prose">solved in 412 ms</p>`, SOLVED_LIVE],
   ] as const) {
     assert.notEqual(markup, state === IDLE ? idle : state.solved === null ? running : solved, `the break "${name}" must apply`);

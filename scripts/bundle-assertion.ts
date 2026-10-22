@@ -46,8 +46,13 @@ import type { Plugin } from 'vite';
  * imports that alone and the router ships with the mount: the entry measured
  * 3,028. Story 5.1's Colophon imports React's hooks, so React's core leaves the
  * mount chunk for a shared `react` chunk both load, one more name on the
- * entry's preload list for the mount: 3,057, the figure of record, with the
- * budget unchanged.
+ * entry's preload list for the mount: 3,057, with the budget unchanged. Story
+ * 6.3's contact route, a shell component in the `ui` group, brings React's core
+ * and its JSX runtime into that group as its dependencies (Rolldown captures a
+ * group member's dependencies), so the `react` and `jsx-runtime` chunks fold
+ * into `ui` and Rolldown's runtime helpers split into a `rolldown-runtime`
+ * chunk of their own: one name fewer on the list, 3,033, the figure of record,
+ * the budget unchanged.
  */
 export const ENTRY_BUDGET_BYTES = 4_000;
 

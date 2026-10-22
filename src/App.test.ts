@@ -105,13 +105,13 @@ function chartAlone(root: MarkupElement, machine: Surface): string[] {
   return failures;
 }
 
-/** The Colophon: `main` holds its one `<h1>` alone. */
+/** The Colophon: `main` holds its one `<h1>` and, under it, the contact route (6.3), and nothing else. */
 function colophonAlone(root: MarkupElement): string[] {
   const main = mainOf(root);
   if (main === null) return ['the render is not one <main>'];
   const children = elementsOf(main);
-  if (children.length !== 1 || children[0]?.tag !== 'h1' || textOf(children[0]) !== 'the model') {
-    return [`main holds ${children.map(describe).join(', ')} — not the Colophon's one <h1> alone`];
+  if (children.length !== 2 || children[0]?.tag !== 'h1' || textOf(children[0]) !== 'the model' || describe(children[1] as MarkupElement) !== 'p.contact-route') {
+    return [`main holds ${children.map(describe).join(', ')} — not the Colophon's one <h1> and its contact route alone`];
   }
   return [];
 }
@@ -175,7 +175,7 @@ test('the chart anywhere: on /chart whatever the machine, and at home on a fallb
   assert.deepEqual(chartAlone(await renderApp('fallback', 'home'), 'fallback'), []);
 });
 
-test('the Colophon: its one heading alone, on either machine', async () => {
+test('the Colophon: its one heading and the contact route alone, on either machine', async () => {
   assert.deepEqual(colophonAlone(await renderApp('scene', 'colophon')), []);
   assert.deepEqual(colophonAlone(await renderApp('fallback', 'colophon')), []);
 });

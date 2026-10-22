@@ -719,9 +719,27 @@ Unglamorous by design; the collapse ending is M4. A `mailto:` alone is
 insufficient — it dead-links on exactly the corporate laptops NFR-4 names — so
 a **visible, copyable address** ships alongside or instead (FR-23).
 
-`[ASSUMPTION: A visible address rendered as text, plus a copy affordance whose
-success feedback is a three-word microcopy change in place ("copied") and never
-a toast, banner, or modal. Not ratified. See PRD §13 Q10.]`
+**Ruled (Thomas, 2026-10-22, story 6.3).** One shared line: the address,
+itself a `mailto:` link whose visible text and accessible name is the address,
+selectable by hand, and beside it a `copy` button (Q4 (b)).
+
+- **Placement.** On the Fallback chart, in the chrome row beside the heading,
+  directly after the `<h1>`, with the route line opposite at the row's end
+  (Q3 (a)); on the Colophon, directly under its `<h1>`,
+  drawn before the exhibits arrive. **Never on the scene** or in its corner
+  chrome (Q2 (d)).
+- **Strings.** The button reads `copy`; on press it changes in place to
+  `copied`, or to `not copied` when the clipboard is blocked or absent. The
+  label stays until the next press — no timer, no toast, no banner, no modal,
+  no live region, no tooltip, no caption, no apology (Q5). The changed name on
+  the focused button is the announcement.
+- **Failure.** A blocked clipboard is the one runtime error surface: the label
+  reads `not copied`, and the address stays visible and hand-selectable.
+  Nothing else degrades. No form and no endpoint: nothing is submitted.
+- **The address is deferred** (Q1). The route ships with the placeholder
+  `address@example.invalid` (the reserved `.invalid` TLD can never deliver);
+  the real address must be supplied before the 6.5 launch pass. A `todo` test
+  reports it pending in every `npm test`.
 
 ---
 
@@ -1095,7 +1113,7 @@ motion; neither reads the other.
 | E-A5 | A→B Focus transition overlaps decay and condensation; no dead beat | §6.4 | Q6 |
 | E-A6 | Free flight is entered implicitly by first use of any of the three layers; return occupies the stateful right-bottom chrome slot | §6.5 | **Q8** |
 | E-A7 | Reduced motion: durations shorten to the floor of the easing curve, Rail included; no cuts introduced | §11.2 | — |
-| E-A8 | Contact = visible copyable address; copy feedback is in-place microcopy, never a toast | §7.5 | Q10 |
+| E-A8 | Contact = visible copyable address; copy feedback is in-place microcopy, never a toast — **ruled 2026-10-22 (6.3)**, the address itself deferred to 6.5 | §7.5 | Q10 |
 | E-A9 | Three derived tempos — Held / Passed / Traversed | §8 | Q7, §15 |
 | E-A10 | No third tier between mobile Fallback and desktop scene; window size is not a capability signal | §10 | Q9 |
 

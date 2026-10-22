@@ -9,10 +9,10 @@
  * is `startExhibits` (executed in `exhibits.test.ts`; this file is audited in
  * `colophon.test.ts`), its stop aborting on unmount, so a visitor who leaves
  * mid-fetch causes no state update. A failed fetch is logged once and draws nothing more: the
- * `<h1>` alone, nothing thrown into React, no loading indicator and no retry. An
+ * `<h1>` and the contact route alone, nothing thrown into React, no loading indicator and no retry. An
  * abort is swallowed silently.
  *
- * `ColophonPage` draws: the `<h1>`, then, once the files have arrived, each
+ * `ColophonPage` draws: the `<h1>`, the contact route, then, once the files have arrived, each
  * file's text verbatim and in full in its own `<pre>`, career first.
  *
  * **The exhibits, set** (5.3, DESIGN.md `components.colophon-json`). Each
@@ -67,9 +67,15 @@
  * `console.error` and leaves the page as it was. No loading indicator, no
  * motion, no live region, and no other copy.
  *
+ * **The contact route** (6.3): `ContactRoute`, the shell's shared component
+ * (`src/shell/contact-route.tsx`, in the `ui` chunk, so the colophon chunk
+ * still holds `src/colophon/` alone), drawn directly after the `<h1>` and
+ * unconditionally — before the exhibits arrive, and when they never do.
+ *
  * It imports React, `exhibits.ts`, `derivations.ts`, `json-setting.ts`,
- * `absences.ts`, `live-solve.ts` and `colophon.css`, and nothing else: not the
- * shell, not the motion preference, never `src/data/` or `generated/`, and
+ * `absences.ts`, `live-solve.ts`, `../shell/contact-route.tsx` and
+ * `colophon.css`, and nothing else: no other shell module, not the motion
+ * preference, never `src/data/` or `generated/`, and
  * `src/derive/` only through the one dynamic import of `live.ts`, never
  * statically.
  */
@@ -80,6 +86,7 @@ import { DERIVATION_LABELS, derivationRows, type DerivationInput } from './deriv
 import { jsonRuns } from './json-setting.ts';
 import { ABSENCES, ABSENCES_HEADING } from './absences.ts';
 import { LIVE_SOLVE, createLiveSolve } from './live-solve.ts';
+import { ContactRoute } from '../shell/contact-route.tsx';
 import './colophon.css';
 
 /** A rule's input: the weight as `String(weight)`, or the duration as `start – end`, `start –` while ongoing. */
@@ -145,7 +152,7 @@ export interface LiveSolveState {
 }
 
 /**
- * The surface as drawn: the heading, and, once the files have arrived, the two
+ * The surface as drawn: the heading, the contact route, and, once the files have arrived, the two
  * files with the derivations between them, what is not there, the live
  * re-solve's heading, framing and button, and its result once a run has
  * succeeded.
@@ -154,6 +161,7 @@ export function ColophonPage({ exhibits, solved, running, onSolve }: { readonly 
   return (
     <>
       <h1>the model</h1>
+      <ContactRoute />
       {exhibits === null ? null : (
         <>
           <Exhibit name={EXHIBIT_PATHS.career.slice(1)} text={exhibits.career} />

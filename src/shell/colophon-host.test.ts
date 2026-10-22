@@ -1,7 +1,7 @@
 /**
  * `colophon-host.tsx` (4.2): rendered through the render harness
  * (`scripts/render.ts`) — the lazy Colophon arrives inline, its one `<h1>`
- * alone, the host adding no element of its own — and its structural audit,
+ * and its contact route (6.3) alone, the host adding no element of its own — and its structural audit,
  * moved here from `router.test.ts` with its mutation rows unchanged: the lazy
  * edge, the boundary outside the suspense edge, the logged failure. The audit is
  * structural throughout (imports, the lazy edge, boundary order), so none of its
@@ -27,11 +27,11 @@ const harness = (started = await renderer());
 
 const { ColophonHost } = await harness.load<{ ColophonHost: typeof ColophonHostComponent }>('/src/shell/colophon-host.tsx');
 
-/** The host's render: the Colophon's one `<h1>`, `the model`, and nothing of the host's own. */
+/** The host's render: the Colophon's one `<h1>`, `the model`, then its contact route (6.3), and nothing of the host's own. */
 function colophonOnly(html: string): string[] {
   const children = elementsOf(parseMarkup(html));
-  if (children.length !== 1 || children[0]?.tag !== 'h1' || textOf(children[0]) !== 'the model') {
-    return [`the host renders ${children.map((child) => child.tag).join(', ') || 'nothing'} — not the Colophon's one <h1>`];
+  if (children.length !== 2 || children[0]?.tag !== 'h1' || textOf(children[0]) !== 'the model' || children[1]?.tag !== 'p' || children[1]?.attrs['class'] !== 'contact-route') {
+    return [`the host renders ${children.map((child) => child.tag).join(', ') || 'nothing'} — not the Colophon's one <h1> and its contact route`];
   }
   return [];
 }

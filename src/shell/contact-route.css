@@ -1,0 +1,76 @@
+/*
+ * The contact route's treatment (6.3). Token custom properties only: no hue,
+ * no radius, no shadow, no glow. It mirrors its two neighbours. The line is
+ * the `chrome` type role at `ink-label`, as the chart's chrome row is. The
+ * address is the chart's chrome links (`.chart-heading a`, `.chart-routes a`,
+ * which name only the heading's and the route line's links, so this sheet alone
+ * styles the address on both surfaces): `ink-label` over a
+ * 1px `ink-label` rule (the 3:1 non-text floor), raised to `ink-lift` and a
+ * `stroke-focus` rule on hover and focus, with the links' focus outline. The
+ * copy button takes the Colophon's `.colophon-solve` treatment (not its margin
+ * or its `aria-disabled` guards): a bare word, no box, at
+ * `ink-label`, raised to `ink-prose`, with the same focus outline. Under
+ * forced colours both keep a system-coloured outline. The address breaks
+ * anywhere (`overflow-wrap: anywhere`), so a long real address never scrolls
+ * the page sideways at phone width. Nothing is hidden and
+ * nothing is recased. `src/identity-audit.test.ts` holds each declaration.
+ */
+
+.contact-route {
+  margin: 0;
+  font-family: var(--type-chrome-font-family);
+  font-size: var(--type-chrome-font-size);
+  font-weight: var(--type-chrome-font-weight);
+  line-height: var(--type-chrome-line-height);
+  letter-spacing: var(--type-chrome-letter-spacing);
+  color: var(--color-ink-label-dark);
+}
+
+.contact-address {
+  color: var(--color-ink-label-dark);
+  text-decoration: none;
+  border-bottom: 1px solid var(--color-ink-label-dark);
+  overflow-wrap: anywhere;
+}
+
+.contact-address:hover,
+.contact-address:focus-visible {
+  color: var(--color-ink-lift-dark);
+  border-bottom-color: var(--color-stroke-focus-dark);
+}
+
+.contact-address:focus-visible {
+  outline: 1px solid var(--color-stroke-focus-dark);
+  outline-offset: 3px;
+}
+
+.contact-copy {
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--type-chrome-font-family);
+  font-size: var(--type-chrome-font-size);
+  font-weight: var(--type-chrome-font-weight);
+  line-height: var(--type-chrome-line-height);
+  letter-spacing: var(--type-chrome-letter-spacing);
+  color: var(--color-ink-label-dark);
+}
+
+.contact-copy:hover,
+.contact-copy:focus-visible {
+  color: var(--color-ink-prose-dark);
+}
+
+.contact-copy:focus-visible {
+  outline: 1px solid var(--color-stroke-focus-dark);
+  outline-offset: 3px;
+}
+
+@media (forced-colors: active) {
+  .contact-address:focus-visible,
+  .contact-copy:focus-visible {
+    outline: 1px solid CanvasText;
+  }
+}

@@ -10,6 +10,11 @@
  * `display: block`), and `tabindex="-1"` on every fragment target — each check
  * driven red against a render with the wrong links or broken markup.
  *
+ * Since 6.3, the contact route: the chrome row holds the `<h1>`, then
+ * `p.contact-route` beside it (ruling Q3 (a): the mailto address, then the
+ * `copy` button), then the route line, on either machine, the `<h1>` and route
+ * line unchanged — red against the route dropped, moved, doubled or broken.
+ *
  * Plus the source audits of `chart.tsx` that no render shows, moved here from
  * `chart-model.test.ts` with their mutation rows: what the markup is bound to
  * (the glyph's kind and radii, the legend's, the fragment's ref, each link's
@@ -25,8 +30,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { React, parseMarkup, queryAll, queryOne, renderer, textOf, type MarkupElement, type Renderer } from '../../scripts/render.ts';
+import { React, elementsOf, parseMarkup, queryAll, queryOne, renderer, textOf, type MarkupElement, type Renderer } from '../../scripts/render.ts';
 import { stripComments } from '../../scripts/source-scan.ts';
+import { CONTACT } from '../shell/contact.ts';
 import { chartLinks, routeLink } from '../shell/route-link.ts';
 import type { ChartArtifact, ChartLinks } from './chart-model.ts';
 import type ChartComponent from './chart.tsx';
@@ -185,6 +191,69 @@ test('the links check is red against the wrong links and broken markup', async (
   ] as const) {
     assert.notEqual(markup, capable, `the break "${name}" must apply`);
     assert.notDeepEqual(linksDrawn(parseMarkup(markup), chartLinks('scene', navigate)), [], `"${name}" must be rejected`);
+  }
+});
+
+// --- The contact route, rendered (6.3) --------------------------------------------------------------
+
+/**
+ * The chart's chrome row (6.3, ruling Q3 (a)): the `<h1>`, the contact route
+ * beside it, then the route line — the contact route one `p.contact-route` holding the address as an
+ * `a.contact-address` to `mailto:` and the address, its text and so its
+ * accessible name the address, then a `button.contact-copy` of
+ * `type="button"`, never disabled, reading `copy` — and nothing else in the
+ * row. The `<h1>` and the route line keep their own contents (`linksDrawn`).
+ */
+function contactDrawn(root: MarkupElement): string[] {
+  const failures: string[] = [];
+  const rows = queryAll(root, 'div.chart-chrome');
+  if (rows.length !== 1) return [`${rows.length} chrome rows, not one`];
+  const parts = elementsOf(rows[0] as MarkupElement).map((part) => `${part.tag}.${part.attrs['class'] ?? ''}`);
+  if (JSON.stringify(parts) !== JSON.stringify(['h1.chart-heading', 'p.contact-route', 'p.chart-routes'])) failures.push(`the chrome row holds ${JSON.stringify(parts)}, not the heading, the contact route and the route line`);
+  const routes = queryAll(root, 'p.contact-route');
+  if (routes.length !== 1) return [...failures, `${routes.length} contact routes, not one`];
+  const route = routes[0] as MarkupElement;
+  const inside = elementsOf(route);
+  const [link, button] = inside as [MarkupElement | undefined, MarkupElement | undefined];
+  if (inside.length !== 2 || link?.tag !== 'a' || button?.tag !== 'button') return [...failures, `the contact route holds ${JSON.stringify(inside.map((part) => part.tag))}, not a link and a button`];
+  if (JSON.stringify(link.attrs) !== JSON.stringify({ class: 'contact-address', href: `mailto:${CONTACT.address}` })) failures.push(`the address link carries ${JSON.stringify(link.attrs)}`);
+  if (elementsOf(link).length !== 0 || textOf(link) !== CONTACT.address) failures.push(`the address link reads ${JSON.stringify(textOf(link))}, not the address alone`);
+  if (JSON.stringify(button.attrs) !== JSON.stringify({ type: 'button', class: 'contact-copy' })) failures.push(`the copy button carries ${JSON.stringify(button.attrs)}`);
+  if (elementsOf(button).length !== 0 || textOf(button) !== CONTACT.copy) failures.push(`the copy button reads ${JSON.stringify(textOf(button))}`);
+  return failures;
+}
+
+test('the chart’s chrome row draws the contact route beside its heading, before the route line, on either machine', async () => {
+  for (const machine of ['scene', 'fallback'] as const) {
+    const root = parseMarkup(await renderChart(chartLinks(machine, navigate)));
+    assert.deepEqual(contactDrawn(root), [], machine);
+    assert.deepEqual(linksDrawn(root, chartLinks(machine, navigate)), [], `${machine}: the heading and the route line keep their own contents`);
+  }
+});
+
+test('the contact route check is red against broken markup', async () => {
+  const real = await renderChart(chartLinks('scene', navigate));
+  const route = /<p class="contact-route">[\s\S]*?<\/p>/.exec(real)?.[0] ?? '';
+  assert.ok(route !== '', 'the route is found');
+  for (const [name, markup] of [
+    ['the route dropped', real.replace(route, '')],
+    ['the route in the heading', real.replace(route, '').replace('</h1>', `${route}</h1>`)],
+    ['the route after the route line', real.replace(route, '').replace('</div>', `${route}</div>`)],
+    ['the route before the heading', real.replace(route, '').replace('<h1 class="chart-heading">', `${route}<h1 class="chart-heading">`)],
+    ['the route inside the route line', real.replace(route, '').replace('<p class="chart-routes">', `<p class="chart-routes">${route}`)],
+    ['the route twice', real.replace(route, `${route}${route}`)],
+    ['the address not a mailto link', real.replace(`href="mailto:${CONTACT.address}"`, 'href="/contact"')],
+    ['the address unlinked', real.replace(/<a class="contact-address"[^>]*>([^<]*)<\/a>/, '$1')],
+    ['the address in a <code>', real.replace(`>${CONTACT.address}</a>`, `><code>${CONTACT.address}</code></a>`)],
+    ['the address renamed', real.replace(`>${CONTACT.address}</a>`, '>email me</a>')],
+    ['the button relabelled', real.replace(`>${CONTACT.copy}</button>`, '>Copy email</button>')],
+    ['the button a submit', real.replace('<button type="button" class="contact-copy">', '<button type="submit" class="contact-copy">')],
+    ['the button disabled', real.replace('<button type="button" class="contact-copy">', '<button type="button" class="contact-copy" disabled="">')],
+    ['a tooltip on the button', real.replace('<button type="button" class="contact-copy">', '<button type="button" class="contact-copy" title="Copy the address">')],
+    ['a status line beside it', real.replace(`>${CONTACT.copy}</button>`, `>${CONTACT.copy}</button><span role="status"></span>`)],
+  ] as const) {
+    assert.notEqual(markup, real, `the break "${name}" must apply`);
+    assert.notDeepEqual(contactDrawn(parseMarkup(markup)), [], `"${name}" must be rejected`);
   }
 });
 
