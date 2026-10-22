@@ -7,8 +7,8 @@
  * one settling late, and after the stop nothing is set — with `writeText`
  * called once per press and never otherwise; `contactLabel` mapping each state
  * to its label; and a source audit: no import and no DOM global, each driven
- * red by a mutation. Plus the deferral: the address is still the `.invalid`
- * placeholder, reported as a `todo` until Thomas supplies the real one (6.5).
+ * red by a mutation. Plus the address: Thomas's real one, never the `.invalid`
+ * placeholder it replaced, in a plain address shape.
  */
 
 import { strict as assert } from 'node:assert';
@@ -20,11 +20,11 @@ import { CONTACT, contactLabel, createContactCopy, type ContactCopyState, type W
 const SOURCE = readFileSync(new URL('./contact.ts', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 test('the copy is the ruling’s, verbatim, as one single-line literal', () => {
-  assert.deepEqual(CONTACT, { address: 'address@example.invalid', copy: 'copy', copied: 'copied', failed: 'not copied' });
-  assert.match(SOURCE, /^export const CONTACT = \{ address: 'address@example\.invalid', copy: 'copy', copied: 'copied', failed: 'not copied' \} as const;$/m);
+  assert.deepEqual(CONTACT, { address: 't.navarro9@laposte.net', copy: 'copy', copied: 'copied', failed: 'not copied' });
+  assert.match(SOURCE, /^export const CONTACT = \{ address: 't\.navarro9@laposte\.net', copy: 'copy', copied: 'copied', failed: 'not copied' \} as const;$/m);
 });
 
-test('the real address is supplied', { todo: 'Thomas to supply before 6.5' }, () => {
+test('the real address is supplied', () => {
   assert.ok(!CONTACT.address.endsWith('.invalid'), `the address is still the placeholder ${CONTACT.address}`);
   assert.match(CONTACT.address, /^[^@\s]+@[^@\s]+\.[^@\s.]+$/, 'a plain address: one @, a dotted domain, no space');
 });
@@ -81,12 +81,12 @@ test('copy works: the address written once, then copied', async () => {
   const board = clipboard();
   const out = states();
   createContactCopy(board.writeText, out.setCopyState).press();
-  assert.deepEqual(board.written, ['address@example.invalid'], 'the address, written at once');
+  assert.deepEqual(board.written, ['t.navarro9@laposte.net'], 'the address, written at once');
   assert.deepEqual(out.set, [], 'nothing set before the clipboard answers');
   board.calls[0]?.resolve();
   await settle();
   assert.deepEqual(out.set, ['copied']);
-  assert.deepEqual(board.written, ['address@example.invalid'], 'one call for one press');
+  assert.deepEqual(board.written, ['t.navarro9@laposte.net'], 'one call for one press');
 });
 
 test('the clipboard blocked: a rejection gives not copied, nothing thrown', async () => {

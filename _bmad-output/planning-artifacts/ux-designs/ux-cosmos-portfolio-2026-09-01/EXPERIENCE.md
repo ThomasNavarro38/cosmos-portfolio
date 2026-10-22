@@ -736,10 +736,8 @@ selectable by hand, and beside it a `copy` button (Q4 (b)).
 - **Failure.** A blocked clipboard is the one runtime error surface: the label
   reads `not copied`, and the address stays visible and hand-selectable.
   Nothing else degrades. No form and no endpoint: nothing is submitted.
-- **The address is deferred** (Q1). The route ships with the placeholder
-  `address@example.invalid` (the reserved `.invalid` TLD can never deliver);
-  the real address must be supplied before the 6.5 launch pass. A `todo` test
-  reports it pending in every `npm test`.
+- **The address** (Q1). `t.navarro9@laposte.net`, supplied by Thomas 2026-10-22, closing the
+  deferral; a test holds it to a plain address shape.
 
 ---
 
@@ -1113,7 +1111,7 @@ motion; neither reads the other.
 | E-A5 | A→B Focus transition overlaps decay and condensation; no dead beat | §6.4 | Q6 |
 | E-A6 | Free flight is entered implicitly by first use of any of the three layers; return occupies the stateful right-bottom chrome slot | §6.5 | **Q8** |
 | E-A7 | Reduced motion: durations shorten to the floor of the easing curve, Rail included; no cuts introduced | §11.2 | — |
-| E-A8 | Contact = visible copyable address; copy feedback is in-place microcopy, never a toast — **ruled 2026-10-22 (6.3)**, the address itself deferred to 6.5 | §7.5 | Q10 |
+| E-A8 | Contact = visible copyable address; copy feedback is in-place microcopy, never a toast — **ruled 2026-10-22 (6.3)**, the address `t.navarro9@laposte.net` supplied the same day | §7.5 | Q10 |
 | E-A9 | Three derived tempos — Held / Passed / Traversed | §8 | Q7, §15 |
 | E-A10 | No third tier between mobile Fallback and desktop scene; window size is not a capability signal | §10 | Q9 |
 

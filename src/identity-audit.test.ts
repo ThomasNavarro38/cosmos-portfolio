@@ -722,11 +722,10 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
   'solve it here',
   'This runs the same solver on career.json, here in your browser. It shows the mechanism at work; it does not reproduce the shipped layout, which was solved once and is the only one the scene reads.',
   'solve it again',
-  // The contact route (6.3, rulings Q1 deferred, Q4 (b), Q5): the address — the
-  // `.invalid` placeholder until Thomas supplies the real one before 6.5, when
-  // this row and `contact.ts` change together — and the copy button's three
-  // labels, verbatim (EXPERIENCE.md §3, place 5).
-  'address@example.invalid',
+  // The contact route (6.3, rulings Q1, Q4 (b), Q5): the address — Thomas's,
+  // supplied 2026-10-22; this row and `contact.ts` change together — and the
+  // copy button's three labels, verbatim (EXPERIENCE.md §3, place 5).
+  't.navarro9@laposte.net',
   'copy',
   'copied',
   'not copied',
