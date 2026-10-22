@@ -717,11 +717,15 @@ const FORBIDDEN_FIELDS = /\b(?:position|mass|luminanceBand|moteTier|orbitNormal|
 
 /**
  * The only modules a render-fallback module may import: the shell's two pure
- * models and the panel's stylesheet, the tokens, and the directory's own. An
- * allowlist, so React, shell state or a scene-chrome sheet fails as surely as
- * the data, the solver, the scene, Three or the artifact.
+ * models, the contact route it shares with the Colophon (6.3) and the panel's
+ * stylesheet, the tokens, and the directory's own. An allowlist, so React,
+ * shell state or a scene-chrome sheet fails as surely as the data, the solver,
+ * the scene, Three or the artifact. A direct `react` import stays banned:
+ * `chart.tsx` itself imports no React, though since 6.3 it reaches React's
+ * core through `contact-route.tsx`, which sits with it in the `ui` chunk
+ * (`vite.config.ts`), never through the mount's.
  */
-const PERMITTED_SPECIFIER = /^(?:\.\.\/shell\/(?:panel-model\.ts|chrome-model\.ts|focus-panel\.css)|\.\.\/tokens\/[\w.-]+|\.\/(?:chart-model\.ts|chart\.css))$/;
+const PERMITTED_SPECIFIER = /^(?:\.\.\/shell\/(?:panel-model\.ts|chrome-model\.ts|contact-route\.tsx|focus-panel\.css)|\.\.\/tokens\/[\w.-]+|\.\/(?:chart-model\.ts|chart\.css))$/;
 
 /** Every reason a render-fallback module breaks the directory's purity. */
 function auditPurity(files: Readonly<Record<string, string>>): string[] {

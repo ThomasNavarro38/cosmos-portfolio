@@ -10,8 +10,13 @@
  * (`scripts/render.ts`) and holds its links and anchors in the markup.
  *
  * A conventional document, top to bottom: the chrome row — the `<h1>` (the
- * identity line, `the model` its link to the Colophon) and the route line
- * opposite it (`the scene` where this machine is capable, else nothing) — the
+ * identity line, `the model` its link to the Colophon), beside it the contact
+ * route (6.3, ruling Q3 (a): `ContactRoute` from `src/shell/contact-route.tsx`,
+ * the address as a `mailto:` link and its copy button, shared with the
+ * Colophon; its React state is that module's, so this file itself still
+ * imports nothing from `react`, though it reaches React through that module in
+ * the `ui` chunk), and the route line opposite them (`the scene` where this
+ * machine is capable, else nothing) — the
  * plate twice — across for a wide window, down for a narrow one, `chart.css`
  * showing one by width — the legend, the index table (Notable, Client, Project
  * as a link to its record, Role, Dates), then a `<section>` per Client (`<h2>`, its entity ID as
@@ -44,7 +49,8 @@
  *
  * **The fragment** is read once, when the chart is attached: a ref callback —
  * the commit-time hook that needs no import from `react`, which would tie this
- * chunk to the mount's — makes one call to the model's `landOnFragment`,
+ * chunk to the mount's (the React the chunk does reach, since 6.3, is the
+ * contact route's, in the `ui` chunk) — makes one call to the model's `landOnFragment`,
  * handing it the element, `location.hash`, the chart's IDs,
  * `document.getElementById` and the module's `WeakSet` of landed roots. The
  * decision is the model's and is executed by `chart-model.test.ts`: a Client or
@@ -64,6 +70,7 @@
  */
 
 import { IDENTITY_NAME } from '../shell/chrome-model.ts';
+import { ContactRoute } from '../shell/contact-route.tsx';
 import { FIELD_LABELS, type PanelReading, type PanelRun } from '../shell/panel-model.ts';
 import {
   CHART_LABELS,
@@ -100,6 +107,7 @@ export default function Chart({ artifact, links }: ChartProps) {
         <h1 className="chart-heading">
           {IDENTITY_NAME} · <a href={links.model.href} onClick={links.model.follow}>{links.model.text}</a>
         </h1>
+        <ContactRoute />
         <p className="chart-routes">
           {links.routes.map((link) => (
             <a key={link.key} href={link.href} onClick={link.follow}>

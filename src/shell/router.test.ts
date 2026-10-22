@@ -880,7 +880,7 @@ test('the router audit rejects the real module with any one reach added', () => 
 // --- The Colophon's one reach ---------------------------------------------------------------
 // (`colophon-host.tsx`'s own audit is `colophon-host.test.ts`'s since 4.7.)
 
-test('the colophon is reached only from src/shell/colophon-host.tsx, and holds one <h1> and no shell or preference', () => {
+test('the colophon is reached only from src/shell/colophon-host.tsx, and holds one <h1> and no shell module but the contact route, and no preference', () => {
   const src = fileURLToPath(new URL('..', import.meta.url));
   const reaching = sourceFilesUnder(src)
     .filter((path) => !isTestFile(path) && !path.startsWith(join(src, 'colophon')))
@@ -890,7 +890,10 @@ test('the colophon is reached only from src/shell/colophon-host.tsx, and holds o
   const colophon = stripComments(readFileSync(COLOPHON_TSX, 'utf8'));
   // 5.1: what it imports (React and its exhibits, nothing else) is held by
   // `src/derive/maintenance.test.ts`, which owns the boundary scan's reader.
-  assert.doesNotMatch(colophon, /shell\/|motion-preference|reducedMotion/, 'no shell, no preference');
+  // 6.3: the one shell module admitted is the shared contact route, imported once.
+  const contactImport = "import { ContactRoute } from '../shell/contact-route.tsx';";
+  assert.equal(colophon.split(contactImport).length, 2, 'the contact route imported once');
+  assert.doesNotMatch(colophon.replace(contactImport, ''), /shell\/|motion-preference|reducedMotion/, 'no other shell module, no preference');
   assert.equal((colophon.match(/<h1\b/g) ?? []).length, 1, 'one <h1>');
   assert.match(colophon, /export\s+default\s+function\s+Colophon\(\)/, 'a default export for lazy()');
 });

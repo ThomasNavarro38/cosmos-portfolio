@@ -687,18 +687,22 @@ test('no test in this suite writes into src/ or generated/', () => {
  * re-export or a dynamic import counts too. Here rather than beside the
  * router's audit because `src/shell/` may not import `src/derive/`.
  */
-test('the colophon imports React, ./exhibits.ts, ./derivations.ts, ./json-setting.ts, ./absences.ts, ./live-solve.ts and ./colophon.css, and ../derive/live.ts dynamically, only; and exhibits.ts, derivations.ts, json-setting.ts, absences.ts and live-solve.ts import nothing', () => {
+test('the colophon imports React, ./exhibits.ts, ./derivations.ts, ./json-setting.ts, ./absences.ts, ./live-solve.ts, ../shell/contact-route.tsx and ./colophon.css, and ../derive/live.ts dynamically, only; and exhibits.ts, derivations.ts, json-setting.ts, absences.ts, live-solve.ts and the shell’s contact.ts import nothing', () => {
   const read = (path: string): string => readFileSync(join(SRC_ROOT, path), 'utf8');
   const importsOf = (source: string): (string | null)[] => findImports(source).map((found) => found.specifier);
   const colophon = read('colophon/colophon.tsx');
-  const admitted = ['react', './exhibits.ts', './derivations.ts', './json-setting.ts', './absences.ts', './live-solve.ts', './colophon.css', '../derive/live.ts'];
-  assert.deepEqual(importsOf(colophon), admitted, 'the colophon imports React, ./exhibits.ts, ./derivations.ts, ./json-setting.ts, ./absences.ts, ./live-solve.ts and ./colophon.css, and ../derive/live.ts dynamically, only');
+  // 6.3: the contact route, the one shell module admitted — the shared component, in the `ui` chunk.
+  const admitted = ['react', './exhibits.ts', './derivations.ts', './json-setting.ts', './absences.ts', './live-solve.ts', '../shell/contact-route.tsx', './colophon.css', '../derive/live.ts'];
+  assert.deepEqual(importsOf(colophon), admitted, 'the colophon imports React, ./exhibits.ts, ./derivations.ts, ./json-setting.ts, ./absences.ts, ./live-solve.ts, ../shell/contact-route.tsx and ./colophon.css, and ../derive/live.ts dynamically, only');
   // 5.5: the solver is reached by a dynamic import alone, never a static one.
   const solver = findImports(colophon).filter((found) => found.specifier === '../derive/live.ts');
   assert.equal(solver.length, 1, 'one import of the solver');
   assert.ok(/\bimport\s*\(\s*$/.test(colophon.slice(0, colophon.indexOf("'../derive/live.ts'", colophon.indexOf('createLiveSolve(')))), 'and it is the dynamic import in the press');
   for (const extra of [
     "import '../shell/page.css';",
+    // 6.3: the contact route's own modules reached past its component, or a second shell module.
+    "import { CONTACT } from '../shell/contact.ts';",
+    "import '../shell/contact-route.css';",
     'import "../shell/state.ts";',
     "export { x } from '../shell/route.ts';",
     "const m = await import('../derive/index.ts');",
@@ -744,6 +748,13 @@ ${absences}`), [], `"${extra}" is seen`);
   for (const extra of ["import { solveLive } from '../derive/live.ts';", "const l = () => import('../derive/live.ts');", "import type { LiveSolver } from '../derive/live.ts';", "import { EXHIBIT_PATHS } from './exhibits.ts';"]) {
     assert.notDeepEqual(importsOf(`${extra}
 ${liveSolve}`), [], `"${extra}" is seen`);
+  }
+  // 6.3: the contact route's copy and press take the clipboard as an argument; the module names nothing.
+  const contact = read('shell/contact.ts');
+  assert.deepEqual(importsOf(contact), [], 'and the shell’s contact.ts imports nothing');
+  for (const extra of ["import { useState } from 'react';", "import { IDENTITY_NAME } from './chrome-model.ts';", "const s = () => import('./state.ts');", "export { CHART_LABELS } from '../render-fallback/chart-model.ts';"]) {
+    assert.notDeepEqual(importsOf(`${extra}
+${contact}`), [], `"${extra}" is seen`);
   }
 });
 

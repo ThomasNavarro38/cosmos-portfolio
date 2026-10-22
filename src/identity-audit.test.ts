@@ -31,6 +31,10 @@
  *   derived value lifted to ink-lift; each exhibit a named, focusable region on
  *   surface-raised, keys at ink-lift, values at ink-prose, structure at
  *   ink-label.
+ * - **Contact** — the contact route's stylesheet (6.3), as an exact
+ *   declaration set, its markup's hooks, and its two places: directly after the
+ *   chart's `<h1>`, before its route line, and directly under the Colophon's `<h1>`, named by no other
+ *   shipped file, so never on the scene.
  * - **Monospace** — `--font-mono` set by the one exhibit rule and named by no
  *   other shipped file, the word `monospace` nowhere under `src/` but the
  *   tokens, no `<code>`/`<kbd>`/`<samp>`/`<tt>` drawn and `<pre>` drawn only by
@@ -54,6 +58,7 @@ import { contrast, channels, linear } from './shell/contrast.ts';
 import { DEPTH_LABELS } from './shell/index-model.ts';
 import { EDITORIAL_RULE, FIELD_LABELS, RELEASE_LABEL, panelStyle } from './shell/panel-model.ts';
 import { CHART_LINK_TEXT, SCENE_LINK_TEXT } from './shell/route-link.ts';
+import { CONTACT } from './shell/contact.ts';
 import { tokens } from './tokens/tokens.ts';
 
 const SRC = fileURLToPath(new URL('.', import.meta.url));
@@ -258,6 +263,7 @@ const INDEX_CSS = 'shell/index-nav.css';
 const PAGE_CSS = 'shell/page.css';
 const CHART_CSS = 'render-fallback/chart.css';
 const COLOPHON_CSS = 'colophon/colophon.css';
+const CONTACT_CSS = 'shell/contact-route.css';
 const AFFORDANCE_TS = 'render-scene/affordance-model.ts';
 const MOTE_TS = 'render-scene/mote-model.ts';
 
@@ -302,9 +308,14 @@ const ROLES: readonly Role[] = [
   // classes on the panel's ground, measured above. The plate's labels are SVG
   // text, so their ink is the rule's `fill`.
   { role: 'chart heading', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-heading' }, ground: 'page' },
-  // The chart's chrome links (4.5): `the model` and `the scene`.
-  { role: 'chart chrome links', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-chrome a' }, ground: 'page' },
-  { role: 'chart chrome links, raised', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-chrome a:hover, .chart-chrome a:focus-visible' }, ground: 'page' },
+  // The chart's chrome links (4.5): `the model` and `the scene` (since 6.3 named by the heading and the route line, so the contact address is its own sheet's).
+  { role: 'chart chrome links', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-heading a, .chart-routes a' }, ground: 'page' },
+  {
+    role: 'chart chrome links, raised',
+    floor: 4.5,
+    ink: { css: CHART_CSS, selector: '.chart-heading a:hover, .chart-heading a:focus-visible, .chart-routes a:hover, .chart-routes a:focus-visible' },
+    ground: 'page',
+  },
   { role: 'chart Client heading', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-client' }, ground: 'page' },
   { role: 'index headers', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-index th' }, ground: 'page' },
   { role: 'chart legend', floor: 4.5, ink: { css: CHART_CSS, selector: '.chart-legend' }, ground: 'page' },
@@ -337,6 +348,14 @@ const ROLES: readonly Role[] = [
   // prose floor.
   { role: 'live re-solve button', floor: 4.5, ink: { css: COLOPHON_CSS, selector: '.colophon-solve' }, ground: 'page' },
   { role: 'live re-solve button, raised', floor: 7, ink: { css: COLOPHON_CSS, selector: '.colophon-solve:hover:not([aria-disabled="true"]), .colophon-solve:focus-visible:not([aria-disabled="true"])' }, ground: 'page' },
+  // The contact route (6.3), on the page ground of the chart and the Colophon:
+  // the line and its address at the chrome's ink-label, the address raised to
+  // ink-lift, the copy button at ink-label raised to ink-prose.
+  { role: 'contact route', floor: 4.5, ink: { css: CONTACT_CSS, selector: '.contact-route' }, ground: 'page' },
+  { role: 'contact address', floor: 4.5, ink: { css: CONTACT_CSS, selector: '.contact-address' }, ground: 'page' },
+  { role: 'contact address, raised', floor: 7, ink: { css: CONTACT_CSS, selector: '.contact-address:hover, .contact-address:focus-visible' }, ground: 'page' },
+  { role: 'contact copy button', floor: 4.5, ink: { css: CONTACT_CSS, selector: '.contact-copy' }, ground: 'page' },
+  { role: 'contact copy button, raised', floor: 7, ink: { css: CONTACT_CSS, selector: '.contact-copy:hover, .contact-copy:focus-visible' }, ground: 'page' },
 ];
 
 /**
@@ -353,13 +372,23 @@ const NON_TEXT_ROLES: readonly Role[] = [
   { role: 'index link underline', floor: 3, ink: { css: CHART_CSS, selector: '.chart-index a', property: 'border-bottom' }, ground: 'page' },
   { role: 'index link underline, raised', floor: 3, ink: { css: CHART_CSS, selector: '.chart-index a:hover, .chart-index a:focus-visible', property: 'border-bottom-color' }, ground: 'page' },
   { role: 'index link focus outline', floor: 3, ink: { css: CHART_CSS, selector: '.chart-index a:focus-visible', property: 'outline' }, ground: 'page' },
-  { role: 'chart chrome link underline', floor: 3, ink: { css: CHART_CSS, selector: '.chart-chrome a', property: 'border-bottom' }, ground: 'page' },
-  { role: 'chart chrome link underline, raised', floor: 3, ink: { css: CHART_CSS, selector: '.chart-chrome a:hover, .chart-chrome a:focus-visible', property: 'border-bottom-color' }, ground: 'page' },
-  { role: 'chart chrome link focus outline', floor: 3, ink: { css: CHART_CSS, selector: '.chart-chrome a:focus-visible', property: 'outline' }, ground: 'page' },
+  { role: 'chart chrome link underline', floor: 3, ink: { css: CHART_CSS, selector: '.chart-heading a, .chart-routes a', property: 'border-bottom' }, ground: 'page' },
+  {
+    role: 'chart chrome link underline, raised',
+    floor: 3,
+    ink: { css: CHART_CSS, selector: '.chart-heading a:hover, .chart-heading a:focus-visible, .chart-routes a:hover, .chart-routes a:focus-visible', property: 'border-bottom-color' },
+    ground: 'page',
+  },
+  { role: 'chart chrome link focus outline', floor: 3, ink: { css: CHART_CSS, selector: '.chart-heading a:focus-visible, .chart-routes a:focus-visible', property: 'outline' }, ground: 'page' },
   { role: 'chart Ring', floor: 3, ink: { css: CHART_CSS, selector: '.chart-ring', property: 'stroke' }, ground: 'page' },
   { role: 'Notable glyph marker', floor: 3, ink: { css: CHART_CSS, selector: '.chart-marker', property: 'stroke' }, ground: 'page' },
   // The Colophon's exhibit focus outline (5.3), drawn 3px outside the block, on the page ground.
   { role: 'exhibit focus outline', floor: 3, ink: { css: COLOPHON_CSS, selector: '.colophon-exhibit:focus-visible', property: 'outline' }, ground: 'page' },
+  // The contact route (6.3): the address's underline at rest and raised, and both controls' focus outline.
+  { role: 'contact address underline', floor: 3, ink: { css: CONTACT_CSS, selector: '.contact-address', property: 'border-bottom' }, ground: 'page' },
+  { role: 'contact address underline, raised', floor: 3, ink: { css: CONTACT_CSS, selector: '.contact-address:hover, .contact-address:focus-visible', property: 'border-bottom-color' }, ground: 'page' },
+  { role: 'contact address focus outline', floor: 3, ink: { css: CONTACT_CSS, selector: '.contact-address:focus-visible', property: 'outline' }, ground: 'page' },
+  { role: 'contact copy focus outline', floor: 3, ink: { css: CONTACT_CSS, selector: '.contact-copy:focus-visible', property: 'outline' }, ground: 'page' },
 ];
 
 /** The token key a `var(--color-…)` value names, or undefined. */
@@ -433,7 +462,7 @@ function auditContrast(sources: Readonly<Record<string, string>>, panelBackgroun
 }
 
 function contrastSources(): Record<string, string> {
-  return Object.fromEntries([PANEL_CSS, CHROME_CSS, INDEX_CSS, PAGE_CSS, CHART_CSS, COLOPHON_CSS, AFFORDANCE_TS, MOTE_TS].map((path) => [path, read(`./${path}`)]));
+  return Object.fromEntries([PANEL_CSS, CHROME_CSS, INDEX_CSS, PAGE_CSS, CHART_CSS, COLOPHON_CSS, CONTACT_CSS, AFFORDANCE_TS, MOTE_TS].map((path) => [path, read(`./${path}`)]));
 }
 
 test('contrast: every text role clears its floor on its ground, read from the shipping source', () => {
@@ -497,7 +526,7 @@ test('contrast: a role moved to a dimmer ink, or one whose ink cannot be read, f
     /^contrast: plate span label is ink-quiet-dark on surface-base-dark/,
   );
   assert.match(
-    failing(CHART_CSS, (s) => s.replace(/(\.chart-chrome a \{\n  color: )var\(--color-ink-label-dark\)/, '$1var(--color-ink-faint-dark)')),
+    failing(CHART_CSS, (s) => s.replace(/(\.chart-heading a,\n\.chart-routes a \{\n  color: )var\(--color-ink-label-dark\)/, '$1var(--color-ink-faint-dark)')),
     /^contrast: chart chrome links is ink-faint-dark on surface-base-dark/,
   );
   assert.match(
@@ -554,6 +583,19 @@ test('contrast: a role moved to a dimmer ink, or one whose ink cannot be read, f
   assert.match(
     failing(COLOPHON_CSS, (s) => s.replace(/(\.colophon-heading \{[^}]*color: )var\(--color-ink-label-dark\)/, '$1var(--color-ink-quiet-dark)')),
     /^contrast: absences heading is ink-quiet-dark on surface-base-dark/m,
+  );
+  // 6.3: the contact route's line, its copy button at the quiet step; its raised address under 7.
+  assert.match(
+    failing(CONTACT_CSS, (s) => s.replace(/(\.contact-route \{[^}]*color: )var\(--color-ink-label-dark\)/, '$1var(--color-ink-quiet-dark)')),
+    /^contrast: contact route is ink-quiet-dark on surface-base-dark/m,
+  );
+  assert.match(
+    failing(CONTACT_CSS, (s) => s.replace(/(\.contact-copy \{[^}]*color: )var\(--color-ink-label-dark\)/, '$1var(--color-ink-faint-dark)')),
+    /^contrast: contact copy button is ink-faint-dark on surface-base-dark/m,
+  );
+  assert.match(
+    failing(CONTACT_CSS, (s) => s.replace('.contact-address:focus-visible {\n  color: var(--color-ink-lift-dark);', '.contact-address:focus-visible {\n  color: var(--color-ink-label-dark);')),
+    /^contrast: contact address, raised is ink-label-dark on surface-base-dark, \d\.\d\d:1 — below its 7:1 floor$/m,
   );
   assert.match(
     auditContrast(real, 'var(--color-stroke-active-dark)').join('\n'),
@@ -680,6 +722,14 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
   'solve it here',
   'This runs the same solver on career.json, here in your browser. It shows the mechanism at work; it does not reproduce the shipped layout, which was solved once and is the only one the scene reads.',
   'solve it again',
+  // The contact route (6.3, rulings Q1 deferred, Q4 (b), Q5): the address — the
+  // `.invalid` placeholder until Thomas supplies the real one before 6.5, when
+  // this row and `contact.ts` change together — and the copy button's three
+  // labels, verbatim (EXPERIENCE.md §3, place 5).
+  'address@example.invalid',
+  'copy',
+  'copied',
+  'not copied',
 ]);
 
 /** Accessible names — announced, never drawn — listed separately. */
@@ -694,7 +744,7 @@ const ACCESSIBLE_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 /** The constants the renderers draw copy from; any other upper-case constant drawn as text fails. */
-const COPY_CONSTANTS: ReadonlySet<string> = new Set(['IDENTITY_LINE', 'IDENTITY_NAME', 'IDENTITY_MODEL', 'CHART_LINK_TEXT', 'SCENE_LINK_TEXT', 'SLOT_TEXT', 'EDITORIAL_RULE', 'RELEASE_LABEL', 'FIELD_LABELS', 'DEPTH_LABELS', 'CHART_LABELS', 'DERIVATION_LABELS', 'ABSENCES_HEADING', 'ABSENCES', 'LIVE_SOLVE']);
+const COPY_CONSTANTS: ReadonlySet<string> = new Set(['IDENTITY_LINE', 'IDENTITY_NAME', 'IDENTITY_MODEL', 'CHART_LINK_TEXT', 'SCENE_LINK_TEXT', 'SLOT_TEXT', 'EDITORIAL_RULE', 'RELEASE_LABEL', 'FIELD_LABELS', 'DEPTH_LABELS', 'CHART_LABELS', 'DERIVATION_LABELS', 'ABSENCES_HEADING', 'ABSENCES', 'LIVE_SOLVE', 'CONTACT']);
 
 /**
  * The separators a template sets between data, and nothing else: whitespace
@@ -1062,6 +1112,7 @@ function copyConstants(): Record<string, string> {
     ...Object.entries(absencesHeading()),
     ...entries('ABSENCES', absences()),
     ...entries('LIVE_SOLVE', liveSolve()),
+    ...entries('CONTACT', CONTACT),
     ...entries('SURFACE_TITLES', SURFACE_TITLES),
     ...entries('SURFACE_NAMES', SURFACE_NAMES),
   ]);
@@ -1106,6 +1157,20 @@ test('copy: the copy constants are each in the closed allowlist', () => {
     ['LIVE_SOLVE.action', 'layout, solved in this browser'],
     ['LIVE_SOLVE.result', 'solve it again'.replace('again', 'once')],
     ['LIVE_SOLVE.status', 'solved in 412 ms'],
+  ] as const) {
+    assert.deepEqual(auditCopyConstants({ ...constants, [name]: value }), [`copy: the constant ${name} is ${JSON.stringify(value)}, which is not in the closed allowlist`]);
+  }
+  // 6.3: the contact route's copy, held by key: the address and the three labels as
+  // visible copy; an apology, a narrated label or a call to action is in neither set.
+  assert.deepEqual(Object.keys(CONTACT), ['address', 'copy', 'copied', 'failed'], 'the contact route’s copy is read off its module (6.3)');
+  assert.ok(Object.values(CONTACT).every((value) => VISIBLE_COPY.has(value)), 'the address and the three labels are visible copy');
+  assert.match(read('./shell/contact.ts'), /^export const CONTACT = \{ address: '[^']+', copy: 'copy', copied: 'copied', failed: 'not copied' \} as const;$/m, 'one single-line literal');
+  for (const [name, value] of [
+    ['CONTACT.copy', 'Copy email'],
+    ['CONTACT.copied', 'Copied to clipboard!'],
+    ['CONTACT.failed', 'Sorry, could not copy — select the address instead'],
+    ['CONTACT.address', 'thomas@example.com'],
+    ['CONTACT.hint', 'Click to copy'],
   ] as const) {
     assert.deepEqual(auditCopyConstants({ ...constants, [name]: value }), [`copy: the constant ${name} is ${JSON.stringify(value)}, which is not in the closed allowlist`]);
   }
@@ -1170,6 +1235,19 @@ test('copy: every visible literal shipped from src/ and index.html is in the clo
     auditCopy({ ...scripts, 'colophon/colophon.tsx': (scripts['colophon/colophon.tsx'] as string).replace('<thead>', '<caption>How the layout is derived</caption>\n      <thead>') }, read('../index.html')).join('\n'),
     /^copy: src\/colophon\/colophon\.tsx draws the visible text "How the layout is derived"/,
     'a caption on the derivation table fails',
+  );
+  // 6.3: the contact route draws its address as a constant and its label as an expression; help text or a tooltip beside it fails.
+  const contact = jsxDrawn(codeOf(scripts['shell/contact-route.tsx'] as string, 'script'));
+  assert.ok(contact.some((drawn) => drawn.kind === 'constant' && drawn.text === 'CONTACT'), 'the contact route’s address is read');
+  assert.match(
+    auditCopy({ ...scripts, 'shell/contact-route.tsx': (scripts['shell/contact-route.tsx'] as string).replace('{label}\n      </button>', '{label}\n      </button>\n      <span>Click to copy the address</span>') }, read('../index.html')).join('\n'),
+    /^copy: src\/shell\/contact-route\.tsx draws the visible text "Click to copy the address"/m,
+    'help text beside the button fails',
+  );
+  assert.match(
+    auditCopy({ ...scripts, 'shell/contact-route.tsx': (scripts['shell/contact-route.tsx'] as string).replace('<button type="button" className="contact-copy"', '<button type="button" title="Copy the address to your clipboard" className="contact-copy"') }, read('../index.html')).join('\n'),
+    /^copy: src\/shell\/contact-route\.tsx draws the title "Copy the address to your clipboard"/m,
+    'a tooltip on the button fails',
   );
   assert.deepEqual(auditCopy(scripts, read('../index.html')), []);
 });
@@ -1722,15 +1800,23 @@ const CHART_RULES: readonly CssRule[] = [
     selector: '.chart',
     declarations: ['box-sizing: border-box', 'max-width: 1242px', 'margin: 0 auto', 'padding: var(--space-xxl) var(--space-xl) var(--space-xxl)', 'color: var(--color-ink-prose-dark)', 'overflow-wrap: anywhere'],
   },
-  // The chrome row (4.5): the heading and the route line, opposite each other on one baseline.
-  { at: '', selector: '.chart-chrome', declarations: ['display: flex', 'justify-content: space-between', 'align-items: baseline', 'gap: var(--space-md)', 'margin: 0 0 var(--space-xxl)'] },
+  // The chrome row (4.5): the heading and the route line, opposite each other on one baseline. Since 6.3 (ruling
+  // Q3 (a)) it packs from the start, the contact route beside the heading, and the route line takes the rest of
+  // the row by its auto start margin, so it stays opposite at the end.
+  { at: '', selector: '.chart-chrome', declarations: ['display: flex', 'flex-wrap: wrap', 'justify-content: flex-start', 'align-items: baseline', 'gap: var(--space-md)', 'margin: 0 0 var(--space-xxl)'] },
   { at: '', selector: '.chart-heading, .chart-routes', declarations: ['margin: 0', ...CHART_TYPE('chrome'), 'color: var(--color-ink-label-dark)'] },
+  { at: '', selector: '.chart-routes', declarations: ['margin-inline-start: auto'] },
   // 4.5: the route line, empty on the fallback surface, leaves no gap in the column.
   { at: '', selector: '.chart-routes:empty', declarations: ['display: none'] },
   // 4.10, ruling Q1 (b): every non-text indicator on the chart at ink-label, 3:1 and over (`NON_TEXT_ROLES`).
-  { at: '', selector: '.chart-chrome a', declarations: ['color: var(--color-ink-label-dark)', 'text-decoration: none', 'border-bottom: 1px solid var(--color-ink-label-dark)'] },
-  { at: '', selector: '.chart-chrome a:hover, .chart-chrome a:focus-visible', declarations: ['color: var(--color-ink-lift-dark)', 'border-bottom-color: var(--color-stroke-focus-dark)'] },
-  { at: '', selector: '.chart-chrome a:focus-visible', declarations: ['outline: 1px solid var(--color-stroke-focus-dark)', 'outline-offset: 3px'] },
+  // 6.3: the heading's and the route line's links alone, so the contact address takes `contact-route.css` alone.
+  { at: '', selector: '.chart-heading a, .chart-routes a', declarations: ['color: var(--color-ink-label-dark)', 'text-decoration: none', 'border-bottom: 1px solid var(--color-ink-label-dark)'] },
+  {
+    at: '',
+    selector: '.chart-heading a:hover, .chart-heading a:focus-visible, .chart-routes a:hover, .chart-routes a:focus-visible',
+    declarations: ['color: var(--color-ink-lift-dark)', 'border-bottom-color: var(--color-stroke-focus-dark)'],
+  },
+  { at: '', selector: '.chart-heading a:focus-visible, .chart-routes a:focus-visible', declarations: ['outline: 1px solid var(--color-stroke-focus-dark)', 'outline-offset: 3px'] },
   { at: '', selector: '.chart-plate', declarations: ['border: 1px solid var(--color-surface-edge-dark)'] },
   { at: '', selector: '.chart-plate svg', declarations: ['display: block', 'width: 100%', 'height: auto'] },
   { at: '', selector: '.chart-plate-across', declarations: ['overflow-x: auto'] },
@@ -1795,6 +1881,8 @@ const CHART_RULES: readonly CssRule[] = [
   { at: '', selector: '.chart-section:focus, .chart-record:focus', declarations: ['outline: none'] },
   { at: PHONE, selector: '.chart', declarations: ['padding: var(--space-lg) var(--space-md) var(--space-xxl)'] },
   { at: PHONE, selector: '.chart-chrome', declarations: ['flex-direction: column', 'gap: var(--space-xs)'] },
+  // 6.3: stacked, the route line drops its auto margin and sits at the start with the rest.
+  { at: PHONE, selector: '.chart-routes', declarations: ['margin-inline-start: 0'] },
   { at: PHONE, selector: '.chart-plate-across', declarations: ['display: none'] },
   { at: PHONE, selector: '.chart-plate-down', declarations: ['display: block'] },
   { at: PHONE, selector: '.chart-legend', declarations: ['flex-direction: column', 'gap: var(--space-md)'] },
@@ -1808,7 +1896,7 @@ const CHART_RULES: readonly CssRule[] = [
   { at: PHONE, selector: '.chart-record .panel-fields th, .chart-record .panel-fields td', declarations: ['display: block'] },
   { at: PHONE, selector: '.chart-record .panel-fields th', declarations: ['padding: var(--space-sm) 0 var(--space-hair)'] },
   { at: PHONE, selector: '.chart-record .panel-fields td', declarations: ['padding: 0 0 var(--space-sm)', 'border-top: 0'] },
-  { at: '@media (forced-colors: active)', selector: '.chart-chrome a:focus-visible, .chart-index a:focus-visible', declarations: ['outline: 1px solid CanvasText'] },
+  { at: '@media (forced-colors: active)', selector: '.chart-heading a:focus-visible, .chart-routes a:focus-visible, .chart-index a:focus-visible', declarations: ['outline: 1px solid CanvasText'] },
 ];
 
 /**
@@ -1878,18 +1966,23 @@ test('chart: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('  .chart-legend {\n    flex-direction: column;', '  .chart-legend {\n    display: none;\n    flex-direction: column;'), /`@media \(max-width: 640px\) \.chart-legend` sets display: none/],
     [(s) => s.replace('.chart-index th:first-child {\n  white-space: nowrap;\n}\n', ''), /`\.chart-index th:first-child` is missing/],
     // 4.5: the chrome row, its links and the span label.
-    [(s) => s.replace('  justify-content: space-between;\n', ''), /`\.chart-chrome` lacks `justify-content: space-between`/],
+    [(s) => s.replace('  justify-content: flex-start;\n', '  justify-content: space-between;\n'), /`\.chart-chrome` lacks `justify-content: flex-start`/],
+    // 6.3: the route line no longer pushed opposite, or still pushed when stacked.
+    [(s) => s.replace('.chart-routes {\n  margin-inline-start: auto;\n}\n', ''), /`\.chart-routes` is missing/],
+    [(s) => s.replace('  .chart-routes {\n    margin-inline-start: 0;\n  }\n', ''), /`@media \(max-width: 640px\) \.chart-routes` is missing/],
+    // 6.3: the chrome links' rule widened back to the whole row, reaching the contact address.
+    [(s) => s.replace('.chart-heading a,\n.chart-routes a {', '.chart-chrome a {'), /^chart: the unlisted rule `\.chart-chrome a`$/m],
     [(s) => s.replace('.chart-routes:empty {\n  display: none;\n}\n', ''), /`\.chart-routes:empty` is missing/],
     [(s) => s.replace('.chart-routes:empty {', '.chart-routes {'), /`\.chart-routes` sets display: none/],
     [(s) => s.replace('  .chart-chrome {\n    flex-direction: column;', '  .chart-chrome {\n    flex-direction: row;'), /`@media \(max-width: 640px\) \.chart-chrome` lacks `flex-direction: column`/],
-    [(s) => s.replace('.chart-chrome a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;', '.chart-chrome a {\n  color: var(--color-ink-label-dark);\n  text-decoration: underline;'), /`\.chart-chrome a` lacks `text-decoration: none`/],
-    [(s) => s.replace('.chart-chrome a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;\n  border-bottom: 1px solid var(--color-ink-label-dark);', '.chart-chrome a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;'), /`\.chart-chrome a` lacks `border-bottom/],
+    [(s) => s.replace('.chart-routes a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;', '.chart-routes a {\n  color: var(--color-ink-label-dark);\n  text-decoration: underline;'), /`\.chart-heading a, \.chart-routes a` lacks `text-decoration: none`/],
+    [(s) => s.replace('.chart-routes a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;\n  border-bottom: 1px solid var(--color-ink-label-dark);', '.chart-routes a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;'), /`\.chart-heading a, \.chart-routes a` lacks `border-bottom/],
     // 4.10: the links' underline back at stroke-near, 2.11:1.
     [(s) => s.replace('.chart-index a {\n  color: var(--color-ink-prose-dark);\n  text-decoration: none;\n  border-bottom: 1px solid var(--color-ink-label-dark);', '.chart-index a {\n  color: var(--color-ink-prose-dark);\n  text-decoration: none;\n  border-bottom: 1px solid var(--color-stroke-near-dark);'), /`\.chart-index a` lacks `border-bottom: 1px solid var\(--color-ink-label-dark\)`/],
     // 4.10: the fragment targets' outline rule gone, or reaching the links' focus too.
     [(s) => s.replace('.chart-section:focus,\n.chart-record:focus {\n  outline: none;\n}\n', ''), /`\.chart-section:focus, \.chart-record:focus` is missing/],
     [(s) => s.replace('.chart-section:focus,\n.chart-record:focus {', '.chart-section:focus,\n.chart-record:focus,\n.chart a:focus {'), /the rule `\.chart-section:focus, \.chart-record:focus` is missing/],
-    [(s) => s.replace('  .chart-chrome a:focus-visible,\n  .chart-index a:focus-visible {', '  .chart-index a:focus-visible {'), /`@media \(forced-colors: active\) \.chart-chrome a:focus-visible, \.chart-index a:focus-visible` is missing/],
+    [(s) => s.replace('  .chart-heading a:focus-visible,\n  .chart-routes a:focus-visible,\n  .chart-index a:focus-visible {', '  .chart-index a:focus-visible {'), /`@media \(forced-colors: active\) \.chart-heading a:focus-visible, \.chart-routes a:focus-visible, \.chart-index a:focus-visible` is missing/],
     [(s) => s.replace('  font-size: var(--type-scene-label-secondary-font-size);\n', '  font-size: var(--type-scene-label-project-font-size);\n'), /`\.chart-label-span` lacks `font-size: var\(--type-scene-label-secondary-font-size\)`/],
     [(s) => s.replace('.chart-routes {\n  margin: 0;', '.chart-routes {\n  display: none;\n  margin: 0;'), /sets display: none/],
     [(s) => `${s}\n.deep .chart-marker {\n  transform: scale(1.4);\n}\n`, /^chart: the unlisted rule `\.deep \.chart-marker`$/m],
@@ -2179,6 +2272,147 @@ test('colophon: each guarantee removed fails with its own line', () => {
     assert.notEqual(mutated, tsx, `the mutation ${String(message)} must apply`);
     assert.match(auditColophon(css, mutated).join('\n'), message);
   }
+});
+
+// --- The contact route (6.3) ------------------------------------------------------------------------
+
+const CONTACT_TSX = 'shell/contact-route.tsx';
+
+const CONTACT_RULES: readonly CssRule[] = [
+  // The line: the chrome role at ink-label, as the chart's chrome row sets it.
+  { at: '', selector: '.contact-route', declarations: ['margin: 0', ...CHART_TYPE('chrome'), 'color: var(--color-ink-label-dark)'] },
+  // The address: the chart's chrome links' declarations (`.chart-heading a, .chart-routes a`), plus one: it
+  // breaks anywhere, so a long real address never scrolls the page sideways at phone width.
+  { at: '', selector: '.contact-address', declarations: ['color: var(--color-ink-label-dark)', 'text-decoration: none', 'border-bottom: 1px solid var(--color-ink-label-dark)', 'overflow-wrap: anywhere'] },
+  { at: '', selector: '.contact-address:hover, .contact-address:focus-visible', declarations: ['color: var(--color-ink-lift-dark)', 'border-bottom-color: var(--color-stroke-focus-dark)'] },
+  { at: '', selector: '.contact-address:focus-visible', declarations: ['outline: 1px solid var(--color-stroke-focus-dark)', 'outline-offset: 3px'] },
+  // The copy button: `.colophon-solve`'s bare word, no box, at ink-label raised to ink-prose — never disabled, so no aria-disabled rule.
+  {
+    at: '',
+    selector: '.contact-copy',
+    declarations: ['margin: 0', 'padding: 0', 'background: none', 'border: 0', 'cursor: pointer', ...CHART_TYPE('chrome'), 'color: var(--color-ink-label-dark)'],
+  },
+  { at: '', selector: '.contact-copy:hover, .contact-copy:focus-visible', declarations: ['color: var(--color-ink-prose-dark)'] },
+  { at: '', selector: '.contact-copy:focus-visible', declarations: ['outline: 1px solid var(--color-stroke-focus-dark)', 'outline-offset: 3px'] },
+  { at: '@media (forced-colors: active)', selector: '.contact-address:focus-visible, .contact-copy:focus-visible', declarations: ['outline: 1px solid CanvasText'] },
+];
+
+/** Where the contact route may be named: its own two modules, the chart and the Colophon (rulings Q2 (d), Q3 (a)). */
+const CONTACT_PLACES: ReadonlySet<string> = new Set(['shell/contact.ts', 'shell/contact-route.tsx', 'render-fallback/chart.tsx', 'colophon/colophon.tsx']);
+
+/**
+ * The contact route's treatment and placement: `contact-route.css` exactly,
+ * with the identity bans; no hex, radius, shadow or filter; its markup's hooks —
+ * the stylesheet imported once, one `p.contact-route` holding the address as
+ * `a.contact-address` to `mailto:` and `CONTACT.address`, its text the address,
+ * then one `button.contact-copy` of `type="button"` whose text is the label and
+ * whose click is the press — and none of what the ruling refuses: no
+ * `disabled`, no `title`, no `aria-live` or `role="status"`, no timer, no
+ * `<code>` or `<kbd>`, no inline style, no form and no request. Placed beside
+ * the chart's heading — directly after its `<h1>`, before the route line,
+ * inside its chrome row (ruling Q3 (a)) — and directly after the
+ * Colophon's `<h1>`, unconditionally; and named by no other shipped file, so
+ * the scene and its corner chrome never draw it.
+ */
+function auditContact(css: string, files: Readonly<Record<string, string>>): string[] {
+  const failures = [...auditBans('contact', css), ...auditDeclarations('contact', css, CONTACT_RULES)];
+  const sheet = codeOf(css, 'css');
+  if (/#[0-9a-f]{3,8}\b/i.test(sheet)) failures.push('contact: a hex colour — every colour is a token');
+  if (/\b(?:border-radius|box-shadow|text-shadow|filter)\s*:/.test(sheet)) failures.push('contact: a radius, shadow or filter — corners are square and nothing glows');
+  const script = codeOf(files[CONTACT_TSX] ?? '', 'script');
+  if ((script.match(/^import\s+'\.\/contact-route\.css'\s*;/gm) ?? []).length !== 1) failures.push('contact: contact-route.tsx does not import ./contact-route.css, once');
+  if (
+    !/<p className="contact-route">\s*<a className="contact-address" href=\{`mailto:\$\{CONTACT\.address\}`\}>\s*\{CONTACT\.address\}\s*<\/a>\{' '\}\s*<button type="button" className="contact-copy" onClick=\{onCopy\}>\s*\{label\}\s*<\/button>\s*<\/p>/.test(script)
+  ) {
+    failures.push('contact: the route is not one p.contact-route holding the mailto a.contact-address reading CONTACT.address, then the button.contact-copy reading its label');
+  }
+  if ((script.match(/<(?:p|a|button)\b/g) ?? []).length !== 3) failures.push('contact: an element other than the line, the address and the button');
+  if (/\bdisabled\b/.test(script)) failures.push('contact: the button disabled — it is never disabled');
+  if (/\btitle=|\baria-live\b|role="status"|role="alert"|\baria-describedby\b/.test(script)) failures.push('contact: a tooltip, a description or a live region — the label is the feedback');
+  if (/\bsetTimeout\b|\bsetInterval\b/.test(script)) failures.push('contact: a timer — the label stays until the next press');
+  if (/<(?:code|kbd)\b/.test(script)) failures.push('contact: the address in <code> or <kbd>');
+  if (/\bstyle=\{/.test(script)) failures.push('contact: an inline style — the treatment is the stylesheet’s');
+  if (/<form\b|\bfetch\s*\(|\bXMLHttpRequest\b|\bsendBeacon\b|\baction=/.test(script)) failures.push('contact: a form or a request — nothing is submitted anywhere');
+  const chart = codeOf(files['render-fallback/chart.tsx'] ?? '', 'script');
+  if (!/<div className="chart-chrome">\s*<h1 className="chart-heading">[\s\S]*?<\/h1>\s*<ContactRoute \/>\s*<p className="chart-routes">/.test(chart) || (chart.match(/<ContactRoute\b/g) ?? []).length !== 1) {
+    failures.push('contact: the chart does not draw the route once, beside its heading, before its route line, inside its chrome row');
+  }
+  const colophon = codeOf(files['colophon/colophon.tsx'] ?? '', 'script');
+  if (!/<h1>the model<\/h1>\s*<ContactRoute \/>\s*\{exhibits === null \?/.test(colophon) || (colophon.match(/<ContactRoute\b/g) ?? []).length !== 1) {
+    failures.push('contact: the Colophon does not draw the route once, directly after its <h1>, before the exhibits arrive');
+  }
+  for (const [path, source] of Object.entries(files)) {
+    if (CONTACT_PLACES.has(path) || languageOf(path) !== 'script') continue;
+    if (/\bContactRoute\b|contact-route|\bCONTACT\b|\bcreateContactCopy\b/.test(codeOf(source, 'script'))) failures.push(`contact: src/${path} names the contact route — it is drawn on the chart and the Colophon alone`);
+  }
+  return failures;
+}
+
+test('contact: the route’s stylesheet, declaration by declaration, its markup’s hooks, and its two places', () => {
+  const files = shippedFiles();
+  assert.ok(CONTACT_TSX in files && 'shell/corner-chrome.tsx' in files && 'render-scene/scene.tsx' in files, 'the walk reaches the route, the corner chrome and the scene');
+  assert.deepEqual(auditContact(read(`./${CONTACT_CSS}`), files), []);
+});
+
+test('contact: each guarantee removed fails with its own line', () => {
+  const css = read(`./${CONTACT_CSS}`);
+  const files = shippedFiles();
+  const cssCases: readonly (readonly [(source: string) => string, RegExp])[] = [
+    [(s) => s.replace(/(\.contact-route \{[^}]*)font-size: var\(--type-chrome-font-size\)/, '$1font-size: var(--type-field-value-font-size)'), /`\.contact-route` lacks `font-size: var\(--type-chrome-font-size\)`/],
+    [(s) => s.replace('.contact-address {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;', '.contact-address {\n  color: var(--color-ink-label-dark);\n  text-decoration: underline;'), /`\.contact-address` lacks `text-decoration: none`/],
+    [(s) => s.replace('  border-bottom: 1px solid var(--color-ink-label-dark);\n', '  border-bottom: 1px solid var(--color-stroke-near-dark);\n'), /`\.contact-address` lacks `border-bottom: 1px solid var\(--color-ink-label-dark\)`/],
+    [(s) => s.replace('  overflow-wrap: anywhere;\n', ''), /`\.contact-address` lacks `overflow-wrap: anywhere`/],
+    [(s) => s.replace('.contact-address:focus-visible {\n  outline: 1px solid var(--color-stroke-focus-dark);', '.contact-address:focus-visible {\n  outline: none;'), /`\.contact-address:focus-visible` lacks `outline: 1px solid var\(--color-stroke-focus-dark\)`/],
+    [(s) => s.replace('.contact-copy:focus-visible {\n  outline: 1px solid var(--color-stroke-focus-dark);', '.contact-copy:focus-visible {\n  outline: none;'), /`\.contact-copy:focus-visible` lacks `outline: 1px solid var\(--color-stroke-focus-dark\)`/],
+    [(s) => s.replace('    outline: 1px solid CanvasText;\n', ''), /`@media \(forced-colors: active\) \.contact-address:focus-visible, \.contact-copy:focus-visible` lacks `outline: 1px solid CanvasText`/],
+    [(s) => s.replace(/(\.contact-copy \{[^}]*)border: 0;/, '$1border: 1px solid var(--color-stroke-rest-dark);'), /`\.contact-copy` lacks `border: 0`/],
+    [(s) => s.replace(/(\.contact-copy \{[^}]*)border: 0;/, '$1border: 0;\n  border-radius: 2px;'), /contact: a radius, shadow or filter/],
+    [(s) => s.replace(/(\.contact-copy \{[^}]*)background: none;/, '$1background: var(--color-surface-raised-dark);\n  box-shadow: 0 0 4px white;'), /contact: a radius, shadow or filter/],
+    [(s) => s.replace(/(\.contact-copy \{[^}]*)font-weight: var\(--type-chrome-font-weight\)/, '$1font-weight: 600'), /^contact: a literal font-weight/m],
+    [(s) => s.replace('.contact-copy {\n', '.contact-copy {\n  text-transform: uppercase;\n'), /^contact: text-transform/m],
+    [(s) => s.replace('.contact-copy:hover,\n.contact-copy:focus-visible {\n  color: var(--color-ink-prose-dark);', '.contact-copy:hover,\n.contact-copy:focus-visible {\n  color: #F2F2F4;'), /contact: a hex colour/],
+    [(s) => `${s}\n.contact-copy[data-copied] {\n  color: var(--color-ink-lift-dark);\n}\n`, /^contact: the unlisted rule `\.contact-copy\[data-copied\]`$/m],
+    [(s) => `${s}\n.contact-route::after {\n  content: '';\n}\n`, /^contact: the unlisted rule `\.contact-route::after`$/m],
+    [(s) => s.replace('.contact-route {\n  margin: 0;', '.contact-route {\n  display: none;\n  margin: 0;'), /^contact: display: none/m],
+  ];
+  for (const [mutate, message] of cssCases) {
+    const mutated = mutate(css);
+    assert.notEqual(mutated, css, `the mutation ${String(message)} must apply`);
+    assert.match(auditContact(mutated, files).join('\n'), message);
+  }
+  const edit = (path: string, change: (source: string) => string): Record<string, string> => {
+    const source = files[path] as string;
+    const changed = change(source);
+    assert.notEqual(changed, source, `the mutation of ${path} must apply`);
+    return { ...files, [path]: changed };
+  };
+  const fileCases: readonly (readonly [Record<string, string>, RegExp])[] = [
+    [edit(CONTACT_TSX, (s) => s.replace("import './contact-route.css';\n", '')), /contact-route\.tsx does not import \.\/contact-route\.css, once/],
+    [edit(CONTACT_TSX, (s) => s.replace('href={`mailto:${CONTACT.address}`}', 'href={CONTACT.address}')), /the route is not one p\.contact-route/],
+    [edit(CONTACT_TSX, (s) => s.replace('<a className="contact-address"', '<a')), /the route is not one p\.contact-route/],
+    [edit(CONTACT_TSX, (s) => s.replace('<button type="button" className="contact-copy"', '<button className="contact-copy"')), /the route is not one p\.contact-route/],
+    [edit(CONTACT_TSX, (s) => s.replace(' onClick={onCopy}', '')), /the route is not one p\.contact-route/],
+    [edit(CONTACT_TSX, (s) => s.replace('        {CONTACT.address}\n', '        {CONTACT.copy}\n')), /the route is not one p\.contact-route/],
+    [edit(CONTACT_TSX, (s) => s.replace('<p className="contact-route">', '<div className="contact-route">').replace('    </p>\n  );', '    </div>\n  );')), /the route is not one p\.contact-route/],
+    [edit(CONTACT_TSX, (s) => s.replace(' onClick={onCopy}>', ' onClick={onCopy} disabled={label !== CONTACT.copy}>')), /the button disabled/],
+    [edit(CONTACT_TSX, (s) => s.replace(' onClick={onCopy}>', ' onClick={onCopy} aria-live="polite">')), /a tooltip, a description or a live region/],
+    [edit(CONTACT_TSX, (s) => s.replace('    </p>\n  );', '      <span role="status">{label}</span>\n    </p>\n  );')), /a tooltip, a description or a live region/],
+    [edit(CONTACT_TSX, (s) => s.replace('  useEffect(() => () => tracker.stop(), [tracker]);', '  useEffect(() => () => tracker.stop(), [tracker]);\n  useEffect(() => { const t = setTimeout(() => setCopyState(\'idle\'), 2000); return () => clearTimeout(t); }, [state]);')), /a timer/],
+    [edit(CONTACT_TSX, (s) => s.replace('        {CONTACT.address}\n', '        <code>{CONTACT.address}</code>\n')), /the address in <code> or <kbd>/],
+    [edit(CONTACT_TSX, (s) => s.replace('<p className="contact-route">', '<p className="contact-route" style={{ margin: 0 }}>')), /an inline style/],
+    [edit(CONTACT_TSX, (s) => s.replace('<p className="contact-route">', '<form action="https://formspree.io/f/x">\n    <p className="contact-route">').replace('    </p>\n  );', '    </p>\n    </form>\n  );')), /a form or a request/],
+    // Placement: the chart's route moved into the heading or dropped; the Colophon's below the exhibits, or drawn only with them.
+    [edit('render-fallback/chart.tsx', (s) => s.replace('        <ContactRoute />\n', '')), /the chart does not draw the route once/],
+    [edit('render-fallback/chart.tsx', (s) => s.replace('        <ContactRoute />\n', '').replace('<h1 className="chart-heading">', '<ContactRoute />\n        <h1 className="chart-heading">')), /the chart does not draw the route once/],
+    [edit('render-fallback/chart.tsx', (s) => s.replace('        <ContactRoute />\n', '').replace('        </p>\n      </div>', '        </p>\n        <ContactRoute />\n      </div>')), /the chart does not draw the route once/],
+    [edit('render-fallback/chart.tsx', (s) => s.replace('        <ContactRoute />\n', '').replace('        </h1>', '          <ContactRoute />\n        </h1>')), /the chart does not draw the route once/],
+    [edit('colophon/colophon.tsx', (s) => s.replace('      <ContactRoute />\n', '')), /the Colophon does not draw the route once/],
+    [edit('colophon/colophon.tsx', (s) => s.replace('      <ContactRoute />\n', '').replace('          <Exhibit name={EXHIBIT_PATHS.career.slice(1)}', '          <ContactRoute />\n          <Exhibit name={EXHIBIT_PATHS.career.slice(1)}')), /the Colophon does not draw the route once/],
+    // Never on the scene or in its corner chrome (ruling Q2 (d)).
+    [edit('shell/corner-chrome.tsx', (s) => `import { ContactRoute } from './contact-route.tsx';\n${s}`), /^contact: src\/shell\/corner-chrome\.tsx names the contact route/m],
+    [edit('render-scene/scene.tsx', (s) => `import { CONTACT } from '../shell/contact.ts';\n${s}`), /^contact: src\/render-scene\/scene\.tsx names the contact route/m],
+  ];
+  for (const [mutated, message] of fileCases) assert.match(auditContact(css, mutated).join('\n'), message);
 });
 
 // --- Monospace: the exhibits alone (5.3) ------------------------------------------------------------

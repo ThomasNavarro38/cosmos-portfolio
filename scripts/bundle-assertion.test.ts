@@ -496,6 +496,21 @@ test('the shipped app builds under the assertion, measured within its budget', a
   );
   const mountChunk = chunks.find((out) => Object.keys(out.modules).some((id) => local(id) === 'src/shell/mount.tsx'));
   assert.ok(mountChunk !== undefined, 'the mount was emitted');
+  // 6.3: the contact route, shared by the chart and the Colophon, sits in the
+  // `ui` group's one chunk — off the entry graph, in neither surface's chunk nor
+  // the mount's — which both surfaces import statically, and which holds no
+  // react-dom, so neither reaches React's DOM through it.
+  const contactModules = ['src/shell/contact.ts', 'src/shell/contact-route.tsx', 'src/shell/contact-route.css'];
+  const holdingContact = chunks.filter((out) => Object.keys(out.modules).some((id) => contactModules.includes(local(id))));
+  assert.equal(holdingContact.length, 1, 'the contact route is emitted in one chunk');
+  const [contactChunk] = holdingContact as [Rolldown.OutputChunk];
+  assert.deepEqual(contactModules.filter((id) => !Object.keys(contactChunk.modules).map(local).includes(id)), [], 'all three of its modules together');
+  assert.ok(Object.keys(contactChunk.modules).map(local).includes('src/shell/panel-model.ts'), 'in the ui group’s chunk, beside the panel model');
+  assert.ok(!graph.has(contactChunk.fileName), 'off the entry graph');
+  for (const out of [colophon, chart, mountChunk]) assert.notEqual(contactChunk.fileName, out.fileName, `not in ${out.fileName}`);
+  for (const out of [colophon, chart]) assert.ok(out.imports.includes(contactChunk.fileName), `${out.fileName} imports it statically`);
+  assert.ok(!Object.keys(contactChunk.modules).some((id) => /\/node_modules\/react-dom\//.test(forward(id))), 'and it holds no react-dom');
+  assert.deepEqual(heavy(chunks, contactChunk.fileName), [], 'nor reaches a scene or react-dom chunk');
   // 5.5: neither renderer — the scene, the chart — nor anything loading with it
   // holds a solver or data module, zod or d3-force-3d: the live re-solve's output
   // cannot feed a renderer, and the committed layout is the only one either reads.
