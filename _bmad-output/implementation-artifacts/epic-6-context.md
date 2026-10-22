@@ -4,13 +4,13 @@
 
 ## Goal
 
-This epic is the last mile before the CV link goes live. A link pasted into Slack, LinkedIn or a message unfurls as a deliberately composed image that does not promise more than a mobile visitor (who gets the Fallback) will receive. Anyone can reach Thomas through a contact route that works on a locked-down corporate laptop with no mail client configured. The first frame of the Schematic scene is verified on real target hardware, fast enough that The Forward (the cold, context-free recipient that the link being forwarded depends on) is still there when it arrives. The preview and its drift guard are done; the contact route is done (its address deferred to 6.5), then hardware verification and a final launch-readiness pass against the M2 gate.
+This epic is the last mile before the CV link goes live. A link pasted into Slack, LinkedIn or a message unfurls as a deliberately composed image that does not promise more than a mobile visitor (who gets the Fallback) will receive. Anyone can reach Thomas through a contact route that works on a locked-down corporate laptop with no mail client configured. The first frame of the Schematic scene is verified on real target hardware, fast enough that The Forward (the cold, context-free recipient that the link being forwarded depends on) is still there when it arrives. The preview and its drift guard are done; the contact route is done, then hardware verification and a final launch-readiness pass against the M2 gate.
 
 ## Stories
 
 - Story 6.1: The composed link preview (done)
 - Story 6.2: Preview drift guard (done)
-- Story 6.3: The contact route (done; address deferred)
+- Story 6.3: The contact route (done)
 - Story 6.4: First Paint verified on target hardware
 - Story 6.5: Launch readiness pass
 
@@ -18,7 +18,7 @@ This epic is the last mile before the CV link goes live. A link pasted into Slac
 
 - **Contact route:** a visible, copyable address, alongside or instead of `mailto:`, because a bare mailto dead-links on exactly the corporate laptops of the target hardware profile. The route must work without a configured mail client.
 - **No backend for contact:** no form service, API, serverless function or third-party endpoint. Nothing is submitted anywhere.
-- **Ruled (Thomas, 2026-10-22, Q1–Q5).** The address is itself a `mailto:` link (its visible text and accessible name the address, selectable by hand) with a separate `copy` button beside it (Q4 (b)). The button's label is the feedback, changed in place: `copy`, then `copied`, or `not copied` when the clipboard is blocked or absent. It stays until the next press: no timer, toast, banner, modal, live region or tooltip (Q5). The real address is deferred (Q1): the route ships with the placeholder `address@example.invalid`, a `todo` test keeps it visible in every `npm test`, and it must be supplied before 6.5.
+- **Ruled (Thomas, 2026-10-22, Q1–Q5).** The address is itself a `mailto:` link (its visible text and accessible name the address, selectable by hand) with a separate `copy` button beside it (Q4 (b)). The button's label is the feedback, changed in place: `copy`, then `copied`, or `not copied` when the clipboard is blocked or absent. It stays until the next press: no timer, toast, banner, modal, live region or tooltip (Q5). The address is `t.navarro9@laposte.net` (Q1, supplied by Thomas 2026-10-22).
 - **The one genuine runtime error surface.** If clipboard access is blocked or fails, the visible address stays readable and hand-selectable. Nothing else degrades.
 - **One of exactly five copy places.** The contact route is copy place 5. It has no help text, tooltip or explanatory caption. Every string must be held to the product voice.
 - **Unglamorous, without apology.** It works and does not embarrass. The designed ending (the collapse into a black hole that becomes the contact surface) is M4 and stays out of scope.
@@ -47,6 +47,6 @@ This epic is the last mile before the CV link goes live. A link pasted into Slac
 ## Cross-Story Dependencies
 
 - This epic builds on Epic 1 (the committed artifact, schema gates and deliberate re-solve), Epic 2 (the scene) and Epic 4 (the Fallback, routing, detection and bundle assertions).
-- 6.3's route appears on the Fallback and the Colophon, never the scene. 6.5's final no-disclaimer review covers it, and 6.5 needs the real address (the 6.3 deferral).
+- 6.3's route appears on the Fallback and the Colophon, never the scene. 6.5's final no-disclaimer review covers it; its address is supplied.
 - 6.4 measures the shipped scene, so it should follow any additions to the entry graph or the first frame. 6.3 adds nothing to the scene.
 - 6.5 comes last. It re-verifies 6.1–6.4 with the earlier routing and build gates, and it needs a real deployment.
