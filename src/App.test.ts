@@ -2,7 +2,8 @@
  * `App.tsx`, rendered (4.7): every (surface, route) pair through the render
  * harness (`scripts/render.ts`) with a fake router — the scene's four elements
  * at home in document order, the chart alone on `/chart` and on a `fallback`
- * machine, the Colophon alone on `/colophon` — each check driven red against a
+ * machine, the Colophon alone on `/colophon`, its chrome row offering the scene
+ * only on a capable machine (Epic 5 item 38) — each check driven red against a
  * render whose router returns the wrong route, whose props are wrong, or whose
  * markup is broken.
  *
@@ -105,15 +106,28 @@ function chartAlone(root: MarkupElement, machine: Surface): string[] {
   return failures;
 }
 
-/** The Colophon: `main` holds its one `<h1>` and, under it, the contact route (6.3), and nothing else. */
-function colophonAlone(root: MarkupElement): string[] {
+/**
+ * The Colophon: `main` holds its chrome row alone (Epic 5 item 38) — the `<h1>`
+ * reading the identity line, the contact route (6.3), then the route line: `the
+ * scene` to `/` and `the chart` to `/chart` on a capable machine, `the chart`
+ * alone on a fallback one — and nothing else.
+ */
+function colophonAlone(root: MarkupElement, machine: Surface): string[] {
   const main = mainOf(root);
   if (main === null) return ['the render is not one <main>'];
   const children = elementsOf(main);
-  if (children.length !== 2 || children[0]?.tag !== 'h1' || textOf(children[0]) !== 'the model' || describe(children[1] as MarkupElement) !== 'p.contact-route') {
-    return [`main holds ${children.map(describe).join(', ')} — not the Colophon's one <h1> and its contact route alone`];
+  const [row] = children;
+  if (children.length !== 1 || row === undefined || describe(row) !== 'div.colophon-chrome') {
+    return [`main holds ${children.map(describe).join(', ')} — not the Colophon's chrome row alone`];
   }
-  return [];
+  const parts = elementsOf(row).map(describe);
+  if (JSON.stringify(parts) !== JSON.stringify(['h1.colophon-chrome-heading', 'p.contact-route', 'p.colophon-routes'])) return [`the chrome row holds ${parts.join(', ')} — not the <h1>, the contact route and the route line`];
+  const failures: string[] = [];
+  if (textOf(elementsOf(row)[0] as MarkupElement) !== 'THOMAS NAVARRO · the model') failures.push('the Colophon’s <h1> is not the identity line');
+  const routes = queryAll(row, 'p.colophon-routes > a').map((link) => `${link.attrs['href'] ?? ''} ${textOf(link)}`);
+  const want = machine === 'scene' ? ['/ the scene', '/chart the chart'] : ['/chart the chart'];
+  if (JSON.stringify(routes) !== JSON.stringify(want)) failures.push(`the Colophon's route line links ${JSON.stringify(routes)} on a ${machine} machine, not ${JSON.stringify(want)}`);
+  return failures;
 }
 
 /**
@@ -175,9 +189,9 @@ test('the chart anywhere: on /chart whatever the machine, and at home on a fallb
   assert.deepEqual(chartAlone(await renderApp('fallback', 'home'), 'fallback'), []);
 });
 
-test('the Colophon: its one heading and the contact route alone, on either machine', async () => {
-  assert.deepEqual(colophonAlone(await renderApp('scene', 'colophon')), []);
-  assert.deepEqual(colophonAlone(await renderApp('fallback', 'colophon')), []);
+test('the Colophon: its chrome row alone — the heading, the contact route and a route out — on either machine', async () => {
+  assert.deepEqual(colophonAlone(await renderApp('scene', 'colophon'), 'scene'), []);
+  assert.deepEqual(colophonAlone(await renderApp('fallback', 'colophon'), 'fallback'), []);
 });
 
 // --- Each check, red ----------------------------------------------------------------------
@@ -191,8 +205,13 @@ test('each rendered check is red against a router returning the wrong route', as
     assert.notDeepEqual(chartAlone(await renderApp(surface, route), surface), [], `the chart check must reject ${surface} at ${route}`);
   }
   for (const [surface, route] of [['scene', 'home'], ['scene', 'chart'], ['fallback', 'home']] as const) {
-    assert.notDeepEqual(colophonAlone(await renderApp(surface, route)), [], `the Colophon check must reject ${surface} at ${route}`);
+    assert.notDeepEqual(colophonAlone(await renderApp(surface, route), surface), [], `the Colophon check must reject ${surface} at ${route}`);
   }
+});
+
+test('the Colophon check is red against the wrong machine — the scene offered where it cannot run, or withheld where it can', async () => {
+  assert.notDeepEqual(colophonAlone(await renderApp('scene', 'colophon'), 'fallback'), []);
+  assert.notDeepEqual(colophonAlone(await renderApp('fallback', 'colophon'), 'scene'), []);
 });
 
 test('the chart check is red against the wrong machine — the scene offered where it cannot run, or withheld where it can', async () => {
@@ -233,14 +252,20 @@ test('each rendered check is red against a broken render', async () => {
     assert.notEqual(markup, chart, `the break "${name}" must apply`);
     assert.notDeepEqual(chartAlone(parseMarkup(markup), 'scene'), [], `"${name}" must be rejected`);
   }
+  const colophonHeading = /<h1 class="colophon-chrome-heading">[\s\S]*?<\/h1>/.exec(colophon)?.[0] ?? '';
+  const colophonRoutes = /<p class="colophon-routes">[\s\S]*?<\/p>/.exec(colophon)?.[0] ?? '';
+  for (const part of [colophonHeading, colophonRoutes]) assert.notEqual(part, '', 'the Colophon’s heading and route line are found in the render');
   const colophonRows: readonly (readonly [string, string])[] = [
     ['the Colophon beside the index', colophon.replace(/<main[^>]*>/, (open) => `${open}${nav}`)],
-    ['the Colophon twice', colophon.replace('<h1>the model</h1>', '<h1>the model</h1><h1>the model</h1>')],
-    ['the Colophon gone', colophon.replace('<h1>the model</h1>', '')],
+    ['the Colophon twice', colophon.replace(colophonHeading, `${colophonHeading}${colophonHeading}`)],
+    ['the Colophon gone', colophon.replace(colophonHeading, '')],
+    // Epic 5 item 38: the old shape — no route out of /colophon — and the route line emptied.
+    ['the old shape, no route out', colophon.replace(/<div class="colophon-chrome">([\s\S]*?)<p class="colophon-routes">[\s\S]*?<\/p><\/div>/, (_, kept: string) => kept.replace(colophonHeading, '<h1>the model</h1>'))],
+    ['the route line emptied', colophon.replace(colophonRoutes, '<p class="colophon-routes"></p>')],
   ];
   for (const [name, markup] of colophonRows) {
     assert.notEqual(markup, colophon, `the break "${name}" must apply`);
-    assert.notDeepEqual(colophonAlone(parseMarkup(markup)), [], `"${name}" must be rejected`);
+    assert.notDeepEqual(colophonAlone(parseMarkup(markup), 'scene'), [], `"${name}" must be rejected`);
   }
 });
 
@@ -254,7 +279,7 @@ test('each rendered check is red against a broken render', async () => {
  * the props handed to the hosts whose output does not reveal them (the panel's and the scene's artifact, the chrome's router), the
  * route read from the router through `useSyncExternalStore` and never from the
  * store, the machine's surface read by `surfaceOf` and handed to the fallback
- * host alone, no element gated by `&&` or a ternary — each surface is its own
+ * and colophon hosts alone (Epic 5 item 38), no element gated by `&&` or a ternary — each surface is its own
  * return — and no stylesheet. Order, nesting, each element once and each other
  * surface alone are the rendered rows'.
  */
@@ -274,11 +299,14 @@ function auditMount(source: string): string[] {
   // 4.5: the machine's surface is read by `surfaceOf` and handed to the fallback host alone — a
   // `surface` handed to another host never shows in its markup.
   // `(?<![\w-])…(?![\w-])`: the word alone, not `./shell/surface-main.tsx`'s path (4.10).
-  if ((code.match(/(?<![\w-])surface(?![\w-])/g) ?? []).length !== 5 || (code.match(/surface=\{\s*surface\s*\}/g) ?? []).length !== 1) failures.push('the surface is read other than by surfaceOf and the fallback host');
+  if ((code.match(/(?<![\w-])surface(?![\w-])/g) ?? []).length !== 7 || (code.match(/surface=\{\s*surface\s*\}/g) ?? []).length !== 2) failures.push('the surface is read other than by surfaceOf, the fallback host and the colophon host');
   if (/&&\s*</.test(code) || /\?\s*</.test(code)) failures.push('an element is gated inside a branch — each surface is its own return');
   const scenes = code.match(/<SceneHost\b[^>]*>/g) ?? [];
   if (scenes.some((tag) => !/^<SceneHost\s+artifact=\{\s*artifact\s*\}\s*\/>$/.test(tag))) failures.push('the scene host is not handed the artifact');
   if (!/import\s*\{\s*ColophonHost\s*\}\s*from\s*'\.\/shell\/colophon-host\.tsx'/.test(code)) failures.push('ColophonHost is not imported from the shell');
+  // Epic 5 item 38: the Colophon's links are built in its host, from the machine's surface and the router.
+  const colophonHosts = code.match(/<ColophonHost\b[^>]*>/g) ?? [];
+  if (colophonHosts.length !== 1 || !/^<ColophonHost\s+surface=\{\s*surface\s*\}\s+router=\{\s*router\s*\}\s*\/>$/.test(colophonHosts[0] as string)) failures.push('the colophon host is not handed the surface and the router');
   if (!/import\s*\{\s*FallbackHost\s*\}\s*from\s*'\.\/shell\/fallback-host\.tsx'/.test(code)) failures.push('FallbackHost is not imported from the shell');
   if (/^import\s+'[^']*\.css'/m.test(code)) failures.push('App.tsx imports a stylesheet — the page is the entry’s since 4.1');
   // 4.10: the arrival target. Every branch's root is SurfaceMain, handed `shown`; no bare <main>.
@@ -301,7 +329,11 @@ test('App.tsx structure: the hosts are the shell’s, the route is the router’
     ['the fallback branch after the scene', (s) => s.replace(/\s*if \(shown === 'fallback'\) \{\s*return \(\s*<SurfaceMain shown=\{shown\}>\s*<FallbackHost artifact=\{artifact\} surface=\{surface\} router=\{router\} \/>\s*<\/SurfaceMain>\s*\);\s*\}/, '').replace('<FocusPanel artifact={artifact} />', "<FocusPanel artifact={artifact} />\n      {shown === 'fallback' ? <FallbackHost artifact={artifact} surface={surface} router={router} /> : null}")],
     ['the panel gated', (s) => s.replace('<FocusPanel artifact={artifact} />', "{shown === 'scene' && <FocusPanel artifact={artifact} />}")],
     ['the route from the store', (s) => s.replace('useSyncExternalStore(router.subscribe, router.route)', 'useStore(navigationStore, (state) => state.route)')],
-    ['the colophon beside the index', (s) => s.replace(/\s*if \(shown === 'colophon'\) \{\s*return \(\s*<SurfaceMain shown=\{shown\}>\s*<ColophonHost \/>\s*<\/SurfaceMain>\s*\);\s*\}/, '').replace('<FocusPanel artifact={artifact} />', "<FocusPanel artifact={artifact} />\n      {shown === 'colophon' && <ColophonHost />}")],
+    ['the colophon beside the index', (s) => s.replace(/\s*if \(shown === 'colophon'\) \{\s*return \(\s*<SurfaceMain shown=\{shown\}>\s*<ColophonHost surface=\{surface\} router=\{router\} \/>\s*<\/SurfaceMain>\s*\);\s*\}/, '').replace('<FocusPanel artifact={artifact} />', "<FocusPanel artifact={artifact} />\n      {shown === 'colophon' && <ColophonHost surface={surface} router={router} />}")],
+    // Epic 5 item 38: the colophon host not handed the router, or the surface.
+    ['the colophon host not handed the router', (s) => s.replace('<ColophonHost surface={surface} router={router} />', '<ColophonHost surface={surface} />')],
+    ['the colophon host not handed the surface', (s) => s.replace('<ColophonHost surface={surface} router={router} />', '<ColophonHost router={router} />')],
+    ['the colophon host handed a fixed machine', (s) => s.replace('<ColophonHost surface={surface} router={router} />', '<ColophonHost surface="scene" router={router} />')],
     ['the page imported here again', (s) => s.replace("import { SceneHost } from './shell/scene-host.tsx';", "import { SceneHost } from './shell/scene-host.tsx';\nimport './shell/page.css';")],
     ['no artifact', (s) => s.replace('<FocusPanel artifact={artifact} />', '<FocusPanel artifact={{ clients: [] }} />')],
     ['imported from elsewhere', (s) => s.replace("from './shell/focus-panel.tsx'", "from './panel.tsx'")],
@@ -310,10 +342,10 @@ test('App.tsx structure: the hosts are the shell’s, the route is the router’
     ['the surface handed to the scene host', (s) => s.replace('<SceneHost artifact={artifact} />', '<SceneHost artifact={artifact} surface={surface} />')],
     ['the chrome imported from elsewhere', (s) => s.replace("from './shell/corner-chrome.tsx'", "from './chrome.tsx'")],
     // 4.10: the arrival target.
-    ['a bare <main> again', (s) => s.replace('<SurfaceMain shown={shown}>\n        <ColophonHost />\n      </SurfaceMain>', '<main>\n        <ColophonHost />\n      </main>')],
+    ['a bare <main> again', (s) => s.replace('<SurfaceMain shown={shown}>\n        <ColophonHost surface={surface} router={router} />\n      </SurfaceMain>', '<main>\n        <ColophonHost surface={surface} router={router} />\n      </main>')],
     ['SurfaceMain imported from elsewhere', (s) => s.replace("from './shell/surface-main.tsx'", "from './main.tsx'")],
     ['SurfaceMain handed the route', (s) => s.replace('<SurfaceMain shown={shown}>\n      <DestinationNav', '<SurfaceMain shown={route}>\n      <DestinationNav')],
-    ['SurfaceMain inside a wrapper', (s) => s.replace('<SurfaceMain shown={shown}>\n        <ColophonHost />\n      </SurfaceMain>', '<div>\n        <SurfaceMain shown={shown}>\n          <ColophonHost />\n        </SurfaceMain>\n      </div>')],
+    ['SurfaceMain inside a wrapper', (s) => s.replace('<SurfaceMain shown={shown}>\n        <ColophonHost surface={surface} router={router} />\n      </SurfaceMain>', '<div>\n        <SurfaceMain shown={shown}>\n          <ColophonHost surface={surface} router={router} />\n        </SurfaceMain>\n      </div>')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);
@@ -322,8 +354,8 @@ test('App.tsx structure: the hosts are the shell’s, the route is the router’
   }
   // The surface clause on its own: the scene host's own tag clause rejects that row too.
   const surfaceHanded = real.replace('<SceneHost artifact={artifact} />', '<SceneHost artifact={artifact} surface={surface} />');
-  assert.ok(auditMount(surfaceHanded).includes('the surface is read other than by surfaceOf and the fallback host'), 'the surface handed to the scene host is the surface clause’s');
+  assert.ok(auditMount(surfaceHanded).includes('the surface is read other than by surfaceOf, the fallback host and the colophon host'), 'the surface handed to the scene host is the surface clause’s');
   const surfaceRead = real.replace('const shown = surfaceOf(route, surface);', "const shown = surfaceOf(route, surface);\n  const machine = surface;\n  void machine;");
   assert.notEqual(surfaceRead, real);
-  assert.deepEqual(auditMount(surfaceRead), ['the surface is read other than by surfaceOf and the fallback host'], 'a second read of the surface is the surface clause’s alone');
+  assert.deepEqual(auditMount(surfaceRead), ['the surface is read other than by surfaceOf, the fallback host and the colophon host'], 'a second read of the surface is the surface clause’s alone');
 });

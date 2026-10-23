@@ -1,7 +1,7 @@
 /**
  * The links between surfaces (4.5), executed: the click rule over every row of
- * the matrix's modified-click case, the link texts, the chart's route line per
- * surface, and the links bound to a router — plus scans holding that the module
+ * the matrix's modified-click case, the link texts, the chart's and the
+ * Colophon's route lines per surface (Epic 5 item 38), and the links bound to a router — plus scans holding that the module
  * is pure and that no `.tsx` file holds a click rule of its own, each driven
  * red by a mutation.
  */
@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { isTestFile, sourceFilesUnder, stripComments } from '../../scripts/source-scan.ts';
 import { IDENTITY_LINE, IDENTITY_MODEL, IDENTITY_NAME } from './chrome-model.ts';
 import { ROUTE_PATHS, type Route } from './route.ts';
-import { CHART_LINK_TEXT, SCENE_LINK_TEXT, chartLinks, chartRoutes, followRoute, isPrimaryClick, routeLink, type RouteClick } from './route-link.ts';
+import { CHART_LINK_TEXT, SCENE_LINK_TEXT, chartLinks, chartRoutes, colophonLinks, colophonRoutes, followRoute, isPrimaryClick, routeLink, type RouteClick } from './route-link.ts';
 
 const ROUTE_LINK_TS = fileURLToPath(new URL('./route-link.ts', import.meta.url));
 const SRC = fileURLToPath(new URL('..', import.meta.url));
@@ -121,6 +121,59 @@ test('the chart’s links: the model to /colophon on every machine, the scene to
   const incapable = chartLinks('fallback', recorder().navigate);
   assert.equal(incapable.model.href, '/colophon', 'the model link is present on any machine');
   assert.deepEqual(incapable.routes, [], 'no scene link where the scene cannot run');
+});
+
+test('the Colophon’s route line: the scene then the chart on a capable machine; the chart alone on the fallback surface; never the Colophon', () => {
+  assert.deepEqual(colophonRoutes('scene'), [
+    { key: 'scene', text: 'the scene', to: 'home' },
+    { key: 'chart', text: 'the chart', to: 'chart' },
+  ]);
+  assert.deepEqual(colophonRoutes('fallback'), [{ key: 'chart', text: 'the chart', to: 'chart' }]);
+  for (const machine of ['scene', 'fallback'] as const) {
+    assert.ok(colophonRoutes(machine).every((route) => route.to !== 'colophon'), `${machine}: no link to the page itself`);
+    assert.deepEqual(
+      colophonRoutes(machine).map((route) => route.text),
+      colophonRoutes(machine).map((route) => (route.to === 'home' ? SCENE_LINK_TEXT : CHART_LINK_TEXT)),
+      `${machine}: the texts are the existing constants`,
+    );
+  }
+});
+
+/** `colophonRoutes`' body, comments stripped: it must not be built from `chartRoutes`, so a link added to the chart's line cannot join it. */
+function colophonRoutesBorrows(source: string): boolean {
+  const code = stripComments(source);
+  const body = /export function colophonRoutes\([^)]*\)[^{]*\{([\s\S]*?)\n\}/.exec(code)?.[1];
+  return body === undefined || /\bchartRoutes\b|\bchartLinks\b/.test(body);
+}
+
+test('the Colophon’s route line is written out, not borrowed from the chart’s', () => {
+  const real = readFileSync(ROUTE_LINK_TS, 'utf8').replace(/\r\n/g, '\n');
+  assert.equal(colophonRoutesBorrows(real), false, 'colophonRoutes does not read chartRoutes');
+  const borrowed = real.replace(/(export function colophonRoutes\([^)]*\)[^{]*\{)[\s\S]*?\n\}/, "$1\n  return [...chartRoutes(machine), { key: 'chart', text: CHART_LINK_TEXT, to: 'chart' }];\n}");
+  assert.notEqual(borrowed, real, 'the mutation applies');
+  assert.equal(colophonRoutesBorrows(borrowed), true, 'a line built from chartRoutes is rejected');
+});
+
+test('the Colophon’s links: hrefs in order, a primary click routed, a modified click left to the browser', () => {
+  const capable = recorder();
+  const links = colophonLinks('scene', capable.navigate);
+  assert.deepEqual(links.routes.map((link) => [link.key, link.text, link.href]), [['scene', 'the scene', '/'], ['chart', 'the chart', '/chart']]);
+  for (const link of links.routes) {
+    for (const overrides of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
+      const modified = click(overrides);
+      link.follow(modified.event);
+      assert.equal(modified.prevented(), 0, `${link.key} ${JSON.stringify(overrides)}: not prevented`);
+    }
+  }
+  assert.deepEqual(capable.went, [], 'no modified click navigated');
+  const scene = click();
+  links.routes[0]?.follow(scene.event);
+  const chart = click();
+  links.routes[1]?.follow(chart.event);
+  assert.deepEqual(capable.went, ['home', 'chart'], 'the router pushes home, then the chart');
+  assert.deepEqual([scene.prevented(), chart.prevented()], [1, 1]);
+  const incapable = colophonLinks('fallback', recorder().navigate);
+  assert.deepEqual(incapable.routes.map((link) => [link.key, link.text, link.href]), [['chart', 'the chart', '/chart']], 'the chart alone where the scene cannot run');
 });
 
 // --- Purity -------------------------------------------------------------------------------

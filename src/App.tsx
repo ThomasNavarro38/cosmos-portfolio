@@ -27,10 +27,12 @@
  * responsibility, and it comes last in document order because it is read after a
  * destination is chosen.
  *
- * The scene and the chart are each handed the router (4.5), for their links
- * between surfaces: the chrome's `the chart`, and the chart's `the model` and,
- * where this machine's surface is the scene, `the scene` — which is why the
- * fallback host is handed the machine's surface too. Props only.
+ * The scene, the chart and the Colophon are each handed the router (4.5), for
+ * their links between surfaces: the chrome's `the chart`; the chart's `the
+ * model` and, where this machine's surface is the scene, `the scene`; and the
+ * Colophon's route line, `the scene` likewise, then `the chart` (Epic 5 item
+ * 38) — which is why the fallback and colophon hosts are handed the machine's
+ * surface too. Props only.
  *
  * The corner chrome (3.8) sits between the index and the scene host:
  * `./shell/corner-chrome.tsx` holds it — the identity line and the stateful slot
@@ -83,7 +85,7 @@ export function App({ surface, router }: { readonly surface: Surface; readonly r
   if (shown === 'colophon') {
     return (
       <SurfaceMain shown={shown}>
-        <ColophonHost />
+        <ColophonHost surface={surface} router={router} />
       </SurfaceMain>
     );
   }

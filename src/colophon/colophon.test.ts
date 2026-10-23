@@ -1,9 +1,8 @@
 /**
- * `colophon.tsx` (5.1, 5.2, 5.3, 5.4, 6.3): `ColophonPage` rendered through the
+ * `colophon.tsx` (5.1, 5.2, 5.3, 5.4, 6.3, Epic 5 item 38): `ColophonPage` rendered through the
  * render harness (`scripts/render.ts`). Without exhibits — before the files
- * arrive, or after a failed fetch — the `<h1>` and the contact route (6.3)
- * alone, with no prose about files that are not there. With them, the `<h1>`,
- * the contact route, career.json
+ * arrive, or after a failed fetch — the chrome row alone, with no prose about
+ * files that are not there. With them, the chrome row, career.json
  * verbatim in a `<pre>`, the derivation table (5.2), then layout.generated.json
  * verbatim in a `<pre>`, then (5.4) `<h2 class="colophon-heading">` reading
  * `ABSENCES_HEADING` and one `<p class="colophon-prose">` per `ABSENCES`
@@ -40,10 +39,19 @@
  * link or button broken, or a status beside it; the copy button's click is
  * never `onSolve`.
  *
+ * The chrome row (Epic 5 item 38, ruling (a)): one `div.colophon-chrome`
+ * first, holding `h1.colophon-chrome-heading` reading `THOMAS NAVARRO · the
+ * model` with no link in it, the contact route, then `p.colophon-routes`: the
+ * links `colophonLinks` builds for the machine, in order, joined by ` · ` —
+ * `the scene` to `/` then `the chart` to `/chart` on a capable machine, `the
+ * chart` alone otherwise — each link's click its own `follow`. Driven red by
+ * the row unwrapped, the route line dropped or moved before the contact route,
+ * a link dropped, reordered or retargeted, the separator dropped, `the model`
+ * linked, a link to `/colophon` or a back link added, and the wrong machine.
+ *
  * The default `Colophon`'s effect does not run under the harness (a static
  * render runs no effect), so the fetch is `exhibits.test.ts`'s — `startExhibits`
- * executed there — and the default's render — the `<h1>` and the contact
- * route — is
+ * executed there — and the default's render — the chrome row — is
  * `colophon-host.test.ts`'s and `App.test.ts`'s. Here the effect is audited as
  * source: `startExhibits`, its stop the cleanup, run once, the failure logged;
  * and (5.5) the press: a thin binding of `createLiveSolve` built once with the
@@ -56,11 +64,13 @@ import { readFileSync } from 'node:fs';
 import { after, test } from 'node:test';
 import { stripComments } from '../../scripts/source-scan.ts';
 import { React, elementsOf, parseMarkup, queryAll, renderer, textOf, type MarkupElement, type Renderer } from '../../scripts/render.ts';
-import type { ColophonPage as ColophonPageComponent } from './colophon.tsx';
+import type { ColophonLinks, ColophonPage as ColophonPageComponent } from './colophon.tsx';
 import { EXHIBIT_PATHS, type Exhibits } from './exhibits.ts';
 import { ABSENCES, ABSENCES_HEADING } from './absences.ts';
 import { LIVE_SOLVE } from './live-solve.ts';
 import { CONTACT } from '../shell/contact.ts';
+import type { Surface } from '../shell/detect.ts';
+import { colophonLinks } from '../shell/route-link.ts';
 
 const CAREER = readFileSync(new URL('../data/career.json', import.meta.url), 'utf8');
 const LAYOUT = readFileSync(new URL('../../generated/layout.generated.json', import.meta.url), 'utf8');
@@ -84,8 +94,11 @@ const IDLE: Live = { solved: null, running: false };
 /** A handler the page must hand the button, unchanged. */
 const onSolve = (): void => undefined;
 
-async function renderPage(exhibits: Exhibits | null, live: Live = IDLE): Promise<string> {
-  return harness.render(React.createElement(ColophonPage, { exhibits, ...live, onSolve }), { name: 'ColophonPage' });
+/** The links the shell hands the page on each machine, bound to a router that accepts every push, typed as the page declares them. */
+const LINKS: Readonly<Record<Surface, ColophonLinks>> = { scene: colophonLinks('scene', () => true), fallback: colophonLinks('fallback', () => true) };
+
+async function renderPage(exhibits: Exhibits | null, live: Live = IDLE, machine: Surface = 'scene'): Promise<string> {
+  return harness.render(React.createElement(ColophonPage, { links: LINKS[machine], exhibits, ...live, onSolve }), { name: 'ColophonPage' });
 }
 
 /** The artifact's first Project, as the test reads it from the parsed text. */
@@ -275,23 +288,54 @@ function contactRoute(route: MarkupElement): string[] {
   return failures;
 }
 
+/** The route line's links per machine, as `href text`: the scene then the chart where it is capable, the chart alone otherwise. */
+const ROUTE_LINE: Readonly<Record<Surface, readonly string[]>> = { scene: ['/ the scene', '/chart the chart'], fallback: ['/chart the chart'] };
+
 /**
- * The page's elements: `<h1>the model</h1>`, the contact route (6.3), drawn
+ * The chrome row (Epic 5 item 38): one `div.colophon-chrome` holding the
+ * `h1.colophon-chrome-heading` (the identity line, no element in it, so `the
+ * model` links nothing), the contact route, then the `p.colophon-routes`
+ * holding the machine's links in order, joined by ` · `, and nothing else.
+ */
+function chromeRow(row: MarkupElement, machine: Surface): string[] {
+  if (row.tag !== 'div' || JSON.stringify(row.attrs) !== JSON.stringify({ class: 'colophon-chrome' })) return [`the first element is ${row.tag} ${JSON.stringify(row.attrs)}, not the div.colophon-chrome`];
+  const parts = elementsOf(row);
+  const shape = parts.map((part) => `${part.tag}.${part.attrs['class'] ?? ''}`);
+  const want = ['h1.colophon-chrome-heading', 'p.contact-route', 'p.colophon-routes'];
+  if (JSON.stringify(shape) !== JSON.stringify(want)) return [`the chrome row holds ${JSON.stringify(shape)}, not ${JSON.stringify(want)}`];
+  const [heading, route, routes] = parts as [MarkupElement, MarkupElement, MarkupElement];
+  const failures: string[] = [];
+  if (JSON.stringify(heading.attrs) !== JSON.stringify({ class: 'colophon-chrome-heading' }) || elementsOf(heading).length !== 0 || textOf(heading) !== 'THOMAS NAVARRO · the model') {
+    failures.push(`the heading is ${JSON.stringify(heading.attrs)} reading ${JSON.stringify(textOf(heading))} with ${elementsOf(heading).length} elements — not the identity line, unlinked`);
+  }
+  failures.push(...contactRoute(route));
+  if (JSON.stringify(routes.attrs) !== JSON.stringify({ class: 'colophon-routes' })) failures.push(`the route line carries ${JSON.stringify(routes.attrs)}`);
+  const links = elementsOf(routes);
+  const drawn = links.map((link) => `${link.attrs['href'] ?? ''} ${textOf(link)}`);
+  if (links.some((link) => link.tag !== 'a' || Object.keys(link.attrs).join() !== 'href' || elementsOf(link).length !== 0)) failures.push('the route line holds other than bare <a href> links');
+  if (JSON.stringify(drawn) !== JSON.stringify(ROUTE_LINE[machine])) failures.push(`the route line links ${JSON.stringify(drawn)}, not ${JSON.stringify(ROUTE_LINE[machine])} on a ${machine} machine`);
+  const text = ROUTE_LINE[machine].map((link) => link.slice(link.indexOf(' ') + 1)).join(' · ');
+  if (textOf(routes) !== text) failures.push(`the route line reads ${JSON.stringify(textOf(routes))}, not ${JSON.stringify(text)}`);
+  return failures;
+}
+
+/**
+ * The page's elements: the chrome row (Epic 5 item 38) — the `<h1>`, the
+ * contact route (6.3) and the route line — drawn
  * whether or not the files have arrived, then, when `expected` is given,
  * the career exhibit, the derivation table worked on its layout's first
  * Project, the layout exhibit, what is not there — the `<h2>` and five `<p>` —
  * and the live re-solve (5.5) — the `<h2>`, the `<p>`, the `<button>`, and the
  * result `<pre>` when one is solved — and nothing else.
  */
-function colophonPage(html: string, expected: Exhibits | null, live: Live = IDLE): string[] {
+function colophonPage(html: string, expected: Exhibits | null, live: Live = IDLE, machine: Surface = 'scene'): string[] {
   const children = elementsOf(parseMarkup(html));
   const failures: string[] = [];
   const tags = children.map((child) => child.tag);
-  const want = expected === null ? ['h1', 'p'] : ['h1', 'p', 'pre', 'table', 'pre', 'h2', ...PARAGRAPHS.map(() => 'p'), 'h2', 'p', 'button', ...(live.solved === null ? [] : ['pre'])];
+  const want = expected === null ? ['div'] : ['div', 'pre', 'table', 'pre', 'h2', ...PARAGRAPHS.map(() => 'p'), 'h2', 'p', 'button', ...(live.solved === null ? [] : ['pre'])];
   if (JSON.stringify(tags) !== JSON.stringify(want)) return [`the page renders ${JSON.stringify(tags)}, not ${JSON.stringify(want)}`];
-  const [heading, route, career, table, layout, absencesHeading, ...rest] = children as [MarkupElement, MarkupElement, MarkupElement, MarkupElement, MarkupElement, MarkupElement, ...MarkupElement[]];
-  if (textOf(heading) !== 'the model') failures.push(`the heading reads ${JSON.stringify(textOf(heading))}`);
-  failures.push(...contactRoute(route));
+  const [chrome, career, table, layout, absencesHeading, ...rest] = children as [MarkupElement, MarkupElement, MarkupElement, MarkupElement, MarkupElement, ...MarkupElement[]];
+  failures.push(...chromeRow(chrome, machine));
   if (expected !== null) {
     failures.push(...exhibit(career, CAREER_NAME, expected.career));
     failures.push(...derivationTable(table, expected.layout));
@@ -310,14 +354,16 @@ function alteredLayout(edit: (project: { mass: unknown; luminanceBand: unknown; 
   return JSON.stringify(layout, null, 2);
 }
 
-test('without exhibits: the <h1> and the contact route alone', async () => {
+test('without exhibits: the chrome row alone — the <h1>, the contact route and the route line, on either machine', async () => {
   assert.deepEqual(colophonPage(await renderPage(null), null), []);
+  assert.deepEqual(colophonPage(await renderPage(null, IDLE, 'fallback'), null, IDLE, 'fallback'), []);
 });
 
-test('with exhibits: the <h1>, the contact route, career.json verbatim in a <pre>, the derivation table, layout.generated.json verbatim in a <pre>, what is not there, then the live re-solve, idle', async () => {
+test('with exhibits: the chrome row, career.json verbatim in a <pre>, the derivation table, layout.generated.json verbatim in a <pre>, what is not there, then the live re-solve, idle', async () => {
   assert.ok(CAREER.length > 0 && LAYOUT.length > 0, 'the real files were read');
   assert.deepEqual([CAREER_NAME, LAYOUT_NAME], ['career.json', 'layout.generated.json'], 'the names are the published files’');
   assert.deepEqual(colophonPage(await renderPage(EXHIBITS), EXHIBITS), []);
+  assert.deepEqual(colophonPage(await renderPage(EXHIBITS, IDLE, 'fallback'), EXHIBITS, IDLE, 'fallback'), [], 'the row is the same with the exhibits, on a fallback machine');
   const pres = queryAll(parseMarkup(await renderPage(EXHIBITS)), 'pre');
   assert.ok(queryAll(pres[0] as MarkupElement, 'span').length > 0 && queryAll(pres[1] as MarkupElement, 'span').length > 0, 'both files are set in spans');
 });
@@ -365,6 +411,15 @@ test('the page check is red against broken markup', async () => {
   const contactMarkup = /<p class="contact-route">[\s\S]*?<\/p>/.exec(full)?.[0] ?? '';
   assert.ok(contactMarkup !== '' && full.indexOf(contactMarkup) < firstPre, 'the contact route is drawn before the exhibits');
   assert.ok(bare.includes(contactMarkup), 'and before they arrive');
+  // Epic 5 item 38: the chrome row, its heading and its route line.
+  const headingTag = /<h1 class="colophon-chrome-heading">[\s\S]*?<\/h1>/.exec(full)?.[0] ?? '';
+  const routeLine = /<p class="colophon-routes">[\s\S]*?<\/p>/.exec(full)?.[0] ?? '';
+  const sceneLink = /<a href="\/">[^<]*<\/a>/.exec(routeLine)?.[0] ?? '';
+  const chartLink = /<a href="\/chart">[^<]*<\/a>/.exec(routeLine)?.[0] ?? '';
+  const between = routeLine.slice(routeLine.indexOf(sceneLink) + sceneLink.length, routeLine.indexOf(chartLink));
+  assert.ok(headingTag !== '' && sceneLink !== '' && chartLink !== '' && between.includes('·'), 'the heading, both links and the separator between them were found');
+  const chromeOpen = '<div class="colophon-chrome">';
+  assert.ok(full.startsWith(chromeOpen) && bare.startsWith(chromeOpen), 'the chrome row is drawn first, with and without the exhibits');
   const tableStart = full.indexOf('<table');
   const table = full.slice(tableStart, full.indexOf('</table>') + '</table>'.length);
   const bodyRows = [...table.matchAll(/<tr><th scope="row">[\s\S]*?<\/tr>/g)].map((match) => match[0]);
@@ -398,7 +453,7 @@ test('the page check is red against broken markup', async () => {
     ['the career text altered', inCareer((pre) => pre.replace(/\n/, '\n  '))],
     ['the layout text truncated', full.replace(layoutPre, () => layoutPre.replace(/<span[^>]*>[^<]*<\/span>[^<]*<\/pre>$/, '</pre>'))],
     ['the order swapped', swapped],
-    ['the heading renamed', full.replace('<h1>the model</h1>', '<h1>The model</h1>')],
+    ['the heading renamed', full.replace(headingTag, headingTag.replace('the model', 'The model'))],
     ['a third <pre>', `${full}<pre>x</pre>`],
     ['an exhibit’s name dropped', inCareer((pre) => pre.replace(' aria-label="career.json"', ''))],
     ['the exhibits’ names swapped', inCareer((pre) => pre.replace('aria-label="career.json"', 'aria-label="layout.generated.json"'))],
@@ -433,9 +488,57 @@ test('the page check is red against broken markup', async () => {
     ['the copy button relabelled', full.replace(`>${CONTACT.copy}</button>`, '>Copy email</button>')],
     ['the copy button disabled', full.replace('<button type="button" class="contact-copy">', '<button type="button" class="contact-copy" disabled="">')],
     ['a status beside the button', full.replace(`>${CONTACT.copy}</button>`, `>${CONTACT.copy}</button><span role="status"></span>`)],
+    // Epic 5 item 38: the chrome row unwrapped, its route line dropped or misplaced, a link broken, the model linked, a route back to itself.
+    ['the chrome row unwrapped', full.replace(chromeOpen, '').replace(`${routeLine}</div>`, routeLine)],
+    ['the route line dropped', full.replace(routeLine, '')],
+    ['the route line before the contact route', full.replace(contactMarkup, '').replace(routeLine, `${routeLine}${contactMarkup}`)],
+    ['the route line before the heading', full.replace(routeLine, '').replace(headingTag, `${routeLine}${headingTag}`)],
+    ['the scene link dropped', full.replace(`${sceneLink}${between}`, '')],
+    ['the chart link dropped', full.replace(`${between}${chartLink}`, '')],
+    ['the links reordered', full.replace(`${sceneLink}${between}${chartLink}`, `${chartLink}${between}${sceneLink}`)],
+    ['the separator dropped', full.replace(`${sceneLink}${between}${chartLink}`, `${sceneLink}${chartLink}`)],
+    ['the scene link retargeted', full.replace(sceneLink, sceneLink.replace('href="/"', 'href="/colophon"'))],
+    ['a link to the page itself', full.replace(`${chartLink}</p>`, `${chartLink} · <a href="/colophon">the model</a></p>`)],
+    ['a back link', full.replace(`${chartLink}</p>`, `${chartLink} · <a href="javascript:history.back()">back</a></p>`)],
+    ['the model linked', full.replace(headingTag, headingTag.replace(/the model<\/h1>$/, '<a href="/colophon">the model</a></h1>'))],
+    ['the heading the bare model', full.replace(headingTag, '<h1 class="colophon-chrome-heading">the model</h1>')],
+    ['the heading unclassed', full.replace(headingTag, headingTag.replace(' class="colophon-chrome-heading"', ''))],
+    ['the route line unclassed', full.replace(routeLine, routeLine.replace(' class="colophon-routes"', ''))],
   ] as const) {
     assert.notEqual(markup, full, `the break "${name}" must apply`);
     assert.notDeepEqual(colophonPage(markup, EXHIBITS), [], `"${name}" must be rejected`);
+  }
+  // The wrong machine: the scene offered where it cannot run, or withheld where it can.
+  assert.notDeepEqual(colophonPage(full, EXHIBITS, IDLE, 'fallback'), [], 'the scene offered on a fallback machine');
+  assert.notDeepEqual(colophonPage(await renderPage(EXHIBITS, IDLE, 'fallback'), EXHIBITS, IDLE, 'scene'), [], 'the scene withheld on a capable machine');
+});
+
+/** The props of each `<a>` under the recorded `p.colophon-routes`, read off its children as the page handed them to React. */
+function routeAnchors(paragraphs: readonly { readonly props: Readonly<Record<string, unknown>> }[]): Readonly<Record<string, unknown>>[] {
+  const lines = paragraphs.filter((paragraph) => paragraph.props['className'] === 'colophon-routes');
+  assert.equal(lines.length, 1, 'one route line recorded');
+  const anchors: Readonly<Record<string, unknown>>[] = [];
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) return node.forEach(walk);
+    if (node === null || typeof node !== 'object' || !('props' in node)) return;
+    const element = node as { readonly type: unknown; readonly props: Readonly<Record<string, unknown>> };
+    if (element.type === 'a') anchors.push(element.props);
+    walk(element.props['children']);
+  };
+  walk(lines[0]?.props['children']);
+  return anchors;
+}
+
+test('each route link’s click is the link’s own follow, handed down unchanged, on either machine', async () => {
+  for (const [machine, texts] of [['scene', ['the scene', 'the chart']], ['fallback', ['the chart']]] as const) {
+    await renderPage(null, IDLE, machine);
+    const anchors = routeAnchors(harness.elements('p'));
+    assert.deepEqual(anchors.map((anchor) => anchor['children']), texts, `${machine}: the route line’s links, in order`);
+    assert.deepEqual(
+      anchors.map((anchor) => anchor['onClick']),
+      LINKS[machine].routes.map((link) => link.follow),
+      `${machine}: each click is its link’s follow, in order`,
+    );
   }
 });
 
@@ -539,7 +642,10 @@ function auditEffect(source: string): string[] {
   if ((code.match(/\buseEffect\(/g) ?? []).length !== 2) failures.push('an effect other than the two: the exhibits’, and the unmount’s stop of the live re-solve');
   // The state the effect's `show` writes is the state the page is drawn from.
   if (!/const\s*\[\s*exhibits\s*,\s*setExhibits\s*\]\s*=\s*useState<Exhibits\s*\|\s*null>\(\s*null\s*\)\s*;/.test(code)) failures.push('the files are not held as useState<Exhibits | null>(null)');
-  if (!/return\s*<ColophonPage\s+exhibits=\{\s*exhibits\s*\}\s+solved=\{\s*solved\s*\}\s+running=\{\s*running\s*\}\s+onSolve=\{\s*onSolve\s*\}\s*\/>\s*;/.test(code)) failures.push('the page is not drawn from the held files and the held re-solve');
+  if (!/return\s*<ColophonPage\s+links=\{\s*links\s*\}\s+exhibits=\{\s*exhibits\s*\}\s+solved=\{\s*solved\s*\}\s+running=\{\s*running\s*\}\s+onSolve=\{\s*onSolve\s*\}\s*\/>\s*;/.test(code)) failures.push('the page is not drawn from the shell’s links, the held files and the held re-solve');
+  // Epic 5 item 38: the links are the shell's, handed down, never built here.
+  if (!/export\s+default\s+function\s+Colophon\(\s*\{\s*links\s*\}\s*:\s*\{\s*readonly\s+links\s*:\s*ColophonLinks\s*\}\s*\)/.test(code)) failures.push('the default does not take the shell’s links as its one prop');
+  if (/\brouter\b|\bnavigate\b|\bhistory\b|ROUTE_PATHS|\bhref=["'`]/.test(code)) failures.push('a route built here — the links are the shell’s');
   if ((code.match(/\bsetExhibits\b/g) ?? []).length !== 2) failures.push('the setter is used other than as the effect’s show');
   if (/\bAbortController\b|\bloadExhibits\b|\.then\(/.test(code)) failures.push('a fetch rule of its own — the effect is startExhibits’');
   return failures;
@@ -555,7 +661,12 @@ test('the effect audit rejects the real source with its wiring broken', () => {
     ['the stop not returned', (s: string) => s.replace('useEffect(() => startExhibits(', 'useEffect(() => { startExhibits(').replace('error)), []);', 'error)); }, []);')],
     ['run on every render', (s: string) => s.replace('error)), []);', 'error)));')],
     ['the failure swallowed', (s: string) => s.replace(/\(error\) => console\.error\([^)]*\)/, '() => undefined')],
-    ['the page drawn without the files', (s: string) => s.replace('<ColophonPage exhibits={exhibits} ', '<ColophonPage exhibits={null} ')],
+    ['the page drawn without the files', (s: string) => s.replace('<ColophonPage links={links} exhibits={exhibits} ', '<ColophonPage links={links} exhibits={null} ')],
+    // Epic 5 item 38: the links not handed down, not taken as the prop, or a route written here.
+    ['the links not handed down', (s: string) => s.replace('<ColophonPage links={links} exhibits', '<ColophonPage links={{ routes: [] }} exhibits')],
+    ['no links prop', (s: string) => s.replace('export default function Colophon({ links }: { readonly links: ColophonLinks }) {', 'export default function Colophon() {\n  const links: ColophonLinks = { routes: [] };')],
+    ['a written route', (s: string) => s.replace('              <a href={link.href} onClick={link.follow}>', '              <a href="/" onClick={link.follow}>')],
+    ['a back link', (s: string) => s.replace('              <a href={link.href} onClick={link.follow}>', '              <a href={link.href} onClick={() => window.history.back()}>')],
     ['the files never shown', (s: string) => s.replace('startExhibits(fetch, setExhibits,', 'startExhibits(fetch, () => undefined,')],
     ['the files shown into another state', (s: string) => s.replace('const [exhibits, setExhibits] = useState<Exhibits | null>(null);', 'const [exhibits] = useState<Exhibits | null>(null);\n  const [, setExhibits] = useState<Exhibits | null>(null);')],
     ['a fetch of its own', (s: string) => s.replace('useEffect(() => startExhibits(', 'useEffect(() => { const c = new AbortController(); return () => c.abort(); }, []);\n  useEffect(() => startExhibits(')],

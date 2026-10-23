@@ -25,8 +25,16 @@
  * would lead back to the same chart. The route there is `home`, never a
  * `/scene` path: the root *is* this machine's surface.
  *
+ * **The Colophon's route line** (`colophonRoutes`, Epic 5 item 38, ruling (a)
+ * 2026-10-23) mirrors the chart's and adds the chart: `the scene` where this
+ * machine is capable, then `the chart` on any machine. Its heading, `the
+ * model`, is the page itself and links nothing, so `/colophon` is never a
+ * route out of `/colophon`. The texts are the two constants above; the
+ * Colophon joins them with ` · `, as the scene's identity line joins its parts.
+ *
  * Pure: no React, no DOM, no store. The event and `navigate` arrive as
- * arguments; `fallback-host.tsx` and `corner-chrome.tsx` hand them over.
+ * arguments; `fallback-host.tsx`, `colophon-host.tsx` and `corner-chrome.tsx`
+ * hand them over.
  */
 
 import { IDENTITY_MODEL } from './chrome-model.ts';
@@ -103,4 +111,29 @@ export function chartLinks(machine: Surface, navigate: (to: Route) => boolean): 
     model: routeLink('model', IDENTITY_MODEL, 'colophon', navigate),
     routes: chartRoutes(machine).map((route) => routeLink(route.key, route.text, route.to, navigate)),
   };
+}
+
+/**
+ * The Colophon's route line on this machine: `the scene` where it is capable,
+ * then `the chart` on any machine. Written out here rather than built from
+ * `chartRoutes`, so a link added to the chart's route line never joins the
+ * Colophon's silently.
+ */
+export function colophonRoutes(machine: Surface): readonly ChartRoute[] {
+  const chart: ChartRoute = { key: 'chart', text: CHART_LINK_TEXT, to: 'chart' };
+  return machine === 'scene' ? [{ key: 'scene', text: SCENE_LINK_TEXT, to: 'home' }, chart] : [chart];
+}
+
+/**
+ * The Colophon's links, as the shell builds them: its route line alone — its
+ * heading, `the model`, is the page itself. The page declares its own
+ * structural `ColophonLinks` (`colophon.tsx`); this is the shell's side.
+ */
+export interface ColophonRouteLinks {
+  readonly routes: readonly RouteLink[];
+}
+
+/** The Colophon's links on this machine, bound to `navigate`. */
+export function colophonLinks(machine: Surface, navigate: (to: Route) => boolean): ColophonRouteLinks {
+  return { routes: colophonRoutes(machine).map((route) => routeLink(route.key, route.text, route.to, navigate)) };
 }
