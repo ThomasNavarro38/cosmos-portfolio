@@ -36,7 +36,9 @@
  * test is a `todo`, reported pending on every `npm test` — the way 6.3 kept its
  * placeholder address visible. The record reader names what is missing (a row,
  * a table, a run) rather than reading `undefined`, and reads `\|` inside a
- * cell as an escaped pipe.
+ * cell as an escaped pipe. The cell splitter, the table reader and the
+ * automated-row cross-check are shared with 6.5's record, in
+ * `scripts/record-table.ts`.
  */
 
 import { strict as assert } from 'node:assert';
@@ -44,6 +46,7 @@ import { readFileSync } from 'node:fs';
 import { relative, sep } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { cellsOf, missingNamedTests, tableUnder } from '../scripts/record-table.ts';
 import { filesUnder, isTestFile, SOURCE_MODULE, stripComments } from '../scripts/source-scan.ts';
 
 const REPO_ROOT = fileURLToPath(new URL('../', import.meta.url));
@@ -251,27 +254,6 @@ test('the gate vocabulary scan rejects each word in a string, in JSX text and in
 
 // --- The record --------------------------------------------------------------------------------------
 
-/** A table row's cells, trimmed: split on unescaped pipes, with `\|` read back as a literal pipe. */
-function cellsOf(line: string): string[] {
-  const cells: string[] = [];
-  let cell = '';
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    if (char === '\\' && line[i + 1] === '|') {
-      cell += '|';
-      i += 1;
-    } else if (char === '|') {
-      cells.push(cell);
-      cell = '';
-    } else {
-      cell += char;
-    }
-  }
-  cells.push(cell);
-  // A row opens and closes with a pipe: drop the empty text outside them.
-  return cells.slice(1, -1).map((text) => text.trim());
-}
-
 /** What the `todo` reads from the record: the measurement row's Result and the P1 runs. */
 interface Measurement {
   readonly result: string;
@@ -284,23 +266,15 @@ interface Measurement {
  * — never an `undefined` passed on to a later assertion.
  */
 function readMeasurement(record: string): Measurement {
-  const lines = record.split('\n');
   let result: string | undefined;
-  for (const line of lines) {
+  for (const line of record.split('\n')) {
     if (!line.startsWith('|')) continue;
     const cells = cellsOf(line);
     const [, , kind, heldBy, cellResult] = cells;
     if (cells.length === 5 && /\bManual\b/.test(kind ?? '') && /^See protocol P1\b/.test(heldBy ?? '')) result = cellResult;
   }
   if (result === undefined) throw new Error('the record has no measurement row: a Manual row held by "See protocol P1", with a Result column');
-  const heading = lines.findIndex((line) => /^###\s+P1 runs\s*$/.test(line));
-  if (heading === -1) throw new Error('the record has no "### P1 runs" table');
-  const table: string[][] = [];
-  for (const line of lines.slice(heading + 1)) {
-    if (line.startsWith('|')) table.push(cellsOf(line));
-    else if (table.length > 0) break;
-  }
-  if (table.length === 0) throw new Error('the "### P1 runs" heading has no table under it');
+  const table = tableUnder(record, '### P1 runs');
   const runs = ['1', '2', '3'].map((run) => {
     const row = table.find((cells) => cells[0] === run);
     if (row === undefined) throw new Error(`the P1 runs table has no run ${run} row`);
@@ -368,18 +342,7 @@ test('the record reader names what is missing, and reads an escaped pipe inside 
 });
 
 test('the record’s automated rows each name a test that exists', () => {
-  const record = readFileSync(RECORD, 'utf8');
-  const rows = record.split('\n').filter((line) => line.startsWith('|') && /\|\s*Automated\b/.test(line));
-  assert.ok(rows.length > 0, 'the record has automated rows');
-  for (const row of rows) {
-    const named = [...row.matchAll(/`([^`]+\.test\.ts)` "([^"]+)"/g)];
-    assert.ok(named.length > 0, `the row names no test: ${row.slice(0, 80)}`);
-    for (const [, file, title] of named) {
-      const source = readFileSync(fileURLToPath(new URL(`../${file}`, import.meta.url)), 'utf8');
-      const singleQuoted = `test('${(title ?? '').replace(/'/g, "\\'")}'`;
-      assert.ok(source.includes(singleQuoted) || source.includes(`test("${title}"`), `${file} has no test "${title}"`);
-    }
-  }
+  assert.deepEqual(missingNamedTests(readFileSync(RECORD, 'utf8'), REPO_ROOT), []);
 });
 
 test('First Paint is measured on the target hardware', { todo: 'Thomas, before 6.5' }, () => {
