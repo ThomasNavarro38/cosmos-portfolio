@@ -25,15 +25,17 @@
  *   hidden until keyboard focus (ruling 8a), as exact declaration sets.
  * - **Chart** — the flat star chart's stylesheet (4.3), as an exact declaration
  *   set, its two `display: none` admitted only on the plates, by width.
- * - **Colophon** — the derivation table's stylesheet (5.2) and the exhibits'
- *   (5.3), as an exact declaration set, and its markup's hooks: rule labels and
+ * - **Colophon** — the derivation table's stylesheet (5.2), the exhibits'
+ *   (5.3) and the chrome row's (Epic 5 item 38, the chart's mirrored), as an
+ *   exact declaration set, and its markup's hooks: rule labels and
  *   headers at field-label/ink-label, values at field-value/ink-prose, the
  *   derived value lifted to ink-lift; each exhibit a named, focusable region on
  *   surface-raised, keys at ink-lift, values at ink-prose, structure at
  *   ink-label.
  * - **Contact** — the contact route's stylesheet (6.3), as an exact
  *   declaration set, its markup's hooks, and its two places: directly after the
- *   chart's `<h1>`, before its route line, and directly under the Colophon's `<h1>`, named by no other
+ *   chart's `<h1>`, before its route line, and directly after the Colophon's
+ *   `<h1>`, before its route line, inside its chrome row, named by no other
  *   shipped file, so never on the scene.
  * - **Monospace** — `--font-mono` set by the one exhibit rule and named by no
  *   other shipped file, the word `monospace` nowhere under `src/` but the
@@ -348,6 +350,11 @@ const ROLES: readonly Role[] = [
   // prose floor.
   { role: 'live re-solve button', floor: 4.5, ink: { css: COLOPHON_CSS, selector: '.colophon-solve' }, ground: 'page' },
   { role: 'live re-solve button, raised', floor: 7, ink: { css: COLOPHON_CSS, selector: '.colophon-solve:hover:not([aria-disabled="true"]), .colophon-solve:focus-visible:not([aria-disabled="true"])' }, ground: 'page' },
+  // The Colophon's chrome row (Epic 5 item 38), on the page ground, the chart's mirrored: the heading and the
+  // route line at the chrome's ink-label, the route links at ink-label raised to ink-lift.
+  { role: 'colophon heading', floor: 4.5, ink: { css: COLOPHON_CSS, selector: '.colophon-chrome-heading' }, ground: 'page' },
+  { role: 'colophon route links', floor: 4.5, ink: { css: COLOPHON_CSS, selector: '.colophon-routes a' }, ground: 'page' },
+  { role: 'colophon route links, raised', floor: 4.5, ink: { css: COLOPHON_CSS, selector: '.colophon-routes a:hover, .colophon-routes a:focus-visible' }, ground: 'page' },
   // The contact route (6.3), on the page ground of the chart and the Colophon:
   // the line and its address at the chrome's ink-label, the address raised to
   // ink-lift, the copy button at ink-label raised to ink-prose.
@@ -384,6 +391,10 @@ const NON_TEXT_ROLES: readonly Role[] = [
   { role: 'Notable glyph marker', floor: 3, ink: { css: CHART_CSS, selector: '.chart-marker', property: 'stroke' }, ground: 'page' },
   // The Colophon's exhibit focus outline (5.3), drawn 3px outside the block, on the page ground.
   { role: 'exhibit focus outline', floor: 3, ink: { css: COLOPHON_CSS, selector: '.colophon-exhibit:focus-visible', property: 'outline' }, ground: 'page' },
+  // The Colophon's route links (Epic 5 item 38): the chart chrome links' underline at rest and raised, and their focus outline.
+  { role: 'colophon route link underline', floor: 3, ink: { css: COLOPHON_CSS, selector: '.colophon-routes a', property: 'border-bottom' }, ground: 'page' },
+  { role: 'colophon route link underline, raised', floor: 3, ink: { css: COLOPHON_CSS, selector: '.colophon-routes a:hover, .colophon-routes a:focus-visible', property: 'border-bottom-color' }, ground: 'page' },
+  { role: 'colophon route link focus outline', floor: 3, ink: { css: COLOPHON_CSS, selector: '.colophon-routes a:focus-visible', property: 'outline' }, ground: 'page' },
   // The contact route (6.3): the address's underline at rest and raised, and both controls' focus outline.
   { role: 'contact address underline', floor: 3, ink: { css: CONTACT_CSS, selector: '.contact-address', property: 'border-bottom' }, ground: 'page' },
   { role: 'contact address underline, raised', floor: 3, ink: { css: CONTACT_CSS, selector: '.contact-address:hover, .contact-address:focus-visible', property: 'border-bottom-color' }, ground: 'page' },
@@ -540,6 +551,19 @@ test('contrast: a role moved to a dimmer ink, or one whose ink cannot be read, f
   assert.match(
     failing(CHROME_CSS, (s) => s.replace(/(\.chrome-route-offered:focus-visible \{\n  color: )var\(--color-ink-lift-dark\)/, '$1var(--color-ink-faint-dark)')),
     /^contrast: chrome chart link, offered, raised is ink-faint-dark on surface-base-dark/,
+  );
+  // Epic 5 item 38: the Colophon's route links at the faint step, its heading unread.
+  assert.match(
+    failing(COLOPHON_CSS, (s) => s.replace(/(\.colophon-routes a \{\n  color: )var\(--color-ink-label-dark\)/, '$1var(--color-ink-faint-dark)')),
+    /^contrast: colophon route links is ink-faint-dark on surface-base-dark/,
+  );
+  assert.match(
+    failing(COLOPHON_CSS, (s) => s.replace(/(\.colophon-routes a:focus-visible \{\n  color: )var\(--color-ink-lift-dark\)/, '$1var(--color-ink-faint-dark)')),
+    /^contrast: colophon route links, raised is ink-faint-dark on surface-base-dark/,
+  );
+  assert.match(
+    failing(COLOPHON_CSS, (s) => s.replace(/(\.colophon-chrome-heading,\n\.colophon-routes \{[^}]*)color: var\(--color-ink-label-dark\);/, '$1')),
+    /^contrast: colophon heading's ink could not be read off colophon\/colophon\.css/,
   );
   // 5.2: the derivation table's derived value at ink-label, its values at the quiet step, its labels unread.
   assert.match(
@@ -2075,9 +2099,67 @@ const COLOPHON_RULES: readonly CssRule[] = [
   { at: '', selector: '.colophon-solve:focus-visible', declarations: ['outline: 1px solid var(--color-stroke-focus-dark)', 'outline-offset: 3px'] },
   // While a run is in flight the button is aria-disabled (never `disabled`, which drops focus): no pointer.
   { at: '', selector: '.colophon-solve[aria-disabled="true"]', declarations: ['cursor: default'] },
+  // The chrome row (Epic 5 item 38, ruling (a)): `CHART_RULES`' chrome row, declaration for declaration — the row
+  // packed from the start and wrapping on one baseline, the heading and the route line in the chrome role at
+  // ink-label, the route line opposite by its auto start margin, its links the chart chrome links' treatment —
+  // stacked at phone width. No `:empty` rule: the route line always holds `the chart`.
+  { at: '', selector: '.colophon-chrome', declarations: ['display: flex', 'flex-wrap: wrap', 'justify-content: flex-start', 'align-items: baseline', 'gap: var(--space-md)', 'margin: 0 0 var(--space-xxl)'] },
+  { at: '', selector: '.colophon-chrome-heading, .colophon-routes', declarations: ['margin: 0', ...CHART_TYPE('chrome'), 'color: var(--color-ink-label-dark)'] },
+  { at: '', selector: '.colophon-routes', declarations: ['margin-inline-start: auto'] },
+  { at: '', selector: '.colophon-routes a', declarations: ['color: var(--color-ink-label-dark)', 'text-decoration: none', 'border-bottom: 1px solid var(--color-ink-label-dark)'] },
+  { at: '', selector: '.colophon-routes a:hover, .colophon-routes a:focus-visible', declarations: ['color: var(--color-ink-lift-dark)', 'border-bottom-color: var(--color-stroke-focus-dark)'] },
+  { at: '', selector: '.colophon-routes a:focus-visible', declarations: ['outline: 1px solid var(--color-stroke-focus-dark)', 'outline-offset: 3px'] },
+  { at: PHONE, selector: '.colophon-chrome', declarations: ['flex-direction: column', 'gap: var(--space-xs)'] },
+  { at: PHONE, selector: '.colophon-routes', declarations: ['margin-inline-start: 0'] },
   { at: '@media (forced-colors: active)', selector: '.colophon-exhibit:focus-visible', declarations: ['outline: 1px solid CanvasText'] },
   { at: '@media (forced-colors: active)', selector: '.colophon-solve:focus-visible', declarations: ['outline: 1px solid CanvasText'] },
+  { at: '@media (forced-colors: active)', selector: '.colophon-routes a:focus-visible', declarations: ['outline: 1px solid CanvasText'] },
 ];
+
+/**
+ * The chart's chrome-row declarations, keyed by the role each rule plays —
+ * read off `CHART_RULES` — so the Colophon's copy is held to the same
+ * declarations: one edit to the chart's row without the Colophon's (or the
+ * reverse) fails here (Epic 5 item 38, design note: duplicated, pinned alike).
+ */
+const CHROME_ROW_PAIRS: readonly (readonly [string, string, string])[] = [
+  ['', '.chart-chrome', '.colophon-chrome'],
+  ['', '.chart-heading, .chart-routes', '.colophon-chrome-heading, .colophon-routes'],
+  ['', '.chart-routes', '.colophon-routes'],
+  ['', '.chart-heading a, .chart-routes a', '.colophon-routes a'],
+  ['', '.chart-heading a:hover, .chart-heading a:focus-visible, .chart-routes a:hover, .chart-routes a:focus-visible', '.colophon-routes a:hover, .colophon-routes a:focus-visible'],
+  ['', '.chart-heading a:focus-visible, .chart-routes a:focus-visible', '.colophon-routes a:focus-visible'],
+  [PHONE, '.chart-chrome', '.colophon-chrome'],
+  [PHONE, '.chart-routes', '.colophon-routes'],
+  // Forced colours: the chart groups its three link outlines in one rule, so the pair is by declarations alone.
+  ['@media (forced-colors: active)', '.chart-heading a:focus-visible, .chart-routes a:focus-visible, .chart-index a:focus-visible', '.colophon-routes a:focus-visible'],
+];
+
+/** The pairs whose two declaration lists differ, in either table. */
+function chromeRowDrift(chart: readonly CssRule[], colophon: readonly CssRule[]): string[] {
+  const of = (rules: readonly CssRule[], at: string, selector: string): readonly string[] | undefined => rules.find((rule) => rule.at === at && rule.selector === selector)?.declarations;
+  return CHROME_ROW_PAIRS.filter(([at, ours, theirs]) => {
+    const a = of(chart, at, ours);
+    const b = of(colophon, at, theirs);
+    return a === undefined || b === undefined || JSON.stringify(a) !== JSON.stringify(b);
+  }).map(([at, ours, theirs]) => `colophon: \`${at === '' ? '' : `${at} `}${theirs}\` is not \`${ours}\` declaration for declaration`);
+}
+
+test('colophon: the chrome row’s rules are the chart’s, declaration for declaration', () => {
+  assert.deepEqual(chromeRowDrift(CHART_RULES, COLOPHON_RULES), []);
+  const bumped = COLOPHON_RULES.map((rule) => (rule.selector === '.colophon-chrome' && rule.at === '' ? { ...rule, declarations: rule.declarations.map((line) => line.replace('var(--space-md)', 'var(--space-lg)')) } : rule));
+  assert.deepEqual(chromeRowDrift(CHART_RULES, bumped), ['colophon: `.colophon-chrome` is not `.chart-chrome` declaration for declaration']);
+  const dropped = COLOPHON_RULES.filter((rule) => !(rule.at === PHONE && rule.selector === '.colophon-routes'));
+  assert.deepEqual(chromeRowDrift(CHART_RULES, dropped), ['colophon: `@media (max-width: 640px) .colophon-routes` is not `.chart-routes` declaration for declaration']);
+  // The reverse: the chart's row edited alone fails too.
+  const chartBumped = CHART_RULES.map((rule) => (rule.selector === '.chart-routes' && rule.at === '' ? { ...rule, declarations: ['margin-inline-start: 0'] } : rule));
+  assert.deepEqual(chromeRowDrift(chartBumped, COLOPHON_RULES), ['colophon: `.colophon-routes` is not `.chart-routes` declaration for declaration']);
+  // The forced-colours outline, paired across the two differing selector lists.
+  const unforced = COLOPHON_RULES.map((rule) => (rule.at === '@media (forced-colors: active)' && rule.selector === '.colophon-routes a:focus-visible' ? { ...rule, declarations: ['outline: none'] } : rule));
+  assert.deepEqual(chromeRowDrift(CHART_RULES, unforced), [
+    'colophon: `@media (forced-colors: active) .colophon-routes a:focus-visible` is not `.chart-heading a:focus-visible, .chart-routes a:focus-visible, .chart-index a:focus-visible` declaration for declaration',
+  ]);
+});
 
 /**
  * The derivation table's treatment: `colophon.css` exactly, with the identity
@@ -2132,7 +2214,16 @@ function auditColophon(css: string, tsx: string): string[] {
   ) {
     failures.push('colophon: the live re-solve is not the h2.colophon-heading, the p.colophon-prose framing, the button.colophon-solve and the result Exhibit named LIVE_SOLVE.result, after what is not there');
   }
-  if ((script.match(/<h2\b/g) ?? []).length !== 2 || (script.match(/<p\b/g) ?? []).length !== 2) failures.push('colophon: a heading or paragraph other than the absences’ and the live re-solve’s');
+  if ((script.match(/<h2\b/g) ?? []).length !== 2 || (script.match(/<p\b/g) ?? []).length !== 3) failures.push('colophon: a heading or paragraph other than the absences’, the live re-solve’s and the route line');
+  // Epic 5 item 38: the chrome row — the identity line in the <h1>, unlinked; the contact route; the route line
+  // of the shell's links joined by ` · `, each an `<a href>` with its own follow; then the exhibits.
+  if (
+    !/<div className="colophon-chrome">\s*<h1 className="colophon-chrome-heading">\{IDENTITY_NAME\} · \{IDENTITY_MODEL\}<\/h1>\s*<ContactRoute \/>\s*<p className="colophon-routes">\s*\{links\.routes\.map\(\(link, index\) => \(\s*<Fragment key=\{link\.key\}>\s*\{index === 0 \? null : ' · '\}\s*<a href=\{link\.href\} onClick=\{link\.follow\}>\s*\{link\.text\}\s*<\/a>\s*<\/Fragment>\s*\)\)\}\s*<\/p>\s*<\/div>\s*\{exhibits === null \?/.test(script)
+  ) {
+    failures.push('colophon: the chrome row is not the div.colophon-chrome holding the h1.colophon-chrome-heading identity line, the contact route and the p.colophon-routes of the shell’s links joined by ` · `, before the exhibits');
+  }
+  if ((script.match(/<a\b/g) ?? []).length !== 1 || (script.match(/<h1\b/g) ?? []).length !== 1) failures.push('colophon: a link or heading other than the route line’s and the chrome row’s');
+  if (!/^import \{ IDENTITY_MODEL, IDENTITY_NAME \} from '\.\.\/shell\/chrome-model\.ts';$/m.test(script)) failures.push('colophon: the identity’s words are not read from ../shell/chrome-model.ts');
   if ((script.match(/<button\b/g) ?? []).length !== 1) failures.push('colophon: a button other than the live re-solve’s');
   if (!/^import \{ LIVE_SOLVE, createLiveSolve \} from '\.\/live-solve\.ts';$/m.test(script)) failures.push('colophon: the live re-solve’s copy is not read from ./live-solve.ts');
   if (/<section\b/.test(script)) failures.push('colophon: a <section> — the page’s one landmark is the host’s <main>');
@@ -2211,6 +2302,21 @@ test('colophon: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('.colophon-solve {\n', '.colophon-solve {\n  text-transform: lowercase;\n'), /^colophon: text-transform/m],
     [(s) => s.replace(/(\.colophon-solve \{[^}]*)font-family: var\(--type-chrome-font-family\);\n  font-size: var\(--type-chrome-font-size\);/, '$1font: var(--type-chrome-font-size) var(--type-chrome-font-family);'), /`\.colophon-solve` lacks `font-family: var\(--type-chrome-font-family\)`/],
     [(s) => `${s}\n.colophon-solve::before {\n  content: '';\n}\n`, /^colophon: the unlisted rule `\.colophon-solve::before`$/m],
+    // Epic 5 item 38: the chrome row off the chart's — spread apart, the route line not opposite or still pushed when stacked,
+    // off the chrome role or ink-label, its links underlined by text-decoration or not at all, unraised, unfocused; a wider rule.
+    [(s) => s.replace('.colophon-chrome {\n  display: flex;\n  flex-wrap: wrap;\n  justify-content: flex-start;', '.colophon-chrome {\n  display: flex;\n  flex-wrap: wrap;\n  justify-content: space-between;'), /`\.colophon-chrome` lacks `justify-content: flex-start`/],
+    [(s) => s.replace('.colophon-routes {\n  margin-inline-start: auto;\n}\n', ''), /the rule `\.colophon-routes` is missing/],
+    [(s) => s.replace('  .colophon-routes {\n    margin-inline-start: 0;\n  }\n', ''), /`@media \(max-width: 640px\) \.colophon-routes` is missing/],
+    [(s) => s.replace('  .colophon-chrome {\n    flex-direction: column;', '  .colophon-chrome {\n    flex-direction: row;'), /`@media \(max-width: 640px\) \.colophon-chrome` lacks `flex-direction: column`/],
+    [(s) => s.replace(/(\.colophon-chrome-heading,\n\.colophon-routes \{[^}]*)font-size: var\(--type-chrome-font-size\)/, '$1font-size: var(--type-scene-label-client-font-size)'), /`\.colophon-chrome-heading, \.colophon-routes` lacks `font-size: var\(--type-chrome-font-size\)`/],
+    [(s) => s.replace(/(\.colophon-chrome-heading,\n\.colophon-routes \{[^}]*color: )var\(--color-ink-label-dark\)/, '$1var(--color-ink-prose-dark)'), /`\.colophon-chrome-heading, \.colophon-routes` lacks `color: var\(--color-ink-label-dark\)`/],
+    [(s) => s.replace('.colophon-routes a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;', '.colophon-routes a {\n  color: var(--color-ink-label-dark);\n  text-decoration: underline;'), /`\.colophon-routes a` lacks `text-decoration: none`/],
+    [(s) => s.replace('.colophon-routes a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;\n  border-bottom: 1px solid var(--color-ink-label-dark);', '.colophon-routes a {\n  color: var(--color-ink-label-dark);\n  text-decoration: none;'), /`\.colophon-routes a` lacks `border-bottom: 1px solid var\(--color-ink-label-dark\)`/],
+    [(s) => s.replace('.colophon-routes a:focus-visible {\n  color: var(--color-ink-lift-dark);', '.colophon-routes a:focus-visible {\n  color: var(--color-ink-prose-dark);'), /`\.colophon-routes a:hover, \.colophon-routes a:focus-visible` lacks `color: var\(--color-ink-lift-dark\)`/],
+    [(s) => s.replace('.colophon-routes a:focus-visible {\n  outline: 1px solid var(--color-stroke-focus-dark);', '.colophon-routes a:focus-visible {\n  outline: none;'), /`\.colophon-routes a:focus-visible` lacks `outline: 1px solid var\(--color-stroke-focus-dark\)`/],
+    [(s) => s.replace('  .colophon-routes a:focus-visible {\n    outline: 1px solid CanvasText;\n  }\n', ''), /`@media \(forced-colors: active\) \.colophon-routes a:focus-visible` is missing/],
+    [(s) => s.replace('.colophon-routes a {', '.colophon-chrome a {'), /^colophon: the unlisted rule `\.colophon-chrome a`$/m],
+    [(s) => s.replace('.colophon-chrome-heading,\n.colophon-routes {\n  margin: 0;', '.colophon-chrome-heading,\n.colophon-routes {\n  display: none;\n  margin: 0;'), /^colophon: display: none/m],
   ];
   for (const [mutate, message] of cssCases) {
     const mutated = mutate(css);
@@ -2247,7 +2353,7 @@ test('colophon: each guarantee removed fails with its own line', () => {
       (s) => s.replace('<Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />\n          <h2', '<h2').replace('          ))}\n          <h2 className="colophon-heading">{LIVE_SOLVE.heading}', '          ))}\n          <Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />\n          <h2 className="colophon-heading">{LIVE_SOLVE.heading}'),
       /what is not there is not the h2\.colophon-heading/,
     ],
-    [(s) => s.replace('<h1>the model</h1>', '<h1>the model</h1>\n      <p className="colophon-prose">{ABSENCES.thesis}</p>'), /a heading or paragraph other than the absences’/],
+    [(s) => s.replace('      </div>\n      {exhibits === null', '      </div>\n      <p className="colophon-prose">{ABSENCES.thesis}</p>\n      {exhibits === null'), /a heading or paragraph other than the absences’/],
     [(s) => s.replace('<h2 className="colophon-heading">', '<section>\n          <h2 className="colophon-heading">').replace('          ))}\n          <h2 className="colophon-heading">{LIVE_SOLVE.heading}', '          ))}\n          </section>\n          <h2 className="colophon-heading">{LIVE_SOLVE.heading}'), /a <section>/],
     [(s) => s.replace("import { ABSENCES, ABSENCES_HEADING } from './absences.ts';", "import { ABSENCES, ABSENCES_HEADING } from './copy.ts';"), /the absences are not read from \.\/absences\.ts/],
     // 5.5: the button dropped, unclassed, a submit, never disabled, unwired; the label or heading off its constant; the result misnamed or drawn in a bare <pre>; the block before the absences; a status line; a second button; the import off.
@@ -2262,9 +2368,20 @@ test('colophon: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('<h2 className="colophon-heading">{LIVE_SOLVE.heading}</h2>', '<h3 className="colophon-heading">{LIVE_SOLVE.heading}</h3>'), /the live re-solve is not the h2\.colophon-heading/],
     [(s) => s.replace('<Exhibit name={LIVE_SOLVE.result} text={solved} />', '<Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={solved} />'), /the live re-solve is not the h2\.colophon-heading/],
     [(s) => s.replace('<Exhibit name={LIVE_SOLVE.result} text={solved} />', '<pre aria-label={LIVE_SOLVE.result}>{solved}</pre>'), /the exhibit is not one <pre className="colophon-exhibit"/],
-    [(s) => s.replace('<p className="colophon-prose">{LIVE_SOLVE.framing}</p>', '<p className="colophon-prose">{LIVE_SOLVE.framing}</p>\n          <p className="colophon-prose">{LIVE_SOLVE.result}</p>'), /a heading or paragraph other than the absences’ and the live re-solve’s/],
+    [(s) => s.replace('<p className="colophon-prose">{LIVE_SOLVE.framing}</p>', '<p className="colophon-prose">{LIVE_SOLVE.framing}</p>\n          <p className="colophon-prose">{LIVE_SOLVE.result}</p>'), /a heading or paragraph other than the absences’, the live re-solve’s and the route line/],
     [(s) => s.replace('            {LIVE_SOLVE.action}\n          </button>', '            {LIVE_SOLVE.action}\n          </button>\n          <button type="button">{LIVE_SOLVE.action}</button>'), /a button other than the live re-solve’s/],
     [(s) => s.replace("import { LIVE_SOLVE, createLiveSolve } from './live-solve.ts';", "import { LIVE_SOLVE, createLiveSolve } from './copy.ts';"), /the live re-solve’s copy is not read from \.\/live-solve\.ts/],
+    // Epic 5 item 38: the chrome row broken — the model linked or bare, the route line dropped or before the contact route,
+    // the separator dropped, a written route, a second link, the identity spelled out here, the row drawn only with the exhibits.
+    [(s) => s.replace('{IDENTITY_NAME} · {IDENTITY_MODEL}</h1>', '{IDENTITY_NAME} · <a href="/colophon">{IDENTITY_MODEL}</a></h1>'), /the chrome row is not the div\.colophon-chrome/],
+    [(s) => s.replace('{IDENTITY_NAME} · {IDENTITY_MODEL}</h1>', '{IDENTITY_MODEL}</h1>'), /the chrome row is not the div\.colophon-chrome/],
+    [(s) => s.replace(/\s*<p className="colophon-routes">[\s\S]*?<\/p>\n/, '\n'), /the chrome row is not the div\.colophon-chrome/],
+    [(s) => s.replace('        <ContactRoute />\n', '').replace('        </p>\n      </div>', '        </p>\n        <ContactRoute />\n      </div>'), /the chrome row is not the div\.colophon-chrome/],
+    [(s) => s.replace("{index === 0 ? null : ' · '}", ''), /the chrome row is not the div\.colophon-chrome/],
+    [(s) => s.replace('<a href={link.href} onClick={link.follow}>', '<a href="/" onClick={link.follow}>'), /the chrome row is not the div\.colophon-chrome/],
+    [(s) => s.replace('        </p>\n      </div>', '        </p>\n        <a href="/colophon">{IDENTITY_MODEL}</a>\n      </div>'), /a link or heading other than the route line’s/],
+    [(s) => s.replace("import { IDENTITY_MODEL, IDENTITY_NAME } from '../shell/chrome-model.ts';", "const IDENTITY_NAME = 'THOMAS NAVARRO';\nconst IDENTITY_MODEL = 'the model';"), /the identity’s words are not read from \.\.\/shell\/chrome-model\.ts/],
+    [(s) => s.replace('      <div className="colophon-chrome">', '      {exhibits === null ? null : <div className="colophon-chrome">').replace('        </p>\n      </div>', '        </p>\n      </div>}'), /the chrome row is not the div\.colophon-chrome/],
   ];
   for (const [mutate, message] of tsxCases) {
     const mutated = mutate(tsx);
@@ -2337,8 +2454,11 @@ function auditContact(css: string, files: Readonly<Record<string, string>>): str
     failures.push('contact: the chart does not draw the route once, beside its heading, before its route line, inside its chrome row');
   }
   const colophon = codeOf(files['colophon/colophon.tsx'] ?? '', 'script');
-  if (!/<h1>the model<\/h1>\s*<ContactRoute \/>\s*\{exhibits === null \?/.test(colophon) || (colophon.match(/<ContactRoute\b/g) ?? []).length !== 1) {
-    failures.push('contact: the Colophon does not draw the route once, directly after its <h1>, before the exhibits arrive');
+  if (
+    !/<div className="colophon-chrome">\s*<h1 className="colophon-chrome-heading">[\s\S]*?<\/h1>\s*<ContactRoute \/>\s*<p className="colophon-routes">[\s\S]*?<\/p>\s*<\/div>\s*\{exhibits === null \?/.test(colophon) ||
+    (colophon.match(/<ContactRoute\b/g) ?? []).length !== 1
+  ) {
+    failures.push('contact: the Colophon does not draw the route once, directly after its <h1>, before its route line, inside its chrome row, before the exhibits arrive');
   }
   for (const [path, source] of Object.entries(files)) {
     if (CONTACT_PLACES.has(path) || languageOf(path) !== 'script') continue;
@@ -2405,8 +2525,11 @@ test('contact: each guarantee removed fails with its own line', () => {
     [edit('render-fallback/chart.tsx', (s) => s.replace('        <ContactRoute />\n', '').replace('<h1 className="chart-heading">', '<ContactRoute />\n        <h1 className="chart-heading">')), /the chart does not draw the route once/],
     [edit('render-fallback/chart.tsx', (s) => s.replace('        <ContactRoute />\n', '').replace('        </p>\n      </div>', '        </p>\n        <ContactRoute />\n      </div>')), /the chart does not draw the route once/],
     [edit('render-fallback/chart.tsx', (s) => s.replace('        <ContactRoute />\n', '').replace('        </h1>', '          <ContactRoute />\n        </h1>')), /the chart does not draw the route once/],
-    [edit('colophon/colophon.tsx', (s) => s.replace('      <ContactRoute />\n', '')), /the Colophon does not draw the route once/],
-    [edit('colophon/colophon.tsx', (s) => s.replace('      <ContactRoute />\n', '').replace('          <Exhibit name={EXHIBIT_PATHS.career.slice(1)}', '          <ContactRoute />\n          <Exhibit name={EXHIBIT_PATHS.career.slice(1)}')), /the Colophon does not draw the route once/],
+    [edit('colophon/colophon.tsx', (s) => s.replace('        <ContactRoute />\n', '')), /the Colophon does not draw the route once/],
+    [edit('colophon/colophon.tsx', (s) => s.replace('        <ContactRoute />\n', '').replace('          <Exhibit name={EXHIBIT_PATHS.career.slice(1)}', '          <ContactRoute />\n          <Exhibit name={EXHIBIT_PATHS.career.slice(1)}')), /the Colophon does not draw the route once/],
+    // Epic 5 item 38: after the route line, or outside the chrome row.
+    [edit('colophon/colophon.tsx', (s) => s.replace('        <ContactRoute />\n', '').replace('        </p>\n      </div>', '        </p>\n        <ContactRoute />\n      </div>')), /the Colophon does not draw the route once/],
+    [edit('colophon/colophon.tsx', (s) => s.replace('        <ContactRoute />\n', '').replace('      </div>\n      {exhibits === null', '      </div>\n      <ContactRoute />\n      {exhibits === null')), /the Colophon does not draw the route once/],
     // Never on the scene or in its corner chrome (ruling Q2 (d)).
     [edit('shell/corner-chrome.tsx', (s) => `import { ContactRoute } from './contact-route.tsx';\n${s}`), /^contact: src\/shell\/corner-chrome\.tsx names the contact route/m],
     [edit('render-scene/scene.tsx', (s) => `import { CONTACT } from '../shell/contact.ts';\n${s}`), /^contact: src\/render-scene\/scene\.tsx names the contact route/m],
@@ -2494,8 +2617,8 @@ test('monospace: each guarantee removed fails with its own line', () => {
     ['the family in a model', edit(AFFORDANCE_TS, (s) => s.replace('fontFamily: type.fontFamily,', 'fontFamily: tokens.typography.fontFamily.mono,')), /^monospace: src\/render-scene\/affordance-model\.ts reads the mono family off the tokens/m],
     ['a <code> drawn', edit('render-fallback/chart.tsx', (s) => s.replace('<h1 className="chart-heading">', '<code>x</code>\n<h1 className="chart-heading">')), /^monospace: src\/render-fallback\/chart\.tsx draws <code>/m],
     ['a <kbd> drawn', edit('shell/index-nav.tsx', (s) => s.replace('<button type="button" id={OVERVIEW_ID}', '<kbd>Tab</kbd><button type="button" id={OVERVIEW_ID}')), /^monospace: src\/shell\/index-nav\.tsx draws <kbd>/m],
-    ['a <samp> drawn', edit('colophon/colophon.tsx', (s) => s.replace('<h1>the model</h1>', '<samp>x</samp><h1>the model</h1>')), /^monospace: src\/colophon\/colophon\.tsx draws <samp>/m],
-    ['a <tt> drawn', edit('colophon/colophon.tsx', (s) => s.replace('<h1>the model</h1>', '<tt>x</tt><h1>the model</h1>')), /^monospace: src\/colophon\/colophon\.tsx draws <tt>/m],
+    ['a <samp> drawn', edit('colophon/colophon.tsx', (s) => s.replace('<h1 className="colophon-chrome-heading">', '<samp>x</samp><h1 className="colophon-chrome-heading">')), /^monospace: src\/colophon\/colophon\.tsx draws <samp>/m],
+    ['a <tt> drawn', edit('colophon/colophon.tsx', (s) => s.replace('<h1 className="colophon-chrome-heading">', '<tt>x</tt><h1 className="colophon-chrome-heading">')), /^monospace: src\/colophon\/colophon\.tsx draws <tt>/m],
     ['a <pre> elsewhere', edit('render-fallback/chart.tsx', (s) => s.replace('<h1 className="chart-heading">', '<pre>x</pre>\n<h1 className="chart-heading">')), /^monospace: src\/render-fallback\/chart\.tsx draws <pre>/m],
     ['an undefined family', edit(COLOPHON_CSS, (s) => s.replace('  font-family: var(--font-mono);\n', '  font-family: var(--font-code);\n')), /^monospace: src\/colophon\/colophon\.css `\.colophon-exhibit` reads --font-code, which no token defines/m],
     ['an undefined colour', edit(CHART_CSS, (s) => s.replace('var(--color-ink-prose-dark)', 'var(--color-ink-prose-darker)')), /^monospace: src\/render-fallback\/chart\.css `[^`]+` reads --color-ink-prose-darker, which no token defines/m],

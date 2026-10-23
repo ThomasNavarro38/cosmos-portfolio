@@ -47,7 +47,63 @@
  * `disabled`, which would drop focus): it keeps its focus outline, drops the
  * pointer cursor and does not lift; nothing else marks the run: no indicator,
  * no motion.
+ *
+ * The chrome row (Epic 5 item 38, ruling (a)): `chart.css`'s chrome row,
+ * duplicated rather than shared, so each surface's sheet stays its own and
+ * the identity audit pins both copies to the same declarations. One flex row
+ * packed from the start and wrapping, on one baseline: the `<h1>`
+ * (`.colophon-chrome-heading`) and the route line (`.colophon-routes`) in the
+ * `chrome` type role at `ink-label`, the contact route beside the heading,
+ * and the route line held opposite by its auto start margin. Its links take
+ * the chart's chrome links' treatment: `ink-label` with a 1px `ink-label`
+ * underline at rest, `ink-lift` and a `stroke-focus` underline raised, the
+ * `stroke-focus` outline 3px out on keyboard focus (a system one under forced
+ * colours). The heading holds no link: `the model` is this page. At phone
+ * width (640px and below) the row stacks and the route line drops its auto
+ * margin, as the chart's does. The route line is never empty — `the chart` is
+ * on every machine — so it has no `:empty` rule.
  */
+
+.colophon-chrome {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: baseline;
+  gap: var(--space-md);
+  margin: 0 0 var(--space-xxl);
+}
+
+.colophon-chrome-heading,
+.colophon-routes {
+  margin: 0;
+  font-family: var(--type-chrome-font-family);
+  font-size: var(--type-chrome-font-size);
+  font-weight: var(--type-chrome-font-weight);
+  line-height: var(--type-chrome-line-height);
+  letter-spacing: var(--type-chrome-letter-spacing);
+  color: var(--color-ink-label-dark);
+}
+
+.colophon-routes {
+  margin-inline-start: auto;
+}
+
+.colophon-routes a {
+  color: var(--color-ink-label-dark);
+  text-decoration: none;
+  border-bottom: 1px solid var(--color-ink-label-dark);
+}
+
+.colophon-routes a:hover,
+.colophon-routes a:focus-visible {
+  color: var(--color-ink-lift-dark);
+  border-bottom-color: var(--color-stroke-focus-dark);
+}
+
+.colophon-routes a:focus-visible {
+  outline: 1px solid var(--color-stroke-focus-dark);
+  outline-offset: 3px;
+}
 
 .colophon-derivations {
   max-width: 100%;
@@ -169,10 +225,21 @@
   cursor: default;
 }
 
+@media (max-width: 640px) {
+  .colophon-chrome {
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
+
+  .colophon-routes {
+    margin-inline-start: 0;
+  }
+}
+
 /*
- * Forced colours flatten the ink steps: there, keyboard focus on an exhibit
- * or on the re-solve's button keeps a system-coloured outline, as the chart's
- * links do.
+ * Forced colours flatten the ink steps: there, keyboard focus on an exhibit,
+ * on the re-solve's button or on a route link keeps a system-coloured outline,
+ * as the chart's links do.
  */
 @media (forced-colors: active) {
   .colophon-exhibit:focus-visible {
@@ -180,6 +247,10 @@
   }
 
   .colophon-solve:focus-visible {
+    outline: 1px solid CanvasText;
+  }
+
+  .colophon-routes a:focus-visible {
     outline: 1px solid CanvasText;
   }
 }

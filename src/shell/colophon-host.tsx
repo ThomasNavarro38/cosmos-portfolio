@@ -12,9 +12,20 @@
  * fetch's rejection. A failed chunk is logged and renders nothing, and the React
  * root stays mounted, so a later route change still renders. No loader and no
  * retry, by the same decision as the entry's.
+ *
+ * **The Colophon's links are built here** (Epic 5 item 38, ruling (a)), from
+ * the router and this machine's surface, by `colophonLinks` (`route-link.ts`),
+ * as `fallback-host.tsx` builds the chart's: its route line, `the scene` to `/`
+ * only where the surface is the scene, then `the chart` to `/chart` on any
+ * machine. Each is `{ key, text, href, follow }`, so the Colophon reads no
+ * router, store or machine surface of its own, and a primary click on `the
+ * scene` is the router's push home — the scene resumes at the stop it was left.
  */
 
 import { Component, Suspense, lazy, type ReactNode } from 'react';
+import type { Surface } from './detect.ts';
+import { colophonLinks } from './route-link.ts';
+import type { Router } from './router.ts';
 
 const Colophon = lazy(() => import('../colophon/colophon.tsx'));
 
@@ -43,11 +54,18 @@ class ColophonBoundary extends Component<ColophonBoundaryProps, ColophonBoundary
   }
 }
 
-export function ColophonHost() {
+export interface ColophonHostProps {
+  /** This machine's surface: the Colophon offers the scene only where it can run. */
+  readonly surface: Surface;
+  readonly router: Router;
+}
+
+export function ColophonHost({ surface, router }: ColophonHostProps) {
+  const links = colophonLinks(surface, router.navigate);
   return (
     <ColophonBoundary>
       <Suspense fallback={null}>
-        <Colophon />
+        <Colophon links={links} />
       </Suspense>
     </ColophonBoundary>
   );

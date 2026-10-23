@@ -9,11 +9,24 @@
  * is `startExhibits` (executed in `exhibits.test.ts`; this file is audited in
  * `colophon.test.ts`), its stop aborting on unmount, so a visitor who leaves
  * mid-fetch causes no state update. A failed fetch is logged once and draws nothing more: the
- * `<h1>` and the contact route alone, nothing thrown into React, no loading indicator and no retry. An
+ * chrome row alone, nothing thrown into React, no loading indicator and no retry. An
  * abort is swallowed silently.
  *
- * `ColophonPage` draws: the `<h1>`, the contact route, then, once the files have arrived, each
+ * `ColophonPage` draws: the chrome row, then, once the files have arrived, each
  * file's text verbatim and in full in its own `<pre>`, career first.
+ *
+ * **The chrome row** (Epic 5 item 38, ruling (a) 2026-10-23), the chart's
+ * mirrored, drawn unconditionally — before the exhibits arrive, and when they
+ * never do: a `div.colophon-chrome` holding the `<h1>` (`h1.colophon-chrome-heading`,
+ * `IDENTITY_NAME`, ` · ` and `IDENTITY_MODEL`: the identity line, `the model`
+ * unlinked because it is this page), the contact route directly after it, and
+ * the route line opposite (`p.colophon-routes`): the `links` prop's routes, each
+ * an `<a href>` whose click is the link's own `follow`, joined by ` · ` —
+ * `the scene · the chart` on a capable machine, `the chart` alone otherwise.
+ * The links are built by `src/shell/colophon-host.tsx` (`colophonLinks`), so
+ * this file reads no router, store or machine surface; their type is declared
+ * here structurally, as `chart-model.ts` declares `ChartLinks`, with React's
+ * own `MouseEvent` as the click so no click rule is restated in a `.tsx` file.
  *
  * **The exhibits, set** (5.3, DESIGN.md `components.colophon-json`). Each
  * `<pre>` is a named, keyboard-scrollable region — `role="region"`, its
@@ -69,25 +82,41 @@
  *
  * **The contact route** (6.3): `ContactRoute`, the shell's shared component
  * (`src/shell/contact-route.tsx`, in the `ui` chunk, so the colophon chunk
- * still holds `src/colophon/` alone), drawn directly after the `<h1>` and
- * unconditionally — before the exhibits arrive, and when they never do.
+ * still holds `src/colophon/` alone), drawn directly after the `<h1>`, before
+ * the route line, inside the chrome row.
  *
  * It imports React, `exhibits.ts`, `derivations.ts`, `json-setting.ts`,
- * `absences.ts`, `live-solve.ts`, `../shell/contact-route.tsx` and
- * `colophon.css`, and nothing else: no other shell module, not the motion
+ * `absences.ts`, `live-solve.ts`, `../shell/chrome-model.ts` (the identity's
+ * two words, in the `ui` chunk), `../shell/contact-route.tsx` and
+ * `colophon.css`, and nothing else: no other shell module — never the router,
+ * `route-link.ts` or detection — not the motion
  * preference, never `src/data/` or `generated/`, and
  * `src/derive/` only through the one dynamic import of `live.ts`, never
  * statically.
  */
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState, type MouseEvent } from 'react';
 import { EXHIBIT_PATHS, startExhibits, type Exhibits } from './exhibits.ts';
 import { DERIVATION_LABELS, derivationRows, type DerivationInput } from './derivations.ts';
 import { jsonRuns } from './json-setting.ts';
 import { ABSENCES, ABSENCES_HEADING } from './absences.ts';
 import { LIVE_SOLVE, createLiveSolve } from './live-solve.ts';
+import { IDENTITY_MODEL, IDENTITY_NAME } from '../shell/chrome-model.ts';
 import { ContactRoute } from '../shell/contact-route.tsx';
 import './colophon.css';
+
+/** One link on the route line, as the shell builds it: its key, its text, its `href`, and its click. */
+export interface ColophonLink {
+  readonly key: string;
+  readonly text: string;
+  readonly href: string;
+  readonly follow: (event: MouseEvent<HTMLAnchorElement>) => void;
+}
+
+/** The Colophon's links: its route line — `the scene` where this machine is capable, then `the chart`. */
+export interface ColophonLinks {
+  readonly routes: readonly ColophonLink[];
+}
 
 /** A rule's input: the weight as `String(weight)`, or the duration as `start – end`, `start –` while ongoing. */
 function Input({ input }: { readonly input: DerivationInput }) {
@@ -152,16 +181,28 @@ export interface LiveSolveState {
 }
 
 /**
- * The surface as drawn: the heading, the contact route, and, once the files have arrived, the two
+ * The surface as drawn: the chrome row — the heading, the contact route and the route line — and, once the files have arrived, the two
  * files with the derivations between them, what is not there, the live
  * re-solve's heading, framing and button, and its result once a run has
  * succeeded.
  */
-export function ColophonPage({ exhibits, solved, running, onSolve }: { readonly exhibits: Exhibits | null } & LiveSolveState) {
+export function ColophonPage({ links, exhibits, solved, running, onSolve }: { readonly links: ColophonLinks; readonly exhibits: Exhibits | null } & LiveSolveState) {
   return (
     <>
-      <h1>the model</h1>
-      <ContactRoute />
+      <div className="colophon-chrome">
+        <h1 className="colophon-chrome-heading">{IDENTITY_NAME} · {IDENTITY_MODEL}</h1>
+        <ContactRoute />
+        <p className="colophon-routes">
+          {links.routes.map((link, index) => (
+            <Fragment key={link.key}>
+              {index === 0 ? null : ' · '}
+              <a href={link.href} onClick={link.follow}>
+                {link.text}
+              </a>
+            </Fragment>
+          ))}
+        </p>
+      </div>
       {exhibits === null ? null : (
         <>
           <Exhibit name={EXHIBIT_PATHS.career.slice(1)} text={exhibits.career} />
@@ -185,7 +226,7 @@ export function ColophonPage({ exhibits, solved, running, onSolve }: { readonly 
   );
 }
 
-export default function Colophon() {
+export default function Colophon({ links }: { readonly links: ColophonLinks }) {
   const [exhibits, setExhibits] = useState<Exhibits | null>(null);
   const [solved, setSolved] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -195,5 +236,5 @@ export default function Colophon() {
   const onSolve = () => {
     if (exhibits !== null) live.press(exhibits.career);
   };
-  return <ColophonPage exhibits={exhibits} solved={solved} running={running} onSolve={onSolve} />;
+  return <ColophonPage links={links} exhibits={exhibits} solved={solved} running={running} onSolve={onSolve} />;
 }

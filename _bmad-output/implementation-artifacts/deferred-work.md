@@ -1165,3 +1165,11 @@ Still open after 3.5:
   evidence: The record's rows 1–3 Results and its `### M2 runs — scene`, `### M2 runs — Fallback` and `### Deployment` tables are empty; no reader, verdict, URL or commit was invented, and nothing was deployed. `src/launch-readiness.test.ts` carries `the M2 gate passes on the scene`, `the M2 gate passes on the Fallback alone` and `the site is deployed to a static host and rolled back once` as `{ todo: 'Thomas, before launch' }`. node:test reports a todo as todo whether its body passes or fails, and a todo never fails `npm test`: it keeps each run visible, it does not enforce it. Once a table is filled and its todo test's body passes, remove the `{ todo }` option so the test runs as a normal assertion (as 6.3's `the real address is supplied` was promoted).
   location: _bmad-output/implementation-artifacts/launch-readiness-6-5.md (rows 1–3, L1–L3, the run tables, the Pre-launch checklist), src/launch-readiness.test.ts (the todos)
   severity: high (owed before launch)
+
+## Deferred from: code review of spec-e5-r38-colophon-corner-chrome.md (2026-10-23)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-e5-r38-colophon-corner-chrome.md`
+  summary: When the colophon chunk fails to load (e.g. a stale hashed chunk after a redeploy), `ColophonHost`'s boundary renders `null`, so `/colophon` again has no route out but Back; the route line lives inside the lazy chunk.
+  evidence: `src/shell/colophon-host.tsx` boundary `this.state.failed ? null : this.props.children`; the same holds for `FallbackHost` and the chart. Pre-existing pattern, not caused by this change; tied to pre-launch checklist item 8 (the stale-chunk 404) in `launch-readiness-6-5.md`. A fix would draw the route line from the host on failure.
+  location: src/shell/colophon-host.tsx, src/shell/fallback-host.tsx
+  severity: low
