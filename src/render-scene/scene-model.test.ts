@@ -3341,6 +3341,147 @@ test('the sampler mount audit rejects the real scene with any one guarantee remo
   }
 });
 
+// --- The First Paint mark (6.4) ---------------------------------------------
+
+const FIRST_FRAME_MARK_TSX = fileURLToPath(new URL('./first-frame-mark.tsx', import.meta.url));
+
+/** The mark's sink, exactly: the browser's `performance.mark` bound to `performance`, or a no-op where either is missing. */
+const FIRST_FRAME_SINK =
+  "const mark: (name: string) => void = typeof performance !== 'undefined' && typeof performance?.mark === 'function' ? performance.mark.bind(performance) : () => undefined;";
+
+/**
+ * `first-frame-mark.tsx`'s contract, as a pure function over its source: the
+ * sink bound once at module scope (exactly `FIRST_FRAME_SINK`), the one latch
+ * built from it at module scope, a frame callback `firstFrameTick` that is
+ * exactly `queueMicrotask(markFirstFrame);` (the mark lands after the frame's
+ * draw is issued, never synchronously inside the callback), and a component
+ * that is exactly `useFrame(firstFrameTick); return null;` — no state, no
+ * effect, no store read, no DOM, no log, no send, no element, and imports of
+ * `useFrame` and `createFirstFrameMark` alone. Every rule of the latch, the
+ * binding and the tick is executed in `first-frame.test.ts`; the component body
+ * is the one unexecuted residual, pinned here.
+ */
+function auditFirstFrameMark(source: string): string[] {
+  const code = stripCommentsAndStrings(source);
+  const quoted = stripComments(source);
+  const failures: string[] = [];
+  const squash = (text: string) => text.replace(/\s+/g, ' ').trim();
+  const body = /export function FirstFrameMark\(\)\s*\{([\s\S]*?)\n\}/.exec(code)?.[1] ?? '';
+  if (squash(body) !== 'useFrame(firstFrameTick); return null;') {
+    failures.push('the mark is not exactly useFrame(firstFrameTick) and return null');
+  }
+  const tick = /export function firstFrameTick\(\): void\s*\{([\s\S]*?)\n\}/.exec(code)?.[1] ?? '';
+  if (squash(tick) !== 'queueMicrotask(markFirstFrame);') {
+    failures.push('the tick is not exactly queueMicrotask(markFirstFrame) — the mark must land after the draw');
+  }
+  if ((code.match(/\buseFrame\s*\(/g) ?? []).length !== 1) failures.push('runs other than one frame loop');
+  if (/\bmarkFirstFrame\s*\(/.test(code)) failures.push('marks synchronously inside the frame — the mark is queued, after the draw');
+  if (/\brequestAnimationFrame\b|\bsetTimeout\b|\bsetInterval\b|\bDate\b/.test(code)) failures.push('reads a clock or schedules a frame — the microtask alone');
+  if (/\buse(?!Frame\b)[A-Z]\w*\b/.test(code)) failures.push('holds a hook beyond useFrame — no state, no effect, no ref, no store read');
+  if (/\bnavigationStore\b|\bgetState\b|\bsubscribe\b|['"]zustand/.test(quoted)) failures.push('reads the store');
+  if (/\bwindow\b|\bdocument\b|\bnavigator\b|\bglobalThis\b|addEventListener|matchMedia/.test(code)) failures.push('reads the DOM — the mark reads performance alone');
+  if (!squash(quoted).includes(FIRST_FRAME_SINK)) failures.push('the sink is not performance.mark bound to performance, with a no-op where it is missing');
+  if ((code.match(/\bperformance\b/g) ?? []).length !== 4) failures.push('reads performance beyond the sink — no clock, no other entry');
+  if (!/^export const markFirstFrame = createFirstFrameMark\(mark\);$/m.test(code) || (code.match(/\bcreateFirstFrameMark\s*\(/g) ?? []).length !== 1) {
+    failures.push('the latch is not built once at module scope — a remount would mark again');
+  }
+  if (/\bconsole\b/.test(code)) failures.push('logs the mark — it stays on the timeline');
+  if (/\bfetch\b|\bsendBeacon\b|\bXMLHttpRequest\b|\bWebSocket\b|\bEventSource\b|\bpostMessage\b/.test(code)) failures.push('sends the mark — nothing leaves the browser');
+  if (/\b(?:navigate|history|location|router)\b/i.test(code)) failures.push('names navigation');
+  const imports = [...quoted.matchAll(/^import[^\n]*$/gm)].map((match) => squash(match[0]));
+  if (JSON.stringify(imports) !== JSON.stringify(["import { useFrame } from '@react-three/fiber';", "import { createFirstFrameMark } from './first-frame.ts';"])) {
+    failures.push(`imports ${JSON.stringify(imports)} — useFrame and createFirstFrameMark alone`);
+  }
+  if (/<[a-zA-Z]/.test(code)) failures.push('draws an element — the mark renders null');
+  return failures;
+}
+
+test('the First Paint mark is one useFrame queuing the module-scope latch after the draw, and renders null', () => {
+  assert.deepEqual(auditFirstFrameMark(readFileSync(FIRST_FRAME_MARK_TSX, 'utf8')), []);
+});
+
+test('the First Paint mark audit rejects the real binding with any one guarantee broken', () => {
+  const real = readFileSync(FIRST_FRAME_MARK_TSX, 'utf8');
+  const LATCH = 'export const markFirstFrame = createFirstFrameMark(mark);';
+  const QUEUE = '  queueMicrotask(markFirstFrame);';
+  const USE = '  useFrame(firstFrameTick);';
+  const mutations: readonly (readonly [string, (source: string) => string, RegExp])[] = [
+    ['the tick dropped from the frame', (s) => s.replace(USE, '  useFrame(() => undefined);'), /not exactly useFrame\(firstFrameTick\)/],
+    ['the mark dropped from the tick', (s) => s.replace(`${QUEUE}\n`, ''), /the tick is not exactly/],
+    ['a synchronous mark in the tick', (s) => s.replace(QUEUE, '  markFirstFrame();'), /marks synchronously/],
+    ['a synchronous mark beside the queue', (s) => s.replace(QUEUE, `${QUEUE}\n  markFirstFrame();`), /marks synchronously/],
+    ['an inline synchronous frame callback', (s) => s.replace(USE, '  useFrame(() => {\n    markFirstFrame();\n  });'), /marks synchronously/],
+    ['a frame scheduled instead of a microtask', (s) => s.replace(QUEUE, '  requestAnimationFrame(markFirstFrame);'), /schedules a frame/],
+    ['a second frame loop', (s) => s.replace('  return null;', '  useFrame(() => undefined);\n  return null;'), /other than one frame loop/],
+    ['state', (s) => s.replace(USE, `  const [marked] = useState(false);\n${USE}`), /a hook beyond useFrame/],
+    ['an effect', (s) => s.replace('  return null;', '  useEffect(() => firstFrameTick(), []);\n  return null;'), /a hook beyond useFrame/],
+    ['a store read', (s) => s.replace(QUEUE, '  if (navigationStore.getState().mode === "rail") queueMicrotask(markFirstFrame);'), /reads the store/],
+    ['the document read', (s) => s.replace(QUEUE, '  if (!document.hidden) queueMicrotask(markFirstFrame);'), /reads the DOM/],
+    ['an unguarded sink', (s) => s.replace("typeof performance !== 'undefined' && typeof performance?.mark === 'function'", 'true'), /the sink is not/],
+    ['a clock', (s) => s.replace(QUEUE, `${QUEUE}\n  void performance.now();`), /reads performance beyond the sink/],
+    ['the latch per mount', (s) => s.replace(`${LATCH}\n`, '').replace(USE, `  const markFirstFrame = createFirstFrameMark(mark);\n${USE}`), /module scope/],
+    ['a console call', (s) => s.replace(QUEUE, `${QUEUE}\n  console.log('first frame');`), /logs the mark/],
+    ['a send', (s) => s.replace(QUEUE, `${QUEUE}\n  navigator.sendBeacon('/t', 'schematic-first-frame');`), /sends the mark/],
+    ['an element drawn', (s) => s.replace('  return null;', '  return <group />;'), /draws an element/],
+    ['another import', (s) => s.replace("import { createFirstFrameMark } from './first-frame.ts';", "import { createFirstFrameMark } from './first-frame.ts';\nimport { navigationStore } from '../shell/state.ts';"), /imports/],
+  ];
+  for (const [name, mutate, message] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped binding`);
+    assert.match(auditFirstFrameMark(mutated).join('\n'), message, `"${name}" must be rejected with its own message`);
+  }
+});
+
+/**
+ * The mark's mount in `scene.tsx`: once, inside the `<Canvas>` (outside it
+ * `useFrame` has no loop to join), unconditionally, with no props, after
+ * `<FrameSampler />`. The `<Canvas>` performance props stay banned by
+ * `auditSamplerMount`.
+ */
+function auditFirstFrameMount(source: string): string[] {
+  const code = stripCommentsAndStrings(source);
+  const failures: string[] = [];
+  const inside = /<Canvas\b[\s\S]*<\/Canvas>/.exec(code)?.[0] ?? '';
+  if (!/<FirstFrameMark\s*\/>/.test(inside)) failures.push('the mark is not mounted inside the Canvas, with no props');
+  if ((code.match(/<FirstFrameMark\b/g) ?? []).length !== 1) failures.push('the mark is mounted other than once');
+  if (/(?:&&|\|\||\?|:|\{|\[|=>|,)\s*(?:\(\s*)*<FirstFrameMark\b/.test(code)) failures.push('the mark is mounted conditionally — it must be an unconditional direct child of the Canvas');
+  const sampler = inside.search(/<FrameSampler\b/);
+  const mark = inside.search(/<FirstFrameMark\b/);
+  if (sampler === -1 || mark === -1 || mark < sampler) failures.push('the mark is not mounted after the sampler');
+  if (!/import\s*\{\s*FirstFrameMark\s*\}\s*from\s*'\.\/first-frame-mark\.tsx'/.test(stripComments(source))) failures.push('FirstFrameMark is not imported');
+  return failures;
+}
+
+test('the scene mounts the First Paint mark once inside the Canvas, after the sampler', () => {
+  assert.deepEqual(auditFirstFrameMount(readFileSync(SCENE_TSX, 'utf8')), []);
+});
+
+test('the First Paint mount audit rejects the real scene with any one guarantee removed', () => {
+  const real = readFileSync(SCENE_TSX, 'utf8');
+  const MOUNT = '<FirstFrameMark />';
+  const mutations: readonly (readonly [string, (source: string) => string, RegExp])[] = [
+    ['unmounted', (s) => s.replace(MOUNT, ''), /not mounted inside the Canvas/],
+    ['outside the Canvas', (s) => s.replace(MOUNT, '').replace('</Canvas>', `</Canvas>\n      ${MOUNT}`), /not mounted inside the Canvas/],
+    ['mounted twice', (s) => s.replace(MOUNT, `${MOUNT}\n        ${MOUNT}`), /other than once/],
+    ['mounted behind &&', (s) => s.replace(MOUNT, `{false && ${MOUNT}}`), /conditionally/],
+    ['mounted behind && in parentheses', (s) => s.replace(MOUNT, `{flag && (${MOUNT})}`), /conditionally/],
+    ['mounted behind || in parentheses over lines', (s) => s.replace(MOUNT, `{flag || (\n          ${MOUNT}\n        )}`), /conditionally/],
+    ['mounted in a parenthesised ternary', (s) => s.replace(MOUNT, `{flag ? (${MOUNT}) : null}`), /conditionally/],
+    ['mounted behind a ternary', (s) => s.replace(MOUNT, `{bodies.length > 0 ? ${MOUNT} : null}`), /conditionally/],
+    ['mounted in the ternary’s else', (s) => s.replace(MOUNT, `{bodies.length === 0 ? null : ${MOUNT}}`), /conditionally/],
+    ['mounted in an array', (s) => s.replace(MOUNT, `{[${MOUNT}]}`), /conditionally/],
+    ['mounted from a map', (s) => s.replace(MOUNT, `{bodies.map((b) => ${MOUNT})}`), /conditionally/],
+    ['handed a prop', (s) => s.replace(MOUNT, '<FirstFrameMark name="x" />'), /with no props/],
+    ['before the sampler', (s) => s.replace(MOUNT, '').replace('<FrameSampler />', `${MOUNT}\n        <FrameSampler />`), /after the sampler/],
+    ['not imported', (s) => s.replace("import { FirstFrameMark } from './first-frame-mark.tsx';\n", ''), /not imported/],
+  ];
+  for (const [name, mutate, message] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped scene`);
+    assert.match(auditFirstFrameMount(mutated).join('\n'), message, `"${name}" must be rejected with its own message`);
+  }
+});
+
 // --- The Moons (3.3) --------------------------------------------------------
 
 /**
