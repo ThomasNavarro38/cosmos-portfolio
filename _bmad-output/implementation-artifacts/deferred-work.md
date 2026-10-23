@@ -1132,7 +1132,7 @@ Still open after 3.5:
 ## Deferred from: code review of spec-6-2-preview-drift-guard.md (2026-10-21)
 
 - source_spec: spec-6-2-preview-drift-guard.md
-  summary: src/derive/README.md still says the gate lives in src/ because "a scripts/ directory would escape typecheck entirely", but tsconfig.json now includes scripts/.
+  summary: ~~src/derive/README.md still says the gate lives in src/ because "a scripts/ directory would escape typecheck entirely", but tsconfig.json now includes scripts/.~~ — **closed 2026-10-23** (Epic 6 retro action item 5): the sentence is removed from `src/derive/README.md`, and the same claim from `src/derive/index.ts`'s header.
   evidence: Pre-existing at HEAD (53e5fb5); tsconfig.json include is ["src", "scripts", "vite.config.ts"] and `npm run typecheck` checks scripts/preview-drift.ts. Surfaced by the 6.2 blind-hunter review, not caused by it.
   location: src/derive/README.md:169
   severity: low

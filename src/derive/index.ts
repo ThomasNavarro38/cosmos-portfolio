@@ -12,9 +12,7 @@
  *
  * They live in one file rather than two scripts so the artifact path and its
  * schema are named in exactly one place — a gate validating a different path
- * from the one the emitter writes would pass while gating nothing — and so
- * `tsconfig.json`'s `include: ["src"]` covers the gate. A `scripts/` directory
- * would escape typecheck entirely.
+ * from the one the emitter writes would pass while gating nothing.
  *
  * **Nothing here reads a clock, a random source, or the environment.** The
  * reference month comes from `career.json`, and the solve's randomness is a
