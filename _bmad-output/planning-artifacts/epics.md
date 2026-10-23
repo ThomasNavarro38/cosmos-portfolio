@@ -2384,7 +2384,7 @@ So that the site's only call to action is not a dead link.
 
 **Given** copy feedback is microcopy, never furniture (E-A8)
 **When** a visitor copies the address
-**Then** the success feedback is a three-word in-place microcopy change
+**Then** the feedback is an in-place change of the button's own label — `copied`, or `not copied` when the clipboard is blocked or absent (E-A8, EXPERIENCE.md §7.5, ruled 2026-10-22)
 **And** it is **never a toast, a banner, or a modal**
 
 **Given** the route is one of exactly five places copy exists (UX-DR45)

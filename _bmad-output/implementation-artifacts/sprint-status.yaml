@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 10-23-2026 17:30
+last_updated: 10-23-2026 16:21
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -94,7 +94,7 @@ development_status:
   4-10-fallback-accessibility: done
   epic-4-retrospective: done
 
-  epic-5: in-progress
+  epic-5: done
   5-1-the-colophon-as-a-fourth-lazy-chunk: done
   5-2-the-three-mapping-rules-worked-on-real-entities: done
   5-3-the-data-file-rendered-in-full: done
@@ -102,13 +102,13 @@ development_status:
   5-5-the-live-re-solve-honestly-framed: done
   epic-5-retrospective: done
 
-  epic-6: in-progress
+  epic-6: done
   6-1-the-composed-link-preview: done
   6-2-preview-drift-guard: done
   6-3-the-contact-route: done
   6-4-first-paint-verified-on-target-hardware: done
   6-5-launch-readiness-pass: done
-  epic-6-retrospective: optional
+  epic-6-retrospective: done
 action_items:
   - id: "epic-1-retro-item-1-ci-test-automation"
     epic: 1
@@ -566,3 +566,40 @@ action_items:
     owner: "Thomas"
     status: open
     ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
+  - id: "epic-6-retro-item-45-run-the-l1-l2-l3-launch-protocols-6-4-p1"
+    epic: 6
+    action: "Run the L1/L2/L3 launch protocols, 6.4 P1 and NFR-1a; fill the records,
+      promote the four todos, then close pre-launch checklist items 6-8 against the
+      chosen host"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-6-retro-10-23-2026.md"
+  - id: "epic-6-retro-item-46-schedule-the-open-epic-5-retro-items-38"
+    epic: 6
+    action: "Schedule the open Epic 5 retro items (38-44) as stories before launch,
+      item 38 (the /colophon route to the scene) first"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-6-retro-10-23-2026.md"
+  - id: "epic-6-retro-item-47-run-one-bmad-code-review-over-53e5fb5-5b"
+    epic: 6
+    action: "Run one bmad-code-review over 53e5fb5^..5b80137 for the five 6.x follow-ups,
+      clear followup_review_recommended, and decide whether the >= 5 threshold is
+      recalibrated or gated"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-6-retro-10-23-2026.md"
+  - id: "epic-6-retro-item-48-reconcile-epics-md-6-3-three-word-copy-f"
+    epic: 6
+    action: "Reconcile epics.md 6.3 three-word copy feedback to the E-A8 ruling (copied
+      / not copied)"
+    owner: "Thomas"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-6-retro-10-23-2026.md"
+  - id: "epic-6-retro-item-49-housekeeping-fix-the-stale-src-derive-re"
+    epic: 6
+    action: "Housekeeping: fix the stale src/derive/README.md typecheck sentence (6.2
+      deferral) and set epic-5 and epic-6 done via sprint-status repair"
+    owner: "Thomas"
+    status: done
+    ref: "_bmad-output/implementation-artifacts/epic-6-retro-10-23-2026.md"
