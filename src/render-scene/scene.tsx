@@ -47,7 +47,13 @@
  * after a return through history opens at the stop it was left at. The
  * frame-time sampler (`<FrameSampler>`, 4.6) is mounted after the affordance: it
  * hands each frame's delta to the chart offer's monitor and draws nothing — the
- * `<Canvas>` and every child are the same on any machine at any framerate.
+ * `<Canvas>` and every child are the same on any machine at any framerate. The
+ * First Paint mark (`<FirstFrameMark>`, 6.4) is mounted after the sampler: its
+ * frame callback queues a microtask that marks `schematic-first-frame` on the
+ * visitor's own performance timeline just after the first draw is issued, once
+ * per document, and draws nothing either.
+ * Nothing streams in, so every Body is in that first frame at its final
+ * luminance.
  *
  * **Dust is drawn strictly behind every Body** (FR-15). The model in
  * `dust-model.ts` decides what Dust exists; this file only guarantees the Dust's
@@ -92,6 +98,7 @@ import {
 import { AffordanceField } from './affordance-field.tsx';
 import type { AffordanceArtifact } from './affordance-model.ts';
 import { FrameSampler } from './frame-sampler.tsx';
+import { FirstFrameMark } from './first-frame-mark.tsx';
 import { MoonField } from './moon-field.tsx';
 import { MoteField } from './mote-field.tsx';
 import type { MoteArtifact } from './mote-model.ts';
@@ -216,6 +223,8 @@ export function Scene({ artifact }: SceneProps) {
         <AffordanceField artifact={artifact} bodies={bodies} />
         {/* The frame-time sampler (4.6): counts frames for the chart offer, draws nothing, changes nothing. */}
         <FrameSampler />
+        {/* The First Paint mark (6.4): marks the first frame once per document, on the visitor's own timeline. Draws nothing, sends nothing. */}
+        <FirstFrameMark />
       </Canvas>
       {/* The vignette: the ground over the frame's edge, 0 inside 42% rising to 0.9. Inert, and not narrated. */}
       <div aria-hidden="true" style={vignetteStyle()} />
