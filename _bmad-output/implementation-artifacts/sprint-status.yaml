@@ -340,7 +340,15 @@ action_items:
     action: "Run the skipped code review on story 2.10 (fa581dc) and record the reduced-motion
       manual check result in its spec"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-28: the review ran over fa581dc (src/ only), four layers, read
+      against HEAD; no AC violated; D1 (reduced motion as a 4x shorter move) kept as
+      ruled; five patches applied (an executed mount() test of the chrome's focus
+      hand-back, railFrame passing reduced on to the spring, the stale writer line in
+      motion-preference.ts, the panel test's field comparison, listener cleanup in
+      motion-preference.test.ts), one deferred to deferred-work.md. The reduced-motion
+      manual check run via DevTools MCP and recorded in the spec's Verification: pass
+      (0.2s transitions, the Motes still while Focused)"
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
   - id: "epic-2-retro-item-6-schedule-retro-items-as-stories"
     epic: 2

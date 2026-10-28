@@ -101,6 +101,18 @@ context: []
 - Given `npm run dev` and only a keyboard, when `Escape` is pressed in each of the four states, then exactly one layer releases, DOM focus is never on `<body>`, and Tab always leaves the panel (perceptual, checked in Chrome).
 - Given DevTools emulating `prefers-reduced-motion: reduce`, when the Rail is scrolled, a Star is flown to and a Project is Focused, then each move is visibly brief but continuous, the Motes do not orbit, and no reroute occurs.
 
+### Review Findings
+
+Follow-up review, 2026-10-28 (Epic 2 retro item 5): `fa581dc` (src/ only), four layers, each finding read against HEAD.
+
+- [x] [Review][Decision] (Thomas, 2026-10-28: kept as ruled, dismissed) Reduced motion makes each camera move 4× faster along the same path — `motionPace` shortens the Rail spring, flight, Focus and Condensation to `duration × 0.25` without changing the path, so the same travel happens in a quarter of the time. For vestibular users faster motion can be worse than slower, and WCAG 2.3.3 guidance favours removing non-essential travel (for example a cross-fade to the goal pose). This spec's Approach rules `duration × pace`. Keep it as ruled, or re-rule it.
+- [x] [Review][Patch] The return button's focus hand-back is checked only by a source regex: no executed test, now that the `mount()` harness exists [src/shell/corner-chrome.tsx:113]
+- [x] [Review][Patch] No test executes `railFrame` passing `reduced` on to `stepRailMotion`. The only `railFrame` reduced test runs on a settled spring, so dropping the argument stays green [src/render-scene/rail-model.test.ts:1199]
+- [x] [Review][Patch] The `motion-preference.ts` header still names `scene-host.tsx` as the one writer (it moved to `mount.tsx` in 4.1), and one line runs past the block's wrap width [src/shell/motion-preference.ts:15]
+- [x] [Review][Patch] A reduced-motion test's comment claims open and closed differ only in three fields, but compares only `visibility` [src/shell/panel-model.test.ts:546]
+- [x] [Review][Patch] The `motion-preference` subscription tests leak a listener into later tests when an assertion fails before the unsubscribe: `afterEach` resets the value, not the listener set [src/shell/motion-preference.test.ts:26]
+- [x] [Review][Defer] The preference writer's guards (throwing or `null` `matchMedia`, legacy `addListener`) are held only by a text audit; `writeReducedMotion` is private to `mount.tsx`, which `node --test` cannot load [src/shell/mount.tsx:42] — deferred, pre-existing
+
 ## Design Notes
 
 Dilating time after the clamp shortens every eased move by the same factor, so Focus and Condensation shorten identically by construction. The CSS reversing factor stays in step with the camera, because both are ratios of elapsed time to duration. A running CSS transition keeps the duration it started with, so toggling the preference mid-slide desyncs one move by a few frames; that is accepted. For a critically damped spring, `dt / pace` and `seconds × pace` are equivalent.
@@ -113,7 +125,7 @@ Dilating time after the clamp shortens every eased move by the same factor, so F
 
 **Manual checks** (the `.tsx` bindings cannot run under `node --test`; there is no DOM harness by design):
 - Chrome, keyboard only: `Escape` in each of the four states releases one layer; with DOM focus on `↩ resume the journey`, `Escape` lands focus on `overview`, never `<body>` (the React 19 ref cleanup). Checked via DevTools MCP 2026-09-30: pass.
-- DevTools → Rendering → emulate `prefers-reduced-motion: reduce`: the panel's computed `transition` reads `0.2s`, the camera moves are brief but continuous, and the Motes hold still.
+- DevTools → Rendering → emulate `prefers-reduced-motion: reduce`: the panel's computed `transition` reads `0.2s`, the camera moves are brief but continuous, and the Motes hold still. Checked via DevTools MCP 2026-10-28 on the dev server at HEAD (1600×900): pass. Emulated `reduce`: the panel reads `transform 0.2s cubic-bezier(0.65, 0, 0.35, 1), visibility 0s linear 0.2s` and the corner slot `right 0.2s …`; `no-preference` reads `0.8s`, and toggling the emulation live switches both, so the writer's `change` listener runs. With the Motes condensed on *Client referential* (Focused), two screenshots 3 s apart differ at full motion and are pixel-identical (same PNG hash) under reduced motion. The camera's brevity was not measured on screen; it is held by the model tests.
 
 ## Suggested Review Order
 

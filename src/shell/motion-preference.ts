@@ -12,7 +12,8 @@
  * visitor who asked for less motion gets none there (WCAG 2.3.3, Animation from
  * Interactions). This does not meet WCAG 2.2.2 (Pause, Stop, Hide), which needs
  * a control for everyone: at full motion the orbits still spin, and that stays
- * open in `deferred-work.md`. Dwell and every rest pose are untouched — reduced motion shortens the moves, and moves nothing else.
+ * open in `deferred-work.md`. Dwell and every rest pose are untouched — reduced
+ * motion shortens the moves, and moves nothing else.
  *
  * **A module-level value, not a second store.** The preference is not "where
  * the visitor is", so it has no place in `navigationStore`; and it is one
@@ -20,8 +21,8 @@
  * frame loop (`reducedMotion()`, once per frame) and by React
  * (`useSyncExternalStore(subscribeReducedMotion, reducedMotion)`).
  *
- * **One writer:** a `matchMedia(REDUCED_MOTION_QUERY)` listener in
- * `scene-host.tsx`, guarded where `matchMedia` is absent. **The readers** are
+ * **One writer:** a `matchMedia(REDUCED_MOTION_QUERY)` listener in `mount.tsx`,
+ * run before the first render on both surfaces. **The readers** are
  * the camera rig, the Mote field, the Focus panel and the corner chrome (3.8,
  * whose slot moves with the panel); the models take `reduced`
  * as an argument and map it through `motionPace`. A source audit in

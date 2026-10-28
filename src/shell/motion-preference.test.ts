@@ -38,16 +38,19 @@ test('the preference starts false, and notifies only on a change', () => {
   assert.equal(reducedMotion(), false);
   let notified = 0;
   const unsubscribe = subscribeReducedMotion(() => notified++);
-  setReducedMotion(false);
-  assert.equal(notified, 0, 'no change, no notification');
-  setReducedMotion(true);
-  assert.equal(reducedMotion(), true);
-  assert.equal(notified, 1);
-  setReducedMotion(true);
-  assert.equal(notified, 1, 'a redundant event notifies nothing');
-  setReducedMotion(false);
-  assert.equal(notified, 2);
-  unsubscribe();
+  try {
+    setReducedMotion(false);
+    assert.equal(notified, 0, 'no change, no notification');
+    setReducedMotion(true);
+    assert.equal(reducedMotion(), true);
+    assert.equal(notified, 1);
+    setReducedMotion(true);
+    assert.equal(notified, 1, 'a redundant event notifies nothing');
+    setReducedMotion(false);
+    assert.equal(notified, 2);
+  } finally {
+    unsubscribe();
+  }
   setReducedMotion(true);
   assert.equal(notified, 2, 'unsubscribed');
   setReducedMotion(false);
@@ -61,11 +64,16 @@ test('every listener hears a change, and one unsubscribing mid-notify does not s
     offA();
   });
   const offB = subscribeReducedMotion(() => heard.push('b'));
-  setReducedMotion(true);
-  assert.deepEqual(heard, ['a', 'b']);
-  setReducedMotion(false);
-  assert.deepEqual(heard, ['a', 'b', 'b'], 'a is gone');
-  offB();
+  try {
+    setReducedMotion(true);
+    assert.deepEqual(heard, ['a', 'b']);
+    setReducedMotion(false);
+    assert.deepEqual(heard, ['a', 'b', 'b'], 'a is gone');
+  } finally {
+    // A listener left subscribed would hear every later test's writes.
+    offA();
+    offB();
+  }
 });
 
 // --- Purity ----------------------------------------------------------------------

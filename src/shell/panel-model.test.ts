@@ -544,9 +544,12 @@ test('reduced motion: the slide, its visibility delay and the cross-fade run on 
   assert.deepEqual(panelStyle(false, motionPace(false)), panelStyle(false));
   assert.deepEqual(crossFadeTiming('1', motionPace(false)), crossFadeTiming('1'));
   // Open and closed differ only in the three fields they always did.
-  const open = panelStyle(true, pace);
+  const open: Record<string, unknown> = { ...panelStyle(true, pace) };
+  const closed: Record<string, unknown> = { ...panelStyle(false, pace) };
+  assert.deepEqual(Object.keys(open).sort(), Object.keys(closed).sort());
+  assert.deepEqual(Object.keys(open).filter((key) => open[key] !== closed[key]).sort(), ['transform', 'transition', 'visibility']);
   assert.equal(open.visibility, 'visible');
-  assert.equal(panelStyle(false, pace).visibility, 'hidden');
+  assert.equal(closed.visibility, 'hidden');
 });
 
 test('a pace that is not a positive finite number reads as 1 — never a 0s or NaN duration', () => {
