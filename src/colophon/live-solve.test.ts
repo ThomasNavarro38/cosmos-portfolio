@@ -268,6 +268,23 @@ test('the press: after the stop, a late result or failure is never applied', asy
   }
 });
 
+test('the press: the stop does not latch — a press after it starts afresh', async () => {
+  // A remount that keeps the tracker (React's dev re-run of effects) must still answer the button.
+  const out = sinks();
+  const { load, careers, runs } = queuedLoader();
+  const live = createLiveSolve(load, out);
+  live.press('first');
+  await settle();
+  live.stop();
+  live.press('second');
+  await settle();
+  assert.deepEqual(careers, ['first', 'second'], 'the press after the stop ran');
+  runs[0]?.resolve('stale');
+  runs[1]?.resolve('fresh');
+  await settle();
+  assert.deepEqual(out.writes, ['running true', 'running true', 'solved fresh', 'running false'], 'only the new run is applied');
+});
+
 // --- Import-free ------------------------------------------------------------------------------------
 
 function auditSource(source: string): string[] {

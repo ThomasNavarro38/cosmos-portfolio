@@ -556,7 +556,7 @@ test('the live re-solve: idle, running, solved', async () => {
   assert.deepEqual(colophonPage(await renderPage(EXHIBITS, solved), EXHIBITS, solved), [], 'solved: the result in full, named');
   // A second run in flight keeps the previous result until it succeeds.
   const again = { solved: SOLVED, running: true };
-  assert.deepEqual(colophonPage(await renderPage(EXHIBITS, again), EXHIBITS, again), [], 'running again: the previous result kept, the button disabled');
+  assert.deepEqual(colophonPage(await renderPage(EXHIBITS, again), EXHIBITS, again), [], 'running again: the previous result kept, the button aria-disabled');
   // A failure's transitions (logged once, the button freed, the result untouched) are the tracker's, executed in live-solve.test.ts.
   // A browser's solve may differ from the committed one: whatever text arrives is drawn, exactly.
   const other = { solved: SOLVED.replace(/"x": -?[\d.eE+-]+/, '"x": 123.25'), running: false };

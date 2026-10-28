@@ -5,7 +5,7 @@ created: '2026-10-23'
 baseline_revision: 'f5d735c37744dfe988d25f23fdd6f08f69f961cf'
 status: 'done'
 review_loop_iteration: 1
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-6-context.md'
 warnings: ['oversized']
@@ -143,6 +143,16 @@ deferred: []
   - the bundle assertions pass.
 - **The audits run.** Given the shipped source, when `npm test` runs, then every test passes and exactly one `todo` is reported pending: the First Paint measurement.
 - **The record exists.** Given `first-paint-6-4.md`, when read, then it states the target profile, the protocol, the 2.5 s figure and the unratified framing, and every automated row names a test that exists.
+
+### Review Findings
+
+Follow-up review, 2026-10-28, over `d1eac40` (code and tests), read against HEAD, beside 6.5. No acceptance criterion is violated; the owed P1 and NFR-1a runs are not re-reported.
+
+- [x] [Review][Patch] The P1 `todo` still reads `'Thomas, before 6.5'`; 6.5 is done and carries P1 on its pre-launch checklist, its own todos reading `'Thomas, before launch'` [src/first-paint.test.ts:348]
+- [x] [Review][Patch] The collection scan's `/\bfetch\s*\(/` misses the optional call `fetch?.(…)`; add it, with a mutation row [src/first-paint.test.ts:105]
+- [x] [Review][Defer] The mount audit's "unconditional direct child of the Canvas" does not reject a wrapper (`<Suspense fallback={null}><FirstFrameMark /></Suspense>`, `<group>…</group>`) [src/render-scene/scene-model.test.ts] — deferred, pre-existing
+- [x] [Review][Defer] "The site collects nothing" scans `src/` and `index.html`, not the built `dist/` (bundled dependency code, `public/`) [src/first-paint.test.ts] — deferred, pre-existing
+- [x] [Review][Defer] Protocol P1 does not say a run must load in a foreground tab: in a background tab rAF is paused and the mark arrives arbitrarily late [first-paint-6-4.md] — deferred, pre-existing
 
 ## Spec Change Log
 

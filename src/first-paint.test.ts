@@ -102,7 +102,7 @@ const COLLECTION: readonly (readonly [string, RegExp])[] = [
   ['stores: the Cache API', /\bcaches\s*\./],
   ['stores: a service worker', /\bnavigator\s*\.\s*serviceWorker\b/],
   ['sends: sendBeacon', /\bsendBeacon\b/],
-  ['sends: fetch', /\bfetch\s*\(/],
+  ['sends: fetch', /\bfetch\s*(?:\?\.\s*)?\(/],
   ['sends: XMLHttpRequest', /\bXMLHttpRequest\b/],
   ['sends: a WebSocket', /\bWebSocket\b/],
   ['sends: an EventSource', /\bEventSource\b/],
@@ -131,6 +131,7 @@ test('the collection scan rejects each reach, and ignores one written in a comme
     ['the Cache API', "void caches.open('v1');", /the Cache API/],
     ['a beacon', "navigator.sendBeacon('/t', 'x');", /sendBeacon/],
     ['a fetch', "void fetch('/t', { method: 'POST' });", /fetch/],
+    ['an optional fetch', "void fetch?.('/t');", /fetch/],
     ['an XHR', 'const r = new XMLHttpRequest();', /XMLHttpRequest/],
     ['a socket', "const s = new WebSocket('wss://t');", /a WebSocket/],
     ['an event stream', "const e = new EventSource('/t');", /an EventSource/],
@@ -345,7 +346,7 @@ test('the record’s automated rows each name a test that exists', () => {
   assert.deepEqual(missingNamedTests(readFileSync(RECORD, 'utf8'), REPO_ROOT), []);
 });
 
-test('First Paint is measured on the target hardware', { todo: 'Thomas, before 6.5' }, () => {
+test('First Paint is measured on the target hardware', { todo: 'Thomas, before launch' }, () => {
   const { result, runs } = readMeasurement(readFileSync(RECORD, 'utf8'));
   for (const run of runs) assert.ok(runFilled(run), `P1 run ${run[0]} is not filled in: ${JSON.stringify(run)}`);
   assert.ok(holdsMeasuredSeconds(result), `the measurement row's Result holds ${JSON.stringify(result)}, not a measured value in seconds other than the carried 2.5 s`);

@@ -19,6 +19,8 @@ Thumbs.db
 resume.txt
 .claude/
 .impeccable/
+# The link preview's intermediate SVG (scripts/preview.ts recipe): captured into public/preview.png, then deleted
+/preview.svg
 
 # Logs
 *.log

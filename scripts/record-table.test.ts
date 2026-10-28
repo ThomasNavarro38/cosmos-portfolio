@@ -66,6 +66,14 @@ test('missingNamedTests: an automated row naming no test, naming a missing test,
     assert.match(missingNamedTests(row('`src/gone.test.ts` "anything"'), root).join('\n'), /src\/gone\.test\.ts does not exist/);
     const both = missingNamedTests(`${row('nothing')}\n${row('`src/x.test.ts` "missing"')}\n`, root);
     assert.equal(both.length, 2, 'one failure per fault, every row read');
+    // A test declared todo or skipped never asserts, so it holds nothing; a skip decided at run time is the test's own.
+    writeFileSync(
+      join(root, 'src', 'y.test.ts'),
+      "test('owed', { todo: 'later' }, () => {});\ntest('parked', { skip: true }, () => {});\ntest('git only', 'skip' in tracked ? { skip: tracked.skip } : {}, () => {});\n",
+    );
+    assert.match(missingNamedTests(row('`src/y.test.ts` "owed"'), root).join('\n'), /src\/y\.test\.ts "owed" is declared todo, so it holds nothing/);
+    assert.match(missingNamedTests(row('`src/y.test.ts` "parked"'), root).join('\n'), /src\/y\.test\.ts "parked" is declared skip, so it holds nothing/);
+    assert.deepEqual(missingNamedTests(row('`src/y.test.ts` "git only"'), root), [], 'a skip decided at run time is admitted');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -14,7 +14,8 @@
  * **Pure and injectable.** `fetch` and the abort signal arrive as arguments;
  * nothing here touches the DOM or React. Both requests start at once and carry
  * the signal. A response that is not `ok` rejects, naming its path, as a network
- * failure or an abort does — what to do about it is `colophon.tsx`'s.
+ * failure or an abort does, and so does an HTML page answered in place of the
+ * file (the host's SPA rewrite) — what to do about it is `colophon.tsx`'s.
  */
 
 /** The two published paths, career first. */
@@ -29,16 +30,21 @@ export interface Exhibits {
   readonly layout: string;
 }
 
-/** The slice of `fetch` this reads: a URL and a signal in, a response with `ok`, `status` and `text()` out. */
+/** The slice of `fetch` this reads: a URL and a signal in, a response with `ok`, `status`, `headers` and `text()` out. */
 export type FetchText = (path: string, init: { readonly signal: AbortSignal }) => Promise<{
   readonly ok: boolean;
   readonly status: number;
+  readonly headers: { get(name: string): string | null };
   text(): Promise<string>;
 }>;
 
 async function textAt(load: FetchText, path: string, signal: AbortSignal): Promise<string> {
   const response = await load(path, { signal });
   if (!response.ok) throw new Error(`${path} answered ${response.status}`);
+  // The host's SPA rewrite answers a missing file with index.html and a 200;
+  // drawn, the page would pass for the file. Only an HTML type is refused, so
+  // a host serving JSON as text, or untyped, still reads.
+  if (/^\s*text\/html\b/i.test(response.headers.get('content-type') ?? '')) throw new Error(`${path} answered a page, not the file`);
   return response.text();
 }
 

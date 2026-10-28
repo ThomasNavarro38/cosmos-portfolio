@@ -1,7 +1,8 @@
 /**
  * `exhibits.ts` (5.1) against a fake `fetch`: both files fetched together with
- * the signal and returned as text, verbatim; a non-`ok` response, a network
- * rejection and an abort each reject. And the paths it fetches are the paths
+ * the signal and returned as text, verbatim; a non-`ok` response, an HTML page
+ * answered in place of a file, a network rejection and an abort each reject,
+ * while JSON served as text or untyped still reads. And the paths it fetches are the paths
  * `scripts/exhibits.ts` publishes. `startExhibits`, the Colophon's effect: the
  * files shown once, a failure reported once, and after its stop — the unmount —
  * neither, the requests aborted.
@@ -15,6 +16,13 @@ import { EXHIBIT_PATHS, loadExhibits, startExhibits, type FetchText } from './ex
 const CAREER = '{\n  "clients": []\n}\n';
 const LAYOUT = '{\n  "version": 1\n}\n';
 
+/** Response headers carrying one `content-type`, or none. */
+function typed(type: string | null): { get(name: string): string | null } {
+  return { get: (name) => (name.toLowerCase() === 'content-type' ? type : null) };
+}
+
+const JSON_TYPE = typed('application/json');
+
 interface Call {
   readonly path: string;
   readonly signal: AbortSignal;
@@ -26,7 +34,7 @@ function fakeFetch(bodies: Readonly<Record<string, string>>, statuses: Readonly<
   const load: FetchText = async (path, { signal }) => {
     calls.push({ path, signal });
     const status = statuses[path] ?? 200;
-    return { ok: status >= 200 && status < 300, status, text: async () => bodies[path] ?? '' };
+    return { ok: status >= 200 && status < 300, status, headers: JSON_TYPE, text: async () => bodies[path] ?? '' };
   };
   return { load, calls };
 }
@@ -53,7 +61,7 @@ test('both requests start at once, before either answers', async () => {
   const load: FetchText = async (path) => {
     started.push(path);
     await gate;
-    return { ok: true, status: 200, text: async () => (path === '/career.json' ? CAREER : LAYOUT) };
+    return { ok: true, status: 200, headers: JSON_TYPE, text: async () => (path === '/career.json' ? CAREER : LAYOUT) };
   };
   const pending = loadExhibits(load, new AbortController().signal);
   await Promise.resolve();
@@ -69,10 +77,27 @@ test('a response that is not ok rejects, naming its path', async () => {
   }
 });
 
+test('a page answered in place of a file rejects, naming its path', async () => {
+  // The host's SPA rewrite answers a missing file with index.html and a 200.
+  for (const path of ['/career.json', '/layout.generated.json']) {
+    for (const type of ['text/html', 'text/html; charset=utf-8', 'TEXT/HTML']) {
+      const load: FetchText = async (asked) => ({ ok: true, status: 200, headers: asked === path ? typed(type) : JSON_TYPE, text: async () => (asked === '/career.json' ? CAREER : LAYOUT) });
+      await assert.rejects(loadExhibits(load, new AbortController().signal), new RegExp(`${path.replace(/\./g, '\\.')} answered a page`));
+    }
+  }
+});
+
+test('a file served as JSON, as text, or untyped is read', async () => {
+  for (const type of ['application/json; charset=utf-8', 'text/plain', null]) {
+    const load: FetchText = async (path) => ({ ok: true, status: 200, headers: typed(type), text: async () => (path === '/career.json' ? CAREER : LAYOUT) });
+    assert.deepEqual(await loadExhibits(load, new AbortController().signal), { career: CAREER, layout: LAYOUT });
+  }
+});
+
 test('a network rejection rejects', async () => {
   const load: FetchText = async (path) => {
     if (path === '/layout.generated.json') throw new TypeError('Failed to fetch');
-    return { ok: true, status: 200, text: async () => CAREER };
+    return { ok: true, status: 200, headers: JSON_TYPE, text: async () => CAREER };
   };
   await assert.rejects(loadExhibits(load, new AbortController().signal), /Failed to fetch/);
 });
@@ -97,7 +122,7 @@ function gatedFetch(statuses: Readonly<Record<string, number>> = {}): { readonly
     signals.push(signal);
     await gate;
     const status = statuses[path] ?? 200;
-    return { ok: status >= 200 && status < 300, status, text: async () => (path === '/career.json' ? CAREER : LAYOUT) };
+    return { ok: status >= 200 && status < 300, status, headers: JSON_TYPE, text: async () => (path === '/career.json' ? CAREER : LAYOUT) };
   };
   return { load, signals, release: () => release() };
 }
@@ -131,7 +156,7 @@ test('startExhibits: one request failing aborts the other, still in flight, and 
   const signals: AbortSignal[] = [];
   const load: FetchText = (path, { signal }) => {
     signals.push(signal);
-    if (path === '/career.json') return Promise.resolve({ ok: false, status: 404, text: async () => '' });
+    if (path === '/career.json') return Promise.resolve({ ok: false, status: 404, headers: JSON_TYPE, text: async () => '' });
     return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
   };
   const failed: unknown[] = [];

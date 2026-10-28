@@ -5,7 +5,7 @@ created: '2026-10-23'
 baseline_revision: 'd1eac40d40bfe30046ebe119ad31d77aa306eaa2'
 status: 'done'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-6-context.md'
 warnings: ['oversized']
@@ -159,6 +159,14 @@ Today no record ties the ACs to their evidence. Nothing pins the deploy envelope
 - **The record holds.** Given `launch-readiness-6-5.md`, when the cross-check runs, then every automated row names at least one test, and every named test exists.
 - **The build holds.** Given a clean tree, when `npm run build` runs, then the gate is green and the entry stays at 3,033 bytes (no shipped code changed).
 - **The envelope audit bites.** Given a synthetic `import.meta.env` read, `functions/` path, `public/*.js` or off-site rewrite, when the audit runs on it, then it fails naming that file.
+
+### Review Findings
+
+Follow-up review, 2026-10-28, over `5b80137` (code and tests), read against HEAD, beside 6.4. No acceptance criterion is violated; L1–L3 are not re-reported.
+
+- [x] [Review][Patch] `missingNamedTests` accepts a named test declared `{ todo }` or `{ skip }`, so an Automated row can rest on a test that never asserts and the record stays green; reject a literal todo/skip option (the 3b test's runtime-conditional skip stays admitted) [scripts/record-table.ts:100]
+- [x] [Review][Patch] The envelope's `ENV_MEMBER` misses the optional-chaining reads `import.meta?.env` and `process?.env`; add them, with mutation rows [src/launch-readiness.test.ts:95]
+- [x] [Review][Defer] Any `git ls-files` failure, not only git being absent, skips the server-and-secret-path audit [src/launch-readiness.test.ts:214] — deferred, pre-existing
 
 ## Spec Change Log
 

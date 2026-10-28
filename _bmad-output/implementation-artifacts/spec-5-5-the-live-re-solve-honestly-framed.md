@@ -5,7 +5,7 @@ created: '2026-10-21'
 status: 'done'
 baseline_revision: '14a79c6a0d5b1e70b779ec408529683f03fb45d0'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-5-context.md'
 warnings: ['oversized']
@@ -40,13 +40,13 @@ deferred: []
 - **The output feeds no renderer.** The solved text is held only in `Colophon`'s `useState`. No store, no shell module, no renderer. Nothing outside `src/colophon/colophon.tsx` references `derive/live`.
 - **The run, injectable and import-free.** `live-solve.ts` also exports `startLiveSolve(load, career, show, fail): () => void`. It calls `load()`, then `solveLive(career)`, then `show(text)` exactly once, or `fail(error)` exactly once, and does neither after the returned stop. Pattern: `startExhibits` in `exhibits.ts`.
 - **Colophon wiring.**
-  - The button is disabled while a run is in flight. A new run's stop replaces the old one, and unmount calls the current stop.
+  - The button is `aria-disabled` (never `disabled`, which drops keyboard focus) while a run is in flight, and a press then is ignored. A new run's stop replaces the old one, and unmount calls the current stop.
   - On success the previous result is replaced. A failure is logged once with `console.error` and leaves the page as it was.
   - There is no loading indicator, no motion and no live region.
   - `ColophonPage` gains props `solved: string | null`, `running: boolean` and `onSolve: () => void`, so the render harness drives it.
 - **Button treatment.** `.colophon-solve` mirrors `.panel-release` (`src/shell/focus-panel.css:153-185`) declaration for declaration, without its `::before` hairline: the chrome type properties set one by one, `ink-label` at rest and `ink-prose` on `:hover`/`:focus-visible`.
   - Add `:focus-visible { outline: 1px solid var(--color-stroke-focus-dark); outline-offset: 3px }` as `.colophon-exhibit` has, and a forced-colours `CanvasText` outline.
-  - Add `:disabled { cursor: default }`.
+  - Add `[aria-disabled="true"] { cursor: default }`, the hover/focus lift keyed off `:not([aria-disabled="true"])`.
   - Use tokens only. No `font:` shorthand, no bold, no `text-transform`, no radius, shadow or hue.
 - **Checkable framing.** Tests hold its claims:
   - "the same solver": `solveLive(shipped career text)` in Node equals the committed `layout.generated.json`, CRLF-normalised, and both `runPipeline` and `solveLive` call `pipeline.ts`'s step.
@@ -72,7 +72,7 @@ deferred: []
 |----------|--------------|---------------------------|----------------|
 | Not loaded | `exhibits === null` | `<h1>` alone. No button | — |
 | Loaded, idle | exhibits, `solved === null` | sequence ends `h2, p, button`. Button enabled | — |
-| Running | `running === true` | button `disabled` | — |
+| Running | `running === true` | button `aria-disabled="true"` | — |
 | Solved | solver resolves text | final `pre`, named `layout, solved in this browser`, its text exactly the solved text | — |
 | Solve fails | chunk load or solve rejects | `fail` once; page unchanged; button re-enabled | `console.error` once |
 | Unmount mid-run | stop called | neither `show` nor `fail` | silent |
@@ -129,7 +129,20 @@ deferred: []
 - Given a re-solve has completed, when the scene or chart renders, then it reads only the committed `layout.generated.json`.
 - Given the Colophon's computed styles, when they are inspected, then the button meets its contrast floors on `surface-base-dark` and shows a visible focus indicator.
 
+### Review Findings
+
+Follow-up review, 2026-10-28, over `1753811` (code and tests), read against HEAD, beside 5.4.
+
+- [x] [Review][Patch] `.colophon-solve` copies `.panel-release` but nothing held the copy to its source: `releaseDrift` now reads `focus-panel.css` and pins rest, raised ink and forced-colours outline (less the flex layout and `outline: none`), either side's drift failing [src/identity-audit.test.ts]
+- [x] [Review][Patch] The Always rules and the I/O matrix said `disabled`, the code (rightly) `aria-disabled`; the spec is amended, logged in the Spec Change Log [spec-5-5-the-live-re-solve-honestly-framed.md:43]
+- [x] [Review][Patch] `createLiveSolve`'s doc said "nothing after `stop`", but the stop does not latch (a later press runs, as a kept tracker needs); the doc says so and a test pins it [src/colophon/live-solve.ts:79]
+- [x] [Review][Patch] An assertion message said "the button disabled" for a check that holds it `aria-disabled` [src/colophon/colophon.test.ts:559]
+- [x] [Review][Defer] `rendererCarries` follows dynamic edges only from chunks holding a `src/render-*` module, so a shared chunk a renderer imports statically could lazily reach the solver unflagged [scripts/bundle-assertion.test.ts] — deferred, pre-existing
+- [x] [Review][Defer] The live solve runs synchronously on the main thread, with no measured or bounded duration on a slow device [src/derive/live.ts] — deferred, pre-existing
+
 ## Spec Change Log
+
+- 2026-10-28 (follow-up review): the Always rules and the I/O matrix now say `aria-disabled` where they said `disabled`, matching the 2026-10-21 review patch that kept keyboard focus on the button; behaviour unchanged.
 
 ## Review Triage Log
 

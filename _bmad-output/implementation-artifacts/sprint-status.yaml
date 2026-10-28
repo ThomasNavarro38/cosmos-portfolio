@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 10-23-2026 16:21
+last_updated: 10-28-2026 12:00
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -521,7 +521,11 @@ action_items:
       offered as the chart offers the scene), so AC 5.4 #5 one-click-away holds and
       a shared /colophon URL is no dead end"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-23 (5b534e5): the Colophon draws the chart's chrome row, the
+      route line `the scene · the chart` on a capable machine and `the chart` alone
+      on a fallback one, built by colophonLinks in route-link.ts; colophon.css pinned
+      to the chart's chrome rules by the identity audit"
     ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
   - id: "epic-5-retro-item-39-rule-d-g6-colophon-page-layout-gutter-co"
     epic: 5
@@ -543,7 +547,12 @@ action_items:
     action: "Run the follow-up bmad-code-review 5.1, 5.4 and 5.5 recommended over
       5782675^..1753811, then clear followup_review_recommended"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-28: one follow-up review over 5782675^..5b80137, run with item
+      47 in five chunks; 5.1, 5.4 and 5.5: six patches applied (the exhibit fetch refuses
+      an HTML page, the network admission binds the name to ./exhibits.ts, .colophon-solve
+      pinned to .panel-release, spec 5.5 aria-disabled, the tracker's non-latching stop
+      tested), four deferred to deferred-work.md; followup_review_recommended cleared"
     ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
   - id: "epic-5-retro-item-42-add-a-client-render-path-to-the-render-h"
     epic: 5
@@ -557,7 +566,11 @@ action_items:
     action: "Reconcile epics.md: fourth lazy chunk wording in 5.1/5.5 (solver is fifth)
       and the no-src/data bundle clause; set epic-5 done in sprint status"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-28: epics.md 5.5 AC 1 reads fifth lazy chunk (mount, scene,
+      chart, Colophon, solver as built) and 5.1's src/data clause notes the solver
+      chunk's src/data/schema.ts under AD-3, both as dated reconciliation notes; epic-5
+      set done on 2026-10-23 (1645f0d)"
     ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
   - id: "epic-5-retro-item-44-process-file-carried-retro-obligations-i"
     epic: 5
@@ -587,7 +600,13 @@ action_items:
       clear followup_review_recommended, and decide whether the >= 5 threshold is
       recalibrated or gated"
     owner: "Thomas"
-    status: open
+    status: in-progress
+    resolution: "2026-10-28: the review ran over 5782675^..5b80137 with item 41; 6.1-6.5:
+      twelve patches applied (the preview CLI's write guarded, /preview.svg ignored,
+      the route line's cascade order audited, stale README prose, the record reader
+      refusing todo/skip tests, optional-chaining env and fetch reads), seven deferred;
+      followup_review_recommended cleared on 6.1-6.5. Open: Thomas's decision on the
+      >= 5 threshold (recalibrate or gate)"
     ref: "_bmad-output/implementation-artifacts/epic-6-retro-10-23-2026.md"
   - id: "epic-6-retro-item-48-reconcile-epics-md-6-3-three-word-copy-f"
     epic: 6

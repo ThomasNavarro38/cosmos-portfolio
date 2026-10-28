@@ -2162,6 +2162,86 @@ test('colophon: the chrome row’s rules are the chart’s, declaration for decl
 });
 
 /**
+ * The route line's place in the chrome row rests on cascade order, which
+ * `auditDeclarations` does not read: its `margin-inline-start: auto` must come
+ * after the shared rule whose `margin: 0` would reset it, and the phone rule's
+ * `0` after both. Checked in each stylesheet that draws the row (6.3 ruling Q3
+ * (a), the Colophon's copy since Epic 5 item 38).
+ */
+function routeOrder(label: string, source: string, shared: string, routes: string): string[] {
+  const rules = parseCss(source);
+  const indexOf = (at: string, selector: string, declaration: string): number => rules.findIndex((rule) => rule.at === at && rule.selector === selector && rule.declarations.includes(declaration));
+  const sharedAt = indexOf('', shared, 'margin: 0');
+  const autoAt = indexOf('', routes, 'margin-inline-start: auto');
+  const phoneAt = indexOf(PHONE, routes, 'margin-inline-start: 0');
+  if (sharedAt < 0 || autoAt < 0 || phoneAt < 0) return [`${label}: the route line's three margin rules are not all there`];
+  const failures: string[] = [];
+  if (autoAt < sharedAt) failures.push(`${label}: \`${routes}\`'s auto margin comes before \`${shared}\`'s \`margin: 0\`, which resets it`);
+  if (phoneAt < autoAt) failures.push(`${label}: the phone \`${routes}\` comes before its auto margin, which overrides it`);
+  return failures;
+}
+
+test('chart and colophon: the route line’s auto margin sits between the shared reset and the phone rule', () => {
+  const chart = read(CHART_CSS);
+  const colophon = read(COLOPHON_CSS);
+  assert.deepEqual(routeOrder('chart', chart, '.chart-heading, .chart-routes', '.chart-routes'), []);
+  assert.deepEqual(routeOrder('colophon', colophon, '.colophon-chrome-heading, .colophon-routes', '.colophon-routes'), []);
+  const auto = '.chart-routes {\n  margin-inline-start: auto;\n}\n';
+  const shared = '.chart-heading,\n.chart-routes {\n  margin: 0;';
+  assert.ok(chart.includes(auto) && chart.includes(shared), 'the mutation targets exist');
+  const autoFirst = chart.replace(auto, '').replace(shared, `${auto}\n${shared}`);
+  assert.deepEqual(routeOrder('chart', autoFirst, '.chart-heading, .chart-routes', '.chart-routes'), ["chart: `.chart-routes`'s auto margin comes before `.chart-heading, .chart-routes`'s `margin: 0`, which resets it"]);
+  const autoLast = `${chart.replace(auto, '')}\n${auto}`;
+  assert.deepEqual(routeOrder('chart', autoLast, '.chart-heading, .chart-routes', '.chart-routes'), ['chart: the phone `.chart-routes` comes before its auto margin, which overrides it']);
+  const colophonAuto = '.colophon-routes {\n  margin-inline-start: auto;\n}\n';
+  assert.ok(colophon.includes(colophonAuto), 'the colophon mutation target exists');
+  assert.deepEqual(routeOrder('colophon', `${colophon.replace(colophonAuto, '')}\n${colophonAuto}`, '.colophon-chrome-heading, .colophon-routes', '.colophon-routes'), [
+    'colophon: the phone `.colophon-routes` comes before its auto margin, which overrides it',
+  ]);
+  assert.deepEqual(routeOrder('chart', chart.replace(auto, ''), '.chart-heading, .chart-routes', '.chart-routes'), ["chart: the route line's three margin rules are not all there"]);
+});
+
+/**
+ * The live re-solve's button is the panel's release word, copied (5.5): the
+ * rest, the raised ink and the forced-colours outline of `.panel-release`, read
+ * off `focus-panel.css` itself, against `COLOPHON_RULES`' `.colophon-solve` —
+ * less only what the copy drops on purpose: the flex layout that placed the
+ * `::before` hairline, and the raised state's `outline: none`, which would hide
+ * the focus outline the button keeps. Either side edited alone fails.
+ */
+function releaseDrift(panelCss: string, colophon: readonly CssRule[]): string[] {
+  const panel = parseCss(panelCss);
+  const of = (rules: readonly CssRule[], at: string, selector: string): readonly string[] | undefined => rules.find((rule) => rule.at === at && rule.selector === selector)?.declarations;
+  const pairs: readonly (readonly [string, string, string, (line: string) => boolean])[] = [
+    ['', '.panel-release', '.colophon-solve', (line) => !/^(?:display|align-items|gap):/.test(line)],
+    ['', '.panel-release:hover, .panel-release:focus-visible', '.colophon-solve:hover:not([aria-disabled="true"]), .colophon-solve:focus-visible:not([aria-disabled="true"])', (line) => line !== 'outline: none'],
+    ['@media (forced-colors: active)', '.panel-release:focus-visible', '.colophon-solve:focus-visible', () => true],
+  ];
+  return pairs
+    .filter(([at, ours, theirs, kept]) => {
+      const a = of(panel, at, ours)?.filter(kept);
+      const b = of(colophon, at, theirs);
+      return a === undefined || b === undefined || JSON.stringify(a) !== JSON.stringify(b);
+    })
+    .map(([at, ours, theirs]) => `colophon: \`${at === '' ? '' : `${at} `}${theirs}\` is not \`${ours}\` declaration for declaration`);
+}
+
+test('colophon: the live re-solve’s button is the panel’s release, declaration for declaration', () => {
+  const panelCss = read(PANEL_CSS);
+  assert.deepEqual(releaseDrift(panelCss, COLOPHON_RULES), []);
+  const loose = COLOPHON_RULES.map((rule) => (rule.selector === '.colophon-solve' && rule.at === '' ? { ...rule, declarations: rule.declarations.map((line) => line.replace('var(--space-xl) 0 0', 'var(--space-lg) 0 0')) } : rule));
+  assert.deepEqual(releaseDrift(panelCss, loose), ['colophon: `.colophon-solve` is not `.panel-release` declaration for declaration']);
+  // The reverse: the panel's release edited alone fails too.
+  assert.deepEqual(releaseDrift(panelCss.replace('color: var(--color-ink-prose-dark);\n  outline: none;', 'color: var(--color-ink-lift-dark);\n  outline: none;'), COLOPHON_RULES), [
+    'colophon: `.colophon-solve:hover:not([aria-disabled="true"]), .colophon-solve:focus-visible:not([aria-disabled="true"])` is not `.panel-release:hover, .panel-release:focus-visible` declaration for declaration',
+  ]);
+  assert.deepEqual(releaseDrift(panelCss.replace('outline: 1px solid CanvasText;', 'outline: 2px solid CanvasText;'), COLOPHON_RULES), [
+    'colophon: `@media (forced-colors: active) .colophon-solve:focus-visible` is not `.panel-release:focus-visible` declaration for declaration',
+  ]);
+  assert.deepEqual(releaseDrift(panelCss.replace('  cursor: pointer;\n  font-family', '  font-family'), COLOPHON_RULES), ['colophon: `.colophon-solve` is not `.panel-release` declaration for declaration']);
+});
+
+/**
  * The derivation table's treatment: `colophon.css` exactly, with the identity
  * bans, imported once by `colophon.tsx`; no hex, radius, shadow or filter; and
  * the markup's hooks: the table's class, four `th scope="col"` drawn from

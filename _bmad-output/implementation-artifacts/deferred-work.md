@@ -1149,7 +1149,7 @@ Still open after 3.5:
 
 - source_spec: spec-6-4-first-paint-verified-on-target-hardware.md
   summary: First Paint has not been measured on the target hardware. Protocol P1 in `first-paint-6-4.md` must be run by a human on NFR-4's profile (a three-year-old laptop with integrated graphics at 1080p, never the dev machine or Apple silicon), three runs filled in its P1 runs table (display, GPU backend, connection, `startTime`, the step-6 count before and after `/chart` → Back) and the median recorded against the carried 2.5 s figure, before the 6.5 launch pass.
-  evidence: The record's row 2 Result and its P1 runs table are empty; no value, connection speed or machine was invented. `src/first-paint.test.ts` carries `test('First Paint is measured on the target hardware', { todo: 'Thomas, before 6.5' }, …)`, reported pending on every `npm test` until the runs table holds three filled runs and the row holds a measured value in seconds other than the carried `2.5 s`. A miss over 2.5 s is a decision point for Thomas, not a failure (the number is not ratified).
+  evidence: The record's row 2 Result and its P1 runs table are empty; no value, connection speed or machine was invented. `src/first-paint.test.ts` carries `test('First Paint is measured on the target hardware', { todo: 'Thomas, before launch' } (relabelled 2026-10-28 from 'Thomas, before 6.5', 6.5 being done), …)`, reported pending on every `npm test` until the runs table holds three filled runs and the row holds a measured value in seconds other than the carried `2.5 s`. A miss over 2.5 s is a decision point for Thomas, not a failure (the number is not ratified).
   location: _bmad-output/implementation-artifacts/first-paint-6-4.md (row 2, P1), src/first-paint.test.ts (the todo)
   severity: high (owed before 6.5)
 - source_spec: spec-6-4-first-paint-verified-on-target-hardware.md
@@ -1172,4 +1172,92 @@ Still open after 3.5:
   summary: When the colophon chunk fails to load (e.g. a stale hashed chunk after a redeploy), `ColophonHost`'s boundary renders `null`, so `/colophon` again has no route out but Back; the route line lives inside the lazy chunk.
   evidence: `src/shell/colophon-host.tsx` boundary `this.state.failed ? null : this.props.children`; the same holds for `FallbackHost` and the chart. Pre-existing pattern, not caused by this change; tied to pre-launch checklist item 8 (the stale-chunk 404) in `launch-readiness-6-5.md`. A fix would draw the route line from the host on failure.
   location: src/shell/colophon-host.tsx, src/shell/fallback-host.tsx
+  severity: low
+
+## Deferred from: code review of spec-5-1-the-colophon-as-a-fourth-lazy-chunk.md (2026-10-28)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-the-colophon-as-a-fourth-lazy-chunk.md`
+  summary: The colophon-chunk assertion filters out every `node_modules/` id, so "the colophon chunk holds only `src/colophon/` modules" is held for `src/` modules alone; package code bundled into the chunk passes unnoticed (react-dom is still banned by `lazySurface`).
+  evidence: `scripts/bundle-assertion.test.ts` `exhibitFailures` filter `!id.startsWith('src/colophon/') && !/\/node_modules\//.test(...)`. A fix bans `node_modules` ids from the chunk or names an allow-list, checked against a fresh build.
+  location: scripts/bundle-assertion.test.ts
+  severity: low
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-1-the-colophon-as-a-fourth-lazy-chunk.md`
+  summary: `/career.json` and `/layout.generated.json` are published at fixed, unhashed names, so after a redeploy a host or CDN cache can serve the previous files beside the new hashed bundle; the host's cache and `Content-Type` for both paths are recorded nowhere.
+  evidence: `scripts/exhibits.ts` `emitFile({ fileName: exhibit.path.slice(1), … })`; the dev handler sets `application/json`, the host's answer is unchecked. Belongs with pre-launch checklist item 8 (the stale-chunk 404) and L3 in `launch-readiness-6-5.md`.
+  location: scripts/exhibits.ts
+  severity: low
+
+## Deferred from: code review of spec-5-5-the-live-re-solve-honestly-framed.md (2026-10-28)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-5-the-live-re-solve-honestly-framed.md`
+  summary: The bundle assertion's `rendererCarries` follows dynamic imports only from chunks holding a `src/render-*` module; a shared chunk a renderer imports statically that itself dynamically imports the solver (or data) would pass.
+  evidence: `scripts/bundle-assertion.test.ts` `rendererCarries`; the mutation rows cover the renderer's own edges only. No such shared chunk exists today. A fix follows dynamic edges from every chunk a renderer reaches statically, exempting the mount's Colophon edge by name.
+  location: scripts/bundle-assertion.test.ts
+  severity: low
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-5-the-live-re-solve-honestly-framed.md`
+  summary: `solveLive` runs `solveArtifact` synchronously on the main thread; on a slow device the page freezes for the solve and the running state may not paint first. Nothing measures or bounds the duration.
+  evidence: `src/derive/live.ts` → `src/derive/pipeline.ts` `solveArtifact`. Options: measure it on the target laptop alongside 6.4's P1, yield a frame before the solve, or move it to a Worker.
+  location: src/derive/live.ts
+  severity: low
+
+## Deferred from: code review of spec-6-2-preview-drift-guard.md (2026-10-28)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-preview-drift-guard.md`
+  summary: The drift guard's `'git failed'` fallback — `status` or `log` failing after `rev-parse` succeeds, or a git timeout — has no test; only `not a git work tree` and `git unavailable` are reached.
+  evidence: `scripts/preview-drift.ts` `gitTimes` / `runGit` (`failure: 'other'`); the `git` seam takes an executable name, and a fake git on Windows would be a `.cmd` that `execFileSync` refuses without a shell. A fix injects the git runner itself, or a node-script fake run through `process.execPath`.
+  location: scripts/preview-drift.ts
+  severity: low
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-preview-drift-guard.md`
+  summary: Any non-zero exit of `git rev-parse --is-inside-work-tree` is reported as `not a git work tree`, including git refusing a real repository (`safe.directory` / dubious ownership, plausible in CI containers and on another user's drive) or a corrupt one; the fallback note then misstates its basis.
+  evidence: `scripts/preview-drift.ts` `runGit` (stderr `'ignore'`) maps every non-zero exit to `'exited'`, and `gitTimes` maps that to `not a git work tree`. A fix reads stderr and keeps that label only for `not a git repository`, else `git failed`.
+  location: scripts/preview-drift.ts
+  severity: low
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-2-preview-drift-guard.md`
+  summary: On a shallow clone (CI's `actions/checkout`) the guard cannot compare history yet prints the plain pass line, so a quiet CI log reads as a clean preview; the blind spot is documented only in the header and README.
+  evidence: `scripts/preview-drift.ts` header "Known blind spots"; `git rev-parse --is-shallow-repository` would let the output name it, as the other fallbacks do.
+  location: scripts/preview-drift.ts
+  severity: low
+
+## Deferred from: code review of spec-6-3-the-contact-route.md (2026-10-28)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-3-the-contact-route.md`
+  summary: The copy button's only feedback is its own label changing (`copied` / `not copied`) while focused; whether screen readers re-announce a focused element's name change is asserted in a comment and checked nowhere. Several reader/browser pairs do not, and a mouse click in Safari does not focus the button.
+  evidence: `src/shell/contact-route.tsx` header ("a screen reader hears the new name on the focused button"); no live region by ruling. A manual protocol (NVDA, VoiceOver, JAWS) in the pre-launch checklist would record it.
+  location: src/shell/contact-route.tsx
+  severity: low
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-3-the-contact-route.md`
+  summary: The identity audit's `VISIBLE_COPY` admits `copy`, `copied` and `not copied` everywhere under `src/`, not only through `CONTACT` in `contact-route.tsx`, so another surface could draw them unflagged.
+  evidence: `src/identity-audit.test.ts` `VISIBLE_COPY`; the closed allowlist is not scoped per file.
+  location: src/identity-audit.test.ts
+  severity: low
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-3-the-contact-route.md`
+  summary: The render-fallback purity scan's `PERMITTED_SPECIFIER` admits `../shell/contact-route.tsx` for the whole directory, so the pure `chart-model.ts` could import the React component without failing.
+  evidence: `src/render-fallback/chart-model.test.ts` `PERMITTED_SPECIFIER`; the spec admitted it for `chart.tsx`'s sake.
+  location: src/render-fallback/chart-model.test.ts
+  severity: low
+
+## Deferred from: code review of spec-6-4-first-paint-verified-on-target-hardware.md (2026-10-28)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-4-first-paint-verified-on-target-hardware.md`
+  summary: The mount audit says `<FirstFrameMark />` is an unconditional direct child of the Canvas but does not reject a wrapping element (`<Suspense fallback={null}>`, `<group>`), which could delay or condition the mark.
+  evidence: `src/render-scene/scene-model.test.ts` mount audit; no mutation row wraps the mark.
+  location: src/render-scene/scene-model.test.ts
+  severity: low
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-4-first-paint-verified-on-target-hardware.md`
+  summary: "The site collects nothing" scans shipped source (`src/`, `index.html`), not the built output; a bundled dependency's request or default CDN URL, or a file in `public/`, would ship unscanned.
+  evidence: `src/first-paint.test.ts` `shippedSources`. A scan of `dist/` after `npm run build` would close it.
+  location: src/first-paint.test.ts
+  severity: low
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-4-first-paint-verified-on-target-hardware.md`
+  summary: Protocol P1 does not require a foreground-tab load; in a background tab requestAnimationFrame is paused and the first-frame mark arrives arbitrarily late.
+  evidence: `first-paint-6-4.md` protocol P1; add the step before the run is made.
+  location: _bmad-output/implementation-artifacts/first-paint-6-4.md
+  severity: low
+
+## Deferred from: code review of spec-6-5-launch-readiness-pass.md (2026-10-28)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-5-launch-readiness-pass.md`
+  summary: Every `git ls-files` failure, not only git being absent, turns the server-and-secret-path audit into a skip, so a broken git call in CI drops the check silently.
+  evidence: `src/launch-readiness.test.ts` `tracked` and the 3b test's runtime `skip`.
+  location: src/launch-readiness.test.ts
   severity: low
