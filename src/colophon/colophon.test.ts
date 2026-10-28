@@ -49,11 +49,21 @@
  * a link dropped, reordered or retargeted, the separator dropped, `the model`
  * linked, a link to `/colophon` or a back link added, and the wrong machine.
  *
- * The default `Colophon`'s effect does not run under the harness (a static
- * render runs no effect), so the fetch is `exhibits.test.ts`'s — `startExhibits`
- * executed there — and the default's render — the chrome row — is
- * `colophon-host.test.ts`'s and `App.test.ts`'s. Here the effect is audited as
- * source: `startExhibits`, its stop the cleanup, run once, the failure logged;
+ * The default `Colophon`, executed (Epic 5 retro item 42): mounted on the
+ * client (`mount`, the harness's client path) with a fake `fetch` that
+ * honours its signal, it draws both files, career first, once the effect
+ * settles; unmounted while both requests pend, it aborts both, and the abort
+ * is not logged; answered a 404, it logs once and draws no `<pre>`; and,
+ * loaded, a click on `solve it again` takes the button's `aria-disabled` from
+ * `false` to `true` and back, recorded as it changes, and draws the result
+ * named `LIVE_SOLVE.result`. The real solver runs there — no stub is needed:
+ * the component's own dynamic import of `../derive/live.ts` resolves through
+ * the harness's Vite server, with no `src/` change, and returns the committed
+ * artifact byte for byte under Node — bounded at 60 s. Each was driven red
+ * once against the binding broken (the effect's stop not returned; the press
+ * not wired). `startExhibits` itself stays executed in `exhibits.test.ts`.
+ * Beside those, the effect is still audited as source: `startExhibits`, its
+ * stop the cleanup, run once, the failure logged;
  * and (5.5) the press: a thin binding of `createLiveSolve` built once with the
  * one dynamic import of `../derive/live.ts` and this component's setters, the
  * press handing it `exhibits.career`, the unmount calling its stop.
@@ -61,10 +71,10 @@
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
-import { after, test } from 'node:test';
+import { after, mock, test } from 'node:test';
 import { stripComments } from '../../scripts/source-scan.ts';
 import { React, elementsOf, parseMarkup, queryAll, renderer, textOf, type MarkupElement, type Renderer } from '../../scripts/render.ts';
-import type { ColophonLinks, ColophonPage as ColophonPageComponent } from './colophon.tsx';
+import type { ColophonLinks, ColophonPage as ColophonPageComponent, default as ColophonComponent } from './colophon.tsx';
 import { EXHIBIT_PATHS, type Exhibits } from './exhibits.ts';
 import { ABSENCES, ABSENCES_HEADING } from './absences.ts';
 import { LIVE_SOLVE } from './live-solve.ts';
@@ -81,7 +91,7 @@ let started: Renderer | undefined;
 after(() => started?.close());
 const harness = (started = await renderer());
 
-const { ColophonPage } = await harness.load<{ ColophonPage: typeof ColophonPageComponent }>('/src/colophon/colophon.tsx');
+const { ColophonPage, default: Colophon } = await harness.load<{ ColophonPage: typeof ColophonPageComponent; default: typeof ColophonComponent }>('/src/colophon/colophon.tsx');
 
 /** The live re-solve's state, as `Colophon` hands it down. */
 interface Live {
@@ -726,4 +736,160 @@ test('the press audit rejects the real source with its wiring broken', () => {
     assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
     assert.notDeepEqual(auditLiveSolve(mutated), [], `"${name}" must be rejected`);
   }
+});
+
+// --- The default, executed (Epic 5 retro item 42) ---------------------------------------------
+
+/** One fake request: its path, its signal, and the answer the test hands it. */
+interface Request {
+  readonly path: string;
+  readonly signal: AbortSignal;
+  answer(response: FakeResponse): void;
+}
+
+/** The slice of a response `startExhibits` reads. */
+interface FakeResponse {
+  readonly ok: boolean;
+  readonly status: number;
+  readonly headers: { get(name: string): string | null };
+  text(): Promise<string>;
+}
+
+/** A file answered as the host serves it: `ok`, JSON, its text. */
+const served = (text: string): FakeResponse => ({ ok: true, status: 200, headers: { get: (name) => (name.toLowerCase() === 'content-type' ? 'application/json' : null) }, text: () => Promise.resolve(text) });
+
+/** A missing file. */
+const missing: FakeResponse = { ok: false, status: 404, headers: { get: () => null }, text: () => Promise.resolve('') };
+
+/**
+ * A `fetch` that records each request and holds it until the test answers it —
+ * or answers at once through `answer`. It honours the signal as a browser's
+ * does: an abort rejects the request with an `AbortError`, so the Colophon's
+ * real abort path runs.
+ */
+function fakeFetch(answer?: (path: string) => FakeResponse): { readonly fetch: (path: string, init: { readonly signal: AbortSignal }) => Promise<FakeResponse>; readonly requests: Request[] } {
+  const requests: Request[] = [];
+  const fetch = (path: string, init: { readonly signal: AbortSignal }): Promise<FakeResponse> =>
+    new Promise((resolve, reject) => {
+      requests.push({ path, signal: init.signal, answer: resolve });
+      const abort = (): void => reject(new DOMException('The operation was aborted.', 'AbortError'));
+      if (init.signal.aborted) abort();
+      else init.signal.addEventListener('abort', abort, { once: true });
+      if (answer !== undefined) resolve(answer(path));
+    });
+  return { fetch, requests };
+}
+
+/** The real files, as the build publishes them. */
+const PUBLISHED: Readonly<Record<string, string>> = { [EXHIBIT_PATHS.career]: CAREER, [EXHIBIT_PATHS.layout]: LAYOUT };
+
+/** A published file, answered as the host serves it; a path the Colophon should never request throws. */
+function publishedAt(path: string): FakeResponse {
+  const text = PUBLISHED[path];
+  if (text === undefined) throw new Error(`unexpected ${path}`);
+  return served(text);
+}
+
+const mountColophon = (fetch: unknown) => harness.mount(React.createElement(Colophon, { links: LINKS.scene }), { name: 'Colophon', globals: { fetch } });
+
+/** The drawn exhibits' names and texts, in order. */
+const exhibitsIn = (container: HTMLElement): [string | null, string][] => [...container.querySelectorAll('pre.colophon-exhibit')].map((pre) => [pre.getAttribute('aria-label'), pre.textContent ?? '']);
+
+/** `console.error`, silenced and counted for `run`, restored after. */
+async function withErrors<T>(run: (errors: () => unknown[][]) => Promise<T>): Promise<T> {
+  const error = mock.method(console, 'error', () => undefined);
+  try {
+    return await run(() => error.mock.calls.map((call) => call.arguments));
+  } finally {
+    error.mock.restore();
+  }
+}
+
+test('executed: the default Colophon fetches both files once, and draws them, career first, after the effect settles', async () => {
+  await withErrors(async (errors) => {
+    const { fetch, requests } = fakeFetch(publishedAt);
+    const mounted = await mountColophon(fetch);
+    try {
+      await mounted.waitFor(() => exhibitsIn(mounted.container).length === 2, 'the exhibits drawn');
+      assert.deepEqual(exhibitsIn(mounted.container), [['career.json', CAREER], ['layout.generated.json', LAYOUT]]);
+      assert.deepEqual(requests.map((request) => request.path), [EXHIBIT_PATHS.career, EXHIBIT_PATHS.layout], 'each file fetched once');
+      assert.equal(mounted.container.querySelector('table.colophon-derivations') === null, false, 'the derivations drawn between them');
+    } finally {
+      await mounted.unmount();
+    }
+    assert.deepEqual(errors(), [], 'nothing logged');
+  });
+});
+
+/**
+ * The abort is what this holds: the unmount's cleanup is the effect's stop, and
+ * the stop aborts both requests. That nothing is shown or reported after a stop
+ * is `startExhibits`' own rule, executed in `exhibits.test.ts` ("startExhibits:
+ * the stop aborts both requests, and after it nothing is shown or reported").
+ */
+test('executed: a visitor who leaves before the files arrive aborts both requests, and the abort is not reported', async () => {
+  await withErrors(async (errors) => {
+    const { fetch, requests } = fakeFetch();
+    const mounted = await mountColophon(fetch);
+    try {
+      assert.deepEqual(requests.map((request) => request.path), [EXHIBIT_PATHS.career, EXHIBIT_PATHS.layout], 'both requests started');
+      assert.deepEqual(requests.map((request) => request.signal.aborted), [false, false], 'and pending');
+    } finally {
+      await mounted.unmount();
+    }
+    assert.deepEqual(requests.map((request) => request.signal.aborted), [true, true], 'the unmount aborted both');
+    // Both requests have now rejected with an AbortError; a turn lets those rejections run.
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(errors(), [], 'the abort is not logged as a failure');
+  });
+});
+
+test('executed: a missing file is logged once, and no <pre> is drawn — the chrome row alone', async () => {
+  await withErrors(async (errors) => {
+    const { fetch } = fakeFetch((path) => (path === EXHIBIT_PATHS.layout ? missing : publishedAt(path)));
+    const mounted = await mountColophon(fetch);
+    try {
+      await mounted.waitFor(() => errors().length > 0, 'the failure logged');
+      await mounted.settle(5);
+      assert.equal(errors().length, 1, 'logged once');
+      assert.equal(errors()[0]?.[0], 'the colophon could not load its exhibits.');
+      assert.match(String(errors()[0]?.[1]), /\/layout\.generated\.json answered 404/);
+      assert.deepEqual(exhibitsIn(mounted.container), [], 'no <pre>');
+      assert.deepEqual(elementsOf(mounted.markup()).map((element) => `${element.tag}.${element.attrs['class'] ?? ''}`), ['div.colophon-chrome'], 'the chrome row alone');
+    } finally {
+      await mounted.unmount();
+    }
+  });
+});
+
+test('executed: pressing solve it again marks the button aria-disabled, then draws the result, named, solved by the real solver', async () => {
+  await withErrors(async (errors) => {
+    const { fetch } = fakeFetch(publishedAt);
+    const mounted = await mountColophon(fetch);
+    try {
+      await mounted.waitFor(() => exhibitsIn(mounted.container).length === 2, 'the exhibits drawn');
+      const button = mounted.container.querySelector('button.colophon-solve') as HTMLButtonElement;
+      assert.equal(button.getAttribute('aria-disabled'), 'false', 'idle before the press');
+      // Every value aria-disabled takes, recorded as it changes, so a fast solve cannot race the check.
+      const { MutationObserver: Observer } = button.ownerDocument.defaultView as unknown as { MutationObserver: typeof MutationObserver };
+      const changes: MutationRecord[] = [];
+      const observer = new Observer((records) => void changes.push(...records));
+      observer.observe(button, { attributes: true, attributeFilter: ['aria-disabled', 'disabled'], attributeOldValue: true });
+      await mounted.act(() => button.click());
+      // The press marks the run in flight within its own act: a press not wired fails here, not after the 60 s bound.
+      changes.push(...observer.takeRecords());
+      assert.notDeepEqual(changes, [], 'the press changed the button');
+      await mounted.waitFor(() => exhibitsIn(mounted.container).length === 3, 'the result drawn', 60_000);
+      changes.push(...observer.takeRecords());
+      observer.disconnect();
+      assert.deepEqual(changes.map((change) => change.attributeName), ['aria-disabled', 'aria-disabled'], 'aria-disabled alone changed, twice — never disabled outright');
+      assert.deepEqual([...changes.map((change) => change.oldValue), button.getAttribute('aria-disabled')], ['false', 'true', 'false'], 'idle, in flight after the press, freed once solved');
+      const [, , result] = exhibitsIn(mounted.container);
+      assert.equal(result?.[0], LIVE_SOLVE.result, 'the result named');
+      assert.equal(result?.[1], LAYOUT, 'the same solver: under Node, the committed artifact byte for byte');
+    } finally {
+      await mounted.unmount();
+    }
+    assert.deepEqual(errors(), [], 'nothing logged');
+  });
 });

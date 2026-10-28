@@ -10,12 +10,19 @@
  * one prop, as `fallback-host.tsx` builds the chart's. The audit is
  * structural throughout (imports, the lazy edge, boundary order), so none of its
  * clauses is retired.
+ *
+ * The boundary, executed (Epic 5 retro item 42): the host mounted on the
+ * client (the harness's `mount`) with a fake `fetch` answering a layout
+ * `derivationRows` cannot read — `ColophonBoundary` catches the throw, the
+ * Colophon draws nothing while a sibling of the host is still rendered by the
+ * same root, its one `console.error` is logged and nothing escapes the mount;
+ * driven red once with the boundary removed.
  */
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { after, test } from 'node:test';
+import { after, mock, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { React, elementsOf, parseMarkup, queryAll, renderer, textOf, type Renderer } from '../../scripts/render.ts';
 import { stripComments } from '../../scripts/source-scan.ts';
@@ -33,6 +40,9 @@ after(() => started?.close());
 const harness = (started = await renderer());
 
 const { ColophonHost } = await harness.load<{ ColophonHost: typeof ColophonHostComponent }>('/src/shell/colophon-host.tsx');
+
+// Dynamic, as the shell's README permits src/colophon/ to the shell: the published paths the host's Colophon fetches.
+const { EXHIBIT_PATHS } = await import('../colophon/exhibits.ts');
 
 /** A router that records every push, and accepts it. */
 function recordingRouter(): { readonly router: Router; readonly went: Route[] } {
@@ -122,6 +132,35 @@ test('the links the host hands down route a primary click through router.navigat
   follow(1)(click().event);
   assert.deepEqual(went, ['home', 'chart'], 'a primary click is the router’s push: home, then the chart');
   assert.equal(primary.prevented(), 1);
+});
+
+// --- The boundary, executed (Epic 5 retro item 42) ---------------------------------------------
+
+test('executed: a layout derivationRows cannot read is caught by ColophonBoundary — nothing of the Colophon drawn, the root and its sibling kept, one error logged, nothing escaping', async () => {
+  const career = readFileSync(join(SHELL, '..', 'data', 'career.json'), 'utf8');
+  const answer = (text: string) => ({ ok: true, status: 200, headers: { get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/json' : null) }, text: () => Promise.resolve(text) });
+  // The career as published; a layout with no clients, which the derivation table cannot be read from.
+  const fetch = (path: string) => Promise.resolve(answer(path === EXHIBIT_PATHS.career ? career : '{"clients":[]}'));
+  // A sibling of the host, as the shell's own chrome is: the root that survives the failure renders it still.
+  const page = React.createElement(React.Fragment, null, React.createElement('p', { className: 'sibling' }, 'kept'), React.createElement(ColophonHost, { surface: 'scene', router: recordingRouter().router }));
+  const error = mock.method(console, 'error', () => undefined);
+  try {
+    const mounted = await harness.mount(page, { name: 'ColophonHost', globals: { fetch } });
+    try {
+      await mounted.waitFor(() => error.mock.callCount() > 0, 'the failure logged');
+      await mounted.settle(5);
+      assert.equal(mounted.container.innerHTML, '<p class="sibling">kept</p>', 'the boundary renders nothing; the root still renders the sibling');
+      assert.equal(error.mock.callCount(), 1, 'one error logged');
+      assert.equal(error.mock.calls[0]?.arguments[0], 'the colophon failed to load; the page keeps its root.');
+      assert.match(String(error.mock.calls[0]?.arguments[1]), /the layout's clients is empty/);
+      assert.equal(mounted.caught.length, 1, 'caught by a boundary');
+      assert.deepEqual(mounted.uncaught, [], 'nothing escaped the mount');
+    } finally {
+      await mounted.unmount();
+    }
+  } finally {
+    error.mock.restore();
+  }
 });
 
 // --- The lazy edge, structurally ---------------------------------------------------------------

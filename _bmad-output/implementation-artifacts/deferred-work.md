@@ -1116,17 +1116,23 @@ Still open after 3.5:
 ## Deferred from: code review of spec-5-1-the-colophon-as-a-fourth-lazy-chunk.md (2026-10-21)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-1-the-colophon-as-a-fourth-lazy-chunk.md`
-  summary: The default Colophon's effect wiring (`startExhibits` as the effect, its stop the cleanup, the files drawn from the held state) is held only by a source-text audit, because the render harness runs no effects.
-  evidence: `scripts/render.ts` renders with `react-dom/static`, which runs no effects, so `colophon.test.ts` audits the effect as regexes (`auditEffect`) while `startExhibits` itself is executed in `exhibits.test.ts`; a semantically equivalent rewrite the regexes do not anticipate could ship a `/colophon` that fetches but never draws, or updates after unmount. The same limitation holds every effect in the codebase (cf. 4.10's executed-tracker approach); closing it needs a client-render path in the harness.
-  location: src/colophon/colophon.tsx:43-45, src/colophon/colophon.test.ts (auditEffect), scripts/render.ts
+  summary: ~~The default Colophon's effect wiring (`startExhibits` as the effect, its stop the cleanup, the files drawn from the held state) is held only by a source-text audit, because the render harness runs no effects.~~ — **closed 2026-10-28** (Epic 5 retro item 42, `spec-e5-r42-client-render-harness.md`): the harness has a client path (`mount` in `scripts/render.ts`, happy-dom, test-only), and `src/colophon/colophon.test.ts` executes the default — `executed: the default Colophon fetches both files once, and draws them…`, `executed: a visitor who leaves before the files arrive aborts both requests…`, `executed: a missing file is logged once, and no <pre> is drawn…` — and the press (5.5), `executed: pressing solve it again marks the button aria-disabled, then draws the result…`; each driven red once (the stop not returned; the press not wired). `auditEffect` and `auditLiveSolve` stay beside them.
+  evidence: (at the time) `scripts/render.ts` renders with `react-dom/static`, which runs no effects, so `colophon.test.ts` audits the effect as regexes (`auditEffect`) while `startExhibits` itself is executed in `exhibits.test.ts`; a semantically equivalent rewrite the regexes do not anticipate could ship a `/colophon` that fetches but never draws, or updates after unmount. The same limitation holds every effect in the codebase (cf. 4.10's executed-tracker approach); closing it needs a client-render path in the harness.
+  location: (at the time) src/colophon/colophon.tsx:43-45, src/colophon/colophon.test.ts (auditEffect), scripts/render.ts
   severity: medium
 
 ## Deferred from: code review of spec-5-2-the-three-mapping-rules-worked-on-real-entities.md (2026-10-21)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-5-2-the-three-mapping-rules-worked-on-real-entities.md`
-  summary: No executed test shows that a `derivationRows` throw during the Colophon's render is caught by `ColophonBoundary` (root kept, null drawn, one error logged); only the throw escaping `ColophonPage` is executed.
-  evidence: `colophon.test.ts` ("a layout the rows cannot be read from fails the render") asserts only that the harness render rejects naming the field; `colophon-host.test.ts` renders the host without exhibits, so it never reaches `derivationRows`, and `auditColophonHost` holds the boundary by regex. The harness (`scripts/render.ts`, `prerenderToNodeStream`) runs no client error boundaries; closing it needs the same client-render path as the 5.1 effect-wiring deferral above. The build gate rejects a malformed artifact, so the path is unreachable in a shipped build today.
-  location: src/colophon/colophon.tsx (Derivations), src/shell/colophon-host.tsx:30-44, scripts/render.ts
+  summary: ~~No executed test shows that a `derivationRows` throw during the Colophon's render is caught by `ColophonBoundary` (root kept, null drawn, one error logged); only the throw escaping `ColophonPage` is executed.~~ — **closed 2026-10-28** (Epic 5 retro item 42, `spec-e5-r42-client-render-harness.md`): `src/shell/colophon-host.test.ts`, `executed: a layout derivationRows cannot read is caught by ColophonBoundary — nothing drawn, the root kept, one error logged, nothing escaping`, mounted through the harness's client path; driven red once with the boundary removed. `auditColophonHost` stays beside it.
+  evidence: (at the time) `colophon.test.ts` ("a layout the rows cannot be read from fails the render") asserts only that the harness render rejects naming the field; `colophon-host.test.ts` renders the host without exhibits, so it never reaches `derivationRows`, and `auditColophonHost` holds the boundary by regex. The harness (`scripts/render.ts`, `prerenderToNodeStream`) runs no client error boundaries; closing it needs the same client-render path as the 5.1 effect-wiring deferral above. The build gate rejects a malformed artifact, so the path is unreachable in a shipped build today.
+  location: (at the time) src/colophon/colophon.tsx (Derivations), src/shell/colophon-host.tsx:30-44, scripts/render.ts
+  severity: medium
+- source_spec: `_bmad-output/implementation-artifacts/spec-5-5-the-live-re-solve-honestly-framed.md`
+  summary: ~~The press (`solve it again`) is held only by a source-text audit (`auditLiveSolve`); no test clicks the rendered button and sees the run in flight and its result drawn.~~ — **closed 2026-10-28** (Epic 5 retro item 42, `spec-e5-r42-client-render-harness.md`; recorded here at its closing, it had no entry of its own): `src/colophon/colophon.test.ts`, `executed: pressing solve it again marks the button aria-disabled, then draws the result, named, solved by the real solver` — `aria-disabled` recorded going `false` → `true` → `false`, the result named `layout, solved in this browser`; driven red once with the press not wired and once with `aria-disabled` not set. `auditLiveSolve` stays beside it.
+  severity: medium
+- source_spec: `_bmad-output/implementation-artifacts/spec-6-3-the-contact-route.md`
+  summary: ~~The copy button's label is held only by a source-text audit (`auditBinding`); no test clicks the rendered button and reads `copied` / `not copied`.~~ — **closed 2026-10-28** (Epic 5 retro item 42, `spec-e5-r42-client-render-harness.md`; recorded here at its closing, it had no entry of its own): `src/shell/contact-route.test.ts`, `executed: a click reads copied under a clipboard that takes the address, not copied under one that refuses it, one without writeText, or none at all — nothing logged`; driven red once with the setter not handed to the tracker. `auditBinding` stays beside it.
   severity: medium
 
 ## Deferred from: code review of spec-6-2-preview-drift-guard.md (2026-10-21)
@@ -1261,3 +1267,11 @@ Still open after 3.5:
   evidence: `src/launch-readiness.test.ts` `tracked` and the 3b test's runtime `skip`.
   location: src/launch-readiness.test.ts
   severity: low
+
+## Deferred from: spec-e5-r42-client-render-harness.md (2026-10-28)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-e5-r42-client-render-harness.md`
+  summary: `happy-dom@20.14.6`, the test-only DOM of the render harness's client path, carries a high-severity advisory (GHSA-834v-8h66-3h79, an incomplete fix for CVE-2026-33943: an unsanitized import alias can run code on the host); accepted by Thomas (2026-10-28) as test-only, with the move to 21.x owed once it is two weeks old.
+  evidence: `npm audit` flags it; `npm audit --omit=dev` finds 0 vulnerabilities and no `dist/` chunk holds happy-dom; `scripts/render.ts` disables JavaScript evaluation and JS/CSS file loading in its window and renders only the repo's own components. The fix is `21.0.4` (2026-10-20), a major bump; re-pin after 2026-11-03 and rerun `npm test`.
+  location: package.json
+  severity: medium

@@ -14,11 +14,18 @@
  * from the clipboard's bound `writeText` (or `undefined`) and that state's
  * setter, its stop the unmount's cleanup, the press handed to the view, and
  * the label read through `contactLabel` — each wiring break rejected.
+ *
+ * Beside the audit, the label executed (Epic 5 retro item 42): `ContactRoute`
+ * mounted on the client (the harness's `mount`) under a fake `navigator`, its
+ * button clicked, reads `copied` under a clipboard that resolves, `not copied`
+ * under one that rejects (asked once), one without `writeText` and none, with
+ * nothing logged — driven red once with the setter not
+ * handed to the tracker.
  */
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
-import { after, test } from 'node:test';
+import { after, mock, test } from 'node:test';
 import { React, elementsOf, parseMarkup, renderer, textOf, type MarkupElement, type Renderer } from '../../scripts/render.ts';
 import { stripComments } from '../../scripts/source-scan.ts';
 import { CONTACT, contactLabel } from './contact.ts';
@@ -215,5 +222,39 @@ test('the binding audit rejects the real source with its wiring broken', () => {
     const mutated = mutate(SOURCE);
     assert.notEqual(mutated, SOURCE, `the mutation "${name}" must apply`);
     assert.notDeepEqual(auditBinding(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
+// --- The label, executed (Epic 5 retro item 42) ------------------------------------------------
+
+/** `ContactRoute` mounted on the client under `navigator`, its button clicked; the label it then reads, once settled. */
+async function labelAfterClick(navigator: unknown): Promise<string> {
+  const mounted = await harness.mount(React.createElement(ContactRoute), { name: 'ContactRoute', globals: { navigator } });
+  try {
+    const button = mounted.container.querySelector('button.contact-copy') as HTMLButtonElement;
+    assert.equal(button.textContent, CONTACT.copy, 'copy, before the press');
+    await mounted.act(() => button.click());
+    await mounted.waitFor(() => button.textContent !== CONTACT.copy, 'the label changed', 5_000);
+    return button.textContent ?? '';
+  } finally {
+    await mounted.unmount();
+  }
+}
+
+test('executed: a click reads copied under a clipboard that takes the address, not copied under one that refuses it, one without writeText, or none at all — nothing logged', async () => {
+  const error = mock.method(console, 'error', () => undefined);
+  try {
+    const board = fakeClipboard();
+    assert.equal(await labelAfterClick({ clipboard: board.clipboard }), CONTACT.copied, 'a resolving clipboard');
+    assert.deepEqual(board.writes, [{ text: CONTACT.address, self: board.clipboard }], 'the address written, once');
+    const refused: string[] = [];
+    const refusing = { writeText: (text: string) => (refused.push(text), Promise.reject(new Error('denied'))) };
+    assert.equal(await labelAfterClick({ clipboard: refusing }), CONTACT.failed, 'a rejecting clipboard');
+    assert.deepEqual(refused, [CONTACT.address], 'the rejecting clipboard was asked once');
+    assert.equal(await labelAfterClick({ clipboard: {} }), CONTACT.failed, 'a clipboard without writeText');
+    assert.equal(await labelAfterClick({}), CONTACT.failed, 'no clipboard');
+    assert.equal(error.mock.callCount(), 0, 'nothing logged');
+  } finally {
+    error.mock.restore();
   }
 });
