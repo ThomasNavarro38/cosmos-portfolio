@@ -92,7 +92,7 @@ function envelopeSources(): Shipped[] {
 }
 
 /** `import.meta` or `process`, then `.env` or `['env']`, with any whitespace between. */
-const ENV_MEMBER = /\b(?:import\s*\.\s*meta|process)\s*(?:\.\s*env\b|\[\s*['"`]env['"`]\s*\])/;
+const ENV_MEMBER = /\b(?:import\s*\.\s*meta|process)\s*(?:\??\.\s*env\b|(?:\?\.\s*)?\[\s*['"`]env['"`]\s*\])/;
 /** `const { env } = import.meta` / `= process`, a rename (`{ env: e }`) included. */
 const ENV_DESTRUCTURED = /\{[^}]*\benv\b[^}]*\}\s*=\s*(?:import\s*\.\s*meta|process)\b/;
 /** Vite's own environment loader, the way a config reads `.env*` files. */
@@ -232,6 +232,9 @@ test('the envelope’s environment scan rejects each read, and ignores one writt
     ['src/x.ts', 'const { env: e } = process;'],
     ['src/x.ts', 'const key = process.env.API_KEY;'],
     ['src/x.ts', "const key = process['env'].API_KEY;"],
+    ['src/x.ts', 'const mode = import.meta?.env.MODE;'],
+    ['src/x.ts', 'const key = process?.env.API_KEY;'],
+    ['src/x.ts', "const key = process?.['env'].API_KEY;"],
     ['vite.config.ts', 'const base = process.env.BASE;'],
     ['vite.config.ts', "const env = loadEnv(mode, process.cwd(), '');"],
     ['index.html', '<title>%VITE_TITLE%</title>'],

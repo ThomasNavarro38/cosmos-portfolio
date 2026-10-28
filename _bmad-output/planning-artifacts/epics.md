@@ -2125,6 +2125,7 @@ So that the surface proving the site's engineering does not slow the site down.
 **When** `colophon/` is inspected
 **Then** it imports nothing from `src/data/`
 **And** the CI boundary check from Story 1.8 covers it
+*[Reconciled 2026-10-28 (Epic 5 retro SR-1): the clause binds `colophon/`'s own imports, not every chunk. Since Story 5.5 the solver chunk, built from `src/derive/live.ts`, carries `src/data/schema.ts`, which AD-3 permits because `src/derive/` may import from `src/data/`. No `career.json` is bundled anywhere; it still arrives as emitted data.]*
 
 **Given** the Colophon is an addressable surface (AD-18)
 **When** a visitor navigates to it
@@ -2262,7 +2263,7 @@ So that I can see it is a real solver rather than a stored picture.
 
 **Acceptance Criteria:**
 
-**Given** the solver is a fourth lazy chunk loaded only here (AD-7, AD-17)
+**Given** the solver is a ~~fourth~~ fifth lazy chunk loaded only here (AD-7, AD-17) *[reconciled 2026-10-28 (Epic 5 retro SR-1): as built, the dynamically imported chunks are `mount`, the scene, the chart, the Colophon (the fourth, Story 5.1) and the solver (the fifth, `src/derive/live.ts`)]*
 **When** a visitor triggers the live re-run
 **Then** the solver chunk loads on demand
 **And** it is never loaded on the critical entry path or by either renderer

@@ -76,7 +76,7 @@ export interface LiveSolveTracker {
   stop(): void;
 }
 
-/** The tracker: one run at a time, its outcome written to `sinks`, nothing after `stop`. */
+/** The tracker: one run at a time, its outcome written to `sinks`; nothing from a run in flight at `stop`, while a later press starts afresh. */
 export function createLiveSolve(load: LoadSolver, sinks: LiveSolveSinks): LiveSolveTracker {
   let running = false;
   let stopRun: () => void = () => undefined;

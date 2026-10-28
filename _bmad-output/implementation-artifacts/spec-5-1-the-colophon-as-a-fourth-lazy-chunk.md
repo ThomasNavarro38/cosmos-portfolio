@@ -5,7 +5,7 @@ created: '2026-10-20'
 status: 'done'
 baseline_revision: 'fc61e05592ace867df88704ae59d8e48c4a5f988'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-5-context.md'
 warnings: ['oversized']
@@ -81,6 +81,15 @@ deferred:
 - Given the preview build in a browser, when `/` loads, then no request for `/career.json` is made. When `/colophon` is reached, the colophon chunk requests both files.
 - Given the scene at a non-first Client stop, when the visitor clicks `the model` and then presses Back, then the URL is `/` again and the scene sits at the same stop.
 - Given the chart (`/chart`), when its `the model` link is clicked, then `/colophon` is shown and Back returns to the chart.
+
+### Review Findings
+
+Follow-up review, 2026-10-28, over `5782675` (code and tests), read against HEAD.
+
+- [x] [Review][Patch] An exhibit answered by the host's SPA rewrite (`/* /index.html 200`) is drawn as the file: `textAt` checks only `response.ok`, so a missing or stale `/career.json` shows `index.html` verbatim in a `<pre>` [src/colophon/exhibits.ts:39]
+- [x] [Review][Patch] `importsAdmitted` checks the imported name and the `./exhibits.ts` specifier separately, so `import { startExhibits } from './elsewhere.ts'` beside any `./exhibits.ts` import is admitted, against its own doc block; bind the name to the specifier and add the split-import fixture row [src/derive/maintenance.test.ts:521]
+- [x] [Review][Defer] The colophon-chunk check skips every `node_modules/` id, so "the colophon chunk holds only `src/colophon/` modules" holds for `src/` alone; package code pulled into the chunk passes (react-dom stays banned by `lazySurface`) [scripts/bundle-assertion.test.ts] — deferred, pre-existing
+- [x] [Review][Defer] The exhibits are published at fixed unhashed names, so after a redeploy a host or CDN cache can serve the previous `/career.json` / `/layout.generated.json` beside the new hashed bundle; nothing records the host's cache or `Content-Type` for them [scripts/exhibits.ts:110] — deferred, pre-existing
 
 ## Spec Change Log
 

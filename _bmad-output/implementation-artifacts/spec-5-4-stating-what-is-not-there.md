@@ -5,7 +5,7 @@ created: '2026-10-21'
 status: 'done'
 baseline_revision: '0254635b7c73fa8a20a47d9dcb64678789e46b8a'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-5-context.md'
 warnings: ['oversized']
@@ -95,6 +95,10 @@ deferred: []
 - Given the exhibits fail to load, when the page renders, then it draws only the `<h1>`, with no prose about files that are not there.
 - Given the shipped `career.json` and `layout.generated.json`, when the checkability tests run, then each claim holds. Given a file altered to falsify a claim, the matching test fails.
 - Given the computed styles, when inspected, then the prose is `notable-prose` at `ink-prose-dark` held to `measure-prose`, and the heading is `field-label` at `ink-label-dark`. Both meet their contrast floors on `surface-base-dark`.
+
+### Review Findings
+
+Follow-up review, 2026-10-28, over `14a79c6` (code and tests), read against HEAD, beside 5.5. No finding on 5.4 survived triage: the claims the tests do not hold (`solved from the three rules above`, `the camera is`) are Epic 5 retro item 40's re-ruling; the `<h1>`-only wording is superseded by the chrome row (`5b534e5`).
 
 ## Spec Change Log
 

@@ -8,8 +8,8 @@
  * - `tableUnder` returns the table under a heading, or throws naming what is
  *   missing — never an empty list that reads as "no rows yet".
  * - `missingNamedTests` checks that every automated row names at least one
- *   `` `file.test.ts` "title" `` pair and that each named test exists, returning
- *   one failure string per fault.
+ *   `` `file.test.ts` "title" `` pair and that each named test exists and runs
+ *   (not declared todo or skip), returning one failure string per fault.
  *
  * Pure apart from `missingNamedTests` reading the named test files, under the
  * root it is given. Lives outside `src/` so no boundary row governs it.
@@ -73,7 +73,8 @@ export function tableUnder(record: string, heading: string): string[][] {
  * Every fault in `record`'s automated rows (a table row with a cell reading
  * `Automated` or `**Automated**`, qualifier allowed): a row naming no `` `file.test.ts` "title" `` pair, a named file
  * that does not exist under `repoRoot`, or a named title with no
- * `test('title'` (or `test("title"`) in its file. Titles are matched
+ * `test('title'` (or `test("title"`) in its file, or a named test declared
+ * `{ todo }` or `{ skip }`, which never asserts. Titles are matched
  * literally — a curly apostrophe is not a straight one. Empty when the record
  * holds.
  */
@@ -97,7 +98,16 @@ export function missingNamedTests(record: string, repoRoot: string): string[] {
       }
       const source = readFileSync(path, 'utf8');
       const singleQuoted = `test('${title.replace(/'/g, "\\'")}'`;
-      if (!source.includes(singleQuoted) && !source.includes(`test("${title}"`)) failures.push(`${file} has no test "${title}"`);
+      const doubleQuoted = `test("${title}"`;
+      const at = source.includes(singleQuoted) ? source.indexOf(singleQuoted) + singleQuoted.length : source.indexOf(doubleQuoted) + doubleQuoted.length;
+      if (!source.includes(singleQuoted) && !source.includes(doubleQuoted)) {
+        failures.push(`${file} has no test "${title}"`);
+        continue;
+      }
+      // A todo or skip written into the declaration means the body never asserts;
+      // a skip decided at run time (an expression, not a literal object) is the test's own.
+      const parked = /^\s*,\s*\{\s*(todo|skip)\s*:/.exec(source.slice(at));
+      if (parked !== null) failures.push(`${file} "${title}" is declared ${parked[1]}, so it holds nothing`);
     }
   }
   return failures;

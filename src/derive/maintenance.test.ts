@@ -519,10 +519,15 @@ const NETWORK_ADMITTED: ReadonlyMap<string, { readonly what: string; readonly sh
 
 /** Whether `source` imports `name` itself, unrenamed, from `from`, and `code` (its stripped text) declares no local `name`. */
 function importsAdmitted(source: string, code: string, name: string, from: string): boolean {
-  const imported = new RegExp(`\\bimport\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\b`).test(code);
+  // Stripping keeps offsets, so the specifier each import of `name` names is
+  // read from `source` just past its `from`: every one must be `from`, or a
+  // `name` from elsewhere could sit beside some other import of `from`.
+  const specifiers = [...code.matchAll(new RegExp(`\\bimport\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\b`, 'g'))].map(
+    (match) => /^\s*(['"])(.*?)\1/.exec(source.slice(match.index + match[0].length))?.[2],
+  );
   const renamed = new RegExp(`\\bas\\s+${name}\\b`).test(code);
   const local = new RegExp(`\\b(?:function|const|let|var|class)\\s+${name}\\b`).test(code);
-  return imported && !renamed && !local && findImports(source).some((found) => found.specifier === from);
+  return specifiers.length > 0 && specifiers.every((specifier) => specifier === from) && !renamed && !local;
 }
 
 /**
@@ -595,6 +600,7 @@ test('the admitted fetch is the Colophon’s alone, and admits nothing else ther
     ['the fetch handed elsewhere', `${imported}loadExhibits(fetch, controller.signal);\n`],
     ['startExhibits not imported', `${line}\n`],
     ['startExhibits imported from elsewhere', `import { startExhibits } from './elsewhere.ts';\n${line}\n`],
+    ['startExhibits imported from elsewhere, beside a type from ./exhibits.ts', `import { type Exhibits } from './exhibits.ts';\nimport { startExhibits } from './elsewhere.ts';\n${line}\n`],
     ['a local startExhibits', `${imported}function startExhibits(load: unknown) { return load; }\n${line}\n`],
     ['another function imported as startExhibits', `import { leak as startExhibits } from './exhibits.ts';\n${line}\n`],
   ] as const) {

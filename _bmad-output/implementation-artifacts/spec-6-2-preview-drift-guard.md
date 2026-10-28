@@ -5,7 +5,7 @@ created: '2026-10-21'
 status: 'done'
 baseline_revision: '53e5fb5e8c21253f2269c67036b0aa0f54945656'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-6-context.md'
 warnings: ['oversized']
@@ -93,6 +93,14 @@ deferred:
 - Given the current repository, when `npm run build` runs, then no drift warning appears and the gate stays green.
 - Given the guard's source, when it is inspected, then it imports only `node:` built-ins, launches no browser, and reads no file contents.
 - Given ARCHITECTURE-SPINE.md and the script header, when read, then escalating to a build failure is stated as an open decision.
+
+### Review Findings
+
+Follow-up review, 2026-10-28, over `66f2bc1` (code and tests), read against HEAD, beside 6.1. `node scripts/preview-drift.ts` passes at HEAD.
+
+- [x] [Review][Defer] The `'git failed'` fallback (a `status` or `log` failure after `rev-parse` succeeds, or a timeout) has no test; the `git` seam is an executable name, and a fake git on Windows needs a `.cmd`, which `execFileSync` will not run without a shell [scripts/preview-drift.ts:124] — deferred, pre-existing
+- [x] [Review][Defer] Any non-zero `rev-parse` exit is labelled `not a git work tree`, including git refusing a real repository (`safe.directory` / dubious ownership, a corrupt repo); stderr is discarded, so the stated basis can be wrong [scripts/preview-drift.ts:140] — deferred, pre-existing
+- [x] [Review][Defer] On a shallow clone (CI) the guard prints the plain pass line although it cannot compare; documented as a blind spot, but the output does not say so [scripts/preview-drift.ts:45] — deferred, pre-existing
 
 ## Spec Change Log
 

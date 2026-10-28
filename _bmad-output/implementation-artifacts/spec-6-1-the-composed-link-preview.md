@@ -5,7 +5,7 @@ created: '2026-10-21'
 status: 'done'
 baseline_revision: 'ad466ad94a591c760207438ec222a95561f70d1c'
 review_loop_iteration: 1
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-6-context.md'
 warnings: ['oversized']
@@ -135,6 +135,14 @@ deferred: []
 - Given the committed artifact, when `node scripts/preview.ts --out x.svg` runs and x.svg is opened in a browser at 1200×630, then it shows the opening frame's arrangement filling the card: one white Star (decathlon), the Rail at `stroke-dust`, the two chrome lines, with no hue, shadow, glow or radius.
 - Given `npm run build`, when `dist/` is inspected, then `dist/preview.png` exists (1200×630) and `dist/index.html` carries the ruled title, description, `og:` and `twitter:` tags pointing at `/preview.png`.
 - Given the voice and copy audits, when they run over `index.html`, then no disclaimer, quote or praise is present and every metadata string is in `META_COPY`.
+
+### Review Findings
+
+Follow-up review, 2026-10-28, over `53e5fb5` (code and tests), read against HEAD, beside 6.2. The committed `public/preview.png` was confirmed current: the SVG composed at HEAD is byte-identical to the one at `53e5fb5`.
+
+- [x] [Review][Patch] `writeFileSync(parsed.out, svg)` is unguarded: an `--out` naming a directory, or an unwritable or locked file, throws a stack trace, against the CLI's one-line exit-1 contract [scripts/preview.ts:370]
+- [x] [Review][Patch] The documented recipe writes `preview.svg` into the repo root and relies on "then delete the SVG"; nothing ignores it, so it can be committed by accident — add it to `.gitignore` [.gitignore]
+- [x] [Review][Patch] The no-absolute-URL assertion still reads "until 6.5", but 6.5 has landed and the item is open on its pre-launch checklist; name the checklist item, so whoever closes it knows to invert this assertion [scripts/preview.test.ts:558]
 
 ## Spec Change Log
 

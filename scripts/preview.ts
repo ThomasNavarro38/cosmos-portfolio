@@ -367,7 +367,11 @@ function main(): void {
   } catch (error) {
     return fail(`${parsed.artifact}: ${error instanceof Error ? error.message : String(error)}`.replace(/\s*\r?\n\s*/g, ' '));
   }
-  writeFileSync(parsed.out, svg);
+  try {
+    writeFileSync(parsed.out, svg);
+  } catch (error) {
+    return fail(`cannot write ${parsed.out}: ${error instanceof Error ? error.message : String(error)}`.replace(/\s*\r?\n\s*/g, ' '));
+  }
   console.log(`wrote ${parsed.out}. Capture it with:`);
   console.log(captureCommand(parsed.out));
 }

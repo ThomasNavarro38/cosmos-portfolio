@@ -1,7 +1,8 @@
 /**
  * The contact route, drawn (6.3, FR-23): one shell component the two reading
  * surfaces share — the Fallback chart's chrome row, beside its heading (ruling
- * Q3 (a)), and the Colophon, right under its `<h1>` — and never the scene
+ * Q3 (a)), and the Colophon's chrome row, likewise beside its heading (Epic
+ * 5 item 38, ruling (a)) — and never the scene
  * (ruling Q2 (d)).
  * It lives here, in the `ui` chunk (`vite.config.ts`), because `chart.tsx` may
  * not import React itself and the colophon chunk may hold only `src/colophon/`

@@ -5,7 +5,7 @@ created: '2026-10-22'
 baseline_revision: '66f2bc13f1a1cc5181cbedc374c5ca5bc7d47ead'
 status: 'done'
 review_loop_iteration: 1
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-6-context.md'
 warnings: ['oversized']
@@ -150,6 +150,19 @@ deferred: []
   - The address stays visible in both cases.
 - **Nothing breaks.** Given `npm run build`, then the gate is green and the entry stays under 4,000 bytes with no React. The bundle assertions hold.
 - **The deferral is visible.** Given `npm test`, then everything passes, and the address `todo` is reported as pending.
+
+### Review Findings
+
+Follow-up review, 2026-10-28, over `175942c` and `f5d735c` (code and tests), read against HEAD (the Colophon's chrome row, `5b534e5`, included). No acceptance criterion is violated; the AC wording on the placeholder and "directly under `the model`" is overtaken by the Q1 closure and ruling (a).
+
+- [x] [Review][Patch] The route line's `margin-inline-start: auto` works only by cascade order (after the shared `margin: 0` rule, before the phone override), in `chart.css` and `colophon.css` alike, and `auditDeclarations` checks no order: a reordering keeps every test green and drops the placement ruling Q3 (a) asks for [src/identity-audit.test.ts]
+- [x] [Review][Patch] `src/shell/README.md`'s `contact.test.ts` row still ends with "the `todo` that keeps the placeholder address visible"; f5d735c removed it [src/shell/README.md:58]
+- [x] [Review][Patch] The Colophon's route is still described as "under its `<h1>`"; since `5b534e5` it sits in the chrome row beside the heading [src/shell/README.md:59, src/shell/contact-route.tsx:4]
+- [x] [Review][Patch] `src/colophon/README.md` says the live result touches "no shell module", beside the same row listing two shell imports; it means no shell state [src/colophon/README.md:12]
+- [x] [Review][Patch] `src/shell/README.md`'s Imported by names only `index.html` and dynamic imports, but the renderers and the Colophon import shell modules statically (now `contact-route.tsx` too) [src/shell/README.md:6]
+- [x] [Review][Defer] That a screen reader re-announces the focused button's changed name (`copied` / `not copied`, the route's only feedback, live regions ruled out) is asserted in a comment but checked nowhere, by test or recorded manual protocol [src/shell/contact-route.tsx] — deferred, pre-existing
+- [x] [Review][Defer] `VISIBLE_COPY` admits `copy`, `copied`, `not copied` globally, not only through `CONTACT` in `contact-route.tsx` [src/identity-audit.test.ts] — deferred, pre-existing
+- [x] [Review][Defer] `PERMITTED_SPECIFIER` admits `../shell/contact-route.tsx` for every `render-fallback/` module, so the pure `chart-model.ts` could import the React component [src/render-fallback/chart-model.test.ts] — deferred, pre-existing
 
 ## Spec Change Log
 

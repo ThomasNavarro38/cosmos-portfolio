@@ -341,7 +341,7 @@ test('CLI: a missing --out exits 1 naming the flag', () => {
   assert.deepEqual(parseArgs(['--x']), ['unknown argument "--x" — scripts/preview.ts takes --out <file> and --artifact <file>.', '--out is required — scripts/preview.ts --out <file> writes the composed SVG there.']);
 });
 
-test('CLI: a missing or unparseable artifact, or a missing --out directory, exits 1 with one line naming the file', () => {
+test('CLI: a missing or unparseable artifact, a missing --out directory or an unwritable --out exits 1 with one line naming the file', () => {
   const missing = join(scratch, 'absent.json');
   const garbled = join(scratch, 'garbled.json');
   writeFileSync(garbled, '{ not json');
@@ -349,6 +349,8 @@ test('CLI: a missing or unparseable artifact, or a missing --out directory, exit
     [['--out', join(scratch, 'a.svg'), '--artifact', missing], missing],
     [['--out', join(scratch, 'b.svg'), '--artifact', garbled], garbled],
     [['--out', join(scratch, 'no-such-dir', 'c.svg')], join(scratch, 'no-such-dir', 'c.svg')],
+    // An out that is itself a directory passes the directory check; the write is refused.
+    [['--out', scratch], scratch],
   ];
   for (const [args, named] of cases) {
     const run = spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' });
@@ -555,7 +557,7 @@ test('metadata: index.html carries the ruled title, description, og: and twitter
       'twitter:image:alt': ALT,
     },
   );
-  assert.doesNotMatch(html, /og:url|https?:\/\//, 'no og:url and no absolute URL until 6.5');
+  assert.doesNotMatch(html, /og:url|https?:\/\//, 'no og:url and no absolute URL while absolute og: URLs stay open on the pre-launch checklist (launch-readiness-6-5.md); closing it inverts this');
 });
 
 test('metadata: og:image resolves to a file under public/, at the size it declares', () => {
