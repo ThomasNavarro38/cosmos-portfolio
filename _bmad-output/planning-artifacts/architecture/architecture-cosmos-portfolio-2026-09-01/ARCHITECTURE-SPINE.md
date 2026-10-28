@@ -214,6 +214,7 @@ Verified against the npm registry 2026-09-01. Pin exact versions; stay off the R
 | d3-force-3d | 3.0.6 |
 | zustand | 5.0.x |
 | Node (build only) | 24 LTS |
+| happy-dom (test only) | 20.14.6 — devDependency; the render harness's client path (`scripts/render.ts`) alone, never `src/` or a shipped chunk (ruling (a), 2026-10-28, Epic 5 retro item 42) — advisory GHSA-834v-8h66-3h79 accepted as test-only (2026-10-28); move to 21.x owed, deferred-work.md |
 
 **Pairing is load-bearing, not incidental.** drei 10 is the only stable major whose peers accept R3F 9 + React 19 (`react: ^19`, `@react-three/fiber: ^9.0.0`); drei 9 declares `react: ^18` / `@react-three/fiber: ^8` and will not install against this stack. `three >= 0.159` is drei 10's binding constraint. Node 22 entered maintenance in October 2025 and is EOL April 2027 — inside the window UJ-4 promises a cheap rebuild, so the build starts on 24.
 

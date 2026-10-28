@@ -559,7 +559,12 @@ action_items:
     action: "Add a client-render path to the render harness (effects and error boundaries
       executed), closing deferred-work.md 5.1 and 5.2 entries"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-28 (spec-e5-r42-client-render-harness.md): scripts/render.ts gains
+      mount() — happy-dom 20.14.6 (test-only, ruling (a)) as globals only while mounted,
+      react-dom/client createRoot under act; executed tests for the 5.1 effect, the 5.2
+      boundary, the 5.5 press and the 6.3 label, each shown red; the four deferrals closed;
+      the happy-dom advisory accepted, the move to 21.x owed (deferred-work.md)"
     ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
   - id: "epic-5-retro-item-43-reconcile-epics-md-fourth-lazy-chunk-wor"
     epic: 5

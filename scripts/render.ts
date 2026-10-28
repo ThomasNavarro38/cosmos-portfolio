@@ -65,11 +65,56 @@
  * Any `onError`, any client-rendered (`<!--$!-->`) or pending (`<!--$?-->`)
  * boundary, and a render outlasting `timeoutMs` reject, naming the subject.
  *
+ * **Client renders** (Epic 5 retro item 42, ruling (a) 2026-10-28). A static
+ * render runs no effect, no click and no client error boundary, so
+ * `mount(element)` renders on the client: `react-dom/client`'s `createRoot`,
+ * under React's `act`, into a container in a happy-dom document. happy-dom is a
+ * devDependency imported here alone — dynamically, on the first mount, so a
+ * static suite never loads it — and never by a `*.test.ts` or by `src/`. Its
+ * globals are installed only between mount and unmount, by name, from one
+ * `new Window()` (JavaScript evaluation and file loading off): `window`,
+ * `document`, `navigator`, the constructors in `DOM_CONSTRUCTORS` (`Node`,
+ * `Element`, `HTMLElement`, `HTMLIFrameElement`, `Text`, `Event`,
+ * `MouseEvent`, `KeyboardEvent`, `FocusEvent`), `requestAnimationFrame`,
+ * `cancelAnimationFrame`, `getComputedStyle`, and `IS_REACT_ACT_ENVIRONMENT`.
+ * The list is deliberately minimal — what React's DOM client and today's
+ * tests read — so `matchMedia`, `localStorage`, `CustomEvent`,
+ * `PointerEvent`, `MutationObserver` and the rest are absent; a component
+ * that needs one gets it by adding its name to `DOM_CONSTRUCTORS` (or to
+ * `domGlobals`, bound, for a function), or from a test through `globals`.
+ * Each is saved before and restored after — Node's own `navigator` comes back,
+ * `document` goes — and Node's own `fetch` and `AbortController` are never
+ * replaced unless a test hands its own through `globals`, installed after the
+ * DOM's and restored the same way (a fake `fetch`, a `navigator` with a fake
+ * clipboard). One mount at a time, and no static `render()` while one is open:
+ * the globals and the recorders are the process's.
+ *
+ * `react-dom/client` is required through `requireFromRoot`, beside `react`, so
+ * the client renders with the one React too. Node caches it on first load, and
+ * it reads `window` and `navigator.userAgent` then: it must first load inside a
+ * mount, which `mount` does. A module that reaches `react-dom/client` loaded
+ * through `harness.load` outside a mount would cache it with no DOM — its
+ * load-time detection (`canUseDOM`, the supported events) fixed false — and
+ * every later client render in that process would run on that wrong reading.
+ *
+ * The recorders are emptied and marked active for the client pass — every
+ * re-render a click or an effect causes is recorded — and marked inactive at
+ * unmount, so nothing leaks into the next pass. React's own report of an error
+ * a boundary caught is recorded in `caught` rather than logged, so a test
+ * counts the component's own `console.error` alone; an uncaught one is
+ * recorded in `uncaught` and makes the `act` — or the `unmount`, for a
+ * cleanup that threw — that let it escape reject. `settle(n)` runs `n` short
+ * `act` passes, and `waitFor(condition)` repeats them until `condition()`
+ * holds or its timeout passes; each flushes what settled during it. After
+ * unmount, `act`, `settle` and `waitFor` throw. `markup()` is the container's
+ * `innerHTML` through `parseMarkup`, so a client render is read with the same
+ * selectors as a static one.
+ *
  * **Reading the markup.** `parseMarkup` turns the rendered string into a tree
  * (comments, React's boundary marks among them, dropped; entities decoded), and
  * `queryAll`/`queryOne` select from it with compound selectors joined by
  * descendant or child combinators — enough for a test to say which elements a
- * surface holds, in which order, without a DOM package.
+ * surface holds, in which order — a static render needs no DOM package.
  */
 
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -78,6 +123,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type * as ReactTypes from 'react';
+import type * as ClientTypes from 'react-dom/client';
 import type * as StaticTypes from 'react-dom/static';
 import { createServer, type ViteDevServer } from 'vite';
 
@@ -109,6 +155,8 @@ const RECORDED = Symbol.for('cosmos-portfolio.render.recorded');
 
 interface Recordings {
   active: boolean;
+  /** A client render is mounted: its globals and its recordings are the process's until it unmounts. */
+  clientOpen: boolean;
   elements: RecordedElement[];
   subscriptions: Subscribe[];
 }
@@ -120,7 +168,7 @@ interface Recordings {
  * starts and when a render rejects, so `elements()` and `subscriptions()` hold
  * the last successful render pass in this process alone.
  */
-const recorded = ((globalThis as unknown as Record<symbol, Recordings | undefined>)[RECORDED] ??= { active: false, elements: [], subscriptions: [] });
+const recorded = ((globalThis as unknown as Record<symbol, Recordings | undefined>)[RECORDED] ??= { active: false, clientOpen: false, elements: [], subscriptions: [] });
 
 /** `exports[name]`, replaced once by `wrap(original)` — before any Vite-loaded module binds it. */
 function wrapExport(exports: Record<string | symbol, unknown>, name: string, wrap: (original: (...args: never[]) => unknown) => (...args: never[]) => unknown): void {
@@ -233,8 +281,43 @@ export interface Renderer {
   elements(tag?: string): readonly RecordedElement[];
   /** The `subscribe` argument of every `useSyncExternalStore` call made during the last render pass in this process, in call order. Empty after a rejection. */
   subscriptions(): readonly Subscribe[];
+  /**
+   * `element`, rendered on the client into a happy-dom document, its effects
+   * run and settled under `act`. The DOM's globals, and `options.globals`, are
+   * installed until `unmount()`. Rejects naming the subject on an uncaught
+   * error, or while another mount is still open. While one is open, `render()`
+   * throws: a static pass would reset the recorders under it.
+   */
+  mount(element: ReactTypes.ReactElement, options?: MountOptions): Promise<Mounted>;
   /** Stops the server and removes its cache. */
   close(): Promise<void>;
+}
+
+export interface MountOptions {
+  /** The subject's name in a failure; the element type's name when omitted. */
+  readonly name?: string;
+  /** Globals the tree reads beside the DOM's — a fake `fetch`, a `navigator` with a fake clipboard — installed for the pass and restored after; they win over the DOM's own. */
+  readonly globals?: Readonly<Record<string, unknown>>;
+}
+
+/** A client render, open until `unmount()`. */
+export interface Mounted {
+  /** The element the root renders into, in the happy-dom document. */
+  readonly container: HTMLElement;
+  /** The container's markup, read as `parseMarkup` reads a static render. */
+  markup(): MarkupElement;
+  /** `run` under React's `act`: every update it causes, and every effect, flushed before this resolves. Rejects on an uncaught error, and after unmount. */
+  act(run: () => void | Promise<void>): Promise<void>;
+  /** `turns` short `act` passes (1 by default), each one turn of the event loop: what settles during them is flushed. Throws after unmount. */
+  settle(turns?: number): Promise<void>;
+  /** Short `act` passes until `condition()` holds; rejects naming `what` after `timeoutMs` (finite, at least 0, else a `RangeError`). Throws after unmount. */
+  waitFor(condition: () => boolean, what: string, timeoutMs?: number): Promise<void>;
+  /** The errors a client error boundary caught, as React reported them (recorded, not logged). */
+  readonly caught: readonly unknown[];
+  /** The errors no boundary caught (recorded, not logged). */
+  readonly uncaught: readonly unknown[];
+  /** Unmounts under `act`, closes the window and restores every global — then rejects, naming the subject, if an effect's cleanup threw. Idempotent. */
+  unmount(): Promise<void>;
 }
 
 /** The subject's name: the option, else the element type's display name or function name. */
@@ -294,6 +377,189 @@ async function prerenderOnce(element: ReactTypes.ReactElement, subject: string, 
   }
 }
 
+// --- Client renders ----------------------------------------------------------------------------
+
+/**
+ * Installs `values` on `globalThis` by name; returns the restore, which puts
+ * back exactly what was there — a descriptor, or nothing — newest first. If a
+ * definition throws partway, what was already installed is restored before the
+ * error is rethrown, so a failed install leaves nothing behind.
+ */
+function installGlobals(values: Readonly<Record<string, unknown>>): () => void {
+  const target = globalThis as unknown as Record<string, unknown>;
+  const saved: (readonly [string, PropertyDescriptor | undefined])[] = [];
+  const restore = (): void => {
+    for (let at = saved.length - 1; at >= 0; at -= 1) {
+      const [name, descriptor] = saved[at] as readonly [string, PropertyDescriptor | undefined];
+      if (descriptor === undefined) Reflect.deleteProperty(target, name);
+      else Object.defineProperty(target, name, descriptor);
+    }
+  };
+  try {
+    for (const [name, value] of Object.entries(values)) {
+      const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
+      Object.defineProperty(target, name, { value, configurable: true, enumerable: true, writable: true });
+      saved.push([name, descriptor]);
+    }
+  } catch (error) {
+    restore();
+    throw error;
+  }
+  return restore;
+}
+
+/** The constructors installed from the window: what React's DOM client and a test read by name. */
+const DOM_CONSTRUCTORS = ['Node', 'Element', 'HTMLElement', 'HTMLIFrameElement', 'Text', 'Event', 'MouseEvent', 'KeyboardEvent', 'FocusEvent'] as const;
+
+/** The happy-dom window, as far as the harness reads it. */
+interface ClientWindow {
+  readonly document: Document;
+  readonly navigator: unknown;
+  requestAnimationFrame(callback: (time: number) => void): number;
+  cancelAnimationFrame(handle: number): void;
+  getComputedStyle(element: Element): unknown;
+  readonly happyDOM: { close(): Promise<void> };
+}
+
+/** The window's globals, by name, its functions bound to it. */
+function domGlobals(window: ClientWindow): Record<string, unknown> {
+  const globals: Record<string, unknown> = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    getComputedStyle: window.getComputedStyle.bind(window),
+  };
+  for (const name of DOM_CONSTRUCTORS) globals[name] = (window as unknown as Record<string, unknown>)[name];
+  return globals;
+}
+
+/** The longest `waitFor` waits by default, in milliseconds. */
+export const WAIT_TIMEOUT_MS = 10_000;
+
+/** One turn of the event loop: every settled promise and due immediate run. */
+const turn = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
+/** `error`'s message, for a failure that names its cause. */
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+async function mountClient(element: ReactTypes.ReactElement, options: MountOptions): Promise<Mounted> {
+  const subject = subjectOf(element, options);
+  if (recorded.clientOpen) throw new Error(`${subject}: another client render is still mounted — unmount it first`);
+  recorded.clientOpen = true;
+  let window: ClientWindow | undefined;
+  let restore: () => void = () => undefined;
+  // Everything a mount set up, undone once: the recorder, the window, the globals.
+  let released = false;
+  const release = async (): Promise<void> => {
+    if (released) return;
+    released = true;
+    recorded.active = false;
+    try {
+      await window?.happyDOM.close();
+    } finally {
+      restore();
+      recorded.clientOpen = false;
+    }
+  };
+  try {
+    const { Window } = await import('happy-dom');
+    window = new Window({
+      url: 'http://localhost/',
+      settings: { disableJavaScriptEvaluation: true, disableJavaScriptFileLoading: true, disableCSSFileLoading: true },
+    }) as unknown as ClientWindow;
+    const restoreDom = installGlobals({ ...domGlobals(window), IS_REACT_ACT_ENVIRONMENT: true });
+    restore = restoreDom;
+    // Required while the DOM is installed, and before a test's own globals: React's
+    // DOM client reads `window` and `navigator.userAgent` when it is first loaded.
+    const { createRoot } = requireFromRoot('react-dom/client') as typeof ClientTypes;
+    // A failure here is undone by itself, then the DOM's by `release`.
+    const restoreHanded = installGlobals(options.globals ?? {});
+    restore = () => {
+      restoreHanded();
+      restoreDom();
+    };
+    const container = window.document.createElement('div');
+    window.document.body.appendChild(container);
+    const caught: unknown[] = [];
+    const uncaught: unknown[] = [];
+    const root = createRoot(container, {
+      onCaughtError: (error) => void caught.push(error),
+      onUncaughtError: (error) => void uncaught.push(error),
+    });
+    recorded.elements = [];
+    recorded.subscriptions = [];
+    recorded.active = true;
+    let open = true;
+    const escaped = (cause: unknown, when = ''): Error => new Error(`${subject}: an error escaped the client render${when}: ${messageOf(cause)}`, { cause });
+    /** `run` under React's `act`, whatever escaped the root recorded in `uncaught`. */
+    const actRecording = async (run: () => void | Promise<void>): Promise<void> => {
+      try {
+        await React.act(async () => {
+          await run();
+        });
+      } catch (error) {
+        // `act` rethrows what escaped the root; recorded here too, so `uncaught` holds it.
+        if (!uncaught.includes(error)) uncaught.push(error);
+      }
+    };
+    const stillOpen = (what: string): void => {
+      if (!open) throw new Error(`${subject}: ${what} after unmount`);
+    };
+    const act = async (run: () => void | Promise<void>): Promise<void> => {
+      stillOpen('act');
+      const before = uncaught.length;
+      await actRecording(run);
+      if (uncaught.length > before) throw escaped(uncaught[before]);
+    };
+    const unmount = async (): Promise<void> => {
+      if (!open) return;
+      open = false;
+      const before = uncaught.length;
+      try {
+        await actRecording(() => root.unmount());
+      } finally {
+        await release();
+      }
+      // An effect's cleanup that threw: the unmount let it escape.
+      if (uncaught.length > before) throw escaped(uncaught[before], ' during unmount');
+    };
+    const mounted: Mounted = {
+      container,
+      markup: () => parseMarkup(container.innerHTML),
+      act,
+      async settle(turns = 1) {
+        stillOpen('settle');
+        for (let at = 0; at < turns; at += 1) await act(turn);
+      },
+      async waitFor(condition, what, timeoutMs = WAIT_TIMEOUT_MS) {
+        stillOpen('waitFor');
+        if (!Number.isFinite(timeoutMs) || timeoutMs < 0) throw new RangeError(`${subject}: waitFor's timeout must be a finite number of ms, at least 0 — not ${timeoutMs}`);
+        const deadline = Date.now() + timeoutMs;
+        while (!condition()) {
+          if (Date.now() > deadline) throw new Error(`${subject}: ${what} did not happen within ${timeoutMs} ms`);
+          await act(turn);
+        }
+      },
+      caught,
+      uncaught,
+      unmount,
+    };
+    try {
+      await act(() => root.render(element));
+    } catch (error) {
+      // The render's failure is the one reported, whatever the unmount then does.
+      await unmount().catch(() => undefined);
+      throw error;
+    }
+    return mounted;
+  } catch (error) {
+    await release();
+    throw error;
+  }
+}
+
 /** Starts the server. One per test file; close it in `after`. */
 export async function renderer(): Promise<Renderer> {
   const cacheDir = mkdtempSync(join(tmpdir(), 'cosmos-render-'));
@@ -318,6 +584,8 @@ export async function renderer(): Promise<Renderer> {
     },
     async render(element, options = {}) {
       const subject = subjectOf(element, options);
+      // A static pass would reset the recorders under the open client pass.
+      if (recorded.clientOpen) throw new Error(`${subject}: a client render is mounted — unmount it first`);
       const timeoutMs = options.timeoutMs ?? RENDER_TIMEOUT_MS;
       try {
         let html = inlineSegments(await prerenderOnce(element, subject, timeoutMs));
@@ -341,6 +609,9 @@ export async function renderer(): Promise<Renderer> {
     },
     subscriptions() {
       return [...recorded.subscriptions];
+    },
+    mount(element, options = {}) {
+      return mountClient(element, options);
     },
     async close() {
       try {
