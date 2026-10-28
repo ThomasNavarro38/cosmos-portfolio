@@ -29,8 +29,10 @@ import { afterEach, after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { React, elementsOf, parseMarkup, queryAll, renderer, textOf, type MarkupElement, type Renderer } from '../../scripts/render.ts';
 import { stripComments } from '../../scripts/source-scan.ts';
+import type * as Activate from './activate.ts';
 import type * as ChartOffer from './chart-offer.ts';
 import type { CornerChrome as CornerChromeComponent } from './corner-chrome.tsx';
+import { OVERVIEW_ID } from './index-model.ts';
 import type * as MotionPreference from './motion-preference.ts';
 import type { Route } from './route.ts';
 import { followRoute, type RouteClick } from './route-link.ts';
@@ -52,10 +54,12 @@ const { CornerChrome } = await harness.load<{ CornerChrome: typeof CornerChromeC
 const offer = await harness.load<typeof ChartOffer>('/src/shell/chart-offer.ts');
 const state = await harness.load<typeof State>('/src/shell/state.ts');
 const motion = await harness.load<typeof MotionPreference>('/src/shell/motion-preference.ts');
+const doors = await harness.load<typeof Activate>('/src/shell/activate.ts');
 
 afterEach(() => {
   offer.resetChartOfferForTest();
   state.resetNavigation();
+  motion.setReducedMotion(false);
 });
 
 const router: Router = { route: () => 'home', subscribe: () => () => undefined, navigate: () => true, dispose: () => undefined };
@@ -259,6 +263,67 @@ test('the subscription check is red against a list holding only subscribeReduced
   assert.notDeepEqual(subscribesToOffer([motion.subscribeReducedMotion]), []);
   assert.notDeepEqual(subscribesToOffer([motion.subscribeReducedMotion, () => () => undefined]), [], 'a store that is not the offer');
   assert.notDeepEqual(subscribesToOffer([]), []);
+});
+
+// --- The hand-back, executed --------------------------------------------------------------------
+
+/**
+ * The chrome mounted on the client, beside an `overview` target, with the store
+ * put in its state by `arrange`; then `act` on the slot's button, focused first.
+ * Where DOM focus lands after the act.
+ *
+ * Two guards are not observable here, because React's commit restores focus to
+ * whatever held it before, if that is still in the document: the `:focus`
+ * check (happy-dom lets the restored element be `<body>`, undoing an unfocused
+ * button's hand-back), and the stable `useCallback` (an inline ref's cleanup on
+ * a re-render moves focus to `overview`, and the restore moves it straight
+ * back). The source audit below holds both.
+ */
+async function focusAfter(arrange: () => void, act: (button: HTMLButtonElement) => void): Promise<'overview' | 'button' | 'body' | 'elsewhere'> {
+  // Each case starts from the initial store and full motion, whatever the last left.
+  state.resetNavigation();
+  motion.setReducedMotion(false);
+  const mounted = await harness.mount(React.createElement(CornerChrome, { router }), { name: 'CornerChrome' });
+  try {
+    const document = mounted.container.ownerDocument;
+    const overview = document.createElement('h2');
+    overview.id = OVERVIEW_ID;
+    overview.tabIndex = -1;
+    document.body.prepend(overview);
+    await mounted.act(arrange);
+    const button = mounted.container.querySelector<HTMLButtonElement>('button.chrome-slot-control');
+    assert.ok(button !== null, 'the slot is a control before the act');
+    button.focus();
+    assert.equal(document.activeElement, button, 'the button holds focus');
+    await mounted.act(() => act(button));
+    const active: Element | null = document.activeElement;
+    if (active === overview) return 'overview';
+    if (active === button) return 'button';
+    return active === document.body ? 'body' : 'elsewhere';
+  } finally {
+    await mounted.unmount();
+  }
+}
+
+const inFlight = (): void => state.enterFreeFlight(null);
+
+test('executed: resuming from a focused return button — a click, Escape or Home — hands focus to overview, never <body>', async () => {
+  assert.equal(await focusAfter(inFlight, (button) => button.click()), 'overview', 'a click');
+  assert.equal(await focusAfter(inFlight, () => doors.releaseLayer()), 'overview', 'Escape');
+  assert.equal(await focusAfter(inFlight, () => doors.goHome()), 'overview', 'Home');
+});
+
+test('executed: the hand-back moves no focus on a re-render, or on a release', async () => {
+  assert.equal(await focusAfter(inFlight, () => motion.setReducedMotion(true)), 'button', 'a re-render keeps the button, and its focus');
+  // Focused on the Rail, the button reads release; its focus target is focusMove's alone.
+  const focusedOnRail = (): void => state.focusProject('project:a');
+  assert.equal(await focusAfter(focusedOnRail, () => doors.releaseLayer()), 'body', 'a release from the Rail');
+  // A release in free flight keeps the same element, now reading resume: no cleanup runs.
+  const focusedInFlight = (): void => {
+    state.enterFreeFlight(null);
+    state.focusProject('project:a');
+  };
+  assert.equal(await focusAfter(focusedInFlight, () => doors.releaseLayer()), 'button', 'the button stays, and so does focus');
 });
 
 // --- The renderer stays thin -----------------------------------------------------------------

@@ -1275,3 +1275,11 @@ Still open after 3.5:
   evidence: `npm audit` flags it; `npm audit --omit=dev` finds 0 vulnerabilities and no `dist/` chunk holds happy-dom; `scripts/render.ts` disables JavaScript evaluation and JS/CSS file loading in its window and renders only the repo's own components. The fix is `21.0.4` (2026-10-20), a major bump; re-pin after 2026-11-03 and rerun `npm test`.
   location: package.json
   severity: medium
+
+## Deferred from: code review of spec-2-10-escape-precedence-and-reduced-motion.md (2026-10-28)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-2-10-escape-precedence-and-reduced-motion.md`
+  summary: The reduced-motion writer's guards (a throwing or `null` `matchMedia`, the legacy `addListener` fallback, the initial read before `createRoot`) are held only by `auditPreferenceWriter`, a text audit of `mount.tsx`; nothing executes `writeReducedMotion`, which is private to a module `node --test` cannot load (it imports `App` and its CSS).
+  evidence: `src/shell/rail-input.test.ts` `auditPreferenceWriter` reads `MOUNT_TSX` as text. Moving the writer into a pure `.ts` module taking `window` (as `detect.ts` takes `browserEnv()`) would let it run under fake `matchMedia` objects.
+  location: src/shell/mount.tsx
+  severity: low

@@ -1196,6 +1196,14 @@ test('reduced toggled mid-spring: velocity is carried, so the value is continuou
   assert.ok(faster.progress.value - motion.progress.value < 0.5, 'a step, not a jump to the goal');
 });
 
+test('railFrame hands its reduced to the spring', () => {
+  const { rail } = railOf(fiveStops());
+  const moving = { progress: { value: 1, velocity: 0.2 }, aspect: { value: 1.5, velocity: 0 } };
+  const reduced = railFrame(moving, rail, 3, 1600, 900, 1 / 60, true);
+  assert.deepEqual(reduced.motion, stepRailMotion(moving, rail, 3, 1600 / 900, 1 / 60, true));
+  assert.notDeepEqual(reduced.motion, railFrame(moving, rail, 3, 1600, 900, 1 / 60).motion, 'mid-spring, the pace shows');
+});
+
 test('reduced: rest and the Dwell are untouched — the pose at rest is identical, and a settled spring stays put', () => {
   const { rail } = railOf(fiveStops());
   let motion = railFrame(null, rail, 0, 1600, 900, 0.016).motion;
