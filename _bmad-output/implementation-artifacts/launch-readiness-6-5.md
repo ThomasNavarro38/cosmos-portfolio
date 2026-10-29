@@ -98,7 +98,7 @@ More readers are added as rows 4, 5, … in either table. A failed attempt moves
 
 | Deploy | Date | URL | Host | Deployed commit | `/chart` and `/colophon` answer on a direct load (`yes` / `no`) | Rollback commit (and how the host showed it live) | Head redeployed and live (`yes` / `no`) | Host configuration: env vars, functions, secrets (`none`, plus any note) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | | | | | | | | |
+| 1 | 2026-10-29 | https://thomasnavarro38.github.io/cosmos-portfolio/ | GitHub Pages | | yes (checked by Thomas on `b01f8e3`'s deployment, 2026-10-29: `/chart` and `/colophon` 301 to the slash, then 200 and each draws its surface; `/nope` 404 from `404.html`, home drawn) | | | |
 
 ## Pre-launch checklist
 
