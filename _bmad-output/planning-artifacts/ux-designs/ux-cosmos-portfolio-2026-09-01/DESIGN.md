@@ -1009,6 +1009,9 @@ read, not composed.
 
 - **Ground.** `{colors.surface-base-dark}`. Same void as the scene, so the
   transition does not feel like a different site.
+- **The page column** (D-G6, 2026-10-29). The chart's column, the same
+  declarations at both widths, with the chrome row, the exhibits, the
+  derivations and the prose stacked in it.
 - **Measure.** `{spacing.measure-prose}` for prose. The JSON block is exempt and
   may run to its natural width inside a horizontally scrollable container — code
   that wraps arbitrarily is code that cannot be read.
@@ -1138,7 +1141,6 @@ Every unratified proposal and genuine gap in this document, in one place.
 | D-G1 | Light theme needs its own typography and stroke-weight decision; colour swap alone will not reproduce direction 02 | §2 | — |
 | D-G2 | The approved SNCF Notable's constraint does not lift cleanly as one sentence | §7.7 | §15 content pass |
 | D-G3 | Mote label degradation strategy above ~12 simultaneous labels | §7.4 | Q6 |
-| D-G6 | Colophon page layout — how the JSON block and the three derivations sit together. Last unillustrated surface. | §7.11 | Q11 |
 
 ### Resolved since drafting
 
@@ -1146,6 +1148,7 @@ Every unratified proposal and genuine gap in this document, in one place.
 |---|---|---|
 | ~~D-G4~~ | Fallback visual treatment | **Closed.** Rendered as [`.working/keyscreen-fallback.html`](.working/keyscreen-fallback.html). Time is the axis — horizontal on desktop, transposed to vertical on phone. Deep/Shallow carried by three redundant structural channels: ring on the plate marker, ring repeated per index row, and a real `Notable` text column. Skills are shown (the prohibition is on duplicating the Dust; the Fallback has no Dust to duplicate, and content parity outranks it). Vignette dropped — the plate has no centre and every corner carries content. |
 | ~~D-G5~~ | Link preview composition: honest about the Fallback without a disclaimer | **Closed** (6.1, 2026-10-21). §7.12 — the opening frame framed for the card, both chrome lines verbatim, `Thomas Navarro` / `A work history, mapped.`, plain alt text; honesty by composition and wording, no caveat. |
+| ~~D-G6~~ | Colophon page layout — how the JSON block and the three derivations sit together | **Closed** (Thomas, 2026-10-29, Epic 5 item 39). The Colophon is one `div.colophon` column that mirrors the chart's `.chart` declaration for declaration: centred, at most 1242px wide, `space-xxl` above and below and `space-xl` at the sides, `ink-prose`, `overflow-wrap: anywhere`; at 640px and below, the chart's phone padding (`space-lg` above, `space-md` at the sides, `space-xxl` below). The chrome row, the career exhibit, the derivation table, the layout exhibit, what is not there and the live re-solve stack in that order inside it. Prose stays at `measure-prose`, and the `<h1>` stays in the chrome role. The identity audit pins `.colophon` to `.chart` at both widths. |
 | ~~Colophon form~~ | FR-21 launch requirement | **Closed.** §7.11 — a conventional document rendering the live JSON, entered from the left-top identity chrome. Syntax setting is luminance only. |
 
 ### Deferred to M1 greybox tuning — specify shape and ratio, never milliseconds

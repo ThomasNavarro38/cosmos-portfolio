@@ -56,15 +56,21 @@ const render = (surface: Surface, router: Router = recordingRouter().router): Pr
 const ROUTE_LINE: Readonly<Record<Surface, readonly string[]>> = { scene: ['/ the scene', '/chart the chart'], fallback: ['/chart the chart'] };
 
 /**
- * The host's render: the Colophon's chrome row alone — its one `<h1>`, the
- * identity line, then its contact route (6.3) and its route line, the
- * machine's links (Epic 5 item 38) — and nothing of the host's own.
+ * The host's render: the Colophon's page (`div.colophon`, D-G6) holding its
+ * chrome row alone — its one `<h1>`, the identity line, then its contact route
+ * (6.3) and its route line, the machine's links (Epic 5 item 38) — and nothing
+ * of the host's own.
  */
 function colophonOnly(html: string, machine: Surface): string[] {
-  const children = elementsOf(parseMarkup(html));
+  const pages = elementsOf(parseMarkup(html));
+  const [page] = pages;
+  if (pages.length !== 1 || page?.tag !== 'div' || page.attrs['class'] !== 'colophon') {
+    return [`the host renders ${pages.map((child) => child.tag).join(', ') || 'nothing'} — not the Colophon's page alone`];
+  }
+  const children = elementsOf(page);
   const [row] = children;
   if (children.length !== 1 || row?.tag !== 'div' || row.attrs['class'] !== 'colophon-chrome') {
-    return [`the host renders ${children.map((child) => child.tag).join(', ') || 'nothing'} — not the Colophon's chrome row alone`];
+    return [`the Colophon's page holds ${children.map((child) => child.tag).join(', ') || 'nothing'} — not its chrome row alone`];
   }
   const parts = elementsOf(row).map((part) => `${part.tag}.${part.attrs['class'] ?? ''}`);
   if (JSON.stringify(parts) !== JSON.stringify(['h1.colophon-chrome-heading', 'p.contact-route', 'p.colophon-routes'])) return [`the chrome row holds ${JSON.stringify(parts)}`];

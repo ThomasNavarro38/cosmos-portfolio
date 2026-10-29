@@ -62,7 +62,26 @@
  * width (640px and below) the row stacks and the route line drops its auto
  * margin, as the chart's does. The route line is never empty — `the chart` is
  * on every machine — so it has no `:empty` rule.
+ *
+ * The page (D-G6, Epic 5 item 39, ruling 2026-10-29): `.colophon` wraps
+ * everything the Colophon draws and is `chart.css`'s `.chart` declaration for
+ * declaration — one column centred at most 1242px wide, `space-xxl` above and
+ * below and `space-xl` at the sides, `ink-prose`, and breaking anywhere so
+ * nothing pushes the page sideways at phone width — and at phone width (640px
+ * and below) the chart's phone `.chart`: `space-lg` above, `space-md` at the
+ * sides, `space-xxl` below. The prose inside stays held
+ * to `measure-prose` and the `<h1>` stays in the chrome role. The identity
+ * audit pins the two rules to each other, so either one edited alone fails.
  */
+
+.colophon {
+  box-sizing: border-box;
+  max-width: 1242px;
+  margin: 0 auto;
+  padding: var(--space-xxl) var(--space-xl) var(--space-xxl);
+  color: var(--color-ink-prose-dark);
+  overflow-wrap: anywhere;
+}
 
 .colophon-chrome {
   display: flex;
@@ -226,6 +245,10 @@
 }
 
 @media (max-width: 640px) {
+  .colophon {
+    padding: var(--space-lg) var(--space-md) var(--space-xxl);
+  }
+
   .colophon-chrome {
     flex-direction: column;
     gap: var(--space-xs);

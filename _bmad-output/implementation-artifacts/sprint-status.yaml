@@ -540,7 +540,14 @@ action_items:
     action: "Rule D-G6 (Colophon page layout: gutter, column, h1 role) and apply it
       in colophon.css, held by the identity audit"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-29 (spec-e5-r39-r40-favicon-colophon-layout-and-copy.md, Thomas's
+      ruling 2): ColophonPage draws one div.colophon around everything, and .colophon is
+      chart.css's .chart declaration for declaration (centred, max 1242px, space-xxl
+      above and below, space-xl at the sides), and at 640px and below the chart's phone
+      .chart (space-lg above, space-md at the sides); the identity audit pins both
+      pairs, either side's drift failing; prose stays at measure-prose, the h1 in the chrome role;
+      D-G6 moved to Resolved in DESIGN.md"
     ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
   - id: "epic-5-retro-item-40-re-rule-the-loose-copy-5-5-framing-does"
     epic: 5
@@ -548,7 +555,22 @@ action_items:
       / the scene), 5.4 thesis (the camera is), solved from the three rules above;
       hold each relation in tests"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-10-29 (spec-e5-r39-r40-favicon-colophon-layout-and-copy.md, Thomas's
+      ruling 3, re-ruled by Thomas the same day after review): the thesis ('Of the two
+      files above, only career.json is authored: layout.generated.json is solved from
+      it, shots included.'), the positions paragraph and the 5.5 framing ('This runs
+      the same solver on career.json, here in your browser. The shipped
+      layout.generated.json was solved from the same file and committed; the scene and
+      the chart read it, never this run.') replaced verbatim. The framing was re-ruled
+      twice more on 2026-10-29: first because the gate never solves (it compares
+      digests), so 'every build checks it against a fresh solve' was false; then to
+      drop the build clause altogether. Each relation held red-then-green: the committed
+      layout is solveLive(career.json) byte for byte, its shots buildShots of career's
+      entity graph, career.json holding no shots key and no shot record
+      (src/derive/colophon-claims.test.ts); 'the two files above' the EXHIBIT_PATHS
+      count (absences.test.ts); the scene and the chart handed the committed artifact,
+      never the run (live-solve.test.ts)"
     ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
   - id: "epic-5-retro-item-41-run-the-follow-up-bmad-code-review-5-1-5"
     epic: 5

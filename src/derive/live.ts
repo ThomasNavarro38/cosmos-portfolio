@@ -15,8 +15,12 @@
  * `globalThis.crypto.subtle`, and hands both to `solveArtifact`
  * (`pipeline.ts`), the step `npm run solve` calls, with the same seed. Under
  * Node it returns the committed artifact byte for byte (`live.test.ts`); in a
- * browser the force solve may settle differently, which the Colophon's framing
- * says plainly.
+ * browser the force solve may settle differently (the Epic 5 retro observed it
+ * byte-identical in Chrome 155), which is why the Colophon's framing (re-ruled
+ * 2026-10-29, Epic 5 item 40) claims no outcome for this run: only that it is
+ * the same solver on the same file, that the shipped layout.generated.json was
+ * solved from that file and committed, and that the scene and the chart read
+ * it, never this run.
  *
  * Browser-safe: no `node:*`, not `./index.ts` (the file system, the gate) and
  * not `../data/validate.ts` (the file reader). No network: the text arrives as

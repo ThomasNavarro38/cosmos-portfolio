@@ -49,6 +49,11 @@
  * a link dropped, reordered or retargeted, the separator dropped, `the model`
  * linked, a link to `/colophon` or a back link added, and the wrong machine.
  *
+ * The page (D-G6, Epic 5 item 39): everything above is drawn inside one
+ * `div.colophon`, the page's only top-level element, with and without the
+ * exhibits — driven red by the wrapper dropped, renamed, or something drawn
+ * outside it.
+ *
  * The default `Colophon`, executed (Epic 5 retro item 42): mounted on the
  * client (`mount`, the harness's client path) with a fake `fetch` that
  * honours its signal, it draws both files, career first, once the effect
@@ -330,6 +335,19 @@ function chromeRow(row: MarkupElement, machine: Surface): string[] {
 }
 
 /**
+ * The page wrapper (D-G6, Epic 5 item 39): the markup's one top-level element,
+ * a `div.colophon` carrying nothing else; or the failure naming what was drawn.
+ */
+function pageOf(root: MarkupElement): MarkupElement | string {
+  const top = elementsOf(root);
+  const [page] = top;
+  if (top.length !== 1 || page === undefined || page.tag !== 'div' || JSON.stringify(page.attrs) !== JSON.stringify({ class: 'colophon' })) {
+    return `the page draws ${JSON.stringify(top.map((element) => `${element.tag}.${element.attrs['class'] ?? ''}`))} at the top, not one div.colophon`;
+  }
+  return page;
+}
+
+/**
  * The page's elements: the chrome row (Epic 5 item 38) — the `<h1>`, the
  * contact route (6.3) and the route line — drawn
  * whether or not the files have arrived, then, when `expected` is given,
@@ -339,7 +357,9 @@ function chromeRow(row: MarkupElement, machine: Surface): string[] {
  * result `<pre>` when one is solved — and nothing else.
  */
 function colophonPage(html: string, expected: Exhibits | null, live: Live = IDLE, machine: Surface = 'scene'): string[] {
-  const children = elementsOf(parseMarkup(html));
+  const page = pageOf(parseMarkup(html));
+  if (typeof page === 'string') return [page];
+  const children = elementsOf(page);
   const failures: string[] = [];
   const tags = children.map((child) => child.tag);
   const want = expected === null ? ['div'] : ['div', 'pre', 'table', 'pre', 'h2', ...PARAGRAPHS.map(() => 'p'), 'h2', 'p', 'button', ...(live.solved === null ? [] : ['pre'])];
@@ -356,6 +376,15 @@ function colophonPage(html: string, expected: Exhibits | null, live: Live = IDLE
   }
   return failures;
 }
+
+/** The page wrapper's closing tag (D-G6): the slices below stop before it, and an addition goes inside it. */
+const PAGE_CLOSE = '</div>';
+
+/** `extra` drawn last inside the page wrapper. */
+const appended = (html: string, extra: string): string => {
+  assert.ok(html.endsWith(PAGE_CLOSE), 'the page ends with its wrapper’s close');
+  return `${html.slice(0, -PAGE_CLOSE.length)}${extra}${PAGE_CLOSE}`;
+};
 
 /** The real layout text, its first Project `edit`ed. */
 function alteredLayout(edit: (project: { mass: unknown; luminanceBand: unknown; railDistance: unknown; content: { project: unknown; duration: { start: unknown; end: unknown }; weight: unknown } }) => void): string {
@@ -428,8 +457,12 @@ test('the page check is red against broken markup', async () => {
   const chartLink = /<a href="\/chart">[^<]*<\/a>/.exec(routeLine)?.[0] ?? '';
   const between = routeLine.slice(routeLine.indexOf(sceneLink) + sceneLink.length, routeLine.indexOf(chartLink));
   assert.ok(headingTag !== '' && sceneLink !== '' && chartLink !== '' && between.includes('·'), 'the heading, both links and the separator between them were found');
+  const pageOpen = '<div class="colophon">';
   const chromeOpen = '<div class="colophon-chrome">';
-  assert.ok(full.startsWith(chromeOpen) && bare.startsWith(chromeOpen), 'the chrome row is drawn first, with and without the exhibits');
+  assert.ok(full.startsWith(`${pageOpen}${chromeOpen}`) && bare.startsWith(`${pageOpen}${chromeOpen}`), 'the page wrapper, then the chrome row first in it, with and without the exhibits');
+  assert.ok(full.endsWith('</div>') && bare.endsWith('</div>'), 'the page wrapper closes the markup');
+  const solveButton = /<button [^>]*class="colophon-solve"[^>]*>[^<]*<\/button>/.exec(full)?.[0] ?? '';
+  assert.ok(solveButton !== '', 'the solve button was found');
   const tableStart = full.indexOf('<table');
   const table = full.slice(tableStart, full.indexOf('</table>') + '</table>'.length);
   const bodyRows = [...table.matchAll(/<tr><th scope="row">[\s\S]*?<\/tr>/g)].map((match) => match[0]);
@@ -442,7 +475,7 @@ test('the page check is red against broken markup', async () => {
   const inCareer = (edit: (pre: string) => string): string => full.replace(careerPre, () => edit(careerPre));
   // 5.4: what is not there, after the layout <pre>.
   const absencesStart = full.indexOf('<h2 ');
-  const prose = full.slice(absencesStart);
+  const prose = full.slice(absencesStart, -PAGE_CLOSE.length);
   const headingMarkup = /^<h2 [^>]*>[^<]*<\/h2>/.exec(prose)?.[0] ?? '';
   const paragraphMarkup = [...prose.matchAll(/<p class="colophon-prose">[^<]*<\/p>/g)].map((match) => match[0]);
   const [firstParagraph, secondParagraph] = paragraphMarkup as [string, string];
@@ -464,7 +497,7 @@ test('the page check is red against broken markup', async () => {
     ['the layout text truncated', full.replace(layoutPre, () => layoutPre.replace(/<span[^>]*>[^<]*<\/span>[^<]*<\/pre>$/, '</pre>'))],
     ['the order swapped', swapped],
     ['the heading renamed', full.replace(headingTag, headingTag.replace('the model', 'The model'))],
-    ['a third <pre>', `${full}<pre>x</pre>`],
+    ['a third <pre>', appended(full, '<pre>x</pre>')],
     ['an exhibit’s name dropped', inCareer((pre) => pre.replace(' aria-label="career.json"', ''))],
     ['the exhibits’ names swapped', inCareer((pre) => pre.replace('aria-label="career.json"', 'aria-label="layout.generated.json"'))],
     ['an exhibit’s region role dropped', inCareer((pre) => pre.replace(' role="region"', ''))],
@@ -486,9 +519,9 @@ test('the page check is red against broken markup', async () => {
     ['paragraphs reordered', full.replace(`${firstParagraph}${secondParagraph}`, `${secondParagraph}${firstParagraph}`)],
     ['a paragraph altered', full.replace(secondParagraph, secondParagraph.replace('There is no backend and no CMS.', 'There is no backend.'))],
     ['a paragraph unclassed', full.replace(firstParagraph, firstParagraph.replace(' class="colophon-prose"', ''))],
-    ['a sixth paragraph', `${full}<p class="colophon-prose">Built with care.</p>`],
-    ['the prose before the layout <pre>', full.slice(0, secondPre) + prose + full.slice(secondPre, absencesStart)],
-    ['the prose without the exhibits', `${bare}${prose}`],
+    ['a sixth paragraph', appended(full, '<p class="colophon-prose">Built with care.</p>')],
+    ['the prose before the layout <pre>', full.slice(0, secondPre) + prose + full.slice(secondPre, absencesStart) + PAGE_CLOSE],
+    ['the prose without the exhibits', appended(bare, prose)],
     // 6.3: the contact route dropped, moved below the exhibits, its link or button broken, help text beside it.
     ['the contact route dropped', full.replace(contactMarkup, '')],
     ['the contact route after the exhibits', full.replace(contactMarkup, '').replace(layoutPre, () => `${layoutPre}${contactMarkup}`)],
@@ -499,6 +532,12 @@ test('the page check is red against broken markup', async () => {
     ['the copy button disabled', full.replace('<button type="button" class="contact-copy">', '<button type="button" class="contact-copy" disabled="">')],
     ['a status beside the button', full.replace(`>${CONTACT.copy}</button>`, `>${CONTACT.copy}</button><span role="status"></span>`)],
     // Epic 5 item 38: the chrome row unwrapped, its route line dropped or misplaced, a link broken, the model linked, a route back to itself.
+    // D-G6 (Epic 5 item 39): the page wrapper dropped, renamed, or something drawn outside it.
+    ['the page wrapper dropped', full.slice(pageOpen.length, -'</div>'.length)],
+    ['the page wrapper renamed', full.replace(pageOpen, '<div class="colophon-page">')],
+    ['the page wrapper a <main>', `<main class="colophon">${full.slice(pageOpen.length, -'</div>'.length)}</main>`],
+    ['the button outside the wrapper', `${full.slice(0, -'</div>'.length).replace(solveButton, '')}</div>${solveButton}`],
+    ['the chrome row outside the wrapper', `${full.replace(pageOpen, '').replace(`${routeLine}</div>`, `${routeLine}</div>${pageOpen}`)}`],
     ['the chrome row unwrapped', full.replace(chromeOpen, '').replace(`${routeLine}</div>`, routeLine)],
     ['the route line dropped', full.replace(routeLine, '')],
     ['the route line before the contact route', full.replace(contactMarkup, '').replace(routeLine, `${routeLine}${contactMarkup}`)],
@@ -603,7 +642,7 @@ test('the live re-solve check is red against broken markup', async () => {
   const live = idle.slice(liveStart);
   const absencesStart = idle.indexOf('<h2 ');
   const resultStart = solved.lastIndexOf('<pre ');
-  const result = solved.slice(resultStart);
+  const result = solved.slice(resultStart, -PAGE_CLOSE.length);
   assert.ok(button !== '' && liveStart > absencesStart && resultStart > solveAt(solved), 'the button, the live heading and the result were found');
   for (const [name, markup, state] of [
     ['the button dropped', idle.replace(button, ''), IDLE],
@@ -615,17 +654,18 @@ test('the live re-solve check is red against broken markup', async () => {
     ['the button enabled while running', running.replace('aria-disabled="true"', 'aria-disabled="false"'), { solved: null, running: true }],
     ['the button disabled outright while running', running.replace('aria-disabled="true"', 'disabled=""'), { solved: null, running: true }],
     ['a loading indicator', running.replace(`>${LIVE_SOLVE.action}<`, '>solving…<'), { solved: null, running: true }],
-    ['the framing altered', idle.replace(LIVE_SOLVE.framing, LIVE_SOLVE.framing.replace('; it does not reproduce the shipped layout', '')), IDLE],
+    ['the framing altered', idle.replace(LIVE_SOLVE.framing, LIVE_SOLVE.framing.replace('; the scene and the chart read it, never this run', '')), IDLE],
     ['the live heading altered', idle.replace(`>${LIVE_SOLVE.heading}<`, '>solve it yourself<'), IDLE],
     ['the live heading made an <h3>', idle.slice(0, liveStart) + live.replace(/^<h2([^>]*)>([^<]*)<\/h2>/, '<h3$1>$2</h3>'), IDLE],
-    ['the new elements before the absences', idle.slice(0, absencesStart) + live + idle.slice(absencesStart, liveStart), IDLE],
+    ['the new elements before the absences', idle.slice(0, absencesStart) + live.slice(0, -PAGE_CLOSE.length) + idle.slice(absencesStart, liveStart) + PAGE_CLOSE, IDLE],
     ['the result misnamed', solved.replace(`aria-label="${LIVE_SOLVE.result}"`, 'aria-label="layout.generated.json"'), SOLVED_LIVE],
     ['the result named on screen', solved.replace(result, `<p class="colophon-prose">${LIVE_SOLVE.result}</p>${result}`), SOLVED_LIVE],
     ['the result truncated', solved.replace(result, () => result.replace(/<span[^>]*>[^<]*<\/span>[^<]*<\/pre>$/, '</pre>')), SOLVED_LIVE],
     ['the result dropped', solved.replace(result, ''), SOLVED_LIVE],
     ['a result drawn where none was solved', solved, IDLE],
-    ['the result before the button', solved.slice(0, solveAt(solved)) + result + solved.slice(solveAt(solved), resultStart), SOLVED_LIVE],
-    ['a status line', `${solved}<p class="colophon-prose">solved in 412 ms</p>`, SOLVED_LIVE],
+    ['the result before the button', solved.slice(0, solveAt(solved)) + result + solved.slice(solveAt(solved), resultStart) + PAGE_CLOSE, SOLVED_LIVE],
+    ['a status line', appended(solved, '<p class="colophon-prose">solved in 412 ms</p>'), SOLVED_LIVE],
+    ['a status line outside the page', `${solved}<p class="colophon-prose">solved in 412 ms</p>`, SOLVED_LIVE],
   ] as const) {
     assert.notEqual(markup, state === IDLE ? idle : state.solved === null ? running : solved, `the break "${name}" must apply`);
     assert.notDeepEqual(colophonPage(markup, EXHIBITS, state), [], `"${name}" must be rejected`);
@@ -855,7 +895,9 @@ test('executed: a missing file is logged once, and no <pre> is drawn — the chr
       assert.equal(errors()[0]?.[0], 'the colophon could not load its exhibits.');
       assert.match(String(errors()[0]?.[1]), /\/layout\.generated\.json answered 404/);
       assert.deepEqual(exhibitsIn(mounted.container), [], 'no <pre>');
-      assert.deepEqual(elementsOf(mounted.markup()).map((element) => `${element.tag}.${element.attrs['class'] ?? ''}`), ['div.colophon-chrome'], 'the chrome row alone');
+      const page = pageOf(mounted.markup());
+      assert.ok(typeof page !== 'string', String(page));
+      assert.deepEqual(elementsOf(page).map((element) => `${element.tag}.${element.attrs['class'] ?? ''}`), ['div.colophon-chrome'], 'the chrome row alone, in the page');
     } finally {
       await mounted.unmount();
     }

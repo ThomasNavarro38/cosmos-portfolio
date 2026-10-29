@@ -6,10 +6,10 @@
  * reworded to pass.
  *
  * - the file names the copy writes are `EXHIBIT_PATHS`' names, both of them,
- *   and "the two files above" is the number of `EXHIBIT_PATHS` entries;
+ *   and "the two files above" (the data paragraph's, and the thesis's "Of the
+ *   two files above") is the number of `EXHIBIT_PATHS` entries;
  * - each `EXHIBIT_PATHS` value is a root-relative, same-origin path ("fetched
  *   both from this site as static files");
- * - "the three rules above" is `derivationRows(layout).length`;
  * - `career.json` holds no position, coordinate or camera key at any depth;
  * - every `shots[]` entry's keys are exactly `subject, angle, distance,
  *   framing` (in any order), a string subject, finite angle and distance and a
@@ -20,6 +20,15 @@
  *
  * Each check is driven red by an alteration that falsifies it. And a source
  * audit: the module imports nothing.
+ *
+ * The thesis's and the positions paragraph's claims about where the layout and
+ * the shots come from (re-ruled 2026-10-29, Epic 5 item 40) are relations to
+ * the solver and to `buildShots`, which a Colophon module may not import: they
+ * are held in `src/derive/colophon-claims.test.ts` — the committed layout is
+ * `solveLive(career.json)` byte for byte, every position is the solve's, and
+ * the shots are `buildShots` of career's entity graph and appear nowhere in
+ * `career.json`. The copy no longer states a count of rules, and none is
+ * admitted.
  */
 
 import { strict as assert } from 'node:assert';
@@ -27,7 +36,6 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { stripCommentsAndStrings } from '../../scripts/source-scan.ts';
 import { ABSENCES, ABSENCES_HEADING } from './absences.ts';
-import { derivationRows } from './derivations.ts';
 import { EXHIBIT_PATHS } from './exhibits.ts';
 
 const CAREER = readFileSync(new URL('../data/career.json', import.meta.url), 'utf8');
@@ -80,9 +88,6 @@ function countClaim(copy: readonly string[], pattern: RegExp, what: string, actu
     return count === actual ? [] : [`the copy states ${count} ${what}; there are ${actual}`];
   });
 }
-
-/** "the three rules above": the count the copy writes is the derivation table's row count. */
-const rulesClaim = (copy: readonly string[], rows: number): string[] => countClaim(copy, /\bthe (\w+) rules above\b/gi, 'rules', rows);
 
 /** "The two files above": the count the copy writes is the number of exhibited files. */
 const filesClaim = (copy: readonly string[], files: number): string[] => countClaim(copy, /\bthe (\w+) files above\b/gi, 'files', files);
@@ -194,12 +199,31 @@ test('"The two files above" is the number of exhibited files', () => {
   assert.deepEqual(filesClaim(COPY, PATHS.length), []);
 });
 
+test('the thesis’s "Of the two files above" is the number of exhibited files', () => {
+  assert.ok(ABSENCES.thesis.startsWith('Of the two files above, '), 'the thesis is scoped to the files on the page');
+  assert.deepEqual(filesClaim([ABSENCES.thesis], PATHS.length), []);
+});
+
 test('each exhibited file is fetched from this site: a root-relative, same-origin path', () => {
   assert.deepEqual(pathsClaim(PATHS), []);
 });
 
-test('"the three rules above" is the derivation table’s row count', () => {
-  assert.deepEqual(rulesClaim(COPY, derivationRows(LAYOUT).length), []);
+/** "No count of rules": no paragraph writes "<word> rules" or "<word> mapping rules", anywhere in it. */
+const rulesClaim = (copy: readonly string[]): string[] =>
+  copy.flatMap((paragraph) => [...paragraph.matchAll(/\b[\w’'-]+ (?:mapping )?rules\b/gi)].map((match) => `the copy states a count of rules: ${JSON.stringify(match[0])}`));
+
+test('the copy states no count of rules: the rules are the derivation table’s to show, and the positions the solver’s', () => {
+  assert.deepEqual(rulesClaim(COPY), []);
+  for (const [name, copy] of [
+    ['the old positions sentence', COPY.map((p) => p.replace('computed by the solver from career.json, never written by hand', 'solved from the three rules above'))],
+    ['a count of rules, not "above"', COPY.map((p) => p.replace('computed by the solver from career.json', 'solved from three rules'))],
+    ['a count of mapping rules', COPY.map((p) => p.replace('computed by the solver from career.json', 'solved by the three mapping rules'))],
+    ['a count in digits', COPY.map((p) => p.replace('computed by the solver from career.json', 'solved by 3 rules'))],
+  ] as const) {
+    assert.notDeepEqual(copy, COPY, `the rewording "${name}" must apply`);
+    assert.notDeepEqual(rulesClaim(copy), [], `"${name}" must be rejected`);
+  }
+  assert.ok(ABSENCES.positions.includes('computed by the solver from career.json'), 'the positions paragraph names the solver, held in src/derive/colophon-claims.test.ts');
 });
 
 test('career.json holds no position, coordinate or camera key, at any depth', () => {
@@ -229,9 +253,11 @@ test('a file renamed in EXHIBIT_PATHS’ names falsifies the names claim', () =>
 
 test('a third exhibit, or another count written, falsifies "The two files above"', () => {
   assert.notDeepEqual(filesClaim(COPY, PATHS.length + 1), [], 'a third exhibit');
+  assert.notDeepEqual(filesClaim([ABSENCES.thesis], PATHS.length + 1), [], 'a third exhibit, against the thesis alone');
+  assert.notDeepEqual(filesClaim(COPY.map((p) => p.replace('Of the two files above', 'Of the three files above')), PATHS.length), [], 'the thesis miscounting');
   assert.notDeepEqual(filesClaim(COPY.map((p) => p.replace('The two files above', 'The 3 files above')), PATHS.length), [], 'a count in digits');
   assert.match(filesClaim(COPY.map((p) => p.replace('The two files above', 'The both files above')), PATHS.length).join('\n'), /an unreadable count of files: "both"/);
-  assert.notDeepEqual(filesClaim(COPY.map((p) => p.replace('The two files above', 'The files above')), PATHS.length), [], 'no count written');
+  assert.notDeepEqual(filesClaim(COPY.map((p) => p.replace(/\bthe two files above/gi, 'the files above')), PATHS.length), [], 'no count written');
   assert.deepEqual(filesClaim(COPY.map((p) => p.replace('The two files above', 'The 2 files above')), PATHS.length), [], 'digits read as a count');
 });
 
@@ -239,14 +265,6 @@ test('a path off this site falsifies "fetched both from this site"', () => {
   for (const path of ['https://cdn.example.com/career.json', '//cdn.example.com/career.json', 'career.json', 'data:application/json,{}']) {
     assert.notDeepEqual(pathsClaim([path, EXHIBIT_PATHS.layout]), [], `${path} must be rejected`);
   }
-});
-
-test('the rule count changed falsifies "the three rules above"', () => {
-  const rows = derivationRows(LAYOUT);
-  assert.notDeepEqual(rulesClaim(COPY, rows.length + 1), [], 'a fourth rule');
-  assert.notDeepEqual(rulesClaim(COPY, rows.slice(1).length), [], 'a rule dropped');
-  assert.notDeepEqual(rulesClaim(COPY.map((p) => p.replace('the three rules above', 'the rules above')), rows.length), [], 'no count written');
-  assert.match(rulesClaim(COPY.map((p) => p.replace('the three rules above', 'the several rules above')), rows.length).join('\n'), /an unreadable count of rules: "several"/);
 });
 
 test('a coordinate or camera key added to a copy of career.json falsifies the no-overrides claim', () => {

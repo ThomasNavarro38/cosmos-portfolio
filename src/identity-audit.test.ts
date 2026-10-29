@@ -48,11 +48,11 @@
  */
 
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { basename, relative, sep } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { codeOf, languageOf } from '../scripts/colour-literals.ts';
+import { canonicalHex, codeOf, languageOf, stripCssComments } from '../scripts/colour-literals.ts';
 import { filesUnder } from '../scripts/source-scan.ts';
 import { SURFACE_NAMES, SURFACE_TITLES } from './shell/arrival.ts';
 import { IDENTITY_LINE, IDENTITY_MODEL, IDENTITY_NAME, SLOT_TEXT } from './shell/chrome-model.ts';
@@ -730,21 +730,22 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
   'mass ← duration',
   'brightness ← recency',
   'distance from the Rail ← weight',
-  // The Colophon's statement of what is not there (5.4, ruling Q1 (a)): its
+  // The Colophon's statement of what is not there (5.4, ruling Q1 (a); the
+  // thesis and the positions paragraph re-ruled 2026-10-29, Epic 5 item 40): its
   // heading and five paragraphs, verbatim — the absences and the Shot
   // contract, each checkable against the files above it (`absences.test.ts`),
   // under the rule annotations' copy place (EXPERIENCE.md §3, place 4).
   'what is not there',
-  'The layout is never authored; the camera is.',
+  'Of the two files above, only career.json is authored: layout.generated.json is solved from it, shots included.',
   'There is no backend and no CMS. The two files above are all the data there is: career.json is written by hand, and layout.generated.json is produced from it and never edited. This page fetched both from this site as static files.',
-  'There are no position overrides. career.json holds no coordinate, and no entry can pin its own place: every position in layout.generated.json is solved from the three rules above.',
+  'There are no position overrides. career.json holds no coordinate, and no entry can pin its own place: every position in layout.generated.json is computed by the solver from career.json, never written by hand.',
   'Shots name entities, never coordinates. Each shot gives a subject, an angle and a distance, so when a solve moves a Client, its shot moves with it.',
   'There is no per-entry camera work. Every shot’s subject is a Client; a Project is framed at its Client’s stop, never on its own.',
-  // The live re-solve (5.5, rulings Q2 (a), Q3 (a)): its heading, the one
-  // framing paragraph and the button's label, verbatim — widening the same
+  // The live re-solve (5.5, rulings Q2 (a), Q3 (a); the framing re-ruled
+  // 2026-10-29, Epic 5 item 40): its heading, the one framing paragraph and the button's label, verbatim — widening the same
   // copy place (EXPERIENCE.md §3, place 4, ruling Q5 (a)).
   'solve it here',
-  'This runs the same solver on career.json, here in your browser. It shows the mechanism at work; it does not reproduce the shipped layout, which was solved once and is the only one the scene reads.',
+  'This runs the same solver on career.json, here in your browser. The shipped layout.generated.json was solved from the same file and committed; the scene and the chart read it, never this run.',
   'solve it again',
   // The contact route (6.3, rulings Q1, Q4 (b), Q5): the address — Thomas's,
   // supplied 2026-10-22; this row and `contact.ts` change together — and the
@@ -2042,6 +2043,13 @@ test('chart: each guarantee removed fails with its own line', () => {
 const COLOPHON_TSX = 'colophon/colophon.tsx';
 
 const COLOPHON_RULES: readonly CssRule[] = [
+  // The page wrapper (D-G6, Epic 5 item 39, ruling 2026-10-29): `.chart`'s column, declaration for declaration —
+  // centred, at most 1242px, `space-xxl` above and below and `space-xl` at the sides, ink-prose, breaking anywhere.
+  {
+    at: '',
+    selector: '.colophon',
+    declarations: ['box-sizing: border-box', 'max-width: 1242px', 'margin: 0 auto', 'padding: var(--space-xxl) var(--space-xl) var(--space-xxl)', 'color: var(--color-ink-prose-dark)', 'overflow-wrap: anywhere'],
+  },
   { at: '', selector: '.colophon-derivations', declarations: ['max-width: 100%', 'margin: var(--space-xxl) 0', 'border-collapse: collapse', 'border-spacing: 0'] },
   // Review of 5.2: at phone width the cells break rather than push the page sideways.
   { at: '', selector: '.colophon-derivations th, .colophon-derivations td', declarations: ['overflow-wrap: anywhere'] },
@@ -2109,6 +2117,8 @@ const COLOPHON_RULES: readonly CssRule[] = [
   { at: '', selector: '.colophon-routes a', declarations: ['color: var(--color-ink-label-dark)', 'text-decoration: none', 'border-bottom: 1px solid var(--color-ink-label-dark)'] },
   { at: '', selector: '.colophon-routes a:hover, .colophon-routes a:focus-visible', declarations: ['color: var(--color-ink-lift-dark)', 'border-bottom-color: var(--color-stroke-focus-dark)'] },
   { at: '', selector: '.colophon-routes a:focus-visible', declarations: ['outline: 1px solid var(--color-stroke-focus-dark)', 'outline-offset: 3px'] },
+  // The page column at phone width (D-G6): the chart's phone `.chart` rule, matched declaration for declaration.
+  { at: PHONE, selector: '.colophon', declarations: ['padding: var(--space-lg) var(--space-md) var(--space-xxl)'] },
   { at: PHONE, selector: '.colophon-chrome', declarations: ['flex-direction: column', 'gap: var(--space-xs)'] },
   { at: PHONE, selector: '.colophon-routes', declarations: ['margin-inline-start: 0'] },
   { at: '@media (forced-colors: active)', selector: '.colophon-exhibit:focus-visible', declarations: ['outline: 1px solid CanvasText'] },
@@ -2123,6 +2133,9 @@ const COLOPHON_RULES: readonly CssRule[] = [
  * reverse) fails here (Epic 5 item 38, design note: duplicated, pinned alike).
  */
 const CHROME_ROW_PAIRS: readonly (readonly [string, string, string])[] = [
+  // The page column (D-G6, Epic 5 item 39): the Colophon's wrapper is the chart's.
+  ['', '.chart', '.colophon'],
+  [PHONE, '.chart', '.colophon'],
   ['', '.chart-chrome', '.colophon-chrome'],
   ['', '.chart-heading, .chart-routes', '.colophon-chrome-heading, .colophon-routes'],
   ['', '.chart-routes', '.colophon-routes'],
@@ -2147,6 +2160,38 @@ function chromeRowDrift(chart: readonly CssRule[], colophon: readonly CssRule[])
 
 test('colophon: the chrome row’s rules are the chart’s, declaration for declaration', () => {
   assert.deepEqual(chromeRowDrift(CHART_RULES, COLOPHON_RULES), []);
+  // D-G6: the page column, one token off on either side, fails naming the pair.
+  const narrower = COLOPHON_RULES.map((rule) => (rule.selector === '.colophon' && rule.at === '' ? { ...rule, declarations: rule.declarations.map((line) => line.replace('1242px', '1160px')) } : rule));
+  assert.deepEqual(chromeRowDrift(CHART_RULES, narrower), ['colophon: `.colophon` is not `.chart` declaration for declaration']);
+  const chartPadded = CHART_RULES.map((rule) => (rule.selector === '.chart' && rule.at === '' ? { ...rule, declarations: rule.declarations.map((line) => line.replace('var(--space-xl) var(--space-xxl)', 'var(--space-lg) var(--space-xxl)')) } : rule));
+  assert.deepEqual(chromeRowDrift(chartPadded, COLOPHON_RULES), ['colophon: `.colophon` is not `.chart` declaration for declaration']);
+  // And at phone width: the column's gutter, one token off on either side, or dropped, fails naming the pair.
+  const phoneWider = COLOPHON_RULES.map((rule) => (rule.selector === '.colophon' && rule.at === PHONE ? { ...rule, declarations: ['padding: var(--space-lg) var(--space-lg) var(--space-xxl)'] } : rule));
+  assert.deepEqual(chromeRowDrift(CHART_RULES, phoneWider), ['colophon: `@media (max-width: 640px) .colophon` is not `.chart` declaration for declaration']);
+  const chartPhonePadded = CHART_RULES.map((rule) => (rule.selector === '.chart' && rule.at === PHONE ? { ...rule, declarations: ['padding: var(--space-xl) var(--space-md) var(--space-xxl)'] } : rule));
+  assert.deepEqual(chromeRowDrift(chartPhonePadded, COLOPHON_RULES), ['colophon: `@media (max-width: 640px) .colophon` is not `.chart` declaration for declaration']);
+  const phoneDropped = COLOPHON_RULES.filter((rule) => !(rule.at === PHONE && rule.selector === '.colophon'));
+  assert.deepEqual(chromeRowDrift(CHART_RULES, phoneDropped), ['colophon: `@media (max-width: 640px) .colophon` is not `.chart` declaration for declaration']);
+  // The shipped sheets themselves, read side by side: one token edited in either file alone names the pair.
+  const chartCss = read(CHART_CSS);
+  const colophonCss = read(COLOPHON_CSS);
+  assert.deepEqual(chromeRowDrift(parseCss(chartCss), parseCss(colophonCss)), [], 'the shipped chart.css and colophon.css agree pair by pair');
+  for (const [name, chart, colophon] of [
+    ['chart.css alone', chartCss.replace('  max-width: 1242px;\n', '  max-width: 1240px;\n'), colophonCss],
+    ['colophon.css alone', chartCss, colophonCss.replace('  max-width: 1242px;\n', '  max-width: 1240px;\n')],
+  ] as const) {
+    assert.ok(chart !== chartCss || colophon !== colophonCss, `the edit to ${name} must apply`);
+    assert.deepEqual(chromeRowDrift(parseCss(chart), parseCss(colophon)), ['colophon: `.colophon` is not `.chart` declaration for declaration'], `an edit to ${name} names the pair`);
+  }
+  const phonePadding = '    padding: var(--space-lg) var(--space-md) var(--space-xxl);\n';
+  const phoneNarrowed = '    padding: var(--space-lg) var(--space-sm) var(--space-xxl);\n';
+  for (const [name, chart, colophon] of [
+    ['chart.css alone, at phone width', chartCss.replace(phonePadding, phoneNarrowed), colophonCss],
+    ['colophon.css alone, at phone width', chartCss, colophonCss.replace(phonePadding, phoneNarrowed)],
+  ] as const) {
+    assert.ok(chart !== chartCss || colophon !== colophonCss, `the edit to ${name} must apply`);
+    assert.deepEqual(chromeRowDrift(parseCss(chart), parseCss(colophon)), ['colophon: `@media (max-width: 640px) .colophon` is not `.chart` declaration for declaration'], `an edit to ${name} names the pair`);
+  }
   const bumped = COLOPHON_RULES.map((rule) => (rule.selector === '.colophon-chrome' && rule.at === '' ? { ...rule, declarations: rule.declarations.map((line) => line.replace('var(--space-md)', 'var(--space-lg)')) } : rule));
   assert.deepEqual(chromeRowDrift(CHART_RULES, bumped), ['colophon: `.colophon-chrome` is not `.chart-chrome` declaration for declaration']);
   const dropped = COLOPHON_RULES.filter((rule) => !(rule.at === PHONE && rule.selector === '.colophon-routes'));
@@ -2302,6 +2347,16 @@ function auditColophon(css: string, tsx: string): string[] {
   ) {
     failures.push('colophon: the chrome row is not the div.colophon-chrome holding the h1.colophon-chrome-heading identity line, the contact route and the p.colophon-routes of the shell’s links joined by ` · `, before the exhibits');
   }
+  // D-G6 (Epic 5 item 39): the page is one div.colophon wrapping everything drawn, the chrome row first.
+  // Read off ColophonPage's own body — from its declaration to the next top-level function — so a later
+  // component's closing tags cannot stand in for the page's.
+  const pageAt = script.search(/^export function ColophonPage\(/m);
+  const pageRest = pageAt < 0 ? '' : script.slice(pageAt);
+  const nextTop = pageRest.slice(1).search(/^(?:export (?:default )?)?function /m);
+  const pageBody = nextTop < 0 ? pageRest : pageRest.slice(0, nextTop + 1);
+  if (!/^export function ColophonPage\([^)]*\) \{\s*return \(\s*<div className="colophon">\s*<div className="colophon-chrome">[\s\S]*\)\}\s*<\/div>\s*\);\s*\}\s*$/.test(pageBody) || (script.match(/className="colophon"/g) ?? []).length !== 1) {
+    failures.push('colophon: the page is not one div.colophon wrapping the chrome row and everything after it');
+  }
   if ((script.match(/<a\b/g) ?? []).length !== 1 || (script.match(/<h1\b/g) ?? []).length !== 1) failures.push('colophon: a link or heading other than the route line’s and the chrome row’s');
   if (!/^import \{ IDENTITY_MODEL, IDENTITY_NAME \} from '\.\.\/shell\/chrome-model\.ts';$/m.test(script)) failures.push('colophon: the identity’s words are not read from ../shell/chrome-model.ts');
   if ((script.match(/<button\b/g) ?? []).length !== 1) failures.push('colophon: a button other than the live re-solve’s');
@@ -2331,7 +2386,7 @@ test('colophon: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('.colophon-derivations .colophon-derived {', '.colophon-derived {'), /the rule `\.colophon-derivations \.colophon-derived` is missing/],
     // The narrow-width guard: the table unbounded, or its cells unbreakable.
     [(s) => s.replace('  max-width: 100%;\n', ''), /`\.colophon-derivations` lacks `max-width: 100%`/],
-    [(s) => s.replace('  overflow-wrap: anywhere;\n', ''), /`\.colophon-derivations th, \.colophon-derivations td` lacks `overflow-wrap: anywhere`/],
+    [(s) => s.replace('.colophon-derivations td {\n  overflow-wrap: anywhere;\n', '.colophon-derivations td {\n'), /`\.colophon-derivations th, \.colophon-derivations td` lacks `overflow-wrap: anywhere`/],
     // A hue, a radius, a shadow, a literal weight, a transform, an unlisted rule.
     [(s) => s.replace('color: var(--color-ink-lift-dark);', 'color: #F2F2F4;'), /colophon: a hex colour/],
     [(s) => s.replace('  border-spacing: 0;\n', '  border-spacing: 0;\n  border-radius: 4px;\n'), /colophon: a radius, shadow or filter/],
@@ -2406,6 +2461,18 @@ test('colophon: each guarantee removed fails with its own line', () => {
   const tsxCases: readonly (readonly [(source: string) => string, RegExp])[] = [
     [(s) => s.replace("import './colophon.css';\n", ''), /colophon\.tsx does not import \.\/colophon\.css, once/],
     [(s) => s.replace("import './colophon.css';\n", "import './colophon.css';\nimport './colophon.css';\n"), /colophon\.tsx does not import \.\/colophon\.css, once/],
+    // D-G6: the page wrapper dropped (the page a fragment again), or renamed.
+    [(s) => s.replace('    <div className="colophon">\n', '    <>\n').replace(/\)\}\n    <\/div>\n  \);\n\}/, ')}\n    </>\n  );\n}'), /the page is not one div\.colophon wrapping/],
+    [(s) => s.replace('<div className="colophon">', '<div className="colophon-page">'), /the page is not one div\.colophon wrapping/],
+    // The wrapper closed after the chrome row, the rest drawn by a later component: ColophonPage's own body is read.
+    [
+      (s) =>
+        s.replace(
+          '      </div>\n      {exhibits === null ? null : (',
+          '      </div>\n    </div>\n  );\n}\n\nfunction Rest({ exhibits, solved, running, onSolve }: { readonly exhibits: Exhibits | null } & LiveSolveState) {\n  return (\n    <div>\n      {exhibits === null ? null : (',
+        ),
+      /the page is not one div\.colophon wrapping/,
+    ],
     [(s) => s.replace('<table className="colophon-derivations">', '<table>'), /the derivation table does not carry its class/],
     [(s) => s.replace('<th scope="col">{DERIVATION_LABELS.input}</th>', '<th>{DERIVATION_LABELS.input}</th>'), /the headers are not four th scope="col"/],
     [(s) => s.replace('<th scope="row">{row.rule}</th>', '<td>{row.rule}</td>'), /the rule label is not a th scope="row"/],
@@ -2707,4 +2774,169 @@ test('monospace: each guarantee removed fails with its own line', () => {
   }
   // The token itself gone: the one reference names nothing.
   assert.match(auditMonospace(files, tokensCss.replace(/\n\s*--font-mono:[^;]*;/, '')).join('\n'), /reads --font-mono, which no token defines/);
+});
+
+// --- The favicon (launch-readiness checklist item 7, ruling 2026-10-29) ----------------------------
+
+/**
+ * `public/favicon.svg`: one body on the ground, as the scene draws it — a
+ * full-bleed `surface-base-dark` square, a filled disc at `ink-lift-dark` and a
+ * thin ring at `ink-label-dark` (the chart Ring's token, which clears the 3:1
+ * non-text floor where `stroke-near` does not). A favicon cannot read a custom
+ * property, so its three colours are written out; each must be one of those
+ * three token values, read off `tokens.css` here, never restated (the
+ * literal-colour scan exempts this one file for that reason,
+ * `scripts/colour-literals.ts`). On a 32×32 viewBox, under 1 KB, with no
+ * script, no event handler, no text and no reference out of the file.
+ * `index.html` carries the one icon link, in its `<head>`, and nothing names
+ * `favicon.ico`.
+ */
+const FAVICON_TOKENS = ['surface-base-dark', 'ink-lift-dark', 'ink-label-dark'] as const;
+
+function auditFavicon(svg: string, html: string, tokensCss: string, icoExists = false): string[] {
+  const failures: string[] = [];
+  // Read as the literal-colour scan reads tokens.css: comments stripped, each value in its long upper-case form.
+  const tokens = stripCssComments(tokensCss);
+  const hexOf = (name: string): string | undefined => {
+    const value = new RegExp(`--color-${name}:\\s*(#[0-9a-f]{3,8})\\s*;`, 'i').exec(tokens)?.[1];
+    return value === undefined ? undefined : canonicalHex(value);
+  };
+  if (icoExists) failures.push('favicon: public/favicon.ico exists');
+  const [ground, disc, ring] = FAVICON_TOKENS.map(hexOf);
+  if (ground === undefined || disc === undefined || ring === undefined) return [`favicon: a token of ${FAVICON_TOKENS.join(', ')} is not in tokens.css`];
+  const bytes = Buffer.byteLength(svg, 'utf8');
+  if (bytes >= 1024) failures.push(`favicon: ${bytes} bytes, not under 1 KB`);
+  const body = svg.trim();
+  if (!/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 32 32">/.test(body) || !body.endsWith('</svg>') || (body.match(/<svg\b/g) ?? []).length !== 1) failures.push('favicon: not one <svg> on a 32×32 viewBox');
+  if (/<script\b/i.test(svg)) failures.push('favicon: a <script>');
+  if (/\son[a-z]+\s*=/i.test(svg)) failures.push('favicon: an event-handler attribute');
+  if (/\bhref\s*=|\bsrc\s*=|url\(|@import|<image\b|<use\b|<foreignObject\b/i.test(svg)) failures.push('favicon: a reference out of the file');
+  if (/<(?:text|tspan|title|desc|style)\b/i.test(svg) || />[^<>]*\S[^<>]*</.test(body)) failures.push('favicon: text in the icon');
+  // Every colour written is one of the three tokens' values, a paint attribute read in either quote style.
+  const allowed = new Set([ground, disc, ring]);
+  for (const match of svg.matchAll(/\s(fill|stroke|stop-color|color)\s*=\s*(["'])(.*?)\2/gi)) {
+    const value = (match[3] as string).toUpperCase();
+    if (value !== 'NONE' && !allowed.has(canonicalHex(value) ?? value)) failures.push(`favicon: ${match[1]}="${match[3]}" is not ${FAVICON_TOKENS.join(', ')}`);
+  }
+  if (/\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/i.test(svg) || /\sstyle\s*=/i.test(svg)) failures.push('favicon: a colour outside a paint attribute');
+  // Only the svg, rect and circle elements: anything else is refused by name, before the body is read.
+  const others = [...new Set([...svg.matchAll(/<([a-zA-Z][\w:.-]*)/g)].map((match) => match[1] as string).filter((tag) => !['svg', 'rect', 'circle'].includes(tag)))];
+  if (others.length > 0) failures.push(`favicon: an element other than svg, rect and circle: ${others.join(', ')}`);
+  // The single body: the ground, the disc, the ring — in that order and nothing else.
+  const shapes = [...body.matchAll(/<(rect|circle)\b([^>]*?)\/?>/g)].map((match) => ({ tag: match[1] as string, attrs: match[2] as string }));
+  const attr = (attrs: string, name: string): string | undefined => new RegExp(`\\s${name}\\s*=\\s*(["'])(.*?)\\1`).exec(attrs)?.[2];
+  const positive = (value: string | undefined): boolean => value !== undefined && /^\d*\.?\d+$/.test(value) && Number(value) > 0;
+  const paint = (value: string | undefined): string | undefined => (value === undefined ? undefined : (canonicalHex(value) ?? value.toUpperCase()));
+  // Each shape carries only its own attributes: no opacity, visibility, transform or style can hide or move it.
+  const ATTRIBUTES: Readonly<Record<string, readonly string[]>> = { rect: ['width', 'height', 'x', 'y', 'fill'], circle: ['cx', 'cy', 'r', 'fill', 'stroke', 'stroke-width'] };
+  for (const { tag, attrs } of shapes) {
+    for (const [, name] of attrs.matchAll(/\s([^\s=/>]+)\s*=/g)) {
+      const allowedNames = ATTRIBUTES[tag] ?? [];
+      if (!allowedNames.includes(name as string)) failures.push(`favicon: a <${tag}> carries ${name}, not one of ${allowedNames.join(', ')}`);
+    }
+  }
+  const [square, filled, ringed] = shapes;
+  if (shapes.length !== 3 || square?.tag !== 'rect' || filled?.tag !== 'circle' || ringed?.tag !== 'circle') {
+    failures.push(`favicon: draws ${JSON.stringify(shapes.map((shape) => shape.tag))}, not a square, a disc and a ring`);
+  } else {
+    if (attr(square.attrs, 'width') !== '32' || attr(square.attrs, 'height') !== '32' || (attr(square.attrs, 'x') ?? '0') !== '0' || (attr(square.attrs, 'y') ?? '0') !== '0' || paint(attr(square.attrs, 'fill')) !== ground) {
+      failures.push('favicon: the ground is not a full-bleed surface-base-dark square');
+    }
+    if (paint(attr(filled.attrs, 'fill')) !== disc || attr(filled.attrs, 'stroke') !== undefined) failures.push('favicon: the disc is not filled at ink-lift-dark');
+    if (attr(ringed.attrs, 'fill') !== 'none' || paint(attr(ringed.attrs, 'stroke')) !== ring) failures.push('favicon: the ring is not a stroke at ink-label-dark, unfilled');
+    for (const [name, circle] of [['disc', filled], ['ring', ringed]] as const) {
+      if (attr(circle.attrs, 'cx') !== '16' || attr(circle.attrs, 'cy') !== '16') failures.push(`favicon: the ${name} is not centred at 16, 16`);
+      if (!positive(attr(circle.attrs, 'r'))) failures.push(`favicon: the ${name}'s radius is not above 0`);
+    }
+    if (!positive(attr(ringed.attrs, 'stroke-width'))) failures.push('favicon: the ring\'s stroke-width is not above 0');
+    // The disc inside the ring, and the ring, its stroke included, inside the 32×32 square.
+    const discR = Number(attr(filled.attrs, 'r'));
+    const ringR = Number(attr(ringed.attrs, 'r'));
+    const ringWidth = Number(attr(ringed.attrs, 'stroke-width'));
+    if (!(discR < ringR)) failures.push('favicon: the disc is not inside the ring');
+    if (!(ringR + ringWidth / 2 <= 16)) failures.push('favicon: the ring runs past the 32×32 edge');
+  }
+  // index.html: the one icon link, in the head; no other icon, and no .ico. `rel` is read in any quoting.
+  const head = /<head>([\s\S]*?)<\/head>/.exec(html)?.[1] ?? '';
+  const icons = [...html.matchAll(/<link\b[^>]*\srel\s*=\s*(?:"[^"]*icon[^"]*"|'[^']*icon[^']*'|[^\s"'>]*icon[^\s"'>]*)[^>]*>/gi)].map((match) => match[0]);
+  const want = '<link rel="icon" href="/favicon.svg" type="image/svg+xml" />';
+  if (icons.length !== 1 || icons[0] !== want || !head.includes(want)) failures.push(`favicon: index.html carries ${JSON.stringify(icons)}, not the one ${want} in its <head>`);
+  if (/favicon\.ico/i.test(html)) failures.push('favicon: index.html names favicon.ico');
+  return failures;
+}
+
+test('favicon: one body on the ground, in three token colours, under 1 KB, linked once from index.html', () => {
+  assert.deepEqual(auditFavicon(read('../public/favicon.svg'), read('../index.html'), read('./tokens/tokens.css'), existsSync(fileURLToPath(new URL('../public/favicon.ico', import.meta.url)))), []);
+});
+
+test('favicon: each guarantee removed fails with its own line', () => {
+  const svg = read('../public/favicon.svg');
+  const html = read('../index.html');
+  const tokensCss = read('./tokens/tokens.css');
+  const link = '<link rel="icon" href="/favicon.svg" type="image/svg+xml" />';
+  const svgCases: readonly (readonly [string, (source: string) => string, RegExp])[] = [
+    ['a hue', (s) => s.replace('fill="#F2F2F4"', 'fill="#FFCC00"'), /^favicon: fill="#FFCC00" is not/m],
+    ['the ring at stroke-near', (s) => s.replace('stroke="#8A8A94"', 'stroke="#45454E"'), /^favicon: stroke="#45454E" is not/m],
+    ['a named colour', (s) => s.replace('fill="#08080A"', 'fill="black"'), /^favicon: fill="black" is not/m],
+    ['a colour in a style', (s) => s.replace('<rect ', '<rect style="fill: rgb(0, 0, 0)" '), /^favicon: a colour outside a paint attribute$/m],
+    ['a script', (s) => s.replace('</svg>', '<script>alert(1)</script></svg>'), /^favicon: a <script>$/m],
+    ['an event handler', (s) => s.replace('<rect ', '<rect onload="x()" '), /^favicon: an event-handler attribute$/m],
+    ['an external reference', (s) => s.replace('</svg>', '<image href="https://example.com/a.png" width="1" height="1"/></svg>'), /^favicon: a reference out of the file$/m],
+    ['text', (s) => s.replace('</svg>', '<text x="4" y="20">T</text></svg>'), /^favicon: text in the icon$/m],
+    ['a title', (s) => s.replace('</svg>', '<title>Thomas Navarro</title></svg>'), /^favicon: text in the icon$/m],
+    ['over 1 KB', (s) => s.replace('</svg>', `<!--${'x'.repeat(1024)}--></svg>`), /^favicon: \d+ bytes, not under 1 KB$/m],
+    ['another viewBox', (s) => s.replace('viewBox="0 0 32 32"', 'viewBox="0 0 64 64"'), /^favicon: not one <svg> on a 32×32 viewBox$/m],
+    ['the ring dropped', (s) => s.replace(/<circle[^>]*fill="none"[^>]*\/>/, ''), /^favicon: draws \["rect","circle"\], not a square, a disc and a ring$/m],
+    ['a second body', (s) => s.replace('</svg>', '<circle cx="4" cy="4" r="1" fill="#F2F2F4"/></svg>'), /^favicon: draws \["rect","circle","circle","circle"\]/m],
+    ['the ground inset', (s) => s.replace('width="32" height="32"', 'width="30" height="30"'), /^favicon: the ground is not a full-bleed surface-base-dark square$/m],
+    ['the disc a ring', (s) => s.replace(/(<circle[^>]*?)fill="#F2F2F4"/, '$1fill="none" stroke="#F2F2F4"'), /^favicon: the disc is not filled at ink-lift-dark$/m],
+    ['the ring filled', (s) => s.replace(/(<circle[^>]*?)fill="none"/, '$1fill="#8A8A94"'), /^favicon: the ring is not a stroke at ink-label-dark, unfilled$/m],
+    ['a hue in single quotes', (s) => s.replace('fill="#F2F2F4"', "fill='#FFCC00'"), /^favicon: fill="#FFCC00" is not/m],
+    ['a stroke in single quotes', (s) => s.replace('stroke="#8A8A94"', "stroke='#45454E'"), /^favicon: stroke="#45454E" is not/m],
+    ['a path', (s) => s.replace('</svg>', '<path d="M0 0h1"/></svg>'), /^favicon: an element other than svg, rect and circle: path$/m],
+    ['a group around the body', (s) => s.replace(/(<rect)/, '<g>$1').replace('</svg>', '</g></svg>'), /^favicon: an element other than svg, rect and circle: g$/m],
+    ['an animation', (s) => s.replace(/(<circle[^>]*?)\/>/, '$1><animate attributeName="r" values="6;7"/></circle>'), /^favicon: an element other than svg, rect and circle: animate$/m],
+    ['the disc off centre', (s) => s.replace('cx="16" cy="16" r="6"', 'cx="15" cy="16" r="6"'), /^favicon: the disc is not centred at 16, 16$/m],
+    ['the ring off centre', (s) => s.replace('cx="16" cy="16" r="11"', 'cx="16" cy="17" r="11"'), /^favicon: the ring is not centred at 16, 16$/m],
+    ['the disc at radius 0', (s) => s.replace('r="6"', 'r="0"'), /^favicon: the disc's radius is not above 0$/m],
+    ['the ring without a radius', (s) => s.replace(' r="11"', ''), /^favicon: the ring's radius is not above 0$/m],
+    ['the ring at stroke-width 0', (s) => s.replace('stroke-width="1.5"', 'stroke-width="0"'), /^favicon: the ring's stroke-width is not above 0$/m],
+    ['the ring without a stroke-width', (s) => s.replace(' stroke-width="1.5"', ''), /^favicon: the ring's stroke-width is not above 0$/m],
+    ['the disc faded', (s) => s.replace('r="6"', 'r="6" opacity="0.2"'), /^favicon: a <circle> carries opacity, not one of cx, cy, r, fill, stroke, stroke-width$/m],
+    ['the disc fill faded', (s) => s.replace('r="6"', 'r="6" fill-opacity="0"'), /^favicon: a <circle> carries fill-opacity, not one of/m],
+    ['the ring stroke faded', (s) => s.replace('stroke-width="1.5"', 'stroke-width="1.5" stroke-opacity="0.1"'), /^favicon: a <circle> carries stroke-opacity, not one of/m],
+    ['the ring hidden', (s) => s.replace('r="11"', 'r="11" visibility="hidden"'), /^favicon: a <circle> carries visibility, not one of/m],
+    ['the ground transformed', (s) => s.replace('<rect ', '<rect transform="scale(0.5)" '), /^favicon: a <rect> carries transform, not one of width, height, x, y, fill$/m],
+    ['the disc as wide as the ring', (s) => s.replace('r="6"', 'r="11"'), /^favicon: the disc is not inside the ring$/m],
+    ['the disc wider than the ring', (s) => s.replace('r="6"', 'r="13"'), /^favicon: the disc is not inside the ring$/m],
+    ['the ring past the edge', (s) => s.replace('r="11"', 'r="15.5"'), /^favicon: the ring runs past the 32×32 edge$/m],
+    ['the ring stroke past the edge', (s) => s.replace('stroke-width="1.5"', 'stroke-width="12"'), /^favicon: the ring runs past the 32×32 edge$/m],
+  ];
+  for (const [name, mutate, message] of svgCases) {
+    const mutated = mutate(svg);
+    assert.notEqual(mutated, svg, `the mutation "${name}" must apply`);
+    assert.match(auditFavicon(mutated, html, tokensCss).join('\n'), message, `"${name}" must be rejected`);
+  }
+  const htmlCases: readonly (readonly [string, string])[] = [
+    ['the link dropped', html.replace(`    ${link}\n`, '')],
+    ['a second icon', html.replace(link, `${link}\n    <link rel="icon" href="/favicon.ico" />`)],
+    ['an apple-touch-icon', html.replace(link, `${link}\n    <link rel="apple-touch-icon" href="/favicon.svg" />`)],
+    ['the type dropped', html.replace(link, '<link rel="icon" href="/favicon.svg" />')],
+    ['the link in the body', html.replace(`    ${link}\n`, '').replace('<body>', `<body>\n    ${link}`)],
+    ['a second icon, rel in single quotes', html.replace(link, `${link}\n    <link rel='shortcut icon' href='/favicon.ico' />`)],
+    ['a second icon, rel unquoted', html.replace(link, `${link}\n    <link href=/icon.png rel=icon>`)],
+    ['the one link, rel in single quotes', html.replace(link, `<link rel='icon' href="/favicon.svg" type="image/svg+xml" />`)],
+  ];
+  for (const [name, mutated] of htmlCases) {
+    assert.notEqual(mutated, html, `the mutation "${name}" must apply`);
+    assert.match(auditFavicon(svg, mutated, tokensCss).join('\n'), /^favicon: index\.html carries/m, `"${name}" must be rejected`);
+  }
+  // A token moved: the icon's hex is no longer one of the three, read off tokens.css, never restated here.
+  assert.match(auditFavicon(svg, html, tokensCss.replace(/(--color-ink-lift-dark:\s*)#F2F2F4/i, '$1#EEEEF0')).join('\n'), /^favicon: fill="#F2F2F4" is not/m);
+  // The token reader agrees with the literal-colour scan's: comments stripped, hex compared in its long form.
+  assert.deepEqual(auditFavicon(svg, html, `/* --color-ink-lift-dark: #FFCC00; */\n${tokensCss}`), [], 'a token named in a comment is not the token');
+  assert.deepEqual(auditFavicon(svg.replace('fill="#F2F2F4"', 'fill="#FFFFFF"'), html, tokensCss.replace(/(--color-ink-lift-dark:\s*)#F2F2F4/i, '$1#FFF')), [], 'a short token value is its long form');
+  assert.deepEqual(auditFavicon(svg.replace('fill="#F2F2F4"', 'fill="#fff"'), html, tokensCss.replace(/(--color-ink-lift-dark:\s*)#F2F2F4/i, '$1#FFFFFF')), [], 'a short paint value is its long form');
+  // No .ico beside it.
+  assert.match(auditFavicon(svg, html, tokensCss, true).join('\n'), /^favicon: public\/favicon\.ico exists$/m);
 });
