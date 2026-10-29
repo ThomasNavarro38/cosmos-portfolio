@@ -32,9 +32,10 @@
  *
  * And the record: `first-paint-6-4.md`'s measurement row (protocol P1) carries
  * a result in seconds that is not the carried `2.5 s`, and its P1 runs table
- * has three filled runs. Until Thomas measures on the target hardware that
- * test is a `todo`, reported pending on every `npm test` — the way 6.3 kept its
- * placeholder address visible. The record reader names what is missing (a row,
+ * has three filled runs. It was a `todo` until the runs were taken; since
+ * 2026-10-29 they are a proxy for the target hardware, by Thomas's ruling, and
+ * a run on the proxy passes only beside that ruling and a Result saying so, so
+ * a proxy figure never reads as a target-hardware one. The record reader names what is missing (a row,
  * a table, a run) rather than reading `undefined`, and reads `\|` inside a
  * cell as an escaped pipe. The cell splitter, the table reader and the
  * automated-row cross-check are shared with 6.5's record, in
@@ -374,8 +375,32 @@ test('the record’s automated rows each name a test that exists', () => {
   assert.deepEqual(missingNamedTests(readFileSync(RECORD, 'utf8'), REPO_ROOT), []);
 });
 
-test('First Paint is measured on the target hardware', { todo: 'Thomas, before launch' }, () => {
-  const { result, runs } = readMeasurement(readFileSync(RECORD, 'utf8'));
+/** The ruling a proxy run needs beside it in the record. */
+const PROXY_RULING = '### Ruling: a proxy for the target hardware';
+
+/** What keeps a proxy run from passing: the ruling missing from the record, or a Result that does not say proxy. Empty when no run names a proxy. */
+function proxyFailures(record: string, { result, runs }: Measurement): string[] {
+  if (!runs.some((run) => /\bproxy\b/i.test(run[2] ?? ''))) return [];
+  const failures: string[] = [];
+  if (!record.includes(PROXY_RULING)) failures.push(`a run is on a proxy, but the record has no "${PROXY_RULING}"`);
+  if (!/\bproxy\b/i.test(result)) failures.push(`a run is on a proxy, but the Result ${JSON.stringify(result)} does not say so`);
+  return failures;
+}
+
+test('a proxy run passes only beside the ruling and a Result that says proxy', () => {
+  const run = (machine: string) => ['1', 'd', machine, 'x', 'x', 'x', '1900', '1 / 1'];
+  const proxy = { result: '1.94 s on a proxy, by ruling', runs: [run('dev machine, proxy by ruling')] };
+  assert.deepEqual(proxyFailures(`${PROXY_RULING}\n`, proxy), []);
+  assert.deepEqual(proxyFailures('', { result: '2.1 s', runs: [run('ThinkPad T14, 2022')] }), [], 'a target run needs no ruling');
+  assert.match(proxyFailures('', proxy).join('\n'), /no "### Ruling/, 'the ruling missing');
+  assert.match(proxyFailures(`${PROXY_RULING}\n`, { ...proxy, result: '1.94 s' }).join('\n'), /does not say so/, 'the Result silent on the proxy');
+});
+
+test('First Paint is measured on the target hardware', () => {
+  const record = readFileSync(RECORD, 'utf8');
+  const measurement = readMeasurement(record);
+  const { result, runs } = measurement;
   for (const run of runs) assert.ok(runFilled(run), `P1 run ${run[0]} is not filled in: ${JSON.stringify(run)}`);
   assert.ok(holdsMeasuredSeconds(result), `the measurement row's Result holds ${JSON.stringify(result)}, not a measured value in seconds other than the carried 2.5 s`);
+  assert.deepEqual(proxyFailures(record, measurement), []);
 });

@@ -35,7 +35,7 @@
  * **The record**, `launch-readiness-6-5.md`: its automated rows each name a
  * test that exists (`scripts/record-table.ts`, shared with 6.4's record); it
  * carries AC rows 1–7 and 3b, the three run tables, the pre-launch checklist
- * with items 3, 6, 7 and 8 `closed`, each citing its spec, and every other still
+ * with items 3, 4, 6, 7 and 8 `closed`, each citing its spec, and every other still
  * `open`, and SM-1's acceptance verbatim. The
  * run-table reader names what is missing — a table, a reader row, the
  * deployment row, an AC row — rather than reading `undefined`.
@@ -389,8 +389,8 @@ test('the record has every AC row, the three run tables, the checklist and SM-1�
   assert.equal(deploymentRow(record).length, 9, 'the deployment row has every column of L3');
   const [, ...items] = tableUnder(record, CHECKLIST);
   assert.equal(items.length, CHECKLIST_ITEMS, `the checklist holds ${CHECKLIST_ITEMS} items`);
-  // Items 3, 6, 7 and 8 closed 2026-10-29 (L3 passed, the production URL, public/favicon.svg, 404.html); every other item is still open.
-  const CLOSED: ReadonlySet<string> = new Set(['3', '6', '7', '8']);
+  // Items 3, 4, 6, 7 and 8 closed 2026-10-29 (L3 passed, P1 on a proxy by ruling, the production URL, public/favicon.svg, 404.html); every other item is still open.
+  const CLOSED: ReadonlySet<string> = new Set(['3', '4', '6', '7', '8']);
   for (const item of items) {
     const want = CLOSED.has(item[0] ?? '') ? 'closed' : 'open';
     assert.match(item[3] ?? '', new RegExp(`^${want}$`, 'i'), `checklist item ${item[0]} is ${want}, not ${JSON.stringify(item[3])}`);
