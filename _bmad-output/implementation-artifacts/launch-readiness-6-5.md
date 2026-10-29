@@ -102,7 +102,7 @@ More readers are added as rows 4, 5, … in either table. A failed attempt moves
 
 ## Pre-launch checklist
 
-Every item still open before the CV links to the site. None is closed by this record.
+Every item open before the CV links to the site, with its Status. Item 7 closed on 2026-10-29 (`spec-e5-r39-r40-favicon-colophon-layout-and-copy.md`); every other item is still open.
 
 | # | Item | Source | Status |
 | --- | --- | --- | --- |
@@ -112,10 +112,10 @@ Every item still open before the CV links to the site. None is closed by this re
 | 4 | 6.4's P1: First Paint measured on the target hardware, three runs and the median against the carried 2.5 s | `first-paint-6-4.md` row 2 and P1; `src/first-paint.test.ts` (todo); `deferred-work.md`, "Deferred from: spec-6-4" | open |
 | 5 | NFR-1a: the opening fifteen seconds, at least three unprompted viewers, against the built site | 3.9's P3 (`identity-audit-3-9.md`), pointed at by `first-paint-6-4.md` row 7; `deferred-work.md`, "Deferred from: spec-6-4" | open |
 | 6 | The absolute `og:image`, `og:url` and `twitter:image` once the production origin is chosen (L3 chooses it) | 6.1 Q4 (b); `deferred-work.md`, "Deferred from 6.1" | open |
-| 7 | The favicon: none is ruled, and `/favicon.ico` 404s | `deferred-work.md`, "Deferred from 6.1" | open |
-| 8 | The stale-chunk 404: after a redeploy, a stale hashed chunk is answered with `index.html` and a `200`; an `/assets/* 404` line before the catch-all in `public/_redirects` would make it an honest 404. It is host-specific, so it waits for L3's host. Adding that line also means widening row 3b's `_redirects` rule, which today admits only rewrites to `/index.html 200` | 4.2; `deferred-work.md`, "Deferred from: code review of spec-4-2" | open |
+| 7 | The favicon, ruled and closed 2026-10-29 by `spec-e5-r39-r40-favicon-colophon-layout-and-copy.md` (Thomas's ruling 1): `public/favicon.svg`, one body on a 32×32 viewBox in three token colours, linked once from `index.html` by `<link rel="icon" href="/favicon.svg" type="image/svg+xml" />`, held by `src/identity-audit.test.ts` "favicon: …" and the literal-colour scan's `FAVICON_PATH` admission. No `.ico` ships. A browser that still asks for `/favicon.ico` on its own is answered by the SPA rewrite with `index.html` and a `200`; the honest 404 for it is owed with item 8 | `deferred-work.md`, "Deferred from 6.1"; `spec-e5-r39-r40-favicon-colophon-layout-and-copy.md` | closed |
+| 8 | The stale-chunk 404: after a redeploy, a stale hashed chunk is answered with `index.html` and a `200`; an `/assets/* 404` line before the catch-all in `public/_redirects` would make it an honest 404. It is host-specific, so it waits for L3's host. Adding that line also means widening row 3b's `_redirects` rule, which today admits only rewrites to `/index.html 200`. `/assets/* 404` does not cover `/favicon.ico` (item 7): the same work should add a `/favicon.ico 404` line before the catch-all too | 4.2; `deferred-work.md`, "Deferred from: code review of spec-4-2" | open |
 
-When an item closes, its Status changes and the checklist test (`the record has every AC row, …`), which today requires every Status to be `open`, is updated with it.
+When an item closes, its Status changes and the checklist test (`the record has every AC row, …`) is updated with it: today it requires item 7 `closed` and every other Status `open`.
 
 ## Known limits
 

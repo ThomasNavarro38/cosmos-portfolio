@@ -107,18 +107,24 @@ function chartAlone(root: MarkupElement, machine: Surface): string[] {
 }
 
 /**
- * The Colophon: `main` holds its chrome row alone (Epic 5 item 38) — the `<h1>`
- * reading the identity line, the contact route (6.3), then the route line: `the
- * scene` to `/` and `the chart` to `/chart` on a capable machine, `the chart`
- * alone on a fallback one — and nothing else.
+ * The Colophon: `main` holds its page (`div.colophon`, D-G6) and, in it, its
+ * chrome row alone (Epic 5 item 38) — the `<h1>` reading the identity line, the
+ * contact route (6.3), then the route line: `the scene` to `/` and `the chart`
+ * to `/chart` on a capable machine, `the chart` alone on a fallback one — and
+ * nothing else.
  */
 function colophonAlone(root: MarkupElement, machine: Surface): string[] {
   const main = mainOf(root);
   if (main === null) return ['the render is not one <main>'];
-  const children = elementsOf(main);
+  const pages = elementsOf(main);
+  const [page] = pages;
+  if (pages.length !== 1 || page === undefined || describe(page) !== 'div.colophon') {
+    return [`main holds ${pages.map(describe).join(', ')} — not the Colophon's page alone`];
+  }
+  const children = elementsOf(page);
   const [row] = children;
   if (children.length !== 1 || row === undefined || describe(row) !== 'div.colophon-chrome') {
-    return [`main holds ${children.map(describe).join(', ')} — not the Colophon's chrome row alone`];
+    return [`the Colophon's page holds ${children.map(describe).join(', ')} — not its chrome row alone`];
   }
   const parts = elementsOf(row).map(describe);
   if (JSON.stringify(parts) !== JSON.stringify(['h1.colophon-chrome-heading', 'p.contact-route', 'p.colophon-routes'])) return [`the chrome row holds ${parts.join(', ')} — not the <h1>, the contact route and the route line`];
@@ -262,6 +268,8 @@ test('each rendered check is red against a broken render', async () => {
     // Epic 5 item 38: the old shape — no route out of /colophon — and the route line emptied.
     ['the old shape, no route out', colophon.replace(/<div class="colophon-chrome">([\s\S]*?)<p class="colophon-routes">[\s\S]*?<\/p><\/div>/, (_, kept: string) => kept.replace(colophonHeading, '<h1>the model</h1>'))],
     ['the route line emptied', colophon.replace(colophonRoutes, '<p class="colophon-routes"></p>')],
+    // D-G6: the page wrapper dropped.
+    ['the page wrapper dropped', colophon.replace('<div class="colophon">', '').replace(/<\/div>((?:<!--[^>]*-->)*)<\/main>/, '$1</main>')],
   ];
   for (const [name, markup] of colophonRows) {
     assert.notEqual(markup, colophon, `the break "${name}" must apply`);

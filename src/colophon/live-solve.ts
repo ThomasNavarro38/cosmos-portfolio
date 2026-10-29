@@ -4,9 +4,20 @@
  * **The copy** is Thomas's ruling (Q2 (a), Q3 (a), 2026-10-21), verbatim:
  * the `<h2>`, the one framing paragraph, the button's label, and the result
  * exhibit's accessible name (`result`: announced, never drawn). The framing
- * concedes in a clause that a browser may settle the solve differently and
- * moves on; each of its claims is held by a test (`live.test.ts`,
- * `pipeline.test.ts`, `colophon.test.ts`, `scripts/bundle-assertion.test.ts`).
+ * was re-ruled 2026-10-29 (Epic 5 item 40, AV-3 (a)), and re-ruled twice more
+ * that day: it no longer says the run "does not reproduce" the shipped layout,
+ * it claims no outcome for this run, and it claims nothing of the build (the
+ * gate, `src/derive/index.ts --check`, compares digests and never solves).
+ * Under Node the solve is byte-identical to the committed artifact
+ * (`live.test.ts`); in a browser it may settle differently, and the Epic 5
+ * retro observed it byte-identical in Chrome 155. What it claims is what the
+ * source holds — the same solver on the same file; the shipped
+ * layout.generated.json solved from that file by `npm run solve` and
+ * committed; and the scene and the chart reading it, never this run. Each
+ * claim is held by a test (`live-solve.test.ts`'s
+ * framing claims, `live.test.ts`, `src/derive/colophon-claims.test.ts`,
+ * `pipeline.test.ts`, `colophon.test.ts`, `scripts/bundle-assertion.test.ts`,
+ * and `src/derive/maintenance.test.ts`'s live references).
  *
  * **The run**, executable here rather than in a `.tsx` the runner cannot load,
  * as `startExhibits` is: `load()` (in `colophon.tsx`, the dynamic import of
@@ -32,7 +43,7 @@
  */
 
 /** The ruled copy: heading, framing and action drawn; result announced only. */
-export const LIVE_SOLVE = { heading: 'solve it here', framing: 'This runs the same solver on career.json, here in your browser. It shows the mechanism at work; it does not reproduce the shipped layout, which was solved once and is the only one the scene reads.', action: 'solve it again', result: 'layout, solved in this browser' } as const;
+export const LIVE_SOLVE = { heading: 'solve it here', framing: 'This runs the same solver on career.json, here in your browser. The shipped layout.generated.json was solved from the same file and committed; the scene and the chart read it, never this run.', action: 'solve it again', result: 'layout, solved in this browser' } as const;
 
 /** The slice of the solver's module this reads. */
 export interface LiveSolver {

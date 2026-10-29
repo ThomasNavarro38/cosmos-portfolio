@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { checkColourLiterals, checkSiteColourLiterals, findColourLiterals, languageOf } from './colour-literals.ts';
+import { FAVICON_PATH, checkColourLiterals, checkSiteColourLiterals, findColourLiterals, languageOf } from './colour-literals.ts';
 
 const SRC_ROOT = fileURLToPath(new URL('../src', import.meta.url));
 
@@ -335,6 +335,36 @@ test('3.9: the second root scans index.html and public/, named from the reposito
 
 test('3.9: the committed index.html and public/ write no literal colour', () => {
   assert.deepEqual(checkSiteColourLiterals(fileURLToPath(new URL('..', import.meta.url))), []);
+});
+
+test('launch item 7: public/favicon.svg may write out colour tokens’ values, and nothing else, and no other file may', () => {
+  const tokensCss = ':root {\n  --color-surface-base-dark: #08080A;\n  --color-ink-lift-dark: #F2F2F4;\n}\n';
+  const tokenIcon = '<svg><rect fill="#08080A"/><circle fill="#f2f2f4"/></svg>\n';
+  // The favicon, in token values (any case): clean.
+  assert.deepEqual(checkSiteColourLiterals(treeOf({ 'index.html': '<title>x</title>\n', 'src/tokens/tokens.css': tokensCss, [FAVICON_PATH]: tokenIcon })), []);
+  // A hue, a named colour, or a colour function in the favicon still fails, naming the file and line.
+  const off = checkSiteColourLiterals(treeOf({ 'index.html': '<title>x</title>\n', 'src/tokens/tokens.css': tokensCss, [FAVICON_PATH]: '<svg>\n<rect fill="#FFCC00"/>\n<circle stroke="white"/>\n<path style="fill: rgb(1, 2, 3)"/>\n</svg>\n' }));
+  assert.equal(off.length, 3, off.join('\n'));
+  assert.match(off[0] as string, /^public\/favicon\.svg:2 writes the literal colour #FFCC00, which is not a colour token's value/);
+  assert.match(off[1] as string, /^public\/favicon\.svg:3 writes the literal colour white, which is not a hex colour — a non-hex colour is never admitted/);
+  assert.match(off[2] as string, /^public\/favicon\.svg:4 .*rgb\(.*a non-hex colour is never admitted/);
+  // A short spelling of a token's value is that value; a token written in tokens.css only inside a comment is no token.
+  const shortTokens = ':root {\n  --color-ink-lift-dark: #FFF;\n  /* --color-retired-dark: #123456; */\n}\n';
+  assert.deepEqual(checkSiteColourLiterals(treeOf({ 'index.html': '<title>x</title>\n', 'src/tokens/tokens.css': shortTokens, [FAVICON_PATH]: '<svg><rect fill="#ffffff"/><circle fill="#FfF"/></svg>\n' })), []);
+  const commented = checkSiteColourLiterals(treeOf({ 'index.html': '<title>x</title>\n', 'src/tokens/tokens.css': shortTokens, [FAVICON_PATH]: '<svg><rect fill="#123456"/></svg>\n' }));
+  assert.equal(commented.length, 1, commented.join('\n'));
+  assert.match(commented[0] as string, /#123456, which is not a colour token's value/);
+  // Without tokens.css nothing is a token: the favicon's literals fail.
+  assert.equal(checkSiteColourLiterals(treeOf({ 'index.html': '<title>x</title>\n', [FAVICON_PATH]: tokenIcon })).length, 2);
+  // The admission is that one path: the same icon anywhere else, or a token value in index.html, still fails.
+  const elsewhere = checkSiteColourLiterals(
+    treeOf({ 'index.html': '<body style="background: #08080A">\n', 'src/tokens/tokens.css': tokensCss, 'public/icon.svg': tokenIcon, 'public/img/favicon.svg': tokenIcon }),
+  );
+  assert.deepEqual(
+    elsewhere.map((line) => line.split(' ')[0]),
+    ['index.html:1', 'public/icon.svg:1', 'public/icon.svg:1', 'public/img/favicon.svg:1', 'public/img/favicon.svg:1'],
+    elsewhere.join('\n'),
+  );
 });
 
 // --- Story 3.9 review: where a colour is paint, and where it is only a word ----------------

@@ -181,14 +181,16 @@ export interface LiveSolveState {
 }
 
 /**
- * The surface as drawn: the chrome row — the heading, the contact route and the route line — and, once the files have arrived, the two
- * files with the derivations between them, what is not there, the live
+ * The surface as drawn: one `div.colophon` — the page's column, the chart's
+ * `.chart` mirrored (D-G6, Epic 5 item 39) — holding the chrome row — the
+ * heading, the contact route and the route line — and, once the files have
+ * arrived, the two files with the derivations between them, what is not there, the live
  * re-solve's heading, framing and button, and its result once a run has
  * succeeded.
  */
 export function ColophonPage({ links, exhibits, solved, running, onSolve }: { readonly links: ColophonLinks; readonly exhibits: Exhibits | null } & LiveSolveState) {
   return (
-    <>
+    <div className="colophon">
       <div className="colophon-chrome">
         <h1 className="colophon-chrome-heading">{IDENTITY_NAME} · {IDENTITY_MODEL}</h1>
         <ContactRoute />
@@ -222,7 +224,7 @@ export function ColophonPage({ links, exhibits, solved, running, onSolve }: { re
           {solved === null ? null : <Exhibit name={LIVE_SOLVE.result} text={solved} />}
         </>
       )}
-    </>
+    </div>
   );
 }
 

@@ -9,12 +9,17 @@
  * button freed, result untouched), a press while running ignored, a new press
  * after a settled run, and a late result after the stop never applied. And a
  * source audit: the module imports nothing.
+ *
+ * The framing's claims (Epic 5 item 40, ruling 2026-10-29, re-ruled twice that
+ * day), each held by what it asserts, read off the shipping source: the scene
+ * and the chart are handed the committed artifact and never the run; each
+ * driven red by a falsifying edit.
  */
 
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { stripCommentsAndStrings } from '../../scripts/source-scan.ts';
+import { stripComments, stripCommentsAndStrings } from '../../scripts/source-scan.ts';
 import { LIVE_SOLVE, createLiveSolve, startLiveSolve, type LiveSolver, type LoadSolver } from './live-solve.ts';
 
 const SOURCE = readFileSync(new URL('./live-solve.ts', import.meta.url), 'utf8');
@@ -22,7 +27,7 @@ const SOURCE = readFileSync(new URL('./live-solve.ts', import.meta.url), 'utf8')
 test('the copy is the ruling’s, verbatim', () => {
   assert.deepEqual(LIVE_SOLVE, {
     heading: 'solve it here',
-    framing: 'This runs the same solver on career.json, here in your browser. It shows the mechanism at work; it does not reproduce the shipped layout, which was solved once and is the only one the scene reads.',
+    framing: 'This runs the same solver on career.json, here in your browser. The shipped layout.generated.json was solved from the same file and committed; the scene and the chart read it, never this run.',
     action: 'solve it again',
     result: 'layout, solved in this browser',
   });
@@ -305,5 +310,85 @@ test('the source audit rejects an import', () => {
     const mutated = mutate(real);
     assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
     assert.notDeepEqual(auditSource(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
+// --- The framing's claims (Epic 5 item 40, AV-3 (a), ruling 2026-10-29) --------------------------------
+
+/**
+ * "The shipped layout.generated.json was solved from the same file and
+ * committed; the scene and the chart read it, never this run." Held by what
+ * it asserts, each relation read off the shipping source as text (a Colophon
+ * module never imports the shell, the renderers or `src/derive/`):
+ *
+ * - **solved from the same file and committed**: the committed
+ *   `layout.generated.json` is the solve of `career.json` byte for byte
+ *   (`src/derive/live.test.ts`, `src/derive/colophon-claims.test.ts`);
+ * - **the scene and the chart read it**: `App.tsx` imports the
+ *   committed `../generated/layout.generated.json` as `artifact` and hands that
+ *   `artifact`, and nothing else, to `SceneHost` and to `FallbackHost`, which
+ *   hand it on to the scene and the chart unchanged;
+ * - **never this run**: none of `App.tsx` and the two hosts names the live
+ *   re-solve (`derive/live`, `live-solve`, `solveLive`) or the Colophon. That no
+ *   other shipped module reaches it is `nothing but the Colophon references
+ *   the live re-solve` (`src/derive/maintenance.test.ts`).
+ */
+interface Readers {
+  readonly app: string;
+  readonly sceneHost: string;
+  readonly fallbackHost: string;
+}
+
+function framingClaims(readers: Readers): string[] {
+  const failures: string[] = [];
+  const app = stripComments(readers.app);
+  const jsonImports = [...app.matchAll(/^import\s+(\w+)\s+from\s+(['"])([^'"]+\.json)\2(?:\s+with\s*\{\s*type:\s*(['"])json\4\s*\})?;?$/gm)].map((match) => `${match[1]} ${match[3]}`);
+  if (JSON.stringify(jsonImports) !== JSON.stringify(['artifact ../generated/layout.generated.json'])) failures.push(`App.tsx reads ${JSON.stringify(jsonImports)}, not the committed artifact alone`);
+  const scenes = app.match(/<SceneHost\b[^>]*\/>/g) ?? [];
+  if (scenes.length === 0 || scenes.some((tag) => !/^<SceneHost artifact=\{artifact\} \/>$/.test(tag))) failures.push('the scene is not handed the committed artifact');
+  const charts = app.match(/<FallbackHost\b[^>]*\/>/g) ?? [];
+  if (charts.length === 0 || charts.some((tag) => !/^<FallbackHost artifact=\{artifact\} /.test(tag))) failures.push('the chart is not handed the committed artifact');
+  const scene = stripComments(readers.sceneHost);
+  if (!/export function SceneHost\(\{ artifact \}: SceneHostProps\)/.test(scene) || (scene.match(/<Scene\b[^>]*\/>/g) ?? []).join() !== '<Scene artifact={artifact} />') failures.push('the scene host does not hand the scene the artifact it was given');
+  const chart = stripComments(readers.fallbackHost);
+  if (!/export function FallbackHost\(\{ artifact, /.test(chart) || (chart.match(/<Chart\b[^>]*\/>/g) ?? []).join() !== '<Chart artifact={artifact} links={links} />') failures.push('the fallback host does not hand the chart the artifact it was given');
+  for (const [name, source] of [['App.tsx', app], ['scene-host.tsx', scene], ['fallback-host.tsx', chart]] as const) {
+    if (/derive\/live|live-solve|solveLive|colophon\.tsx/.test(source)) failures.push(`${name} reaches the live re-solve`);
+  }
+  return failures;
+}
+
+const READERS: Readers = {
+  app: readFileSync(new URL('../App.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n'),
+  sceneHost: readFileSync(new URL('../shell/scene-host.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n'),
+  fallbackHost: readFileSync(new URL('../shell/fallback-host.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n'),
+};
+
+test('the framing states what the source holds: the scene and the chart read the committed layout, never the run', () => {
+  assert.ok(LIVE_SOLVE.framing.includes('The shipped layout.generated.json was solved from the same file and committed; the scene and the chart read it, never this run.'), 'the framing makes these claims');
+  assert.ok(!/\bbuild\b/.test(LIVE_SOLVE.framing), 'the framing claims nothing of the build');
+  assert.deepEqual(framingClaims(READERS), []);
+});
+
+test('each framing claim falsified turns it red', () => {
+  const edit = (key: keyof Readers, change: (source: string) => string): Readers => {
+    const changed = change(READERS[key]);
+    assert.notEqual(changed, READERS[key], `the edit to ${key} must apply`);
+    return { ...READERS, [key]: changed };
+  };
+  for (const [name, readers, message] of [
+    ['the scene reading a run', edit('app', (s) => s.replace("import artifact from '../generated/layout.generated.json';", "import artifact from '../generated/layout.live.json';")), /App\.tsx reads \["artifact \.\.\/generated\/layout\.live\.json"\]/],
+    ['a second layout read, double-quoted', edit('app', (s) => s.replace("import artifact from '../generated/layout.generated.json';", "import artifact from '../generated/layout.generated.json';\nimport solved from \"../generated/solved.json\";")), /App\.tsx reads \[.*solved\.json/],
+    ['a second layout read, with an import attribute', edit('app', (s) => s.replace("import artifact from '../generated/layout.generated.json';", "import artifact from '../generated/layout.generated.json';\nimport solved from '../generated/solved.json' with { type: 'json' };")), /App\.tsx reads \[.*solved\.json/],
+    ['the scene reading a run, double-quoted with an attribute', edit('app', (s) => s.replace("import artifact from '../generated/layout.generated.json';", 'import artifact from "../generated/layout.live.json" with { type: "json" };')), /App\.tsx reads \["artifact \.\.\/generated\/layout\.live\.json"\]/],
+    ['a second layout read', edit('app', (s) => s.replace("import artifact from '../generated/layout.generated.json';", "import artifact from '../generated/layout.generated.json';\nimport solved from '../generated/solved.json';")), /App\.tsx reads/],
+    ['the scene handed another layout', edit('app', (s) => s.replace('<SceneHost artifact={artifact} />', '<SceneHost artifact={solved} />')), /the scene is not handed the committed artifact/],
+    ['the chart handed another layout', edit('app', (s) => s.replace('<FallbackHost artifact={artifact} ', '<FallbackHost artifact={solved} ')), /the chart is not handed the committed artifact/],
+    ['the scene host substituting a layout', edit('sceneHost', (s) => s.replace('<Scene artifact={artifact} />', '<Scene artifact={latest ?? artifact} />')), /the scene host does not hand the scene the artifact it was given/],
+    ['the fallback host substituting a layout', edit('fallbackHost', (s) => s.replace('<Chart artifact={artifact} links={links} />', '<Chart artifact={latest} links={links} />')), /the fallback host does not hand the chart the artifact it was given/],
+    ['the run reaching the scene', edit('sceneHost', (s) => s.replace("import { FOCUS_PANEL_ID } from './panel-model.ts';", "import { FOCUS_PANEL_ID } from './panel-model.ts';\nconst latest = () => import('../derive/live.ts');")), /scene-host\.tsx reaches the live re-solve/],
+    ['the run reaching the shell', edit('app', (s) => s.replace("import { SurfaceMain } from './shell/surface-main.tsx';", "import { SurfaceMain } from './shell/surface-main.tsx';\nimport { solveLive } from './derive/live.ts';")), /App\.tsx reaches the live re-solve/],
+  ] as const) {
+    assert.match(framingClaims(readers).join('\n'), message, `"${name}" must be rejected`);
   }
 });

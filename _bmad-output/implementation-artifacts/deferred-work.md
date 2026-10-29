@@ -350,8 +350,18 @@ become live as the inventory grows.
 - **og:image/og:url/twitter:image absolute once the production origin is chosen
   (6.1 Q4 (b)) — 6.5.** `index.html` ships `/preview.png` root-relative; Slack
   resolves it, LinkedIn and Facebook may show no image until the URL is absolute.
-- **No favicon (open, carried from the `og:`/description/icon item).** No
-  favicon ruled; `/favicon.ico` 404s. `index.html` carries no icon link.
+- ~~**No favicon (open, carried from the `og:`/description/icon item).** No
+  favicon ruled; `/favicon.ico` 404s. `index.html` carries no icon link.~~ —
+  **closed 2026-10-29** (Thomas's ruling 1, `spec-e5-r39-r40-favicon-colophon-layout-and-copy.md`):
+  `public/favicon.svg`, a single body on a 32×32 viewBox in three token colours
+  (`surface-base-dark`, `ink-lift-dark`, `ink-label-dark`), linked once from
+  `index.html`; held by `src/identity-audit.test.ts` "favicon: …" and the
+  literal-colour scan's `FAVICON_PATH` admission. No `.ico` ships, and none is
+  linked: a browser that still asks for `/favicon.ico` on its own is answered
+  by the SPA rewrite with `index.html` and a `200`, not a 404. The stale-chunk
+  404's planned `/assets/* 404` line (launch-readiness checklist item 8, still
+  open) does not cover it; item 8's honest-404 work should also add a
+  `/favicon.ico 404` line before the catch-all.
 
 ---
 

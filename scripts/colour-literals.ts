@@ -82,7 +82,9 @@
  * and tests (`*.test.ts`, `*.test.tsx`, `*.spec.ts`: fixtures and mutations
  * write literals on purpose); and, at the repository root, `index.html` and every
  * governed file under `public/` — scripts, stylesheets, `.html` and `.svg`, the
- * same classification as `src/` (`languageOf`, `checkSiteColourLiterals`). The walk is
+ * same classification as `src/` (`languageOf`, `checkSiteColourLiterals`), where
+ * `public/favicon.svg` alone may write a colour token's value as a hex literal
+ * (`FAVICON_PATH`: a favicon cannot read a custom property). The walk is
  * the shared one (`scripts/source-scan.ts`): dot-files are scanned — every file
  * Vite could bundle is — while dot-directories and `node_modules` are skipped.
  *
@@ -463,9 +465,41 @@ export function checkColourLiterals(root: string, label = 'src'): string[] {
 }
 
 /**
+ * The one file whose colours are token values written out: `public/favicon.svg`
+ * (launch-readiness item 7, ruling 2026-10-29). A browser reads a favicon on its
+ * own, so it cannot read a custom property; its hex literals are admitted only
+ * where each is, exactly, the value of a colour token in `src/tokens/tokens.css`
+ * — a hue, a named colour or any other literal there still fails. Which three
+ * tokens, and where, is the identity audit's (`auditFavicon`,
+ * `src/identity-audit.test.ts`).
+ */
+export const FAVICON_PATH = 'public/favicon.svg';
+
+/**
+ * A hex colour in its long form, upper-cased — `#abc` is `#AABBCC`, `#abcd` is
+ * `#AABBCCDD` — so a short spelling of a token's value is that value; anything
+ * that is not a hex colour is undefined.
+ */
+export function canonicalHex(text: string): string | undefined {
+  if (!/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(text)) return undefined;
+  const digits = text.slice(1).toUpperCase();
+  return `#${digits.length <= 4 ? [...digits].map((digit) => digit + digit).join('') : digits}`;
+}
+
+/** Every colour token's value in `tokens.css`, comments stripped, in long upper-case form; empty when there is no such file. */
+function tokenHexes(site: string): ReadonlySet<string> {
+  const tokensCss = join(site, 'src', 'tokens', 'tokens.css');
+  if (!existsSync(tokensCss)) return new Set();
+  const values = [...stripCssComments(readFileSync(tokensCss, 'utf8')).matchAll(/--color-[\w-]+:\s*(#[0-9a-f]{3,8})\s*;/gi)].map((match) => canonicalHex(match[1] as string));
+  return new Set(values.filter((value): value is string => value !== undefined));
+}
+
+/**
  * The second root: the site files outside `src/`. Scans `index.html` at the
  * repository root `site`, and every governed file under `site/public/`,
- * reporting each relative to `site`.
+ * reporting each relative to `site`. In `public/favicon.svg` alone, a hex
+ * literal that is a colour token's value is the token, written out
+ * (`FAVICON_PATH`).
  *
  * `index.html` must exist — Vite has no page without it, and a missing one
  * would read as clean. `public/` is optional: a static directory the site does
@@ -478,5 +512,17 @@ export function checkSiteColourLiterals(site: string): string[] {
   }
   const publicDir = join(site, 'public');
   const files = [index, ...(existsSync(publicDir) ? governedFilesUnder(publicDir, null) : [])];
-  return scan(files, site, '');
+  return files.flatMap((file) => {
+    // Compared as a `/`-separated relative path, so the admission is one path on every platform.
+    if (relative(site, file).split(sep).join('/') !== FAVICON_PATH) return scan([file], site, '');
+    const tokens = tokenHexes(site);
+    return findColourLiterals(readFileSync(file, 'utf8'), 'markup').flatMap(({ line, text }) => {
+      const hex = canonicalHex(text);
+      if (hex === undefined) {
+        return [`${FAVICON_PATH}:${line} writes the literal colour ${text}, which is not a hex colour — a non-hex colour is never admitted; the favicon may write out only the hex values of src/tokens/tokens.css.`];
+      }
+      if (tokens.has(hex)) return [];
+      return [`${FAVICON_PATH}:${line} writes the literal colour ${text}, which is not a colour token's value — the favicon may write out only the values of src/tokens/tokens.css.`];
+    });
+  });
 }

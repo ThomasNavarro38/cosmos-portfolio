@@ -50,8 +50,8 @@
 
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { relative, sep } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { gitEnvironment } from '../scripts/preview-drift.ts';
@@ -63,6 +63,18 @@ const SRC_ROOT = fileURLToPath(new URL('./', import.meta.url));
 const PUBLIC_ROOT = fileURLToPath(new URL('../public/', import.meta.url));
 const REDIRECTS = fileURLToPath(new URL('../public/_redirects', import.meta.url));
 const RECORD = fileURLToPath(new URL('../_bmad-output/implementation-artifacts/launch-readiness-6-5.md', import.meta.url));
+const ARTIFACTS = fileURLToPath(new URL('../_bmad-output/implementation-artifacts/', import.meta.url));
+
+/**
+ * A closed checklist row names what closed it: at least one `spec-*.md` cited
+ * in its Item or Source cell, and every one it cites a file under
+ * `_bmad-output/implementation-artifacts/`.
+ */
+function closedCitationFailures(cells: readonly string[], artifacts: string = ARTIFACTS): string[] {
+  const cited = [...cells.slice(1, 3).join(' | ').matchAll(/`(spec-[\w.-]+\.md)`/g)].map((match) => match[1] as string);
+  if (cited.length === 0) return [`closed checklist item ${cells[0]} cites no spec- file`];
+  return cited.filter((name) => !existsSync(join(artifacts, name))).map((name) => `closed checklist item ${cells[0]} cites ${name}, which is not in _bmad-output/implementation-artifacts/`);
+}
 
 const repoPath = (path: string): string => relative(REPO_ROOT, path).split(sep).join('/');
 
@@ -276,7 +288,7 @@ test('the envelopeâ€™s public/ scan rejects a module or a page', () => {
   for (const path of ['public/a.js', 'public/a.mjs', 'public/a.cjs', 'public/a.ts', 'public/404.html', 'public/sub/b.js', 'public/a.xhtml', 'public/a.shtml', 'public/a.php', 'public/a.wasm']) {
     assert.deepEqual(auditPublic([path]), [`envelope: ${path} is a module or page`], path);
   }
-  assert.deepEqual(auditPublic(['public/_redirects', 'public/preview.png', 'public/robots.txt']), []);
+  assert.deepEqual(auditPublic(['public/_redirects', 'public/preview.png', 'public/robots.txt', 'public/favicon.svg']), []);
 });
 
 test('the envelopeâ€™s _redirects scan rejects any target but /index.html 200, and ignores comments and blank lines', () => {
@@ -416,7 +428,20 @@ test('the record has every AC row, the three run tables, the checklist and SM-1â
   assert.equal(deploymentRow(record).length, 9, 'the deployment row has every column of L3');
   const [, ...items] = tableUnder(record, CHECKLIST);
   assert.equal(items.length, CHECKLIST_ITEMS, `the checklist holds ${CHECKLIST_ITEMS} items`);
-  for (const item of items) assert.match(item[3] ?? '', /^open$/i, `checklist item ${item[0]} is open, not ${JSON.stringify(item[3])}`);
+  // Item 7, the favicon, closed 2026-10-29 (public/favicon.svg); every other item is still open.
+  const CLOSED: ReadonlySet<string> = new Set(['7']);
+  for (const item of items) {
+    const want = CLOSED.has(item[0] ?? '') ? 'closed' : 'open';
+    assert.match(item[3] ?? '', new RegExp(`^${want}$`, 'i'), `checklist item ${item[0]} is ${want}, not ${JSON.stringify(item[3])}`);
+    // A closed item names what closed it: the spec, cited in its row, and on disk.
+    if (want === 'closed') assert.deepEqual(closedCitationFailures(item), [], `closed checklist item ${item[0]} cites the spec- file that closed it`);
+  }
+  const itemCells = (id: string): readonly string[] => items.find((cells) => cells[0] === id) ?? [];
+  // Item 7 says what was ruled and closed, not the gap it was opened for.
+  assert.doesNotMatch(itemCells('7')[1] ?? '', /none is ruled/i, 'checklist item 7 describes what closed it');
+  assert.match(itemCells('7')[1] ?? '', /public\/favicon\.svg/, 'checklist item 7 names the favicon that closed it');
+  // Item 8's honest-404 work covers /favicon.ico too: `/assets/* 404` alone does not.
+  assert.match(itemCells('8')[1] ?? '', /`\/favicon\.ico 404`/, 'checklist item 8 also owes a /favicon.ico 404 line');
   const checklist = items.map((cells) => cells.join(' | ')).join('\n');
   for (const [item, pattern] of [
     ['L1', /\bL1\b/],
@@ -431,6 +456,14 @@ test('the record has every AC row, the three run tables, the checklist and SM-1â
     assert.match(checklist, pattern, `the checklist carries ${item}`);
   }
   assert.ok(record.includes(SM1_ACCEPTANCE), 'SM-1â€™s acceptance, verbatim');
+});
+
+test('a closed checklist row that cites no spec, or a spec not on disk, is refused', () => {
+  const spec = 'spec-e5-r39-r40-favicon-colophon-layout-and-copy.md';
+  assert.deepEqual(closedCitationFailures(['7', `closed by \`${spec}\``, 'x', 'closed']), []);
+  assert.deepEqual(closedCitationFailures(['7', 'closed by the spec', 'x', 'closed']), ['closed checklist item 7 cites no spec- file']);
+  assert.deepEqual(closedCitationFailures(['7', 'x', '`spec-not-written.md`', 'closed']), ['closed checklist item 7 cites spec-not-written.md, which is not in _bmad-output/implementation-artifacts/']);
+  assert.deepEqual(closedCitationFailures(['7', `\`${spec}\``, 'x', 'closed'], join(ARTIFACTS, 'nowhere')), [`closed checklist item 7 cites ${spec}, which is not in _bmad-output/implementation-artifacts/`]);
 });
 
 test('the run-table reader names what is missing, and the verdicts read only filled tables', () => {
