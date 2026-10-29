@@ -11,7 +11,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { EXHIBIT_PATHS as PUBLISHED } from '../../scripts/exhibits.ts';
-import { EXHIBIT_PATHS, loadExhibits, startExhibits, type FetchText } from './exhibits.ts';
+import { EXHIBIT_NAMES, EXHIBIT_PATHS, loadExhibits, startExhibits, type FetchText } from './exhibits.ts';
 
 const CAREER = '{\n  "clients": []\n}\n';
 const LAYOUT = '{\n  "version": 1\n}\n';
@@ -39,18 +39,23 @@ function fakeFetch(bodies: Readonly<Record<string, string>>, statuses: Readonly<
   return { load, calls };
 }
 
-const BOTH = { '/career.json': CAREER, '/layout.generated.json': LAYOUT };
+const BOTH = { '/cosmos-portfolio/career.json': CAREER, '/cosmos-portfolio/layout.generated.json': LAYOUT };
+
+test('each name is its published path’s last segment, career first', () => {
+  assert.deepEqual(EXHIBIT_NAMES, { career: 'career.json', layout: 'layout.generated.json' });
+  for (const key of ['career', 'layout'] as const) assert.ok(EXHIBIT_PATHS[key].endsWith(`/${EXHIBIT_NAMES[key]}`), key);
+});
 
 test('the fetched paths are the published paths, career first', () => {
   assert.deepEqual(Object.values(EXHIBIT_PATHS), [...PUBLISHED]);
-  assert.deepEqual(EXHIBIT_PATHS, { career: '/career.json', layout: '/layout.generated.json' });
+  assert.deepEqual(EXHIBIT_PATHS, { career: '/cosmos-portfolio/career.json', layout: '/cosmos-portfolio/layout.generated.json' });
 });
 
 test('both files are fetched with the signal and returned as text, verbatim', async () => {
   const { load, calls } = fakeFetch(BOTH);
   const signal = new AbortController().signal;
   assert.deepEqual(await loadExhibits(load, signal), { career: CAREER, layout: LAYOUT });
-  assert.deepEqual(calls.map((call) => call.path).sort(), ['/career.json', '/layout.generated.json']);
+  assert.deepEqual(calls.map((call) => call.path).sort(), ['/cosmos-portfolio/career.json', '/cosmos-portfolio/layout.generated.json']);
   assert.ok(calls.every((call) => call.signal === signal), 'each request carries the signal');
 });
 
@@ -61,7 +66,7 @@ test('both requests start at once, before either answers', async () => {
   const load: FetchText = async (path) => {
     started.push(path);
     await gate;
-    return { ok: true, status: 200, headers: JSON_TYPE, text: async () => (path === '/career.json' ? CAREER : LAYOUT) };
+    return { ok: true, status: 200, headers: JSON_TYPE, text: async () => (path === '/cosmos-portfolio/career.json' ? CAREER : LAYOUT) };
   };
   const pending = loadExhibits(load, new AbortController().signal);
   await Promise.resolve();
@@ -71,7 +76,7 @@ test('both requests start at once, before either answers', async () => {
 });
 
 test('a response that is not ok rejects, naming its path', async () => {
-  for (const [path, status] of [['/career.json', 404], ['/layout.generated.json', 500]] as const) {
+  for (const [path, status] of [['/cosmos-portfolio/career.json', 404], ['/cosmos-portfolio/layout.generated.json', 500]] as const) {
     const { load } = fakeFetch(BOTH, { [path]: status });
     await assert.rejects(loadExhibits(load, new AbortController().signal), new RegExp(`${path.replace(/\./g, '\\.')} answered ${status}`));
   }
@@ -79,9 +84,9 @@ test('a response that is not ok rejects, naming its path', async () => {
 
 test('a page answered in place of a file rejects, naming its path', async () => {
   // The host's SPA rewrite answers a missing file with index.html and a 200.
-  for (const path of ['/career.json', '/layout.generated.json']) {
+  for (const path of ['/cosmos-portfolio/career.json', '/cosmos-portfolio/layout.generated.json']) {
     for (const type of ['text/html', 'text/html; charset=utf-8', 'TEXT/HTML']) {
-      const load: FetchText = async (asked) => ({ ok: true, status: 200, headers: asked === path ? typed(type) : JSON_TYPE, text: async () => (asked === '/career.json' ? CAREER : LAYOUT) });
+      const load: FetchText = async (asked) => ({ ok: true, status: 200, headers: asked === path ? typed(type) : JSON_TYPE, text: async () => (asked === '/cosmos-portfolio/career.json' ? CAREER : LAYOUT) });
       await assert.rejects(loadExhibits(load, new AbortController().signal), new RegExp(`${path.replace(/\./g, '\\.')} answered a page`));
     }
   }
@@ -89,14 +94,14 @@ test('a page answered in place of a file rejects, naming its path', async () => 
 
 test('a file served as JSON, as text, or untyped is read', async () => {
   for (const type of ['application/json; charset=utf-8', 'text/plain', null]) {
-    const load: FetchText = async (path) => ({ ok: true, status: 200, headers: typed(type), text: async () => (path === '/career.json' ? CAREER : LAYOUT) });
+    const load: FetchText = async (path) => ({ ok: true, status: 200, headers: typed(type), text: async () => (path === '/cosmos-portfolio/career.json' ? CAREER : LAYOUT) });
     assert.deepEqual(await loadExhibits(load, new AbortController().signal), { career: CAREER, layout: LAYOUT });
   }
 });
 
 test('a network rejection rejects', async () => {
   const load: FetchText = async (path) => {
-    if (path === '/layout.generated.json') throw new TypeError('Failed to fetch');
+    if (path === '/cosmos-portfolio/layout.generated.json') throw new TypeError('Failed to fetch');
     return { ok: true, status: 200, headers: JSON_TYPE, text: async () => CAREER };
   };
   await assert.rejects(loadExhibits(load, new AbortController().signal), /Failed to fetch/);
@@ -122,7 +127,7 @@ function gatedFetch(statuses: Readonly<Record<string, number>> = {}): { readonly
     signals.push(signal);
     await gate;
     const status = statuses[path] ?? 200;
-    return { ok: status >= 200 && status < 300, status, headers: JSON_TYPE, text: async () => (path === '/career.json' ? CAREER : LAYOUT) };
+    return { ok: status >= 200 && status < 300, status, headers: JSON_TYPE, text: async () => (path === '/cosmos-portfolio/career.json' ? CAREER : LAYOUT) };
   };
   return { load, signals, release: () => release() };
 }
@@ -142,7 +147,7 @@ test('startExhibits: the files are shown once, and nothing fails', async () => {
 });
 
 test('startExhibits: a failed fetch is reported once, and nothing is shown', async () => {
-  const { load, release } = gatedFetch({ '/career.json': 404, '/layout.generated.json': 500 });
+  const { load, release } = gatedFetch({ '/cosmos-portfolio/career.json': 404, '/cosmos-portfolio/layout.generated.json': 500 });
   const shown: unknown[] = [];
   const failed: unknown[] = [];
   startExhibits(load, (exhibits) => shown.push(exhibits), (error) => failed.push(error));
@@ -156,7 +161,7 @@ test('startExhibits: one request failing aborts the other, still in flight, and 
   const signals: AbortSignal[] = [];
   const load: FetchText = (path, { signal }) => {
     signals.push(signal);
-    if (path === '/career.json') return Promise.resolve({ ok: false, status: 404, headers: JSON_TYPE, text: async () => '' });
+    if (path === '/cosmos-portfolio/career.json') return Promise.resolve({ ok: false, status: 404, headers: JSON_TYPE, text: async () => '' });
     return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
   };
   const failed: unknown[] = [];
@@ -168,7 +173,7 @@ test('startExhibits: one request failing aborts the other, still in flight, and 
 });
 
 test('startExhibits: the stop aborts both requests, and after it nothing is shown or reported', async () => {
-  for (const statuses of [{}, { '/career.json': 404 }]) {
+  for (const statuses of [{}, { '/cosmos-portfolio/career.json': 404 }]) {
     const { load, signals, release } = gatedFetch(statuses);
     const calls: string[] = [];
     const stop = startExhibits(load, () => calls.push('show'), () => calls.push('fail'));

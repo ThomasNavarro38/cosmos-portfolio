@@ -35,8 +35,8 @@
  *
  * **The routes to the model and the chart** (4.5 ruling Q1, 5.1). The identity
  * line reads `THOMAS NAVARRO · the model · the chart`: `IDENTITY_NAME`, then
- * ` · ` and one `<a href="/colophon">`, `the model`, then ` · ` and one
- * `<a href="/chart">`, `the chart` — present in every state, Rail, free flight
+ * ` · ` and one `<a href="/cosmos-portfolio/colophon">`, `the model`, then ` · `
+ * and one `<a href="/cosmos-portfolio/chart">`, `the chart` (`routeHref`) — present in every state, Rail, free flight
  * and Focused, since the panel covers the right edge and never the left-top.
  * Each click is `followRoute`'s (`route-link.ts`): a primary click is the
  * router's one `navigate('colophon')` or `navigate('chart')`, any other is the
@@ -92,7 +92,7 @@ import { chartOffered, subscribeChartOffer } from './chart-offer.ts';
 import { IDENTITY_MODEL, IDENTITY_NAME, chartRouteClass, chromeSlot, slotStyle } from './chrome-model.ts';
 import { OVERVIEW_ID } from './index-model.ts';
 import { motionPace, reducedMotion, subscribeReducedMotion } from './motion-preference.ts';
-import { ROUTE_PATHS } from './route.ts';
+import { routeHref } from './route.ts';
 import { CHART_LINK_TEXT, followRoute } from './route-link.ts';
 import type { Router } from './router.ts';
 import { navigationStore } from './state.ts';
@@ -118,7 +118,7 @@ export function CornerChrome({ router }: { readonly router: Router }) {
   return (
     <>
       <p className="chrome-identity">
-        {IDENTITY_NAME} · <a className="chrome-route" href={ROUTE_PATHS.colophon} onClick={(event) => followRoute(event, router.navigate, 'colophon')}>{IDENTITY_MODEL}</a> · <a className={chartRouteClass(offered)} href={ROUTE_PATHS.chart} onClick={(event) => followRoute(event, router.navigate, 'chart')}>{CHART_LINK_TEXT}</a>
+        {IDENTITY_NAME} · <a className="chrome-route" href={routeHref('colophon')} onClick={(event) => followRoute(event, router.navigate, 'colophon')}>{IDENTITY_MODEL}</a> · <a className={chartRouteClass(offered)} href={routeHref('chart')} onClick={(event) => followRoute(event, router.navigate, 'chart')}>{CHART_LINK_TEXT}</a>
       </p>
       <p className="chrome-slot" style={style}>
         {slot.kind === 'control' ? (

@@ -101,7 +101,7 @@ function chartAlone(root: MarkupElement, machine: Surface): string[] {
   }
   const records = queryAll(root, 'article.chart-record').length;
   if (records !== PROJECTS) failures.push(`the chart holds ${records} records, not the artifact's ${PROJECTS}`);
-  const scene = queryAll(root, 'p.chart-routes > a[href="/"]').length;
+  const scene = queryAll(root, 'p.chart-routes > a[href="/cosmos-portfolio/"]').length;
   if (scene !== (machine === 'scene' ? 1 : 0)) failures.push(`the chart offers the scene ${scene} times on a ${machine} machine`);
   return failures;
 }
@@ -131,7 +131,7 @@ function colophonAlone(root: MarkupElement, machine: Surface): string[] {
   const failures: string[] = [];
   if (textOf(elementsOf(row)[0] as MarkupElement) !== 'THOMAS NAVARRO · the model') failures.push('the Colophon’s <h1> is not the identity line');
   const routes = queryAll(row, 'p.colophon-routes > a').map((link) => `${link.attrs['href'] ?? ''} ${textOf(link)}`);
-  const want = machine === 'scene' ? ['/ the scene', '/chart the chart'] : ['/chart the chart'];
+  const want = machine === 'scene' ? ['/cosmos-portfolio/ the scene', '/cosmos-portfolio/chart the chart'] : ['/cosmos-portfolio/chart the chart'];
   if (JSON.stringify(routes) !== JSON.stringify(want)) failures.push(`the Colophon's route line links ${JSON.stringify(routes)} on a ${machine} machine, not ${JSON.stringify(want)}`);
   return failures;
 }

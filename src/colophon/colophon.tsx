@@ -4,7 +4,7 @@
  * is its own chunk and never on the entry graph or the scene's.
  *
  * **The exhibits, fetched** (5.1, AD-17). The default `Colophon` fetches the two
- * raw files the build publishes — `/career.json`, then `/layout.generated.json`
+ * raw files the build publishes — `career.json`, then `layout.generated.json`, under the base
  * (`exhibits.ts`, `scripts/exhibits.ts`) — once, in an effect whose whole body
  * is `startExhibits` (executed in `exhibits.test.ts`; this file is audited in
  * `colophon.test.ts`), its stop aborting on unmount, so a visitor who leaves
@@ -30,7 +30,7 @@
  *
  * **The exhibits, set** (5.3, DESIGN.md `components.colophon-json`). Each
  * `<pre>` is a named, keyboard-scrollable region — `role="region"`, its
- * `aria-label` the file's name read off `EXHIBIT_PATHS` (`career.json`,
+ * `aria-label` the file's name read off `EXHIBIT_NAMES` (`career.json`,
  * `layout.generated.json`), `tabIndex={0}` — since a bare `<pre>` is generic
  * and cannot be named, and a box that scrolls sideways must be reachable from
  * the keyboard. Its text is `jsonRuns` (`json-setting.ts`): key runs in
@@ -96,7 +96,7 @@
  */
 
 import { Fragment, useEffect, useState, type MouseEvent } from 'react';
-import { EXHIBIT_PATHS, startExhibits, type Exhibits } from './exhibits.ts';
+import { EXHIBIT_NAMES, startExhibits, type Exhibits } from './exhibits.ts';
 import { DERIVATION_LABELS, derivationRows, type DerivationInput } from './derivations.ts';
 import { jsonRuns } from './json-setting.ts';
 import { ABSENCES, ABSENCES_HEADING } from './absences.ts';
@@ -207,9 +207,9 @@ export function ColophonPage({ links, exhibits, solved, running, onSolve }: { re
       </div>
       {exhibits === null ? null : (
         <>
-          <Exhibit name={EXHIBIT_PATHS.career.slice(1)} text={exhibits.career} />
+          <Exhibit name={EXHIBIT_NAMES.career} text={exhibits.career} />
           <Derivations layout={exhibits.layout} />
-          <Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />
+          <Exhibit name={EXHIBIT_NAMES.layout} text={exhibits.layout} />
           <h2 className="colophon-heading">{ABSENCES_HEADING}</h2>
           {Object.entries(ABSENCES).map(([key, text]) => (
             <p key={key} className="colophon-prose">

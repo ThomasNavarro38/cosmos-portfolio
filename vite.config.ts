@@ -2,18 +2,27 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { bundleAssertion } from './scripts/bundle-assertion.ts';
 import { exhibits } from './scripts/exhibits.ts';
+import { pages } from './scripts/pages.ts';
+import { BASE } from './scripts/site.ts';
 
 // Minimal by design. No env handling, no proxy, no server block:
 // NFR-6 forbids any backend or runtime configuration surface.
 //
-// Two plugins beside React. The AD-7 bundle assertion: the thin entry is a
+// The site is published under `BASE` (GitHub Pages, a project site), so every
+// URL Vite writes is under it; the app adds and strips it at the browser
+// boundary (`src/shell/route.ts`).
+//
+// Three plugins beside React. The AD-7 bundle assertion: the thin entry is a
 // property of bundler output, so the build itself refuses an entry graph that
 // reaches a banned package or directory (listed in the plugin), or outgrows its
 // budget. And the exhibits (5.1, AD-17): `career.json` and the layout artifact
 // published byte for byte at fixed paths for the Colophon to fetch: neither
-// imported into the Colophon's chunk, and `career.json` into none.
+// imported into the Colophon's chunk, and `career.json` into none. And the
+// host's copies of the page (`scripts/pages.ts`): `index.html` again as
+// `chart/index.html`, `colophon/index.html` and `404.html`, since Pages has no
+// rewrite rule.
 //
-// Note: Vite copies `public/` verbatim into `dist/`: `_redirects`, and the
+// Note: Vite copies `public/` verbatim into `dist/`: the favicon, and the
 // committed link preview `preview.png` (6.1), composed by `scripts/preview.ts`
 // and captured by hand, never rendered by the build.
 //
@@ -44,7 +53,8 @@ import { exhibits } from './scripts/exhibits.ts';
 // why it moved since (a shared `react` chunk in 5.1, folded into `ui` in 6.3),
 // is `scripts/bundle-assertion.ts`'s.
 export default defineConfig({
-  plugins: [react(), bundleAssertion(), exhibits()],
+  base: BASE,
+  plugins: [react(), bundleAssertion(), exhibits(), pages()],
   build: {
     rolldownOptions: {
       output: {

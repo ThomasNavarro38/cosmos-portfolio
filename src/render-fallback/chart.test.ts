@@ -158,8 +158,8 @@ function targetsFocusable(root: MarkupElement): string[] {
 test('the chart’s links on a capable machine: the model to /colophon in the <h1>, the scene to / on the route line', async () => {
   const root = parseMarkup(await renderChart(chartLinks('scene', navigate)));
   assert.deepEqual(linksDrawn(root, chartLinks('scene', navigate)), []);
-  assert.deepEqual(queryAll(root, 'h1 > a[href="/colophon"]').map(textOf), ['the model']);
-  assert.deepEqual(queryAll(root, 'p.chart-routes > a').map(linkOf), ['/ the scene']);
+  assert.deepEqual(queryAll(root, 'h1 > a[href="/cosmos-portfolio/colophon"]').map(textOf), ['the model']);
+  assert.deepEqual(queryAll(root, 'p.chart-routes > a').map(linkOf), ['/cosmos-portfolio/ the scene']);
 });
 
 test('the chart’s links on an incapable machine: the route line holds no link', async () => {
@@ -182,12 +182,12 @@ test('the links check is red against the wrong links and broken markup', async (
   assert.notDeepEqual(linksDrawn(parseMarkup(incapable), chartLinks('scene', navigate)), [], 'the scene withheld on a capable machine');
   assert.notDeepEqual(linksDrawn(parseMarkup(capable), chartLinks('fallback', navigate)), [], 'the scene offered on an incapable one');
   for (const [name, markup] of [
-    ['the model unlinked', capable.replace('<a href="/colophon">the model</a>', 'the model')],
-    ['the model to a written path', capable.replace('<a href="/colophon">', '<a href="/model">')],
+    ['the model unlinked', capable.replace('<a href="/cosmos-portfolio/colophon">the model</a>', 'the model')],
+    ['the model to a written path', capable.replace('<a href="/cosmos-portfolio/colophon">', '<a href="/model">')],
     ['the model’s text written in', capable.replace('>the model</a>', '>a model</a>')],
     ['a second <h1>', capable.replace('<h1 class="chart-heading">', '<h1 class="chart-heading"><h1>x</h1>')],
-    ['the model drawn on the route line', capable.replace('<p class="chart-routes"><a href="/">the scene</a>', '<p class="chart-routes"><a href="/colophon">the model</a>')],
-    ['a route twice', capable.replace('<a href="/">the scene</a>', '<a href="/">the scene</a><a href="/">the scene</a>')],
+    ['the model drawn on the route line', capable.replace('<p class="chart-routes"><a href="/cosmos-portfolio/">the scene</a>', '<p class="chart-routes"><a href="/cosmos-portfolio/colophon">the model</a>')],
+    ['a route twice', capable.replace('<a href="/cosmos-portfolio/">the scene</a>', '<a href="/cosmos-portfolio/">the scene</a><a href="/cosmos-portfolio/">the scene</a>')],
   ] as const) {
     assert.notEqual(markup, capable, `the break "${name}" must apply`);
     assert.notDeepEqual(linksDrawn(parseMarkup(markup), chartLinks('scene', navigate)), [], `"${name}" must be rejected`);

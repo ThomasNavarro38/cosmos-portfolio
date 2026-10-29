@@ -44,7 +44,7 @@ const SOURCE = readFileSync(new URL('./absences.ts', import.meta.url), 'utf8');
 
 const COPY: readonly string[] = Object.values(ABSENCES);
 const PATHS: readonly string[] = Object.values(EXHIBIT_PATHS);
-const NAMES: readonly string[] = [EXHIBIT_PATHS.career.slice(1), EXHIBIT_PATHS.layout.slice(1)];
+const NAMES: readonly string[] = PATHS.map((path) => path.slice(path.lastIndexOf('/') + 1));
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 interface Shot {

@@ -15,7 +15,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { isTestFile, sourceFilesUnder, stripComments } from '../../scripts/source-scan.ts';
-import { ROUTE_PATHS, resolveRoute } from './route.ts';
+import { BASE as SITE_BASE } from '../../scripts/site.ts';
+import { BASE, ROUTE_PATHS, appPath, resolveRoute, routeHref } from './route.ts';
 import {
   SAVE_INTERVAL_MS,
   browserHistory,
@@ -171,6 +172,29 @@ test('the three canonical paths, none of them naming the fallback', () => {
   assert.deepEqual(ROUTE_PATHS, { home: '/', chart: '/chart', colophon: '/colophon' });
   for (const path of Object.values(ROUTE_PATHS)) assert.doesNotMatch(path, /fallback/i);
   for (const [route, path] of Object.entries(ROUTE_PATHS)) assert.equal(resolveRoute(path), route, 'each path resolves to its own route');
+});
+
+test('the base is the site’s, spelled once in scripts/site.ts and held equal here', () => {
+  assert.equal(BASE, SITE_BASE);
+  assert.match(BASE, /^\/[\w-]+\/$/);
+});
+
+test('routeHref: each canonical path under the base', () => {
+  assert.equal(routeHref('home'), '/cosmos-portfolio/');
+  assert.equal(routeHref('chart'), '/cosmos-portfolio/chart');
+  assert.equal(routeHref('colophon'), '/cosmos-portfolio/colophon');
+});
+
+test('appPath: the base stripped, the bare base read as root, a path outside it unchanged', () => {
+  assert.equal(appPath('/cosmos-portfolio/'), '/');
+  assert.equal(appPath('/cosmos-portfolio'), '/');
+  assert.equal(appPath('/cosmos-portfolio/chart'), '/chart');
+  assert.equal(appPath('/cosmos-portfolio/chart/'), '/chart/');
+  assert.equal(appPath('/cosmos-portfolio/nope'), '/nope');
+  assert.equal(appPath('/cosmos-portfolioX/chart'), '/cosmos-portfolioX/chart', 'a prefix that is not the base is not stripped');
+  assert.equal(appPath('/chart'), '/chart');
+  for (const route of ['home', 'chart', 'colophon'] as const) assert.equal(resolveRoute(appPath(routeHref(route))), route, 'each href resolves back to its route');
+  assert.equal(resolveRoute(appPath('/chart-old')), 'home');
 });
 
 test('surfaceOf: root is this machine’s surface, chart the flat chart on any machine, colophon the Colophon', () => {
@@ -433,7 +457,7 @@ test('browserHistory drives the window’s history and location, and listens for
   const removed: [string, unknown][] = [];
   const timers: [() => void, number][] = [];
   const globals: Record<string, unknown> = {
-    location: { pathname: '/chart', search: '?a', hash: '#client-x' },
+    location: { pathname: '/cosmos-portfolio/chart', search: '?a', hash: '#client-x' },
     history: {
       state: { scrollProgress: 1 } as unknown,
       replaceState: (...args: unknown[]) => calls.push(['replaceState', ...args]),
@@ -454,9 +478,9 @@ test('browserHistory drives the window’s history and location, and listens for
     history.push('/', { scrollProgress: 3 });
     assert.deepEqual(calls, [
       ['replaceState', { scrollProgress: 2 }, ''],
-      ['replaceState', { scrollProgress: 1 }, '', '/colophon?a#client-x'],
-      ['pushState', { scrollProgress: 3 }, '', '/'],
-    ], 'save keeps the URL (no third argument), canonicalize keeps the state, search and fragment, push carries its state and no fragment');
+      ['replaceState', { scrollProgress: 1 }, '', '/cosmos-portfolio/colophon?a#client-x'],
+      ['pushState', { scrollProgress: 3 }, '', '/cosmos-portfolio/'],
+    ], 'save keeps the URL (no third argument), canonicalize keeps the state, search and fragment, push carries its state and no fragment, each write under the base');
     let ran = 0;
     history.later(() => (ran += 1));
     assert.equal(timers.length, 1, 'later is one setTimeout');
@@ -758,19 +782,19 @@ test('a push that throws is logged, leaves the route, URL and subscribers unchan
   router.dispose();
 });
 
-/** `route.ts`: the routes, their paths and the resolution, importing nothing, its paths never saying fallback. */
+/** `route.ts`: the routes, their paths, the base and the resolution, importing nothing, its paths never saying fallback. */
 function auditRoute(source: string): string[] {
   const code = stripComments(source);
   const failures: string[] = [];
   if (/^\s*import\s/m.test(code) || /\bimport\s*\(|\brequire\s*\(/.test(code)) failures.push('route.ts imports something');
   const exported = [...code.matchAll(/^export\s+(?:type|const|function)\s+(\w+)/gm)].map((match) => match[1]).sort();
-  if (JSON.stringify(exported) !== JSON.stringify(['ROUTE_PATHS', 'Route', 'resolveRoute'])) failures.push(`route.ts exports ${JSON.stringify(exported)}, not Route, ROUTE_PATHS and resolveRoute alone`);
+  if (JSON.stringify(exported) !== JSON.stringify(['BASE', 'ROUTE_PATHS', 'Route', 'appPath', 'browserPath', 'resolveRoute', 'routeHref'])) failures.push(`route.ts exports ${JSON.stringify(exported)}, not Route, ROUTE_PATHS, BASE, browserPath, routeHref, appPath and resolveRoute alone`);
   if (/'\/[^']*fallback/i.test(code)) failures.push('a path says fallback');
   if (/'\/scene'/.test(code)) failures.push('a /scene path — the root is this machine’s surface');
   return failures;
 }
 
-test('route.ts holds Route, ROUTE_PATHS and resolveRoute alone, and imports nothing', () => {
+test('route.ts holds Route, ROUTE_PATHS, the base and resolveRoute alone, and imports nothing', () => {
   const real = readFileSync(ROUTE_TS, 'utf8').replace(/\r\n/g, '\n');
   assert.deepEqual(auditRoute(real), []);
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
@@ -867,7 +891,7 @@ test('the router audit rejects the real module with any one reach added', () => 
     ['the keep-current save dropped', (s) => s.replace(/\n {4}\/\/ Keep the current entry current[\s\S]*?\n {4}\}\),\n/, '\n')],
     ['an unguarded write of its own', (s) => s.replace('  restore(history.state());', '  restore(history.state());\n  history.save({ scrollProgress: 0 });')],
     ['a re-export', (s) => `${s}\nexport { resolveRoute } from './route.ts';\n`],
-    ['a second import', (s) => s.replace("import { ROUTE_PATHS, resolveRoute, type Route } from './route.ts';", "import { ROUTE_PATHS, resolveRoute, type Route } from './route.ts';\nimport { SLOT_TEXT } from './chrome-model.ts';")],
+    ['a second import', (s) => s.replace("import { ROUTE_PATHS, appPath, browserPath, resolveRoute, type Route } from './route.ts';", "import { ROUTE_PATHS, appPath, browserPath, resolveRoute, type Route } from './route.ts';\nimport { SLOT_TEXT } from './chrome-model.ts';")],
     ['pagehide not saving', (s) => s.replace("history.listen('pagehide', save)", "history.listen('pagehide', () => undefined)")],
   ];
   for (const [name, mutate] of mutations) {

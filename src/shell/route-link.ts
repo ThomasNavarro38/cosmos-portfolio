@@ -4,7 +4,7 @@
  * the chart's route line offers on this machine.
  *
  * **A route link is an `<a href>`.** Its `href` is the route's canonical
- * `ROUTE_PATHS` path, so the browser's own affordances — a new tab, a copied
+ * path under the base (`routeHref`), so the browser's own affordances — a new tab, a copied
  * link, the status bar — work as for any link. A *primary* click (button 0, no
  * Ctrl, Meta, Shift or Alt, not already `defaultPrevented`) is the router's:
  * `navigate(to)` — one real history entry, no reload — then `preventDefault()`
@@ -39,7 +39,7 @@
 
 import { IDENTITY_MODEL } from './chrome-model.ts';
 import type { Surface } from './detect.ts';
-import { ROUTE_PATHS, type Route } from './route.ts';
+import { routeHref, type Route } from './route.ts';
 
 /** The scene's link to the chart, appended to its identity line. */
 export const CHART_LINK_TEXT = 'the chart';
@@ -82,9 +82,9 @@ export interface RouteLink {
   readonly follow: (event: RouteClick) => void;
 }
 
-/** A link to `to`: the route's canonical path as its `href`, and `followRoute` as its click. */
+/** A link to `to`: the route's canonical path under the base as its `href`, and `followRoute` as its click. */
 export function routeLink(key: string, text: string, to: Route, navigate: (to: Route) => boolean): RouteLink {
-  return { key, text, href: ROUTE_PATHS[to], follow: (event) => followRoute(event, navigate, to) };
+  return { key, text, href: routeHref(to), follow: (event) => followRoute(event, navigate, to) };
 }
 
 /** One entry of the chart's route line, before it is bound to a router. */

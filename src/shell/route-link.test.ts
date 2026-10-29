@@ -12,7 +12,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { isTestFile, sourceFilesUnder, stripComments } from '../../scripts/source-scan.ts';
 import { IDENTITY_LINE, IDENTITY_MODEL, IDENTITY_NAME } from './chrome-model.ts';
-import { ROUTE_PATHS, type Route } from './route.ts';
+import { routeHref, type Route } from './route.ts';
 import { CHART_LINK_TEXT, SCENE_LINK_TEXT, chartLinks, chartRoutes, colophonLinks, colophonRoutes, followRoute, isPrimaryClick, routeLink, type RouteClick } from './route-link.ts';
 
 const ROUTE_LINK_TS = fileURLToPath(new URL('./route-link.ts', import.meta.url));
@@ -100,7 +100,7 @@ test('a route link’s href is the route’s canonical path, and its click is th
   for (const to of ['home', 'chart', 'colophon'] as const) {
     const { navigate, went } = recorder();
     const link = routeLink('k', 'text', to, navigate);
-    assert.deepEqual({ key: link.key, text: link.text, href: link.href }, { key: 'k', text: 'text', href: ROUTE_PATHS[to] });
+    assert.deepEqual({ key: link.key, text: link.text, href: link.href }, { key: 'k', text: 'text', href: routeHref(to) });
     link.follow(click({ metaKey: true }).event);
     assert.deepEqual(went, [], 'a modified click navigates nothing');
     const primary = click();
@@ -113,13 +113,13 @@ test('a route link’s href is the route’s canonical path, and its click is th
 test('the chart’s links: the model to /colophon on every machine, the scene to / on a capable one', () => {
   const capable = recorder();
   const links = chartLinks('scene', capable.navigate);
-  assert.deepEqual({ key: links.model.key, text: links.model.text, href: links.model.href }, { key: 'model', text: 'the model', href: '/colophon' });
-  assert.deepEqual(links.routes.map((link) => [link.key, link.text, link.href]), [['scene', 'the scene', '/']]);
+  assert.deepEqual({ key: links.model.key, text: links.model.text, href: links.model.href }, { key: 'model', text: 'the model', href: '/cosmos-portfolio/colophon' });
+  assert.deepEqual(links.routes.map((link) => [link.key, link.text, link.href]), [['scene', 'the scene', '/cosmos-portfolio/']]);
   links.model.follow(click().event);
   links.routes[0]?.follow(click().event);
   assert.deepEqual(capable.went, ['colophon', 'home']);
   const incapable = chartLinks('fallback', recorder().navigate);
-  assert.equal(incapable.model.href, '/colophon', 'the model link is present on any machine');
+  assert.equal(incapable.model.href, '/cosmos-portfolio/colophon', 'the model link is present on any machine');
   assert.deepEqual(incapable.routes, [], 'no scene link where the scene cannot run');
 });
 
@@ -157,7 +157,7 @@ test('the Colophon’s route line is written out, not borrowed from the chart’
 test('the Colophon’s links: hrefs in order, a primary click routed, a modified click left to the browser', () => {
   const capable = recorder();
   const links = colophonLinks('scene', capable.navigate);
-  assert.deepEqual(links.routes.map((link) => [link.key, link.text, link.href]), [['scene', 'the scene', '/'], ['chart', 'the chart', '/chart']]);
+  assert.deepEqual(links.routes.map((link) => [link.key, link.text, link.href]), [['scene', 'the scene', '/cosmos-portfolio/'], ['chart', 'the chart', '/cosmos-portfolio/chart']]);
   for (const link of links.routes) {
     for (const overrides of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
       const modified = click(overrides);
@@ -173,7 +173,7 @@ test('the Colophon’s links: hrefs in order, a primary click routed, a modified
   assert.deepEqual(capable.went, ['home', 'chart'], 'the router pushes home, then the chart');
   assert.deepEqual([scene.prevented(), chart.prevented()], [1, 1]);
   const incapable = colophonLinks('fallback', recorder().navigate);
-  assert.deepEqual(incapable.routes.map((link) => [link.key, link.text, link.href]), [['chart', 'the chart', '/chart']], 'the chart alone where the scene cannot run');
+  assert.deepEqual(incapable.routes.map((link) => [link.key, link.text, link.href]), [['chart', 'the chart', '/cosmos-portfolio/chart']], 'the chart alone where the scene cannot run');
 });
 
 // --- Purity -------------------------------------------------------------------------------
@@ -187,7 +187,7 @@ function auditRouteLink(source: string): string[] {
   }
   if (/\bwindow\b|\bdocument\b|\blocation\b|\bhistory\b\./.test(code)) failures.push('reads a DOM global — the event and navigate arrive as arguments');
   if (/\bnavigationStore\b|\buseStore\b|\bgetState\b/.test(code)) failures.push('reads the store');
-  if (/'\/[^']*'/.test(code)) failures.push('writes a path — every href is ROUTE_PATHS’s');
+  if (/'\/[^']*'/.test(code)) failures.push('writes a path — every href is routeHref’s');
   if (!/export function followRoute\(event: RouteClick, navigate: \(to: Route\) => boolean, to: Route\): void \{\s*if \(!isPrimaryClick\(event\)\) return;\s*if \(navigate\(to\)\) event\.preventDefault\(\);\s*\}/.test(code)) {
     failures.push('followRoute is not: a non-primary click returns, else navigate, and preventDefault only when it succeeded');
   }
@@ -202,7 +202,7 @@ test('route-link.ts is pure, and its click rule is the one the matrix executes',
     ['the store', (s) => `import { navigationStore } from './state.ts';\n${s}`],
     ['the router', (s) => `import { createRouter } from './router.ts';\n${s}`],
     ['a DOM read', (s) => s.replace('  if (!isPrimaryClick(event)) return;', "  if (!isPrimaryClick(event) || window.location.pathname === '') return;")],
-    ['a written path', (s) => s.replace('href: ROUTE_PATHS[to]', "href: '/chart'")],
+    ['a written path', (s) => s.replace('href: routeHref(to)', "href: '/cosmos-portfolio/chart'")],
     ['prevented whatever navigate says', (s) => s.replace('  if (navigate(to)) event.preventDefault();', '  event.preventDefault();\n  navigate(to);')],
     ['every click followed', (s) => s.replace('  if (!isPrimaryClick(event)) return;\n', '')],
   ];

@@ -65,9 +65,9 @@ function passesThrough(root: MarkupElement, machine: Surface, artifact: Fallback
   if (JSON.stringify([...sections].sort()) !== JSON.stringify([...clients].sort())) failures.push('the sections are not the artifact’s Clients');
   if (JSON.stringify([...records].sort()) !== JSON.stringify([...projects].sort())) failures.push('the records are not the artifact’s Projects');
   const model = queryAll(root, 'h1.chart-heading > a');
-  if (model.length !== 1 || model[0]?.attrs['href'] !== '/colophon' || textOf(model[0]) !== 'the model') failures.push('the heading does not link the model to /colophon');
+  if (model.length !== 1 || model[0]?.attrs['href'] !== '/cosmos-portfolio/colophon' || textOf(model[0]) !== 'the model') failures.push('the heading does not link the model to /cosmos-portfolio/colophon');
   const routes = queryAll(queryOne(root, 'p.chart-routes'), 'a').map((node) => `${node.attrs['href']} ${textOf(node)}`);
-  const expected = machine === 'scene' ? ['/ the scene'] : [];
+  const expected = machine === 'scene' ? ['/cosmos-portfolio/ the scene'] : [];
   if (JSON.stringify(routes) !== JSON.stringify(expected)) failures.push(`the route line holds ${JSON.stringify(routes)} on a ${machine} machine`);
   return failures;
 }
@@ -88,9 +88,9 @@ test('the pass-through check is red against the wrong surface, the wrong artifac
   for (const [name, markup] of [
     ['nothing rendered', ''],
     ['wrapped by the host', `<div>${real}</div>`],
-    ['the model unlinked', real.replace(/<a href="\/colophon">the model<\/a>/, 'the model')],
-    ['the model to the scene', real.replace('<a href="/colophon">', '<a href="/">')],
-    ['the scene dropped', real.replace('<a href="/">the scene</a>', '')],
+    ['the model unlinked', real.replace(/<a href="\/cosmos-portfolio\/colophon">the model<\/a>/, 'the model')],
+    ['the model to the scene', real.replace('<a href="/cosmos-portfolio/colophon">', '<a href="/cosmos-portfolio/">')],
+    ['the scene dropped', real.replace('<a href="/cosmos-portfolio/">the scene</a>', '')],
   ] as const) {
     assert.notEqual(markup, real, `the break "${name}" must apply`);
     assert.notDeepEqual(passesThrough(parseMarkup(markup), 'scene', committed), [], `"${name}" must be rejected`);
@@ -178,8 +178,8 @@ async function chartHandler(href: string): Promise<unknown> {
 }
 
 const CHART_LINKS = [
-  ['the model', '/colophon', 'colophon'],
-  ['the scene', '/', 'home'],
+  ['the model', '/cosmos-portfolio/colophon', 'colophon'],
+  ['the scene', '/cosmos-portfolio/', 'home'],
 ] as const;
 
 test('the chart’s links through the host: the model → navigate(colophon), the scene → navigate(home), each preventing the default once', async () => {
@@ -187,8 +187,8 @@ test('the chart’s links through the host: the model → navigate(colophon), th
 });
 
 test('the host click check is red against a broken handler: the default never prevented, the wrong route, every click navigating, prevented whatever the router says, the real links swapped', async () => {
-  const model = await chartHandler('/colophon');
-  const scene = await chartHandler('/');
+  const model = await chartHandler('/cosmos-portfolio/colophon');
+  const scene = await chartHandler('/cosmos-portfolio/');
   assert.notDeepEqual(followsRouteRule('the model', scene, 'colophon'), [], 'the scene’s handler on the model');
   assert.notDeepEqual(followsRouteRule('the scene', model, 'home'), [], 'the model’s handler on the scene');
   for (const [name, , to] of CHART_LINKS) {

@@ -246,7 +246,7 @@ function auditDetect(source: string): string[] {
 
 /**
  * `entry.ts`: the banned words, the two stylesheets then detection then
- * `resolveRoute` alone from `route.ts` (4.2, handed to the mount beside the
+ * `appPath` and `resolveRoute` alone from `route.ts` (4.2, handed to the mount beside the
  * surface; 4.5 split it from `router.ts`, which stays off the entry), and exactly one dynamic import — the mount, started before detection runs so context
  * creation does not delay the chunk request. Its result is chained as
  * `.then(mount).catch(log)`, so a failed import and a throwing mount reach the
@@ -261,9 +261,9 @@ function auditEntry(source: string): string[] {
     failures.push(`entry.ts statically imports ${JSON.stringify(statics)}, not the tokens, the page, detection, then the routes`);
   }
   // 4.2: `resolveRoute` and nothing else; 4.5: from `route.ts`, never the router, which is the mount's.
-  if (!/^\s*import\s*\{\s*resolveRoute\s*\}\s*from\s*'\.\/route\.ts'\s*;/m.test(code)) failures.push('entry.ts takes something other than resolveRoute from route.ts');
+  if (!/^\s*import\s*\{\s*appPath,\s*resolveRoute\s*\}\s*from\s*'\.\/route\.ts'\s*;/m.test(code)) failures.push('entry.ts takes something other than appPath and resolveRoute from route.ts');
   if (/router\.ts/.test(code)) failures.push('entry.ts reaches router.ts — createRouter, surfaceOf and browserHistory are the mount’s');
-  if (!/const\s+route\s*=\s*resolveRoute\(\s*location\.pathname\s*\)\s*;/.test(code)) failures.push('the route is not resolveRoute(location.pathname)');
+  if (!/const\s+route\s*=\s*resolveRoute\(\s*appPath\(\s*location\.pathname\s*\)\s*\)\s*;/.test(code)) failures.push('the route is not resolveRoute(appPath(location.pathname))');
   const dynamic = [...code.matchAll(/\bimport\s*\(/g)];
   if (dynamic.length !== 1) failures.push(`entry.ts holds ${dynamic.length} dynamic imports, not one`);
   if (!/\bimport\(\s*'\.\/mount\.tsx'\s*\)/.test(code)) failures.push('the dynamic import is not ./mount.tsx');
@@ -321,11 +321,12 @@ test('the entry audit rejects the real entry with any one reach added', () => {
     ['the surface not handed over', (s) => s.replace('.mount(surface, route)', '.mount(route)')],
     // 4.2: the route the entry resolved reaches the mount, and the router's only export the entry takes is resolveRoute.
     ['the route not handed over', (s) => s.replace('.mount(surface, route)', '.mount(surface)')],
-    ['the route not resolved from the path', (s) => s.replace('resolveRoute(location.pathname)', "resolveRoute('/')")],
-    ['the whole router taken', (s) => s.replace("import { resolveRoute } from './route.ts';", "import { resolveRoute } from './route.ts';\nimport { createRouter } from './router.ts';")],
-    ['the router again, not the routes', (s) => s.replace("import { resolveRoute } from './route.ts';", "import { resolveRoute } from './router.ts';")],
-    ['more than resolveRoute', (s) => s.replace("import { resolveRoute } from './route.ts';", "import { ROUTE_PATHS, resolveRoute } from './route.ts';")],
-    ['the routes dropped', (s) => s.replace("import { resolveRoute } from './route.ts';\n", '')],
+    ['the route not resolved from the path', (s) => s.replace('resolveRoute(appPath(location.pathname))', "resolveRoute('/')")],
+    ['the base not stripped', (s) => s.replace('resolveRoute(appPath(location.pathname))', 'resolveRoute(location.pathname)')],
+    ['the whole router taken', (s) => s.replace("import { appPath, resolveRoute } from './route.ts';", "import { appPath, resolveRoute } from './route.ts';\nimport { createRouter } from './router.ts';")],
+    ['the router again, not the routes', (s) => s.replace("import { appPath, resolveRoute } from './route.ts';", "import { resolveRoute } from './router.ts';")],
+    ['more than appPath and resolveRoute', (s) => s.replace("import { appPath, resolveRoute } from './route.ts';", "import { ROUTE_PATHS, appPath, resolveRoute } from './route.ts';")],
+    ['the routes dropped', (s) => s.replace("import { appPath, resolveRoute } from './route.ts';\n", '')],
     ['the failure swallowed', (s) => s.replace(/console\.error\(/, 'void (')],
     ['a width check', (s) => s.replace('const surface =', 'const wide = window.innerWidth > 600;\nconst surface =')],
     ['the two-argument then', (s) => s.replace(

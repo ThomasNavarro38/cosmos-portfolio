@@ -15,13 +15,23 @@
  * nothing here touches the DOM or React. Both requests start at once and carry
  * the signal. A response that is not `ok` rejects, naming its path, as a network
  * failure or an abort does, and so does an HTML page answered in place of the
- * file (the host's SPA rewrite) — what to do about it is `colophon.tsx`'s.
+ * file (a host's SPA rewrite) — what to do about it is `colophon.tsx`'s.
  */
 
-/** The two published paths, career first. */
+/** The two files' names, career first: what the page calls each. */
+export const EXHIBIT_NAMES = {
+  career: 'career.json',
+  layout: 'layout.generated.json',
+} as const;
+
+/**
+ * The two published paths: each name under the site's base. The base is
+ * spelled here because this module imports nothing; `exhibits.test.ts` holds
+ * the paths equal to the ones `scripts/exhibits.ts` serves.
+ */
 export const EXHIBIT_PATHS = {
-  career: '/career.json',
-  layout: '/layout.generated.json',
+  career: `/cosmos-portfolio/${EXHIBIT_NAMES.career}`,
+  layout: `/cosmos-portfolio/${EXHIBIT_NAMES.layout}`,
 } as const;
 
 /** The two files, as text, verbatim. */
@@ -41,7 +51,7 @@ export type FetchText = (path: string, init: { readonly signal: AbortSignal }) =
 async function textAt(load: FetchText, path: string, signal: AbortSignal): Promise<string> {
   const response = await load(path, { signal });
   if (!response.ok) throw new Error(`${path} answered ${response.status}`);
-  // The host's SPA rewrite answers a missing file with index.html and a 200;
+  // A host's SPA rewrite answers a missing file with index.html and a 200;
   // drawn, the page would pass for the file. Only an HTML type is refused, so
   // a host serving JSON as text, or untyped, still reads.
   if (/^\s*text\/html\b/i.test(response.headers.get('content-type') ?? '')) throw new Error(`${path} answered a page, not the file`);

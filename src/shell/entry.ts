@@ -13,7 +13,8 @@
  * lazily, after the index is in the document (ruling Q2).
  *
  * The route (4.2) is resolved here too, from the path alone, before the mount
- * chunk can resolve: `resolveRoute` is taken from `route.ts`, which holds the
+ * chunk can resolve: `resolveRoute`, over the path with the base stripped by
+ * `appPath`, is taken from `route.ts`, which holds the
  * routes, their paths and the resolution and imports nothing (4.5, ruling Q3:
  * split from `router.ts` so the router itself stays off this chunk's budget).
  * The mount makes the router, which owns history; `/chart`
@@ -31,11 +32,11 @@
 import '../tokens/tokens.css';
 import './page.css';
 import { browserEnv, chooseSurface, detect } from './detect.ts';
-import { resolveRoute } from './route.ts';
+import { appPath, resolveRoute } from './route.ts';
 
 const mounting = import('./mount.tsx');
 const surface = chooseSurface(detect(browserEnv()));
-const route = resolveRoute(location.pathname);
+const route = resolveRoute(appPath(location.pathname));
 
 mounting
   .then((module) => module.mount(surface, route))

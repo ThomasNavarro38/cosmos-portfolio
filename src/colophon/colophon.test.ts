@@ -238,8 +238,8 @@ function exhibit(pre: MarkupElement, name: string, text: string): string[] {
   return failures;
 }
 
-const CAREER_NAME = EXHIBIT_PATHS.career.slice(1);
-const LAYOUT_NAME = EXHIBIT_PATHS.layout.slice(1);
+const CAREER_NAME = EXHIBIT_PATHS.career.slice(EXHIBIT_PATHS.career.lastIndexOf('/') + 1);
+const LAYOUT_NAME = EXHIBIT_PATHS.layout.slice(EXHIBIT_PATHS.layout.lastIndexOf('/') + 1);
 
 const PARAGRAPHS: readonly string[] = Object.values(ABSENCES);
 
@@ -304,7 +304,7 @@ function contactRoute(route: MarkupElement): string[] {
 }
 
 /** The route line's links per machine, as `href text`: the scene then the chart where it is capable, the chart alone otherwise. */
-const ROUTE_LINE: Readonly<Record<Surface, readonly string[]>> = { scene: ['/ the scene', '/chart the chart'], fallback: ['/chart the chart'] };
+const ROUTE_LINE: Readonly<Record<Surface, readonly string[]>> = { scene: ['/cosmos-portfolio/ the scene', '/cosmos-portfolio/chart the chart'], fallback: ['/cosmos-portfolio/chart the chart'] };
 
 /**
  * The chrome row (Epic 5 item 38): one `div.colophon-chrome` holding the
@@ -453,8 +453,8 @@ test('the page check is red against broken markup', async () => {
   // Epic 5 item 38: the chrome row, its heading and its route line.
   const headingTag = /<h1 class="colophon-chrome-heading">[\s\S]*?<\/h1>/.exec(full)?.[0] ?? '';
   const routeLine = /<p class="colophon-routes">[\s\S]*?<\/p>/.exec(full)?.[0] ?? '';
-  const sceneLink = /<a href="\/">[^<]*<\/a>/.exec(routeLine)?.[0] ?? '';
-  const chartLink = /<a href="\/chart">[^<]*<\/a>/.exec(routeLine)?.[0] ?? '';
+  const sceneLink = /<a href="\/cosmos-portfolio\/">[^<]*<\/a>/.exec(routeLine)?.[0] ?? '';
+  const chartLink = /<a href="\/cosmos-portfolio\/chart">[^<]*<\/a>/.exec(routeLine)?.[0] ?? '';
   const between = routeLine.slice(routeLine.indexOf(sceneLink) + sceneLink.length, routeLine.indexOf(chartLink));
   assert.ok(headingTag !== '' && sceneLink !== '' && chartLink !== '' && between.includes('·'), 'the heading, both links and the separator between them were found');
   const pageOpen = '<div class="colophon">';
@@ -546,10 +546,10 @@ test('the page check is red against broken markup', async () => {
     ['the chart link dropped', full.replace(`${between}${chartLink}`, '')],
     ['the links reordered', full.replace(`${sceneLink}${between}${chartLink}`, `${chartLink}${between}${sceneLink}`)],
     ['the separator dropped', full.replace(`${sceneLink}${between}${chartLink}`, `${sceneLink}${chartLink}`)],
-    ['the scene link retargeted', full.replace(sceneLink, sceneLink.replace('href="/"', 'href="/colophon"'))],
-    ['a link to the page itself', full.replace(`${chartLink}</p>`, `${chartLink} · <a href="/colophon">the model</a></p>`)],
+    ['the scene link retargeted', full.replace(sceneLink, sceneLink.replace('href="/cosmos-portfolio/"', 'href="/cosmos-portfolio/colophon"'))],
+    ['a link to the page itself', full.replace(`${chartLink}</p>`, `${chartLink} · <a href="/cosmos-portfolio/colophon">the model</a></p>`)],
     ['a back link', full.replace(`${chartLink}</p>`, `${chartLink} · <a href="javascript:history.back()">back</a></p>`)],
-    ['the model linked', full.replace(headingTag, headingTag.replace(/the model<\/h1>$/, '<a href="/colophon">the model</a></h1>'))],
+    ['the model linked', full.replace(headingTag, headingTag.replace(/the model<\/h1>$/, '<a href="/cosmos-portfolio/colophon">the model</a></h1>'))],
     ['the heading the bare model', full.replace(headingTag, '<h1 class="colophon-chrome-heading">the model</h1>')],
     ['the heading unclassed', full.replace(headingTag, headingTag.replace(' class="colophon-chrome-heading"', ''))],
     ['the route line unclassed', full.replace(routeLine, routeLine.replace(' class="colophon-routes"', ''))],
@@ -695,7 +695,7 @@ function auditEffect(source: string): string[] {
   if (!/return\s*<ColophonPage\s+links=\{\s*links\s*\}\s+exhibits=\{\s*exhibits\s*\}\s+solved=\{\s*solved\s*\}\s+running=\{\s*running\s*\}\s+onSolve=\{\s*onSolve\s*\}\s*\/>\s*;/.test(code)) failures.push('the page is not drawn from the shell’s links, the held files and the held re-solve');
   // Epic 5 item 38: the links are the shell's, handed down, never built here.
   if (!/export\s+default\s+function\s+Colophon\(\s*\{\s*links\s*\}\s*:\s*\{\s*readonly\s+links\s*:\s*ColophonLinks\s*\}\s*\)/.test(code)) failures.push('the default does not take the shell’s links as its one prop');
-  if (/\brouter\b|\bnavigate\b|\bhistory\b|ROUTE_PATHS|\bhref=["'`]/.test(code)) failures.push('a route built here — the links are the shell’s');
+  if (/\brouter\b|\bnavigate\b|\bhistory\b|ROUTE_PATHS|routeHref|\bhref=["'`]/.test(code)) failures.push('a route built here — the links are the shell’s');
   if ((code.match(/\bsetExhibits\b/g) ?? []).length !== 2) failures.push('the setter is used other than as the effect’s show');
   if (/\bAbortController\b|\bloadExhibits\b|\.then\(/.test(code)) failures.push('a fetch rule of its own — the effect is startExhibits’');
   return failures;

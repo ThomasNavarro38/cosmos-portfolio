@@ -13,6 +13,8 @@ import { fileURLToPath } from 'node:url';
 import { build, createBuilder, createLogger, type Logger, type Rolldown } from 'vite';
 import { ENTRY_BUDGET_BYTES, bundleAssertion, checkBundle, entryBytes, passLine, type BundleView, type ChunkView } from './bundle-assertion.ts';
 import { EXHIBITS } from './exhibits.ts';
+import { PAGE_COPIES } from './pages.ts';
+import { BASE } from './site.ts';
 
 const ROOT = 'E:/repo';
 const CONFIG = fileURLToPath(new URL('../vite.config.ts', import.meta.url));
@@ -205,7 +207,7 @@ const assetBytes = (asset: Rolldown.OutputAsset): Buffer => Buffer.from(typeof a
 function exhibitFailures(chunks: readonly Pick<Rolldown.OutputChunk, 'fileName' | 'modules'>[], assets: readonly Rolldown.OutputAsset[], colophonFile: string, solverFile: string): string[] {
   const failures: string[] = [];
   for (const exhibit of EXHIBITS) {
-    const fileName = exhibit.path.slice(1);
+    const fileName = exhibit.file;
     const emitted = assets.filter((asset) => asset.fileName === fileName);
     if (emitted.length !== 1) {
       failures.push(`${fileName} is emitted ${emitted.length} times, not once`);
@@ -566,6 +568,48 @@ test('the shipped app builds under the assertion, measured within its budget', a
     importedIds: () => [],
   };
   assert.equal(bytes, entryBytes(view), 'the budget counts the code as emitted, after every rewrite');
+});
+
+/**
+ * The host's view of the page: `index.html` and its copies (`PAGE_COPIES`),
+ * byte for byte, and every `src` and `href` the page writes — its scripts,
+ * stylesheets, preloads and favicon — under the base, so a copy one directory
+ * down loads the same files and nothing points outside the site.
+ */
+function pageFailures(assets: readonly Rolldown.OutputAsset[]): string[] {
+  const failures: string[] = [];
+  const page = assets.find((asset) => asset.fileName === 'index.html');
+  if (page === undefined) return ['index.html is not emitted'];
+  const bytes = assetBytes(page);
+  for (const name of PAGE_COPIES) {
+    const copies = assets.filter((asset) => asset.fileName === name);
+    if (copies.length !== 1) failures.push(`${name} is emitted ${copies.length} times, not once`);
+    else if (!assetBytes(copies[0] as Rolldown.OutputAsset).equals(bytes)) failures.push(`${name} is not index.html, byte for byte`);
+  }
+  const urls = [...bytes.toString('utf8').matchAll(/\b(?:src|href)="([^"]*)"/g)].map((match) => match[1] as string);
+  if (!urls.includes(`${BASE}favicon.svg`)) failures.push(`the favicon is not at ${BASE}favicon.svg`);
+  for (const url of urls) if (!url.startsWith(BASE)) failures.push(`index.html writes ${url}, outside ${BASE}`);
+  return failures;
+}
+
+test('the shipped build writes the page and its host copies, every URL in them under the base', async () => {
+  const result = await build({ configFile: CONFIG, root: REPO, logLevel: 'silent', build: { write: false } });
+  const assets = assetsOf(result);
+  assert.deepEqual(pageFailures(assets), []);
+  const page = assets.find((asset) => asset.fileName === 'index.html') as Rolldown.OutputAsset;
+  const html = assetBytes(page).toString('utf8');
+  assert.match(html, /<script type="module" crossorigin src="\/cosmos-portfolio\/assets\/[^"]+\.js"><\/script>/, 'the entry is loaded from under the base');
+  const swap = (name: string, source: string) => assets.map((asset) => (asset.fileName === name ? { ...asset, source } : asset));
+  const breaks: readonly (readonly [string, readonly Rolldown.OutputAsset[]])[] = [
+    ['404.html missing', assets.filter((asset) => asset.fileName !== '404.html')],
+    ['chart/index.html emitted twice', [...assets, assets.find((asset) => asset.fileName === 'chart/index.html') as Rolldown.OutputAsset]],
+    ['colophon/index.html altered', swap('colophon/index.html', `${html} `)],
+    ['the page written off the base', swap('index.html', html.replaceAll('/cosmos-portfolio/', '/'))],
+    ['the favicon off the base', swap('index.html', html.replace(`${BASE}favicon.svg`, '/favicon.svg'))],
+    // Written into every page alike, so the copies still match and only the URL check can see it.
+    ['a relative asset URL, which a copy one directory down misreads', ((relative) => assets.map((asset) => (asset.fileName === 'index.html' || PAGE_COPIES.includes(asset.fileName) ? { ...asset, source: relative } : asset)))(html.replace(`src="${BASE}assets/`, 'src="assets/'))],
+  ];
+  for (const [name, broken] of breaks) assert.notDeepEqual(pageFailures(broken), [], `"${name}" must be rejected`);
 });
 
 test('an SSR environment beside the client is not asserted on', async () => {

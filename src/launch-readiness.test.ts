@@ -23,18 +23,20 @@
  *   `.cjs`, `.ts`, `.html`, `.xhtml`, `.shtml`, `.php`, `.wasm` and their
  *   kin): Vite copies it into `dist/` verbatim, so a script there would ship
  *   unbundled and unaudited.
- * - **`public/_redirects`** exists, holds at least one rule and the catch-all
- *   `/* /index.html 200`, and every rule matches a root-relative path and
- *   rewrites to `/index.html` with status `200`. A rewrite off-site (a proxy),
- *   to any other target, with any other status, or matching another origin
- *   fails. Blank and `#` lines are ignored.
+ * - **No host rule file in `public/`** (`_redirects`, `_headers`, `CNAME`,
+ *   `.nojekyll`): the host is GitHub Pages (ruling 2026-10-29), deployed as an
+ *   Actions artifact, which reads none of them: a custom domain is a setting,
+ *   and an artifact is never run through Jekyll. A direct load is
+ *   answered by the build's copies of the page (`scripts/pages.ts`), which
+ *   `scripts/bundle-assertion.test.ts` holds on the real build.
  *
  * Host-side configuration is invisible here; L3 checks it by hand.
  *
  * **The record**, `launch-readiness-6-5.md`: its automated rows each name a
  * test that exists (`scripts/record-table.ts`, shared with 6.4's record); it
  * carries AC rows 1–7 and 3b, the three run tables, the pre-launch checklist
- * with every carried item still `open`, and SM-1's acceptance verbatim. The
+ * with items 6, 7 and 8 `closed`, each citing its spec, and every other still
+ * `open`, and SM-1's acceptance verbatim. The
  * run-table reader names what is missing — a table, a reader row, the
  * deployment row, an AC row — rather than reading `undefined`.
  *
@@ -61,7 +63,6 @@ import { filesUnder, isTestFile, SOURCE_MODULE, stripComments } from '../scripts
 const REPO_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SRC_ROOT = fileURLToPath(new URL('./', import.meta.url));
 const PUBLIC_ROOT = fileURLToPath(new URL('../public/', import.meta.url));
-const REDIRECTS = fileURLToPath(new URL('../public/_redirects', import.meta.url));
 const RECORD = fileURLToPath(new URL('../_bmad-output/implementation-artifacts/launch-readiness-6-5.md', import.meta.url));
 const ARTIFACTS = fileURLToPath(new URL('../_bmad-output/implementation-artifacts/', import.meta.url));
 
@@ -168,7 +169,7 @@ function trackedPaths(): { readonly paths: string[] } | { readonly skip: string 
   }
 }
 
-// --- The deploy envelope: public/ and _redirects -------------------------------------------------------
+// --- The deploy envelope: public/ and the host's rule files -------------------------------------------
 
 /** A module, a page or a binary module: anything a browser or a server would run or render rather than fetch as an asset. */
 const MODULE_OR_PAGE = /\.(?:[mc]?[jt]s|[jt]sx|x?html?|shtml|php|wasm)$/i;
@@ -177,55 +178,34 @@ function auditPublic(paths: readonly string[]): string[] {
   return paths.filter((path) => MODULE_OR_PAGE.test(path)).map((path) => `envelope: ${path} is a module or page`);
 }
 
-/** `public/_redirects`, or `undefined` when there is none. */
-function readRedirects(path: string = REDIRECTS): string | undefined {
-  try {
-    return readFileSync(path, 'utf8');
-  } catch (error) {
-    if ((error as { code?: unknown }).code === 'ENOENT') return undefined;
-    throw error;
-  }
-}
-
 /**
- * Every fault in `_redirects`: missing, no rule, no `/* /index.html 200`
- * catch-all, a rule matching anything but a root-relative path, or a rule
- * rewriting anywhere but `/index.html` with `200`. Blank and `#` lines are
- * ignored.
+ * A host rule file: one GitHub Pages does not read (`_redirects`, `_headers`,
+ * Netlify's and Cloudflare's), so a rule written there would claim a
+ * behaviour the host never has, or one that changes the host's (`CNAME`, a
+ * custom domain, an Ask First; `.nojekyll`, unneeded when Pages deploys a
+ * built artifact). The SPA answer is the build's: `scripts/pages.ts`.
  */
-function auditRedirects(text: string | undefined): string[] {
-  if (text === undefined) return ['envelope: public/_redirects is missing, so no host is told to serve index.html for every path'];
-  const failures: string[] = [];
-  let rules = 0;
-  let catchAll = false;
-  text.split('\n').forEach((raw, index) => {
-    const line = raw.trim();
-    if (line === '' || line.startsWith('#')) return;
-    rules += 1;
-    const [from = '', to, status, ...rest] = line.split(/\s+/);
-    if (!/^\/(?!\/)/.test(from)) failures.push(`envelope: _redirects line ${index + 1} matches ${from}, not a root-relative path`);
-    if (to !== '/index.html' || status !== '200' || rest.length > 0) {
-      failures.push(`envelope: _redirects line ${index + 1} rewrites to ${[to, status, ...rest].filter((part) => part !== undefined).join(' ') || '(nothing)'}, not /index.html 200`);
-    } else if (from === '/*') {
-      catchAll = true;
-    }
-  });
-  if (rules === 0) failures.push('envelope: _redirects holds no rule');
-  else if (!catchAll) failures.push('envelope: _redirects has no catch-all /* /index.html 200');
-  return failures;
+const HOST_RULE_FILES: readonly string[] = ['_redirects', '_headers', 'CNAME', '.nojekyll'];
+
+function auditHostRules(paths: readonly string[]): string[] {
+  return paths
+    .filter((path) => path.startsWith('public/') && HOST_RULE_FILES.includes(path.split('/').at(-1) ?? ''))
+    .map((path) => `envelope: ${path} is a host rule file, and GitHub Pages reads none`);
 }
 
 const tracked = trackedPaths();
 
-test('the deploy envelope holds: no environment read in shipped source, no module in public/, and only the SPA rewrite', () => {
+test('the deploy envelope holds: no environment read in shipped source, no module in public/, and no host rule file', () => {
   assert.deepEqual(auditEnvReads(envelopeSources()), []);
-  assert.deepEqual(auditPublic(filesUnder(PUBLIC_ROOT, { all: true }).map(repoPath)), []);
-  assert.deepEqual(auditRedirects(readRedirects()), []);
+  const published = filesUnder(PUBLIC_ROOT, { all: true }).map(repoPath);
+  assert.deepEqual(auditPublic(published), []);
+  assert.deepEqual(auditHostRules(published), []);
+  assert.ok(published.includes('public/favicon.svg'), 'public/ is listed');
 });
 
 test('the deploy envelope tracks no server or secret path', 'skip' in tracked ? { skip: tracked.skip } : {}, () => {
   assert.ok('paths' in tracked);
-  assert.ok(tracked.paths.includes('public/_redirects'), 'git ls-files lists the tracked tree');
+  assert.ok(tracked.paths.includes('public/favicon.svg'), 'git ls-files lists the tracked tree');
   assert.deepEqual(auditTrackedPaths(tracked.paths), []);
 });
 
@@ -279,7 +259,7 @@ test('the envelope’s path scan rejects each server or secret path, and passes 
     assert.deepEqual(auditTrackedPaths([path]), [`envelope: ${path} is a server or secret path`], path);
   }
   assert.deepEqual(
-    auditTrackedPaths(['src/shell/router.ts', 'public/_redirects', 'scripts/api-notes.ts', 'src/functions.ts', 'docs/environment.md', 'src/shell/middleware.ts', 'src/routes.json']),
+    auditTrackedPaths(['src/shell/router.ts', '.github/workflows/deploy.yml', 'scripts/pages.ts', 'public/_redirects','scripts/api-notes.ts', 'src/functions.ts', 'docs/environment.md', 'src/shell/middleware.ts', 'src/routes.json']),
     [],
   );
 });
@@ -291,31 +271,11 @@ test('the envelope’s public/ scan rejects a module or a page', () => {
   assert.deepEqual(auditPublic(['public/_redirects', 'public/preview.png', 'public/robots.txt', 'public/favicon.svg']), []);
 });
 
-test('the envelope’s _redirects scan rejects any target but /index.html 200, and ignores comments and blank lines', () => {
-  assert.deepEqual(auditRedirects('# the SPA rewrite\n\n/* /index.html 200\n'), []);
-  assert.deepEqual(auditRedirects('/chart /index.html 200\n/* /index.html 200\n'), [], 'a root-relative rule beside the catch-all');
-  assert.deepEqual(auditRedirects('/* https://x.example/:splat 200\n'), [
-    'envelope: _redirects line 1 rewrites to https://x.example/:splat 200, not /index.html 200',
-    'envelope: _redirects has no catch-all /* /index.html 200',
-  ]);
-  for (const [rule, message] of [
-    ['/* /other.html 200', /line 2 rewrites to \/other\.html 200/],
-    ['/* /index.html 301', /line 2 rewrites to \/index\.html 301/],
-    ['/* /index.html 200!', /line 2 rewrites to \/index\.html 200!/],
-    ['/* /index.html', /line 2 rewrites to \/index\.html,/],
-    ['/*', /line 2 rewrites to \(nothing\)/],
-    ['/api/* https://api.example/:splat 200', /line 2 rewrites to https:\/\/api\.example/],
-    ['https://other.example/* /index.html 200', /line 2 matches https:\/\/other\.example\/\*, not a root-relative path/],
-    ['//other.example/* /index.html 200', /line 2 matches \/\/other\.example\/\*, not a root-relative path/],
-    ['* /index.html 200', /line 2 matches \*, not a root-relative path/],
-  ] as const) {
-    assert.match(auditRedirects(`# note\n${rule}\n/* /index.html 200\n`).join('\n'), message, rule);
+test('the envelope’s host-rule scan rejects each rule file in public/, and passes ordinary files', () => {
+  for (const path of ['public/_redirects', 'public/_headers', 'public/CNAME', 'public/.nojekyll', 'public/sub/_redirects']) {
+    assert.deepEqual(auditHostRules([path]), [`envelope: ${path} is a host rule file, and GitHub Pages reads none`], path);
   }
-  assert.deepEqual(auditRedirects(''), ['envelope: _redirects holds no rule'], 'an empty file');
-  assert.deepEqual(auditRedirects('# only a comment\n\n'), ['envelope: _redirects holds no rule'], 'comments only');
-  assert.deepEqual(auditRedirects('/chart /index.html 200\n'), ['envelope: _redirects has no catch-all /* /index.html 200'], 'no catch-all');
-  assert.deepEqual(auditRedirects(undefined), ['envelope: public/_redirects is missing, so no host is told to serve index.html for every path']);
-  assert.equal(readRedirects(fileURLToPath(new URL('../public/no-such-redirects', import.meta.url))), undefined, 'a missing file reads as undefined, not a raw ENOENT');
+  assert.deepEqual(auditHostRules(['public/favicon.svg', 'public/preview.png', 'public/robots.txt', 'docs/_redirects', 'public/redirects.md']), []);
 });
 
 // --- The record ------------------------------------------------------------------------------------------
@@ -428,8 +388,8 @@ test('the record has every AC row, the three run tables, the checklist and SM-1�
   assert.equal(deploymentRow(record).length, 9, 'the deployment row has every column of L3');
   const [, ...items] = tableUnder(record, CHECKLIST);
   assert.equal(items.length, CHECKLIST_ITEMS, `the checklist holds ${CHECKLIST_ITEMS} items`);
-  // Item 7, the favicon, closed 2026-10-29 (public/favicon.svg); every other item is still open.
-  const CLOSED: ReadonlySet<string> = new Set(['7']);
+  // Items 6, 7 and 8 closed 2026-10-29 (the production URL, public/favicon.svg, 404.html); every other item is still open.
+  const CLOSED: ReadonlySet<string> = new Set(['6', '7', '8']);
   for (const item of items) {
     const want = CLOSED.has(item[0] ?? '') ? 'closed' : 'open';
     assert.match(item[3] ?? '', new RegExp(`^${want}$`, 'i'), `checklist item ${item[0]} is ${want}, not ${JSON.stringify(item[3])}`);
@@ -440,8 +400,9 @@ test('the record has every AC row, the three run tables, the checklist and SM-1�
   // Item 7 says what was ruled and closed, not the gap it was opened for.
   assert.doesNotMatch(itemCells('7')[1] ?? '', /none is ruled/i, 'checklist item 7 describes what closed it');
   assert.match(itemCells('7')[1] ?? '', /public\/favicon\.svg/, 'checklist item 7 names the favicon that closed it');
-  // Item 8's honest-404 work covers /favicon.ico too: `/assets/* 404` alone does not.
-  assert.match(itemCells('8')[1] ?? '', /`\/favicon\.ico 404`/, 'checklist item 8 also owes a /favicon.ico 404 line');
+  // Items 6 and 8 name what closed them: the production URL, and 404.html.
+  assert.match(itemCells('6')[1] ?? '', /https:\/\/thomasnavarro38\.github\.io\/cosmos-portfolio\//, 'checklist item 6 names the production URL');
+  assert.match(itemCells('8')[1] ?? '', /`404\.html`[\s\S]*stale hashed chunk/, 'checklist item 8 names 404.html, which answers a stale chunk');
   const checklist = items.map((cells) => cells.join(' | ')).join('\n');
   for (const [item, pattern] of [
     ['L1', /\bL1\b/],

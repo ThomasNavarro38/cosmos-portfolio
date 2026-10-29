@@ -59,11 +59,13 @@
  * **Pure and injectable.** It imports nothing but `route.ts` — not React, not
  * the store, not the motion preference — and every rule is executed against an
  * injected `RouteHistory` in `router.test.ts`. `browserHistory()` is the real
- * one. Since 4.5 it is off the entry chunk: the entry takes `resolveRoute` from
- * `route.ts`, and this module is reached from the mount alone.
+ * one, and the history's side of the base: it strips it from a pathname and
+ * adds it to every URL it writes. Since 4.5 it is off the entry chunk: the
+ * entry takes `appPath` and `resolveRoute` from `route.ts`, and this module is
+ * reached from the mount alone.
  */
 
-import { ROUTE_PATHS, resolveRoute, type Route } from './route.ts';
+import { ROUTE_PATHS, appPath, browserPath, resolveRoute, type Route } from './route.ts';
 
 /** The trailing schedule of the keep-current save: at most one `replaceState` per this many milliseconds. */
 export const SAVE_INTERVAL_MS = 300;
@@ -236,14 +238,18 @@ export function createRouter(history: RouteHistory, initial: Route, position: Po
   };
 }
 
-/** The real history: the window's `history`, `location`, `popstate` and `pagehide`. */
+/**
+ * The real history: the window's `history`, `location`, `popstate` and
+ * `pagehide`. The one place the router's app paths meet the browser's: a
+ * pathname is read through `appPath`, and every URL written is under the base.
+ */
 export function browserHistory(): RouteHistory {
   return {
-    pathname: () => location.pathname,
+    pathname: () => appPath(location.pathname),
     state: () => history.state as unknown,
     save: (state) => history.replaceState(state, ''),
-    canonicalize: (path) => history.replaceState(history.state, '', path + location.search + location.hash),
-    push: (path, state) => history.pushState(state, '', path),
+    canonicalize: (path) => history.replaceState(history.state, '', browserPath(path) + location.search + location.hash),
+    push: (path, state) => history.pushState(state, '', browserPath(path)),
     later: (fn) => {
       setTimeout(fn, SAVE_INTERVAL_MS);
     },

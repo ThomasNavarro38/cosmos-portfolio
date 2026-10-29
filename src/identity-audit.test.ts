@@ -2296,7 +2296,7 @@ test('colophon: the live re-solve’s button is the panel’s release, declarati
  * its `name`, focusable, classed `colophon-exhibit`, its runs `jsonRuns(text)`
  * — keys in `span.colophon-json-key`, values in `span.colophon-json-value`,
  * structure bare — and the two drawn career, table, layout, each named off
- * `EXHIBIT_PATHS`. What is not there (5.4): after the layout exhibit, one
+ * `EXHIBIT_NAMES`. What is not there (5.4): after the layout exhibit, one
  * `<h2 className="colophon-heading">{ABSENCES_HEADING}</h2>`, then one
  * `<p className="colophon-prose">` per `ABSENCES` entry, keyed by its name,
  * from `./absences.ts`; no `<section>`. The live re-solve (5.5), last: one
@@ -2326,11 +2326,11 @@ function auditColophon(css: string, tsx: string): string[] {
   if (!/\{jsonRuns\(text\)\.map\(/.test(script) || !/^import \{ jsonRuns \} from '\.\/json-setting\.ts';$/m.test(script)) failures.push('colophon: the exhibit’s text is not jsonRuns(text), from ./json-setting.ts');
   if (!/if \(run\.kind === 'key'\) return <span key=\{index\} className="colophon-json-key">\{run\.text\}<\/span>;/.test(script)) failures.push('colophon: a key run is not a span.colophon-json-key');
   if (!/if \(run\.kind === 'value'\) return <span key=\{index\} className="colophon-json-value">\{run\.text\}<\/span>;\s*return run\.text;/.test(script)) failures.push('colophon: a value run is not a span.colophon-json-value, or structure is not bare text');
-  if (!/<Exhibit name=\{EXHIBIT_PATHS\.career\.slice\(1\)\} text=\{exhibits\.career\} \/>\s*<Derivations layout=\{exhibits\.layout\} \/>\s*<Exhibit name=\{EXHIBIT_PATHS\.layout\.slice\(1\)\} text=\{exhibits\.layout\} \/>/.test(script)) {
-    failures.push('colophon: the exhibits are not career, table, layout, each named off EXHIBIT_PATHS');
+  if (!/<Exhibit name=\{EXHIBIT_NAMES\.career\} text=\{exhibits\.career\} \/>\s*<Derivations layout=\{exhibits\.layout\} \/>\s*<Exhibit name=\{EXHIBIT_NAMES\.layout\} text=\{exhibits\.layout\} \/>/.test(script)) {
+    failures.push('colophon: the exhibits are not career, table, layout, each named off EXHIBIT_NAMES');
   }
   if (
-    !/<Exhibit name=\{EXHIBIT_PATHS\.layout\.slice\(1\)\} text=\{exhibits\.layout\} \/>\s*<h2 className="colophon-heading">\{ABSENCES_HEADING\}<\/h2>\s*\{Object\.entries\(ABSENCES\)\.map\(\(\[key, text\]\) => \(\s*<p key=\{key\} className="colophon-prose">\s*\{text\}\s*<\/p>\s*\)\)\}\s*<h2 className="colophon-heading">\{LIVE_SOLVE\.heading\}/.test(script)
+    !/<Exhibit name=\{EXHIBIT_NAMES\.layout\} text=\{exhibits\.layout\} \/>\s*<h2 className="colophon-heading">\{ABSENCES_HEADING\}<\/h2>\s*\{Object\.entries\(ABSENCES\)\.map\(\(\[key, text\]\) => \(\s*<p key=\{key\} className="colophon-prose">\s*\{text\}\s*<\/p>\s*\)\)\}\s*<h2 className="colophon-heading">\{LIVE_SOLVE\.heading\}/.test(script)
   ) {
     failures.push('colophon: what is not there is not the h2.colophon-heading then one p.colophon-prose per ABSENCES entry, after the layout exhibit');
   }
@@ -2489,15 +2489,15 @@ test('colophon: each guarantee removed fails with its own line', () => {
     [(s) => s.replace('className="colophon-json-key"', 'className="colophon-json-value"'), /a key run is not a span\.colophon-json-key/],
     [(s) => s.replace('className="colophon-json-value"', 'className="colophon-json-key"'), /a value run is not a span\.colophon-json-value/],
     [(s) => s.replace('return run.text;', 'return <span key={index}>{run.text}</span>;'), /structure is not bare text/],
-    [(s) => s.replace('<Exhibit name={EXHIBIT_PATHS.career.slice(1)}', '<Exhibit name="career.json"'), /the exhibits are not career, table, layout/],
-    [(s) => s.replace('<Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />', '<Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.career} />'), /the exhibits are not career, table, layout/],
+    [(s) => s.replace('<Exhibit name={EXHIBIT_NAMES.career}', '<Exhibit name="career.json"'), /the exhibits are not career, table, layout/],
+    [(s) => s.replace('<Exhibit name={EXHIBIT_NAMES.layout} text={exhibits.layout} />', '<Exhibit name={EXHIBIT_NAMES.layout} text={exhibits.career} />'), /the exhibits are not career, table, layout/],
     // 5.4: the heading unclassed, an h3, its constant replaced; the prose unclassed, drawn from elsewhere, before the layout; a second paragraph; a section; the import off.
     [(s) => s.replace('<h2 className="colophon-heading">', '<h2>'), /what is not there is not the h2\.colophon-heading/],
     [(s) => s.replace('<h2 className="colophon-heading">{ABSENCES_HEADING}</h2>', '<h3 className="colophon-heading">{ABSENCES_HEADING}</h3>'), /what is not there is not the h2\.colophon-heading/],
     [(s) => s.replace('<p key={key} className="colophon-prose">', '<p key={key}>'), /what is not there is not the h2\.colophon-heading/],
     [(s) => s.replace('{Object.entries(ABSENCES).map(', '{Object.entries(DERIVATION_LABELS).map('), /what is not there is not the h2\.colophon-heading/],
     [
-      (s) => s.replace('<Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />\n          <h2', '<h2').replace('          ))}\n          <h2 className="colophon-heading">{LIVE_SOLVE.heading}', '          ))}\n          <Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={exhibits.layout} />\n          <h2 className="colophon-heading">{LIVE_SOLVE.heading}'),
+      (s) => s.replace('<Exhibit name={EXHIBIT_NAMES.layout} text={exhibits.layout} />\n          <h2', '<h2').replace('          ))}\n          <h2 className="colophon-heading">{LIVE_SOLVE.heading}', '          ))}\n          <Exhibit name={EXHIBIT_NAMES.layout} text={exhibits.layout} />\n          <h2 className="colophon-heading">{LIVE_SOLVE.heading}'),
       /what is not there is not the h2\.colophon-heading/,
     ],
     [(s) => s.replace('      </div>\n      {exhibits === null', '      </div>\n      <p className="colophon-prose">{ABSENCES.thesis}</p>\n      {exhibits === null'), /a heading or paragraph other than the absences’/],
@@ -2513,7 +2513,7 @@ test('colophon: each guarantee removed fails with its own line', () => {
     [(s) => s.replace(' onClick={onSolve}', ''), /the live re-solve is not the h2\.colophon-heading/],
     [(s) => s.replace('{LIVE_SOLVE.action}', '{LIVE_SOLVE.heading}'), /the live re-solve is not the h2\.colophon-heading/],
     [(s) => s.replace('<h2 className="colophon-heading">{LIVE_SOLVE.heading}</h2>', '<h3 className="colophon-heading">{LIVE_SOLVE.heading}</h3>'), /the live re-solve is not the h2\.colophon-heading/],
-    [(s) => s.replace('<Exhibit name={LIVE_SOLVE.result} text={solved} />', '<Exhibit name={EXHIBIT_PATHS.layout.slice(1)} text={solved} />'), /the live re-solve is not the h2\.colophon-heading/],
+    [(s) => s.replace('<Exhibit name={LIVE_SOLVE.result} text={solved} />', '<Exhibit name={EXHIBIT_NAMES.layout} text={solved} />'), /the live re-solve is not the h2\.colophon-heading/],
     [(s) => s.replace('<Exhibit name={LIVE_SOLVE.result} text={solved} />', '<pre aria-label={LIVE_SOLVE.result}>{solved}</pre>'), /the exhibit is not one <pre className="colophon-exhibit"/],
     [(s) => s.replace('<p className="colophon-prose">{LIVE_SOLVE.framing}</p>', '<p className="colophon-prose">{LIVE_SOLVE.framing}</p>\n          <p className="colophon-prose">{LIVE_SOLVE.result}</p>'), /a heading or paragraph other than the absences’, the live re-solve’s and the route line/],
     [(s) => s.replace('            {LIVE_SOLVE.action}\n          </button>', '            {LIVE_SOLVE.action}\n          </button>\n          <button type="button">{LIVE_SOLVE.action}</button>'), /a button other than the live re-solve’s/],
@@ -2673,7 +2673,7 @@ test('contact: each guarantee removed fails with its own line', () => {
     [edit('render-fallback/chart.tsx', (s) => s.replace('        <ContactRoute />\n', '').replace('        </p>\n      </div>', '        </p>\n        <ContactRoute />\n      </div>')), /the chart does not draw the route once/],
     [edit('render-fallback/chart.tsx', (s) => s.replace('        <ContactRoute />\n', '').replace('        </h1>', '          <ContactRoute />\n        </h1>')), /the chart does not draw the route once/],
     [edit('colophon/colophon.tsx', (s) => s.replace('        <ContactRoute />\n', '')), /the Colophon does not draw the route once/],
-    [edit('colophon/colophon.tsx', (s) => s.replace('        <ContactRoute />\n', '').replace('          <Exhibit name={EXHIBIT_PATHS.career.slice(1)}', '          <ContactRoute />\n          <Exhibit name={EXHIBIT_PATHS.career.slice(1)}')), /the Colophon does not draw the route once/],
+    [edit('colophon/colophon.tsx', (s) => s.replace('        <ContactRoute />\n', '').replace('          <Exhibit name={EXHIBIT_NAMES.career}', '          <ContactRoute />\n          <Exhibit name={EXHIBIT_NAMES.career}')), /the Colophon does not draw the route once/],
     // Epic 5 item 38: after the route line, or outside the chrome row.
     [edit('colophon/colophon.tsx', (s) => s.replace('        <ContactRoute />\n', '').replace('        </p>\n      </div>', '        </p>\n        <ContactRoute />\n      </div>')), /the Colophon does not draw the route once/],
     [edit('colophon/colophon.tsx', (s) => s.replace('        <ContactRoute />\n', '').replace('      </div>\n      {exhibits === null', '      </div>\n      <ContactRoute />\n      {exhibits === null')), /the Colophon does not draw the route once/],

@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inflateSync } from 'node:zlib';
+import { SITE_URL } from './site.ts';
 import { CHART_LINK_TEXT } from '../src/shell/route-link.ts';
 import { IDENTITY_MODEL, IDENTITY_NAME, SLOT_TEXT } from '../src/shell/chrome-model.ts';
 import { channels, linear } from '../src/shell/contrast.ts';
@@ -536,7 +537,7 @@ test('metadata: metas() reads either quote and refuses a duplicated name', () =>
   assert.throws(() => metas(twice), /og:image more than once/);
 });
 
-test('metadata: index.html carries the ruled title, description, og: and twitter: tags, root-relative', () => {
+test('metadata: index.html carries the ruled title, description, og: and twitter: tags, absolute on the production URL', () => {
   const html = read('index.html');
   assert.match(html, /<title>Thomas Navarro<\/title>/);
   assert.deepEqual(
@@ -544,27 +545,31 @@ test('metadata: index.html carries the ruled title, description, og: and twitter
     {
       description: 'A work history, mapped.',
       'og:type': 'website',
+      'og:url': SITE_URL,
       'og:title': 'Thomas Navarro',
       'og:description': 'A work history, mapped.',
-      'og:image': '/preview.png',
+      'og:image': `${SITE_URL}preview.png`,
       'og:image:width': '1200',
       'og:image:height': '630',
       'og:image:alt': ALT,
       'twitter:card': 'summary_large_image',
       'twitter:title': 'Thomas Navarro',
       'twitter:description': 'A work history, mapped.',
-      'twitter:image': '/preview.png',
+      'twitter:image': `${SITE_URL}preview.png`,
       'twitter:image:alt': ALT,
     },
   );
-  assert.doesNotMatch(html, /og:url|https?:\/\//, 'no og:url and no absolute URL while absolute og: URLs stay open on the pre-launch checklist (launch-readiness-6-5.md); closing it inverts this');
+  assert.equal(SITE_URL, 'https://thomasnavarro38.github.io/cosmos-portfolio/', 'the production URL (launch-readiness-6-5.md, checklist item 6)');
+  const absolute = [...html.matchAll(/https?:\/\/[^"'\s>]*/g)].map((match) => match[0]);
+  assert.ok(absolute.length > 0 && absolute.every((url) => url.startsWith(SITE_URL)), `every absolute URL in index.html is on the production URL: ${JSON.stringify(absolute)}`);
 });
 
 test('metadata: og:image resolves to a file under public/, at the size it declares', () => {
   const tags = metas(read('index.html'));
   const image = tags.get('og:image') ?? '';
-  assert.match(image, /^\/[\w.-]+$/);
-  const file = join(REPO, 'public', image.slice(1));
+  assert.ok(image.startsWith(SITE_URL), `${image} is on the production URL`);
+  assert.match(image.slice(SITE_URL.length), /^[\w.-]+$/);
+  const file = join(REPO, 'public', image.slice(SITE_URL.length));
   assert.ok(existsSync(file), `${image} is in public/`);
   const png = readFileSync(file);
   assert.equal(String(png.readUInt32BE(16)), tags.get('og:image:width'));

@@ -48,6 +48,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { cellsOf, missingNamedTests, tableUnder } from '../scripts/record-table.ts';
 import { filesUnder, isTestFile, SOURCE_MODULE, stripComments } from '../scripts/source-scan.ts';
+import { SITE_URL } from '../scripts/site.ts';
 
 const REPO_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SRC_ROOT = fileURLToPath(new URL('./', import.meta.url));
@@ -112,12 +113,39 @@ const COLLECTION: readonly (readonly [string, RegExp])[] = [
   ['reaches off-site: a protocol-relative URL', /(?:['"`]|\burl\(\s*['"]?)\/\/[\w.-]/i],
 ];
 
+/**
+ * The one admitted URL: the site's own (`scripts/site.ts`), as the `content` of
+ * a `<meta>` in `index.html` — the link preview's absolute `og:url` and image
+ * URLs (launch-readiness checklist item 6). A crawler reads them; the page
+ * fetches nothing at them. Anywhere else, or any other origin, is still a reach.
+ */
+function withoutOwnMetaUrls(file: Shipped): Shipped {
+  if (file.path !== 'index.html') return file;
+  const own = new RegExp(`(<meta\\b[^>]*\\bcontent=")${SITE_URL.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}[\\w.-]*(")`, 'g');
+  return { ...file, text: file.text.replace(own, (_match, open: string, close: string) => `${open}${close}`) };
+}
+
 function auditCollection(files: readonly Shipped[]): string[] {
-  return scan(files, COLLECTION);
+  return scan(files.map(withoutOwnMetaUrls), COLLECTION);
 }
 
 test('the site collects nothing: no storage, no request and no off-site URL in shipped source', () => {
   assert.deepEqual(auditCollection(shippedSources()), []);
+});
+
+test('the site’s own URL is admitted as a <meta> content in index.html alone', () => {
+  const page = (body: string): Shipped[] => [{ path: 'index.html', text: body }];
+  assert.deepEqual(auditCollection(page(`<meta property="og:url" content="${SITE_URL}" />\n<meta property="og:image" content="${SITE_URL}preview.png" />`)), []);
+  for (const [name, files] of [
+    ['another origin in a meta', page('<meta property="og:image" content="https://cdn.example/preview.png" />')],
+    ['the site’s URL as a script', page(`<script src="${SITE_URL}t.js"></script>`)],
+    ['the site’s URL in a link', page(`<link rel="preload" href="${SITE_URL}t.js" />`)],
+    ['the site’s URL followed off-site', page(`<meta property="og:image" content="${SITE_URL}x?u=https://t.example" />`)],
+    ['a lookalike of the site', page(`<meta property="og:image" content="${SITE_URL.replace('github.io', 'github.io.evil.example')}p.png" />`)],
+    ['the site’s URL in a module', [{ path: 'src/x.ts', text: `const u = '${SITE_URL}t.js';` }]],
+  ] as const) {
+    assert.match(auditCollection(files).join('\n'), /an http\(s\) URL/, `"${name}" must be rejected`);
+  }
 });
 
 test('the collection scan rejects each reach, and ignores one written in a comment', () => {

@@ -12,16 +12,19 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { EXHIBITS, EXHIBIT_PATHS, exhibitHandler, exhibits, type ExhibitRequest } from './exhibits.ts';
+import { EXHIBITS, EXHIBIT_PATHS, exhibitHandler, exhibitPath, exhibits, type ExhibitRequest } from './exhibits.ts';
+import { BASE } from './site.ts';
 
 const REPO = fileURLToPath(new URL('..', import.meta.url));
 
-test('the exhibits: /career.json from src/data/career.json, then /layout.generated.json from generated/layout.generated.json', () => {
+test('the exhibits: career.json from src/data/career.json, then layout.generated.json from generated/layout.generated.json, each served under the base', () => {
   assert.deepEqual(EXHIBITS, [
-    { path: '/career.json', source: 'src/data/career.json' },
-    { path: '/layout.generated.json', source: 'generated/layout.generated.json' },
+    { file: 'career.json', source: 'src/data/career.json' },
+    { file: 'layout.generated.json', source: 'generated/layout.generated.json' },
   ]);
-  assert.deepEqual(EXHIBIT_PATHS, ['/career.json', '/layout.generated.json']);
+  assert.deepEqual(EXHIBIT_PATHS, ['/cosmos-portfolio/career.json', '/cosmos-portfolio/layout.generated.json']);
+  assert.deepEqual(EXHIBITS.map(exhibitPath), EXHIBIT_PATHS);
+  assert.ok(EXHIBIT_PATHS.every((path) => path.startsWith(BASE)), 'each under scripts/site.ts’s base');
   assert.equal(exhibits().name, 'exhibits');
 });
 
@@ -49,7 +52,7 @@ function serve(request: ExhibitRequest): Served {
 test('in dev, each exhibit’s path is served as its file’s exact bytes, as application/json', () => {
   for (const exhibit of EXHIBITS) {
     const bytes = readFileSync(join(REPO, exhibit.source));
-    for (const url of [exhibit.path, `${exhibit.path}?v=1`]) {
+    for (const url of [exhibitPath(exhibit), `${exhibitPath(exhibit)}?v=1`]) {
       const served = serve({ url, method: 'GET' });
       assert.equal(served.passed, false, `${url} is answered, not passed on`);
       assert.equal(served.status, 200);
@@ -57,7 +60,7 @@ test('in dev, each exhibit’s path is served as its file’s exact bytes, as ap
       assert.equal(served.headers['content-length'], bytes.length);
       assert.ok(served.body !== undefined && served.body.equals(bytes), `${url} is ${exhibit.source}, byte for byte`);
     }
-    const head = serve({ url: exhibit.path, method: 'HEAD' });
+    const head = serve({ url: exhibitPath(exhibit), method: 'HEAD' });
     assert.equal(head.status, 200);
     assert.equal(head.body, undefined, 'a HEAD carries no body');
   }
@@ -69,8 +72,9 @@ test('in dev, any other request is passed on untouched', () => {
     { url: '/colophon', method: 'GET' },
     { url: '/src/data/career.json', method: 'GET' },
     { url: '/generated/layout.generated.json', method: 'GET' },
-    { url: '/career.json/', method: 'GET' },
-    { url: '/career.json', method: 'POST' },
+    { url: '/career.json', method: 'GET' },
+    { url: '/cosmos-portfolio/career.json/', method: 'GET' },
+    { url: '/cosmos-portfolio/career.json', method: 'POST' },
     { method: 'GET' },
   ]) {
     const served = serve(request);
@@ -105,14 +109,14 @@ function devMiddleware(plugin: Partial<ReturnType<typeof exhibits>>, root: strin
   return used;
 }
 
-test('in dev, the plugin registers the handler over the resolved root: /career.json is served from it', () => {
+test('in dev, the plugin registers the handler over the resolved root: the based career.json is served from it', () => {
   const used = devMiddleware(exhibits(), REPO);
   assert.equal(used.length, 1, 'one middleware');
   const bytes = readFileSync(join(REPO, 'src/data/career.json'));
   let body: Buffer | undefined;
   let passed = false;
   const response = { statusCode: 0, setHeader: () => undefined, end: (chunk?: Buffer) => void (body = chunk) };
-  (used[0] as ReturnType<typeof exhibitHandler>)({ url: '/career.json', method: 'GET' }, response, () => void (passed = true));
+  (used[0] as ReturnType<typeof exhibitHandler>)({ url: '/cosmos-portfolio/career.json', method: 'GET' }, response, () => void (passed = true));
   assert.equal(passed, false);
   assert.equal(response.statusCode, 200);
   assert.ok(body !== undefined && body.equals(bytes), 'the bytes are read from the root configResolved gave');
@@ -122,7 +126,7 @@ test('the wiring check is red when the root is not the resolved one, or no middl
   const used = devMiddleware(exhibits(), join(REPO, 'nowhere'));
   let body: Buffer | undefined;
   const response = { statusCode: 0, setHeader: () => undefined, end: (chunk?: Buffer) => void (body = chunk) };
-  (used[0] as ReturnType<typeof exhibitHandler>)({ url: '/career.json', method: 'GET' }, response, () => undefined);
+  (used[0] as ReturnType<typeof exhibitHandler>)({ url: '/cosmos-portfolio/career.json', method: 'GET' }, response, () => undefined);
   assert.equal(response.statusCode, 404, 'a root without the file answers 404, not the bytes');
   assert.equal(body, undefined);
   const { configureServer: _dropped, ...silent } = exhibits();

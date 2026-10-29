@@ -347,9 +347,12 @@ become live as the inventory grows.
 
 ## Deferred from 6.1 (2026-10-21)
 
-- **og:image/og:url/twitter:image absolute once the production origin is chosen
+- ~~**og:image/og:url/twitter:image absolute once the production origin is chosen
   (6.1 Q4 (b)) — 6.5.** `index.html` ships `/preview.png` root-relative; Slack
-  resolves it, LinkedIn and Facebook may show no image until the URL is absolute.
+  resolves it, LinkedIn and Facebook may show no image until the URL is absolute.~~ —
+  **closed 2026-10-29** (`spec-github-pages-deploy.md`): the host is GitHub Pages, and
+  `index.html` carries `og:url` and absolute `og:image` / `twitter:image` on
+  `https://thomasnavarro38.github.io/cosmos-portfolio/` (launch-readiness checklist item 6).
 - ~~**No favicon (open, carried from the `og:`/description/icon item).** No
   favicon ruled; `/favicon.ico` 404s. `index.html` carries no icon link.~~ —
   **closed 2026-10-29** (Thomas's ruling 1, `spec-e5-r39-r40-favicon-colophon-layout-and-copy.md`):
@@ -361,7 +364,10 @@ become live as the inventory grows.
   by the SPA rewrite with `index.html` and a `200`, not a 404. The stale-chunk
   404's planned `/assets/* 404` line (launch-readiness checklist item 8, still
   open) does not cover it; item 8's honest-404 work should also add a
-  `/favicon.ico 404` line before the catch-all.
+  `/favicon.ico 404` line before the catch-all. **Since 2026-10-29** (`spec-github-pages-deploy.md`)
+  the host is GitHub Pages and `_redirects` is gone: `/favicon.ico` is asked of
+  the origin root, outside the base, so neither this build nor its `404.html`
+  answers it (review of `spec-github-pages-deploy.md`).
 
 ---
 
@@ -1006,6 +1012,7 @@ Still open after 3.5:
 - source_spec: `_bmad-output/implementation-artifacts/spec-4-2-surface-routing-with-real-history.md`
   summary: After a redeploy, a request for a stale hashed chunk on a host reading `public/_redirects` is answered with `index.html` and a 200, so the chunk fails as a MIME or parse error instead of a 404.
   evidence: `public/_redirects` is `/* /index.html 200` with no `/assets/*` exception. The host's own boundary still logs the failed chunk and keeps the root mounted; a `/assets/* 404` line before the catch-all would make the failure an honest 404.
+  resolution: closed 2026-10-29 by `spec-github-pages-deploy.md` (launch-readiness checklist item 8): the host is GitHub Pages, `public/_redirects` is deleted, and the build's `404.html` answers a stale chunk with a 404.
 
 ## Deferred from: code review of spec-4-2-surface-routing-with-real-history.md, second round (2026-10-16)
 
@@ -1293,3 +1300,9 @@ Still open after 3.5:
   evidence: `src/shell/rail-input.test.ts` `auditPreferenceWriter` reads `MOUNT_TSX` as text. Moving the writer into a pure `.ts` module taking `window` (as `detect.ts` takes `browserEnv()`) would let it run under fake `matchMedia` objects.
   location: src/shell/mount.tsx
   severity: low
+
+## Deferred from: code review of spec-github-pages-deploy.md (2026-10-29)
+
+- **The entry's base strip is held by a source-text audit alone.** `src/shell/entry.ts` hands the mount `resolveRoute(appPath(location.pathname))`; `detect.test.ts`'s entry audit pins the line by regex, with a mutation row, and `appPath`, `resolveRoute` and `browserHistory().pathname()` are executed on their own, but nothing executes the entry and observes the route it hands the mount at `/cosmos-portfolio/chart`. An executed check (the render harness's `mount` path, or the entry loaded with a stubbed `location` and a recording `./mount.tsx`) would close it. L3 step 3's direct loads cover it by hand.
+- **A direct load of `/cosmos-portfolio/chart/index.html` resolves home.** It is a real file Pages serves, but `appPath` gives `/chart/index.html`, which `resolveRoute` reads as unknown, so the router canonicalizes to the base. No link writes that URL.
+- **A stale chunk after a redeploy has no recovery.** It is now an honest 404, but a visitor holding the old page still gets a failed lazy import, logged, with the ground alone (the entry never retries, by decision). Pre-existing.

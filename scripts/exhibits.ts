@@ -1,7 +1,8 @@
 /**
  * The exhibits (5.1, AD-17): the two raw files the Colophon shows, published as
- * emitted data — `src/data/career.json` at `/career.json`, and
- * `generated/layout.generated.json` at `/layout.generated.json`.
+ * emitted data — `src/data/career.json` as `career.json`, and
+ * `generated/layout.generated.json` as `layout.generated.json`, at the root of
+ * `dist/`, so each is served under the site's base (`scripts/site.ts`).
  *
  * **Byte for byte.** The visitor reads every byte the scene reads, so each file
  * is published as its exact bytes: read as a buffer, never parsed, re-serialised
@@ -10,10 +11,10 @@
  * done.
  *
  * **Fixed, unhashed names**, so a link to the raw file stays plain. On a build,
- * each is emitted as an asset at its `fileName`; in dev, a middleware serves the
- * same bytes at the same path as `application/json`, ahead of Vite's SPA
- * fallback. `public/_redirects`' `/* /index.html 200` is a non-forced rewrite, so
- * a real file at either path wins on the host.
+ * each is emitted as an asset at its `file`; in dev, a middleware serves the
+ * same bytes at the same based path as `application/json`, ahead of Vite's SPA
+ * fallback. The host serves a real file as it is, and a missing one with its
+ * `404.html`, a 404.
  *
  * The Colophon fetches the paths (`src/colophon/exhibits.ts`, whose
  * `EXHIBIT_PATHS` its test holds equal to these); nothing imports either file
@@ -23,21 +24,27 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Plugin } from 'vite';
+import { BASE } from './site.ts';
 
-/** One exhibited file: the path it is published at, and its source, relative to the repository root. */
+/** One exhibited file: its name at the root of `dist/`, and its source, relative to the repository root. */
 export interface Exhibit {
-  readonly path: string;
+  readonly file: string;
   readonly source: string;
 }
 
 /** The two exhibits, career first: the authored input, then the artifact derived from it. */
 export const EXHIBITS: readonly Exhibit[] = [
-  { path: '/career.json', source: 'src/data/career.json' },
-  { path: '/layout.generated.json', source: 'generated/layout.generated.json' },
+  { file: 'career.json', source: 'src/data/career.json' },
+  { file: 'layout.generated.json', source: 'generated/layout.generated.json' },
 ];
 
-/** The published paths, in order. */
-export const EXHIBIT_PATHS: readonly string[] = EXHIBITS.map((exhibit) => exhibit.path);
+/** The path an exhibit is served at: its file under the base. */
+export function exhibitPath(exhibit: Exhibit): string {
+  return BASE + exhibit.file;
+}
+
+/** The served paths, in order. */
+export const EXHIBIT_PATHS: readonly string[] = EXHIBITS.map(exhibitPath);
 
 /** An exhibit's exact bytes, read from `root`. */
 export function exhibitBytes(root: string, exhibit: Exhibit): Buffer {
@@ -58,7 +65,7 @@ export interface ExhibitResponse {
 }
 
 /**
- * The dev handler: a `GET` or `HEAD` for an exhibit's path (its query ignored)
+ * The dev handler: a `GET` or `HEAD` for an exhibit's served path (its query ignored)
  * is answered with that file's bytes, read fresh so an edit shows on reload,
  * as `application/json`; any other request is passed on, untouched. A source
  * not on disk (the layout not yet derived on a fresh checkout) answers a bare
@@ -67,7 +74,7 @@ export interface ExhibitResponse {
 export function exhibitHandler(root: string) {
   return (request: ExhibitRequest, response: ExhibitResponse, next: () => void): void => {
     const path = (request.url ?? '').split('?')[0];
-    const exhibit = EXHIBITS.find((candidate) => candidate.path === path);
+    const exhibit = EXHIBITS.find((candidate) => exhibitPath(candidate) === path);
     if (exhibit === undefined || (request.method !== undefined && request.method !== 'GET' && request.method !== 'HEAD')) {
       next();
       return;
@@ -107,7 +114,7 @@ export function exhibits(): Plugin {
       if (!building) return;
       for (const exhibit of EXHIBITS) {
         this.addWatchFile(join(root, exhibit.source));
-        this.emitFile({ type: 'asset', fileName: exhibit.path.slice(1), source: new Uint8Array(exhibitBytes(root, exhibit)) });
+        this.emitFile({ type: 'asset', fileName: exhibit.file, source: new Uint8Array(exhibitBytes(root, exhibit)) });
       }
     },
   };

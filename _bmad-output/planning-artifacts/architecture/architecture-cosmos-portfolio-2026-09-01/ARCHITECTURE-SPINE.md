@@ -263,6 +263,7 @@ graph LR
 - **Host:** any static file host (Cloudflare Pages, Netlify, GitHub Pages, S3). No Node process, no serverless function, no database, no environment variables, no secrets — at any milestone (NFR-6).
 - **Environments:** production only. A personal portfolio has no reader for a staging tier.
 - **Rollback:** redeploy a previous commit.
+- **Ruled host (Thomas, 2026-10-29):** GitHub Pages, a project site at `https://thomasnavarro38.github.io/cosmos-portfolio/`, deployed by `.github/workflows/deploy.yml`. The site is built under the `/cosmos-portfolio/` base; the build writes `chart/index.html`, `colophon/index.html` and `404.html` copies of the page, since Pages has no rewrite rule (`spec-github-pages-deploy.md`).
 
 ## Capability → Architecture Map
 

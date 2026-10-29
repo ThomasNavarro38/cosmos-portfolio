@@ -53,7 +53,7 @@ function recordingRouter(): { readonly router: Router; readonly went: Route[] } 
 const render = (surface: Surface, router: Router = recordingRouter().router): Promise<string> => harness.render(React.createElement(ColophonHost, { surface, router }));
 
 /** The route line's links per machine, as `href text`. */
-const ROUTE_LINE: Readonly<Record<Surface, readonly string[]>> = { scene: ['/ the scene', '/chart the chart'], fallback: ['/chart the chart'] };
+const ROUTE_LINE: Readonly<Record<Surface, readonly string[]>> = { scene: ['/cosmos-portfolio/ the scene', '/cosmos-portfolio/chart the chart'], fallback: ['/cosmos-portfolio/chart the chart'] };
 
 /**
  * The host's render: the Colophon's page (`div.colophon`, D-G6) holding its
