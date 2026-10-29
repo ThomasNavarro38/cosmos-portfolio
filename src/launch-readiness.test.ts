@@ -35,13 +35,14 @@
  * **The record**, `launch-readiness-6-5.md`: its automated rows each name a
  * test that exists (`scripts/record-table.ts`, shared with 6.4's record); it
  * carries AC rows 1–7 and 3b, the three run tables, the pre-launch checklist
- * with items 6, 7 and 8 `closed`, each citing its spec, and every other still
+ * with items 3, 6, 7 and 8 `closed`, each citing its spec, and every other still
  * `open`, and SM-1's acceptance verbatim. The
  * run-table reader names what is missing — a table, a reader row, the
  * deployment row, an AC row — rather than reading `undefined`.
  *
- * And three `todo` tests: the M2 gate on the scene (L1), on the Fallback
- * alone (L2), and the deployment with one rollback (L3). node:test reports a
+ * And the three human runs: the M2 gate on the scene (L1) and on the Fallback
+ * alone (L2), still `todo`, and the deployment with one rollback (L3), a
+ * normal assertion since L3 passed on 2026-10-29. node:test reports a
  * `todo` test as todo whether its body passes or fails, and a todo never fails
  * `npm test`: it keeps the owed run visible, it does not enforce it. Once a
  * table is filled and its todo test's body passes (shown `✔ … # Thomas, before
@@ -388,8 +389,8 @@ test('the record has every AC row, the three run tables, the checklist and SM-1�
   assert.equal(deploymentRow(record).length, 9, 'the deployment row has every column of L3');
   const [, ...items] = tableUnder(record, CHECKLIST);
   assert.equal(items.length, CHECKLIST_ITEMS, `the checklist holds ${CHECKLIST_ITEMS} items`);
-  // Items 6, 7 and 8 closed 2026-10-29 (the production URL, public/favicon.svg, 404.html); every other item is still open.
-  const CLOSED: ReadonlySet<string> = new Set(['6', '7', '8']);
+  // Items 3, 6, 7 and 8 closed 2026-10-29 (L3 passed, the production URL, public/favicon.svg, 404.html); every other item is still open.
+  const CLOSED: ReadonlySet<string> = new Set(['3', '6', '7', '8']);
   for (const item of items) {
     const want = CLOSED.has(item[0] ?? '') ? 'closed' : 'open';
     assert.match(item[3] ?? '', new RegExp(`^${want}$`, 'i'), `checklist item ${item[0]} is ${want}, not ${JSON.stringify(item[3])}`);
@@ -488,7 +489,7 @@ test('the M2 gate passes on the Fallback alone', { todo: 'Thomas, before launch'
   assert.deepEqual(m2Failures(readerRows(record, FALLBACK_RUNS), acRow(record, '2')[4] ?? ''), []);
 });
 
-test('the site is deployed to a static host and rolled back once', { todo: 'Thomas, before launch' }, () => {
+test('the site is deployed to a static host and rolled back once', () => {
   const record = readFileSync(RECORD, 'utf8');
   assert.deepEqual(deploymentFailures(deploymentRow(record), acRow(record, '3')[4] ?? ''), []);
 });
