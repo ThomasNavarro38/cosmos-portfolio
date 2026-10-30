@@ -1012,6 +1012,14 @@ read, not composed.
 - **The page column** (D-G6, 2026-10-29). The chart's column, the same
   declarations at both widths, with the chrome row, the exhibits, the
   derivations and the prose stacked in it.
+- **The chrome row** (Thomas, 2026-10-30). The chart's chrome row, declaration
+  for declaration: the `<h1>` reads `THOMAS NAVARRO · the chart`, the chart a
+  link with the chart heading link's treatment (`ink-label`, a 1px `ink-label`
+  underline, raised to `ink-lift` over `stroke-focus`), in the place the chart's
+  heading holds `the model`; the contact route follows; the route line opposite
+  holds `the scene` on a capable machine and is taken out of the row when empty
+  (`:empty`, as the chart's). Neither reading surface names itself in its
+  chrome, so on a phone the two stacked rows read alike (EXPERIENCE.md §4.7).
 - **Measure.** `{spacing.measure-prose}` for prose. The JSON block is exempt and
   may run to its natural width inside a horizontally scrollable container — code
   that wraps arbitrarily is code that cannot be read.

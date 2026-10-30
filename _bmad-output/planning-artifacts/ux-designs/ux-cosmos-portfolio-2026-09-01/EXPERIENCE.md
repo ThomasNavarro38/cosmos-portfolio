@@ -404,6 +404,17 @@ scene resumes at the stop it was left at, not at First Paint. A visitor who
 inspects the model and is returned to the beginning of the journey has been
 punished for looking.
 
+**Ruled (Thomas, 2026-10-30): the Colophon's chrome row mirrors the chart's.**
+Each reading surface names the *other* one in its heading, and never itself:
+the chart's `<h1>` reads `THOMAS NAVARRO · the model`, the Colophon's
+`THOMAS NAVARRO · the chart`, the second part a link in both. The cross-link
+therefore sits in the same spot on both pages, just before the contact route.
+That matters most on a phone, where the row stacks into a column and the two
+views must read alike. The route line opposite holds `the scene` on a capable
+machine and nothing otherwise, on both pages; empty, it leaves the row. This
+replaces the 2026-10-23 arrangement, in which the Colophon's heading named the
+page itself and its route line carried `the scene · the chart`.
+
 #### Accessibility
 
 The Colophon is a conventional document and therefore the most accessible
@@ -725,8 +736,9 @@ selectable by hand, and beside it a `copy` button (Q4 (b)).
 
 - **Placement.** On the Fallback chart, in the chrome row beside the heading,
   directly after the `<h1>`, with the route line opposite at the row's end
-  (Q3 (a)); on the Colophon, directly under its `<h1>`,
-  drawn before the exhibits arrive. **Never on the scene** or in its corner
+  (Q3 (a)); on the Colophon, the same: in its chrome row directly after
+  its `<h1>` (`THOMAS NAVARRO · the chart`, ruled 2026-10-30, §4.7), drawn
+  before the exhibits arrive. **Never on the scene** or in its corner
   chrome (Q2 (d)).
 - **Strings.** The button reads `copy`; on press it changes in place to
   `copied`, or to `not copied` when the clipboard is blocked or absent. The
