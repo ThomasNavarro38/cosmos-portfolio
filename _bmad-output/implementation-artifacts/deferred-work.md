@@ -1180,6 +1180,7 @@ Still open after 3.5:
   evidence: `first-paint-6-4.md` row 7 points at 3.9's P3 and leaves the Result empty; 3.9's P3 Result is also still empty. No viewer result was invented.
   location: _bmad-output/implementation-artifacts/first-paint-6-4.md (row 7), _bmad-output/implementation-artifacts/identity-audit-3-9.md (P3)
   severity: high (owed before 6.5)
+  resolution: waived 2026-10-30 by Thomas's ruling, not run (`launch-readiness-6-5.md`, "Ruling: launch without the reader runs"; checklist item 5 closed).
 
 ## Deferred from: spec-6-5-launch-readiness-pass.md (2026-10-23)
 
@@ -1188,6 +1189,7 @@ Still open after 3.5:
   evidence: The record's rows 1–3 Results and its `### M2 runs — scene`, `### M2 runs — Fallback` and `### Deployment` tables are empty; no reader, verdict, URL or commit was invented, and nothing was deployed. `src/launch-readiness.test.ts` carries `the M2 gate passes on the scene`, `the M2 gate passes on the Fallback alone` and `the site is deployed to a static host and rolled back once` as `{ todo: 'Thomas, before launch' }`. node:test reports a todo as todo whether its body passes or fails, and a todo never fails `npm test`: it keeps each run visible, it does not enforce it. Once a table is filled and its todo test's body passes, remove the `{ todo }` option so the test runs as a normal assertion (as 6.3's `the real address is supplied` was promoted).
   location: _bmad-output/implementation-artifacts/launch-readiness-6-5.md (rows 1–3, L1–L3, the run tables, the Pre-launch checklist), src/launch-readiness.test.ts (the todos)
   severity: high (owed before launch)
+  resolution: L3 passed 2026-10-29; L1 and L2 waived 2026-10-30 by Thomas's ruling, not run (`launch-readiness-6-5.md`, "Ruling: launch without the reader runs"), their todos replaced by `the M2 gate passes …, or is waived beside the ruling`. Every checklist item is closed.
 
 ## Deferred from: code review of spec-e5-r38-colophon-corner-chrome.md (2026-10-23)
 

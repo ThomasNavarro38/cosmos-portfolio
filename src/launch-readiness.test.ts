@@ -35,19 +35,17 @@
  * **The record**, `launch-readiness-6-5.md`: its automated rows each name a
  * test that exists (`scripts/record-table.ts`, shared with 6.4's record); it
  * carries AC rows 1–7 and 3b, the three run tables, the pre-launch checklist
- * with items 3, 4, 6, 7 and 8 `closed`, each citing its spec, and every other still
- * `open`, and SM-1's acceptance verbatim. The
+ * with every item `closed`, each citing its spec, and items 1, 2 and 5 saying
+ * they were waived, and SM-1's acceptance verbatim. The
  * run-table reader names what is missing — a table, a reader row, the
  * deployment row, an AC row — rather than reading `undefined`.
  *
- * And the three human runs: the M2 gate on the scene (L1) and on the Fallback
- * alone (L2), still `todo`, and the deployment with one rollback (L3), a
- * normal assertion since L3 passed on 2026-10-29. node:test reports a
- * `todo` test as todo whether its body passes or fails, and a todo never fails
- * `npm test`: it keeps the owed run visible, it does not enforce it. Once a
- * table is filled and its todo test's body passes (shown `✔ … # Thomas, before
- * launch`), remove the `{ todo }` option so the test runs as a normal
- * assertion — the way 6.3's `the real address is supplied` was promoted.
+ * And the three human runs, each a normal assertion: the deployment with one
+ * rollback (L3), since it passed on 2026-10-29, and the M2 gate on the scene
+ * (L1) and on the Fallback alone (L2), since Thomas waived both on 2026-10-30.
+ * An M2 verdict is either a pass over three readers or a waiver, and a waiver
+ * holds only beside the ruling and over an empty table, so it never reads as
+ * a pass and never hides a run that was taken.
  * Nothing here deploys, measures or invents a result.
  */
 
@@ -291,6 +289,10 @@ const FALLBACK_RUNS = '### M2 runs — Fallback';
 const DEPLOYMENT = '### Deployment';
 const CHECKLIST = '## Pre-launch checklist';
 const CHECKLIST_ITEMS = 8;
+/** The ruling a waived M2 verdict needs beside it in the record. */
+const WAIVER_RULING = '### Ruling: launch without the reader runs';
+/** The ruling as a heading on its own line, not a mention of it in prose. */
+const hasWaiverRuling = (record: string): boolean => record.split(/\r?\n/).includes(WAIVER_RULING);
 const SM1_ACCEPTANCE = '**No analytics, tracking or measurement instrument is added to observe SM-1; the weak instrument is accepted rather than solved.**';
 
 /** An epic AC row's cells (`#`, AC, Kind, Held by, Result), or a throw naming the row. */
@@ -353,6 +355,19 @@ function m2Failures({ header, rows }: Runs, result: string): string[] {
   return failures;
 }
 
+/**
+ * What keeps an M2 verdict from holding: a pass judged by `m2Failures`, or a waiver missing its ruling or
+ * sitting on a recorded reader. Empty when it holds.
+ */
+function m2VerdictFailures(record: string, runs: Runs, result: string): string[] {
+  if (!says(result, 'waived')) return m2Failures(runs, result);
+  const failures: string[] = [];
+  if (!hasWaiverRuling(record)) failures.push(`the Result is waived, but the record has no "${WAIVER_RULING}"`);
+  const readers = runs.rows.filter(touched);
+  if (readers.length > 0) failures.push(`the Result is waived, but ${readers.length} reader${readers.length === 1 ? ' is' : 's are'} recorded: the Result says what the run found`);
+  return failures;
+}
+
 const COMMIT = /^[0-9a-f]{7,40}$/i;
 
 /** What keeps the deployment from passing; empty when it passes. */
@@ -389,15 +404,17 @@ test('the record has every AC row, the three run tables, the checklist and SM-1�
   assert.equal(deploymentRow(record).length, 9, 'the deployment row has every column of L3');
   const [, ...items] = tableUnder(record, CHECKLIST);
   assert.equal(items.length, CHECKLIST_ITEMS, `the checklist holds ${CHECKLIST_ITEMS} items`);
-  // Items 3, 4, 6, 7 and 8 closed 2026-10-29 (L3 passed, P1 on a proxy by ruling, the production URL, public/favicon.svg, 404.html); every other item is still open.
-  const CLOSED: ReadonlySet<string> = new Set(['3', '4', '6', '7', '8']);
+  // Every item closed: 3, 4, 6, 7 and 8 on 2026-10-29 (L3 passed, P1 on a proxy by ruling, the production URL,
+  // public/favicon.svg, 404.html), and 1, 2 and 5 on 2026-10-30, waived by ruling.
   for (const item of items) {
-    const want = CLOSED.has(item[0] ?? '') ? 'closed' : 'open';
-    assert.match(item[3] ?? '', new RegExp(`^${want}$`, 'i'), `checklist item ${item[0]} is ${want}, not ${JSON.stringify(item[3])}`);
+    assert.match(item[3] ?? '', /^closed$/i, `checklist item ${item[0]} is closed, not ${JSON.stringify(item[3])}`);
     // A closed item names what closed it: the spec, cited in its row, and on disk.
-    if (want === 'closed') assert.deepEqual(closedCitationFailures(item), [], `closed checklist item ${item[0]} cites the spec- file that closed it`);
+    assert.deepEqual(closedCitationFailures(item), [], `closed checklist item ${item[0]} cites the spec- file that closed it`);
   }
   const itemCells = (id: string): readonly string[] => items.find((cells) => cells[0] === id) ?? [];
+  // Items 1, 2 and 5 say they were waived, so none reads as a run that passed.
+  for (const id of ['1', '2', '5']) assert.match(itemCells(id)[1] ?? '', /waived by Thomas's ruling/, `checklist item ${id} says it was waived`);
+  assert.ok(hasWaiverRuling(record), 'the record carries the ruling items 1, 2 and 5 were closed on');
   // Item 7 says what was ruled and closed, not the gap it was opened for.
   assert.doesNotMatch(itemCells('7')[1] ?? '', /none is ruled/i, 'checklist item 7 describes what closed it');
   assert.match(itemCells('7')[1] ?? '', /public\/favicon\.svg/, 'checklist item 7 names the favicon that closed it');
@@ -460,6 +477,15 @@ test('the run-table reader names what is missing, and the verdicts read only fil
   const wide: Runs = { header: [...header.slice(0, 3), 'Machine and route', ...header.slice(3)], rows: three.map((row) => [...row.slice(0, 3), '/chart direct', ...row.slice(3)]) };
   assert.deepEqual(m2Failures(wide, 'pass'), [], 'the clause columns are found by their header, wherever they sit');
 
+  const empty = table([blank('1'), blank('2'), blank('3')]);
+  const waived = "waived, 2026-10-30, by Thomas's ruling: not run";
+  const ruled = `${WAIVER_RULING}\n`;
+  assert.deepEqual(m2VerdictFailures(ruled, empty, waived), [], 'a waiver beside its ruling, over an empty table');
+  assert.match(m2VerdictFailures('', empty, waived).join('\n'), /no "### Ruling: launch without the reader runs"/, 'the ruling missing');
+  assert.match(m2VerdictFailures(ruled, table([reader('1'), blank('2'), blank('3')]), waived).join('\n'), /1 reader is recorded/, 'a waiver over a run that was taken');
+  assert.deepEqual(m2VerdictFailures('', table(three), 'pass'), [], 'a pass needs no ruling');
+  assert.match(m2VerdictFailures(ruled, empty, '').join('\n'), /0 readers recorded/, 'neither a pass nor a waiver');
+
   const deploy = ['1', '2026-11-03', 'https://thomas.example', 'a static host', 'd1eac40', 'yes, both answer', 'f5d735c, the host shows it live', 'yes', 'none'];
   assert.deepEqual(deploymentFailures(deploy, 'pass'), []);
   const swap = (index: number, cell: string) => deploy.map((value, i) => (i === index ? cell : value));
@@ -475,18 +501,16 @@ test('the run-table reader names what is missing, and the verdicts read only fil
   assert.match(deploymentFailures(deploy, '').join('\n'), /not pass/);
 });
 
-// --- Owed by a human, before launch ------------------------------------------------------------------
-// A todo is reported as todo whether its body passes or fails, and never fails `npm test`. Once a table
-// is filled and the body passes, remove `{ todo }` so the test runs as a normal assertion.
+// --- The human runs ------------------------------------------------------------------------------------
 
-test('the M2 gate passes on the scene', { todo: 'Thomas, before launch' }, () => {
+test('the M2 gate passes on the scene, or is waived beside the ruling', () => {
   const record = readFileSync(RECORD, 'utf8');
-  assert.deepEqual(m2Failures(readerRows(record, SCENE_RUNS), acRow(record, '1')[4] ?? ''), []);
+  assert.deepEqual(m2VerdictFailures(record, readerRows(record, SCENE_RUNS), acRow(record, '1')[4] ?? ''), []);
 });
 
-test('the M2 gate passes on the Fallback alone', { todo: 'Thomas, before launch' }, () => {
+test('the M2 gate passes on the Fallback alone, or is waived beside the ruling', () => {
   const record = readFileSync(RECORD, 'utf8');
-  assert.deepEqual(m2Failures(readerRows(record, FALLBACK_RUNS), acRow(record, '2')[4] ?? ''), []);
+  assert.deepEqual(m2VerdictFailures(record, readerRows(record, FALLBACK_RUNS), acRow(record, '2')[4] ?? ''), []);
 });
 
 test('the site is deployed to a static host and rolled back once', () => {
