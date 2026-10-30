@@ -237,7 +237,8 @@ test('the monitor imports nothing, touches no DOM and never reads the motion pre
   assert.ok(floor !== undefined, 'FALLBACK_FLOOR_FPS is one exported numeric literal');
   assert.equal(code.split(/\bFALLBACK_FLOOR_FPS\b/).length - 1, 2, 'declared once and compared once');
   assert.equal(code.match(new RegExp(`(?<![\\w.])${floor.replace('.', '\\.')}(?![\\w.])`, 'g'))?.length, 1, 'the value is written nowhere else');
-  assert.match(read(OFFER_TS), /awaits ratification \(PRD §13 Q16, NFR-2a\)/, 'the note says the value awaits ratification');
+  assert.match(read(OFFER_TS), /ratified by Thomas on 2026-10-30 \(PRD §13 Q16, NFR-2a\)/, 'the note says the value is ratified');
+  assert.doesNotMatch(read(OFFER_TS), /awaits ratification/, 'and no longer says it awaits it');
 });
 
 // --- Source scans ------------------------------------------------------------------------

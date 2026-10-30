@@ -2,7 +2,7 @@
 title: Cosmos Portfolio
 status: draft
 created: 2026-09-01
-updated: 2026-09-01
+updated: 2026-10-30
 ---
 
 # PRD: Cosmos Portfolio
@@ -410,8 +410,8 @@ The link renders as a composed artifact when pasted into Slack, LinkedIn, or a m
 
 - **NFR-1 — First Paint.** `[ASSUMPTION: The first frame of the Schematic scene renders within 2.5 seconds on the target hardware profile over a median broadband connection. Everything behind it — full Dust density, remaining Bodies, complete Rail — may stream in.]` This is a **launch requirement**, not a tradeable. It exists because of The Forward, who has no context and no reason to wait, and it is affordable specifically because M2 ships no photographic textures. **Nothing gates the first frame:** no consent banner, no cookie notice, no splash, no "click to enter" — there is nothing to accept, and anything interposed spends the budget this NFR exists to protect.
 - **NFR-1a — The opening fifteen seconds.** Within roughly fifteen seconds of First Paint, an unprompted visitor should register three things: that this is a **real work history**, that it is **organised rather than listed**, and that it is **deliberately designed**. This is the contract UJ-1 and UJ-3 are both testing, and it sets what the opening Shot must frame. *(NFR-1 governs how fast the frame arrives; this governs what it must accomplish once it does.)*
-- **NFR-2 — Runtime framerate.** `[ASSUMPTION: 30fps at 1080p on 2023-era integrated graphics with full post-FX is the M3 target. This value is PROPOSED in the brief addendum and has never been ratified by the author — it is carried here unratified, not adopted.]` This is an **M3 gate, not a launch gate** — M2 ships no realism pass. Thirty rather than sixty because the content is slow camera movement through mostly static geometry, the exact case where 30 reads cinematic rather than broken, and holding 60 on integrated graphics would cost texture resolution and post-FX, both of which serve realism. **Until ratified, the M3 gate has no testable threshold.**
-- **NFR-2a — Fallback floor.** `[ASSUMPTION: The Fallback is served below 24fps sustained, not below 30.]` NFR-2 sets the *target*; this sets the *floor at which the 3D scene is abandoned*. The two numbers are deliberately different, and conflating them was an error in the draft: a scene running at 26fps should keep running, because NFR-3 says the real thing at 24fps beats a lesser thing at 30. See §13 Q16.
+- **NFR-2 — Runtime framerate.** **30fps at 1080p on the hiring manager's work laptop** (the NFR-4 profile: a 2023-era laptop with integrated graphics), with the full M3 realism pass running. **Measured as the mean framerate over five-second windows across one complete scroll of the Rails, forward then back; every window must hold 30fps** — a whole-run mean would let one bad stretch hide behind good ones. The window is the one NFR-2a's floor monitor already uses, so target and floor are read by one instrument. Below 30fps the scene reads as broken. This is an **M3 gate, not a launch gate** — M2 ships no realism pass. Thirty rather than sixty because the content is slow camera movement through mostly static geometry, the exact case where 30 reads cinematic rather than broken, and holding 60 on integrated graphics would cost texture resolution and post-FX, both of which serve realism. *Ratified by Thomas, 2026-10-30 (§13 Q2).* **The gate is ratified but cannot be run:** no target-profile machine is available, and the dev machine has no integrated GPU, so — unlike First Paint's P1 — no proxy exists either. M3 does not pass NFR-2 until it is measured on a target-profile machine; a run on any other hardware is not a pass.
+- **NFR-2a — Fallback floor.** **The Fallback is offered below 24fps sustained, not below 30** — already shipped at M2 as a five-second mean. NFR-2 sets the *target*; this sets the *floor at which the 3D scene is abandoned*. The two numbers are deliberately different, and conflating them was an error in the draft: between 24 and 30fps the scene is below target but keeps running, an accepted degraded band, because NFR-3 says the real thing at 24fps beats a lesser thing at 30. *Ratified by Thomas, 2026-10-30 (§13 Q16).*
 - **NFR-3 — Degradation policy: quality holds, frames drop.** A viewer served a stripped-down render judges the stripped-down render, unaware a better version existed. Better the real thing at 24fps than a lesser thing at 30. A stable framerate reads smooth where a fluctuating one reads broken even at a higher average.
 - **NFR-4 — Target hardware profile.** A three-year-old laptop with integrated graphics at 1080p: the corporate work-laptop profile of the actual audience. Explicitly not a current Apple-silicon machine and not the dev machine.
 - **NFR-5 — Maintenance cost.** Adding a Project costs one JSON entry plus one `weight` value: no layout work, no camera rework, no repositioning. A living document that stays true for a decade at near-zero upkeep is an explicit requirement, not a nice-to-have.
@@ -485,7 +485,7 @@ Each milestone has a gate. No vertical slice first — deliberate.
 | **M0** | **Cold-read — no code.** Draft two Shallow Projects and one Deep Project in full text. Hand them to a technical reader with no context. | — | **Does a reader stop and read the `notable`? Can they tell the two classes apart on the page?** |
 | M1 | Greybox — schema, force layout, Rails, backward scroll, Focus, untextured | FR-1..FR-6, FR-12a, FR-16..FR-19, FR-17a | Does the pacing work with no visual polish at all? |
 | **M2** | **Information layer + Schematic Identity + Colophon — LAUNCH** | FR-7..FR-15, FR-20..FR-24, NFR-1 | **Can a stranger tell what he does, and which entries are worth reading?** |
-| M3 | Realism pass — textures, lighting, post-FX | NFR-2, NFR-2a | Does it hold NFR-2 on the target hardware profile? |
+| M3 | Realism pass — textures, lighting, post-FX | NFR-2, NFR-2a | Does it hold NFR-2 on the target hardware profile? *(Unrunnable until a target-profile machine is available — §5 NFR-2.)* |
 | M4 | Collapse ending — bookends and contact surface | — | Does the ending land as awe then calm? |
 | M5 | Fun layer | — | Does each addition earn its place? |
 
@@ -539,7 +539,7 @@ Recorded so they are not re-litigated. Full reasoning lives in the [addendum](..
 ## 13. Open Questions
 
 1. **First Paint budget.** Is 2.5s to first Schematic frame right, and is "first frame of the scene" the correct definition of the gate as against first pixel of anything, or scene-plus-first-entity-legible? (NFR-1)
-2. **Framerate target.** Ratify 30fps @ 1080p on 2023-era integrated graphics, or amend the number or the hardware profile? Until ratified, the M3 gate has no testable threshold. (NFR-2)
+2. ~~**Framerate target.** Ratify 30fps @ 1080p on 2023-era integrated graphics, or amend the number or the hardware profile? Until ratified, the M3 gate has no testable threshold. (NFR-2)~~ **Resolved 2026-10-30 (Thomas):** ratified — 30fps at 1080p on the hiring manager's work laptop, every five-second window across a full forward-and-back scroll of the Rails. The gate is unrunnable until a target-profile machine is available; no proxy.
 3. **Forcing function.** A committed date, a named first reader, or both? If neither, R-1 is accepted as a named risk rather than mitigated. (R-1, R-2)
 4. **M4 collapse implementation.** Procedural in-engine, bought, commissioned, or dropped? Decide now rather than leaving an open dependency on the avoided skill. (R-6)
 5. **Shallow-entry treatment.** Does a Shallow Project look different in the scene, or only in the information layer? Resolve after the two-entries-cold-read. (FR-9, R-3)
@@ -553,18 +553,18 @@ Recorded so they are not re-litigated. Full reasoning lives in the [addendum](..
 13. **Schema fix in `inventory-draft.md`.** `duration` and `weight` are missing there as well as here. Fix before drafting the remaining nine entries. (FR-7)
 14. **Default Shot template.** What framing does an un-authored entity get, and which entities earn a hand-authored Shot? (FR-17a)
 15. **Focus trigger.** Dwell, click, scroll-stop, or proximity — and how is Focus released? A UX decision, deliberately left open. (FR-12a)
-16. **Fallback floor.** Is 24fps sustained the right threshold for abandoning the 3D scene, given NFR-2 targets 30? (NFR-2a)
+16. ~~**Fallback floor.** Is 24fps sustained the right threshold for abandoning the 3D scene, given NFR-2 targets 30? (NFR-2a)~~ **Resolved 2026-10-30 (Thomas):** 24fps sustained stays the floor, as shipped at M2; 24–30fps is an accepted degraded band.
 
 ## 14. Assumptions Index
 
-Every `[ASSUMPTION]` above, surfaced for confirmation. **All six are proposals filling gaps the upstream chain left explicitly open — none is a decision the author has ratified.** Each carries a pointer to the Open Question that resolves it.
+Every `[ASSUMPTION]` above, surfaced for confirmation. **All four are proposals filling gaps the upstream chain left explicitly open — none is a decision the author has ratified.** Each carries a pointer to the Open Question that resolves it.
 
 - **§4.2 FR-9** — Deep Projects carry a visible satellite at rest and Shallow Projects do not; brightness is explicitly *not* the distinguishing channel, being already bound to recency by FR-3. (§13 Q5)
 - **§4.6 FR-21** — The Colophon is a static HTML page outside the 3D scene rendering the live JSON with the three mapping rules annotated against real values from it. (§13 Q11)
 - **§5 NFR-1** — First Paint is the first frame of the Schematic scene within 2.5s on target hardware over a median connection, with everything else streaming. (§13 Q1)
-- **§5 NFR-2** — 30fps @ 1080p on 2023-era integrated graphics with full post-FX is the M3 target. **Carried unratified** — proposed in the brief addendum, never confirmed by the author. (§13 Q2)
-- **§5 NFR-2a** — The Fallback floor is 24fps sustained, deliberately below NFR-2's 30fps target. (§13 Q16)
 - **§10 R-6** — The M4 collapse is procedural in-engine (disabling repulsion in the existing force system plus shaders and post-FX) rather than pre-rendered Blender bookends. (§13 Q4)
+
+**NFR-2 and NFR-2a no longer carry assumptions.** Both were ratified by Thomas on 2026-10-30 (§13 Q2, Q16): 30fps in every five-second window on the target profile, and the 24fps floor as shipped. The NFR-2 gate stays unrunnable until a target-profile machine is available.
 
 **R-1 no longer carries an assumption.** The proposed forcing function — a named first reader plus a committed date — was moved out of the mitigation column and the risk is now recorded as unmitigated. A proposal presented as a mitigation made the document read safer than the project is. (§13 Q3)
 
@@ -577,6 +577,7 @@ All critical findings and both mechanical blockers were resolved in place. The f
 **For `bmad-architecture`:**
 - Build-time vs. runtime force settling is unstated, and it silently determines NFR-1's streaming plan, FR-24's reproducible opening frame, and FR-21's demonstrability. Highest-leverage missing decision.
 - Six FRs are epics rather than stories: FR-2, FR-13, FR-17, FR-20, FR-21, FR-22. Expect decomposition.
+- "Full post-FX" in NFR-2 is undefined until the M3 architecture names the realism stack. NFR-2's threshold (ratified 2026-10-30) applies to whatever that stack becomes; the architecture should define it with the 30fps window in view, not after.
 - The project ↔ skill relation dissolves through Condensation the way company ↔ client dissolves into a field lookup (FR-6). Neither is a stored graph edge. Stated in the brief addendum, not restated in FR-13.
 
 **For `bmad-ux`:**

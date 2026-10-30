@@ -96,9 +96,9 @@ NFR-1: **First Paint.** The first frame of the Schematic scene renders within 2.
 
 NFR-1a: **The opening fifteen seconds.** Within roughly fifteen seconds of First Paint an unprompted visitor should register three things: that this is a **real work history**, that it is **organised rather than listed**, and that it is **deliberately designed**. Sets what the opening Shot must frame.
 
-NFR-2: **Runtime framerate.** 30fps at 1080p on 2023-era integrated graphics with full post-FX. **An M3 gate, not a launch gate.** `[UNRATIFIED — carried, not adopted. PRD §13 Q2. Until ratified the M3 gate has no testable threshold.]`
+NFR-2: **Runtime framerate.** 30fps at 1080p on the hiring manager's work laptop (2023-era integrated graphics) with the full M3 realism pass, in every five-second window across a full forward-and-back scroll of the Rails. **An M3 gate, not a launch gate.** *Ratified by Thomas, 2026-10-30 (PRD §13 Q2).* The gate cannot be run until a target-profile machine is available; no proxy.
 
-NFR-2a: **Fallback floor.** The Fallback is offered below 24fps sustained, not below 30 — deliberately different from NFR-2's target. `[UNRATIFIED. PRD §13 Q16.]`
+NFR-2a: **Fallback floor.** The Fallback is offered below 24fps sustained, not below 30 — deliberately different from NFR-2's target. *Ratified by Thomas, 2026-10-30 (PRD §13 Q16).*
 
 NFR-3: **Degradation policy: quality holds, frames drop.** Better the real thing at 24fps than a lesser thing at 30. A stable framerate reads smooth where a fluctuating one reads broken at a higher average.
 
@@ -355,7 +355,7 @@ Every FR is mapped to exactly one owning epic. NFRs are listed against the epic 
 | FR-24 | Epic 6 | Designed shareability — composed preview image, honest about the Fallback |
 | NFR-1 | Epic 6 | First Paint budget **verified** on target hardware (enablers built in Epics 1 and 4) |
 | NFR-1a | Epic 3 | The opening fifteen seconds — what the opening Shot must accomplish |
-| NFR-2 | — | **M3 gate, not launch.** Out of M2 scope. Unratified threshold. |
+| NFR-2 | — | **M3 gate, not launch.** Out of M2 scope. Threshold ratified 2026-10-30; gate unrunnable until target hardware. |
 | NFR-2a | Epic 4 | Fallback floor — the scene is offered, never forced, below the sustained-fps floor |
 | NFR-3 | Epic 4 | Degradation policy: quality holds, frames drop |
 | NFR-4 | Epic 4 | Target hardware profile governs detection and verification |
@@ -1983,7 +1983,7 @@ So that I judge the real thing rather than a stripped-down version of it.
 **Given** the floor value is unratified (NFR-2a, PRD §13 Q16)
 **When** the threshold is implemented
 **Then** it is a single named constant, changeable without touching detection or routing logic
-**And** the code records that the value awaits ratification
+**And** the code records that the value awaits ratification *(ratified 2026-10-30, PRD §13 Q16; the code now records the ratification)*
 
 **Given** the target hardware profile governs verification (NFR-4)
 **When** performance is measured

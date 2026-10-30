@@ -45,7 +45,7 @@
 /**
  * The sustained Fallback floor, in frames per second (NFR-2a).
  *
- * Its value awaits ratification (PRD §13 Q16, NFR-2a). It is the floor below
+ * Its value was ratified by Thomas on 2026-10-30 (PRD §13 Q16, NFR-2a). It is the floor below
  * which the chart is offered — deliberately not NFR-2's 30fps target: a scene
  * between the two keeps running, unoffered. Changing it touches no other file.
  */
