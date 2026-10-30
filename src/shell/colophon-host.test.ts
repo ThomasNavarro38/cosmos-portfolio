@@ -52,8 +52,8 @@ function recordingRouter(): { readonly router: Router; readonly went: Route[] } 
 
 const render = (surface: Surface, router: Router = recordingRouter().router): Promise<string> => harness.render(React.createElement(ColophonHost, { surface, router }));
 
-/** The route line's links per machine, as `href text`. */
-const ROUTE_LINE: Readonly<Record<Surface, readonly string[]>> = { scene: ['/cosmos-portfolio/ the scene', '/cosmos-portfolio/chart the chart'], fallback: ['/cosmos-portfolio/chart the chart'] };
+/** The route line's links per machine, as `href text`: the chart is the heading's, so the line holds the scene alone, where it can run. */
+const ROUTE_LINE: Readonly<Record<Surface, readonly string[]>> = { scene: ['/cosmos-portfolio/ the scene'], fallback: [] };
 
 /**
  * The host's render: the Colophon's page (`div.colophon`, D-G6) holding its
@@ -76,7 +76,8 @@ function colophonOnly(html: string, machine: Surface): string[] {
   if (JSON.stringify(parts) !== JSON.stringify(['h1.colophon-chrome-heading', 'p.contact-route', 'p.colophon-routes'])) return [`the chrome row holds ${JSON.stringify(parts)}`];
   const failures: string[] = [];
   const heading = elementsOf(row)[0];
-  if (heading === undefined || textOf(heading) !== 'THOMAS NAVARRO · the model') failures.push('the heading is not the identity line');
+  const headingLinks = heading === undefined ? [] : queryAll(heading, 'a').map((link) => `${link.attrs['href'] ?? ''} ${textOf(link)}`);
+  if (heading === undefined || textOf(heading) !== 'THOMAS NAVARRO · the chart' || JSON.stringify(headingLinks) !== JSON.stringify(['/cosmos-portfolio/chart the chart'])) failures.push('the heading is not the identity line, `the chart` its one link');
   const links = queryAll(row, 'p.colophon-routes > a').map((link) => `${link.attrs['href'] ?? ''} ${textOf(link)}`);
   if (JSON.stringify(links) !== JSON.stringify(ROUTE_LINE[machine])) failures.push(`the route line links ${JSON.stringify(links)} on a ${machine} machine`);
   return failures;
@@ -102,10 +103,10 @@ test('the colophon host check is red against a broken render, and the wrong mach
   assert.notDeepEqual(colophonOnly(await render('fallback'), 'scene'), [], 'the scene withheld on a capable machine');
 });
 
-/** The props of each `<a>` under the recorded `p.colophon-routes`, read off its children as the page handed them to React. */
-function routeAnchors(paragraphs: readonly { readonly props: Readonly<Record<string, unknown>> }[]): Readonly<Record<string, unknown>>[] {
-  const lines = paragraphs.filter((paragraph) => paragraph.props['className'] === 'colophon-routes');
-  assert.equal(lines.length, 1, 'one route line recorded');
+/** The props of each `<a>` under the one recorded element of `className`, read off its children as the page handed them to React. */
+function anchorsIn(elements: readonly { readonly props: Readonly<Record<string, unknown>> }[], className: string): Readonly<Record<string, unknown>>[] {
+  const lines = elements.filter((element) => element.props['className'] === className);
+  assert.equal(lines.length, 1, `one ${className} recorded`);
   const anchors: Readonly<Record<string, unknown>>[] = [];
   const walk = (node: unknown): void => {
     if (Array.isArray(node)) return node.forEach(walk);
@@ -121,8 +122,8 @@ function routeAnchors(paragraphs: readonly { readonly props: Readonly<Record<str
 test('the links the host hands down route a primary click through router.navigate — the scene to home, the chart to the chart — and leave a modified click to the browser', async () => {
   const { router, went } = recordingRouter();
   await render('scene', router);
-  const anchors = routeAnchors(harness.elements('p'));
-  assert.deepEqual(anchors.map((anchor) => anchor['children']), ['the scene', 'the chart'], 'the scene and the chart, in order');
+  const anchors = [...anchorsIn(harness.elements('p'), 'colophon-routes'), ...anchorsIn(harness.elements('h1'), 'colophon-chrome-heading')];
+  assert.deepEqual(anchors.map((anchor) => anchor['children']), ['the scene', 'the chart'], 'the route line’s scene, then the heading’s chart');
   const click = (overrides: Record<string, unknown> = {}) => {
     let prevented = 0;
     const event = { button: 0, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, defaultPrevented: false, ...overrides, preventDefault: () => void (prevented += 1) };

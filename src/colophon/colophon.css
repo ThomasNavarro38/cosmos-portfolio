@@ -48,7 +48,7 @@
  * pointer cursor and does not lift; nothing else marks the run: no indicator,
  * no motion.
  *
- * The chrome row (Epic 5 item 38, ruling (a)): `chart.css`'s chrome row,
+ * The chrome row (Epic 5 item 38; Thomas's ruling 2026-10-30): `chart.css`'s chrome row,
  * duplicated rather than shared, so each surface's sheet stays its own and
  * the identity audit pins both copies to the same declarations. One flex row
  * packed from the start and wrapping, on one baseline: the `<h1>`
@@ -58,10 +58,12 @@
  * the chart's chrome links' treatment: `ink-label` with a 1px `ink-label`
  * underline at rest, `ink-lift` and a `stroke-focus` underline raised, the
  * `stroke-focus` outline 3px out on keyboard focus (a system one under forced
- * colours). The heading holds no link: `the model` is this page. At phone
- * width (640px and below) the row stacks and the route line drops its auto
- * margin, as the chart's does. The route line is never empty — `the chart` is
- * on every machine — so it has no `:empty` rule.
+ * colours), the heading's `the chart` and the route line's `the scene`
+ * alike, as the chart's heading link and route line take it. At phone width
+ * (640px and below) the row stacks and the route line drops its auto margin,
+ * as the chart's does. Where the scene cannot run the route line is empty,
+ * and `:empty` takes it out of the row, as the chart's, so the stacked column
+ * keeps no stray gap.
  *
  * The page (D-G6, Epic 5 item 39, ruling 2026-10-29): `.colophon` wraps
  * everything the Colophon draws and is `chart.css`'s `.chart` declaration for
@@ -107,18 +109,26 @@
   margin-inline-start: auto;
 }
 
+.colophon-routes:empty {
+  display: none;
+}
+
+.colophon-chrome-heading a,
 .colophon-routes a {
   color: var(--color-ink-label-dark);
   text-decoration: none;
   border-bottom: 1px solid var(--color-ink-label-dark);
 }
 
+.colophon-chrome-heading a:hover,
+.colophon-chrome-heading a:focus-visible,
 .colophon-routes a:hover,
 .colophon-routes a:focus-visible {
   color: var(--color-ink-lift-dark);
   border-bottom-color: var(--color-stroke-focus-dark);
 }
 
+.colophon-chrome-heading a:focus-visible,
 .colophon-routes a:focus-visible {
   outline: 1px solid var(--color-stroke-focus-dark);
   outline-offset: 3px;
@@ -273,6 +283,7 @@
     outline: 1px solid CanvasText;
   }
 
+  .colophon-chrome-heading a:focus-visible,
   .colophon-routes a:focus-visible {
     outline: 1px solid CanvasText;
   }

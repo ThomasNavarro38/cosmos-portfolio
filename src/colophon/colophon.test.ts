@@ -39,15 +39,16 @@
  * link or button broken, or a status beside it; the copy button's click is
  * never `onSolve`.
  *
- * The chrome row (Epic 5 item 38, ruling (a)): one `div.colophon-chrome`
- * first, holding `h1.colophon-chrome-heading` reading `THOMAS NAVARRO · the
- * model` with no link in it, the contact route, then `p.colophon-routes`: the
- * links `colophonLinks` builds for the machine, in order, joined by ` · ` —
- * `the scene` to `/` then `the chart` to `/chart` on a capable machine, `the
- * chart` alone otherwise — each link's click its own `follow`. Driven red by
- * the row unwrapped, the route line dropped or moved before the contact route,
- * a link dropped, reordered or retargeted, the separator dropped, `the model`
- * linked, a link to `/colophon` or a back link added, and the wrong machine.
+ * The chrome row (Epic 5 item 38; Thomas's ruling 2026-10-30, the chart's
+ * mirrored): one `div.colophon-chrome` first, holding
+ * `h1.colophon-chrome-heading` reading `THOMAS NAVARRO · the chart`, `the
+ * chart` its one link, to `/chart`, on every machine — the place the chart's
+ * heading holds `the model` — then the contact route, then `p.colophon-routes`:
+ * `the scene` to `/` on a capable machine, empty otherwise; each link's click
+ * its own `follow`. Driven red by the row unwrapped, the route line dropped or
+ * moved before the contact route, a link dropped, moved or retargeted, the
+ * heading naming the page again, a link to `/colophon` or a back link added,
+ * and the wrong machine.
  *
  * The page (D-G6, Epic 5 item 39): everything above is drawn inside one
  * `div.colophon`, the page's only top-level element, with and without the
@@ -303,14 +304,14 @@ function contactRoute(route: MarkupElement): string[] {
   return failures;
 }
 
-/** The route line's links per machine, as `href text`: the scene then the chart where it is capable, the chart alone otherwise. */
-const ROUTE_LINE: Readonly<Record<Surface, readonly string[]>> = { scene: ['/cosmos-portfolio/ the scene', '/cosmos-portfolio/chart the chart'], fallback: ['/cosmos-portfolio/chart the chart'] };
+/** The route line's links per machine, as `href text`: the scene where it is capable, nothing otherwise. */
+const ROUTE_LINE: Readonly<Record<Surface, readonly string[]>> = { scene: ['/cosmos-portfolio/ the scene'], fallback: [] };
 
 /**
- * The chrome row (Epic 5 item 38): one `div.colophon-chrome` holding the
- * `h1.colophon-chrome-heading` (the identity line, no element in it, so `the
- * model` links nothing), the contact route, then the `p.colophon-routes`
- * holding the machine's links in order, joined by ` · `, and nothing else.
+ * The chrome row: one `div.colophon-chrome` holding the
+ * `h1.colophon-chrome-heading` (the identity line, `the chart` its one link,
+ * on every machine), the contact route, then the `p.colophon-routes` holding
+ * the machine's links in order, and nothing else.
  */
 function chromeRow(row: MarkupElement, machine: Surface): string[] {
   if (row.tag !== 'div' || JSON.stringify(row.attrs) !== JSON.stringify({ class: 'colophon-chrome' })) return [`the first element is ${row.tag} ${JSON.stringify(row.attrs)}, not the div.colophon-chrome`];
@@ -320,8 +321,12 @@ function chromeRow(row: MarkupElement, machine: Surface): string[] {
   if (JSON.stringify(shape) !== JSON.stringify(want)) return [`the chrome row holds ${JSON.stringify(shape)}, not ${JSON.stringify(want)}`];
   const [heading, route, routes] = parts as [MarkupElement, MarkupElement, MarkupElement];
   const failures: string[] = [];
-  if (JSON.stringify(heading.attrs) !== JSON.stringify({ class: 'colophon-chrome-heading' }) || elementsOf(heading).length !== 0 || textOf(heading) !== 'THOMAS NAVARRO · the model') {
-    failures.push(`the heading is ${JSON.stringify(heading.attrs)} reading ${JSON.stringify(textOf(heading))} with ${elementsOf(heading).length} elements — not the identity line, unlinked`);
+  const headingLinks = elementsOf(heading);
+  const chartLink = headingLinks[0];
+  const headingLinked =
+    headingLinks.length === 1 && chartLink?.tag === 'a' && JSON.stringify(chartLink.attrs) === JSON.stringify({ href: '/cosmos-portfolio/chart' }) && elementsOf(chartLink).length === 0 && textOf(chartLink) === 'the chart';
+  if (JSON.stringify(heading.attrs) !== JSON.stringify({ class: 'colophon-chrome-heading' }) || !headingLinked || textOf(heading) !== 'THOMAS NAVARRO · the chart') {
+    failures.push(`the heading is ${JSON.stringify(heading.attrs)} reading ${JSON.stringify(textOf(heading))} with ${headingLinks.length} elements — not the identity line, \`the chart\` its one link`);
   }
   failures.push(...contactRoute(route));
   if (JSON.stringify(routes.attrs) !== JSON.stringify({ class: 'colophon-routes' })) failures.push(`the route line carries ${JSON.stringify(routes.attrs)}`);
@@ -454,9 +459,8 @@ test('the page check is red against broken markup', async () => {
   const headingTag = /<h1 class="colophon-chrome-heading">[\s\S]*?<\/h1>/.exec(full)?.[0] ?? '';
   const routeLine = /<p class="colophon-routes">[\s\S]*?<\/p>/.exec(full)?.[0] ?? '';
   const sceneLink = /<a href="\/cosmos-portfolio\/">[^<]*<\/a>/.exec(routeLine)?.[0] ?? '';
-  const chartLink = /<a href="\/cosmos-portfolio\/chart">[^<]*<\/a>/.exec(routeLine)?.[0] ?? '';
-  const between = routeLine.slice(routeLine.indexOf(sceneLink) + sceneLink.length, routeLine.indexOf(chartLink));
-  assert.ok(headingTag !== '' && sceneLink !== '' && chartLink !== '' && between.includes('·'), 'the heading, both links and the separator between them were found');
+  const chartLink = /<a href="\/cosmos-portfolio\/chart">[^<]*<\/a>/.exec(headingTag)?.[0] ?? '';
+  assert.ok(headingTag !== '' && sceneLink !== '' && chartLink !== '', 'the heading, its chart link and the route line’s scene link were found');
   const pageOpen = '<div class="colophon">';
   const chromeOpen = '<div class="colophon-chrome">';
   assert.ok(full.startsWith(`${pageOpen}${chromeOpen}`) && bare.startsWith(`${pageOpen}${chromeOpen}`), 'the page wrapper, then the chrome row first in it, with and without the exhibits');
@@ -496,7 +500,7 @@ test('the page check is red against broken markup', async () => {
     ['the career text altered', inCareer((pre) => pre.replace(/\n/, '\n  '))],
     ['the layout text truncated', full.replace(layoutPre, () => layoutPre.replace(/<span[^>]*>[^<]*<\/span>[^<]*<\/pre>$/, '</pre>'))],
     ['the order swapped', swapped],
-    ['the heading renamed', full.replace(headingTag, headingTag.replace('the model', 'The model'))],
+    ['the heading renamed', full.replace(headingTag, headingTag.replace('THOMAS NAVARRO', 'Thomas Navarro'))],
     ['a third <pre>', appended(full, '<pre>x</pre>')],
     ['an exhibit’s name dropped', inCareer((pre) => pre.replace(' aria-label="career.json"', ''))],
     ['the exhibits’ names swapped', inCareer((pre) => pre.replace('aria-label="career.json"', 'aria-label="layout.generated.json"'))],
@@ -542,15 +546,15 @@ test('the page check is red against broken markup', async () => {
     ['the route line dropped', full.replace(routeLine, '')],
     ['the route line before the contact route', full.replace(contactMarkup, '').replace(routeLine, `${routeLine}${contactMarkup}`)],
     ['the route line before the heading', full.replace(routeLine, '').replace(headingTag, `${routeLine}${headingTag}`)],
-    ['the scene link dropped', full.replace(`${sceneLink}${between}`, '')],
-    ['the chart link dropped', full.replace(`${between}${chartLink}`, '')],
-    ['the links reordered', full.replace(`${sceneLink}${between}${chartLink}`, `${chartLink}${between}${sceneLink}`)],
-    ['the separator dropped', full.replace(`${sceneLink}${between}${chartLink}`, `${sceneLink}${chartLink}`)],
+    ['the scene link dropped', full.replace(sceneLink, '')],
+    ['the chart link dropped', full.replace(headingTag, headingTag.replace(chartLink, 'the chart'))],
+    ['the chart link moved to the route line', full.replace(headingTag, headingTag.replace(chartLink, '')).replace(`${sceneLink}</p>`, `${sceneLink} · ${chartLink}</p>`)],
+    ['the chart link retargeted', full.replace(chartLink, chartLink.replace('href="/cosmos-portfolio/chart"', 'href="/cosmos-portfolio/"'))],
     ['the scene link retargeted', full.replace(sceneLink, sceneLink.replace('href="/cosmos-portfolio/"', 'href="/cosmos-portfolio/colophon"'))],
-    ['a link to the page itself', full.replace(`${chartLink}</p>`, `${chartLink} · <a href="/cosmos-portfolio/colophon">the model</a></p>`)],
-    ['a back link', full.replace(`${chartLink}</p>`, `${chartLink} · <a href="javascript:history.back()">back</a></p>`)],
-    ['the model linked', full.replace(headingTag, headingTag.replace(/the model<\/h1>$/, '<a href="/cosmos-portfolio/colophon">the model</a></h1>'))],
-    ['the heading the bare model', full.replace(headingTag, '<h1 class="colophon-chrome-heading">the model</h1>')],
+    ['a link to the page itself', full.replace(`${sceneLink}</p>`, `${sceneLink} · <a href="/cosmos-portfolio/colophon">the model</a></p>`)],
+    ['a back link', full.replace(`${sceneLink}</p>`, `${sceneLink} · <a href="javascript:history.back()">back</a></p>`)],
+    ['the heading naming the page again', full.replace(headingTag, '<h1 class="colophon-chrome-heading">THOMAS NAVARRO · the model</h1>')],
+    ['the heading the bare chart link', full.replace(headingTag, `<h1 class="colophon-chrome-heading">${chartLink}</h1>`)],
     ['the heading unclassed', full.replace(headingTag, headingTag.replace(' class="colophon-chrome-heading"', ''))],
     ['the route line unclassed', full.replace(routeLine, routeLine.replace(' class="colophon-routes"', ''))],
   ] as const) {
@@ -562,10 +566,10 @@ test('the page check is red against broken markup', async () => {
   assert.notDeepEqual(colophonPage(await renderPage(EXHIBITS, IDLE, 'fallback'), EXHIBITS, IDLE, 'scene'), [], 'the scene withheld on a capable machine');
 });
 
-/** The props of each `<a>` under the recorded `p.colophon-routes`, read off its children as the page handed them to React. */
-function routeAnchors(paragraphs: readonly { readonly props: Readonly<Record<string, unknown>> }[]): Readonly<Record<string, unknown>>[] {
-  const lines = paragraphs.filter((paragraph) => paragraph.props['className'] === 'colophon-routes');
-  assert.equal(lines.length, 1, 'one route line recorded');
+/** The props of each `<a>` under the one recorded element of `className`, read off its children as the page handed them to React. */
+function anchorsIn(elements: readonly { readonly props: Readonly<Record<string, unknown>> }[], className: string): Readonly<Record<string, unknown>>[] {
+  const lines = elements.filter((element) => element.props['className'] === className);
+  assert.equal(lines.length, 1, `one ${className} recorded`);
   const anchors: Readonly<Record<string, unknown>>[] = [];
   const walk = (node: unknown): void => {
     if (Array.isArray(node)) return node.forEach(walk);
@@ -579,9 +583,12 @@ function routeAnchors(paragraphs: readonly { readonly props: Readonly<Record<str
 }
 
 test('each route link’s click is the link’s own follow, handed down unchanged, on either machine', async () => {
-  for (const [machine, texts] of [['scene', ['the scene', 'the chart']], ['fallback', ['the chart']]] as const) {
+  for (const [machine, texts] of [['scene', ['the scene']], ['fallback', []]] as const) {
     await renderPage(null, IDLE, machine);
-    const anchors = routeAnchors(harness.elements('p'));
+    const heading = anchorsIn(harness.elements('h1'), 'colophon-chrome-heading');
+    assert.deepEqual(heading.map((anchor) => anchor['children']), ['the chart'], `${machine}: the heading’s one link`);
+    assert.deepEqual(heading.map((anchor) => anchor['onClick']), [LINKS[machine].chart.follow], `${machine}: the heading link’s click is the chart link’s follow`);
+    const anchors = anchorsIn(harness.elements('p'), 'colophon-routes');
     assert.deepEqual(anchors.map((anchor) => anchor['children']), texts, `${machine}: the route line’s links, in order`);
     assert.deepEqual(
       anchors.map((anchor) => anchor['onClick']),
@@ -715,8 +722,10 @@ test('the effect audit rejects the real source with its wiring broken', () => {
     // Epic 5 item 38: the links not handed down, not taken as the prop, or a route written here.
     ['the links not handed down', (s: string) => s.replace('<ColophonPage links={links} exhibits', '<ColophonPage links={{ routes: [] }} exhibits')],
     ['no links prop', (s: string) => s.replace('export default function Colophon({ links }: { readonly links: ColophonLinks }) {', 'export default function Colophon() {\n  const links: ColophonLinks = { routes: [] };')],
-    ['a written route', (s: string) => s.replace('              <a href={link.href} onClick={link.follow}>', '              <a href="/" onClick={link.follow}>')],
-    ['a back link', (s: string) => s.replace('              <a href={link.href} onClick={link.follow}>', '              <a href={link.href} onClick={() => window.history.back()}>')],
+    ['a written route', (s: string) => s.replace('            <a key={link.key} href={link.href} onClick={link.follow}>', '            <a key={link.key} href="/" onClick={link.follow}>')],
+    ['a back link', (s: string) => s.replace('            <a key={link.key} href={link.href} onClick={link.follow}>', '            <a key={link.key} href={link.href} onClick={() => window.history.back()}>')],
+    ['a written chart link', (s: string) => s.replace('<a href={links.chart.href} onClick={links.chart.follow}>', '<a href="/chart" onClick={links.chart.follow}>')],
+    ['a back link in the heading', (s: string) => s.replace('<a href={links.chart.href} onClick={links.chart.follow}>', '<a href={links.chart.href} onClick={() => window.history.back()}>')],
     ['the files never shown', (s: string) => s.replace('startExhibits(fetch, setExhibits,', 'startExhibits(fetch, () => undefined,')],
     ['the files shown into another state', (s: string) => s.replace('const [exhibits, setExhibits] = useState<Exhibits | null>(null);', 'const [exhibits] = useState<Exhibits | null>(null);\n  const [, setExhibits] = useState<Exhibits | null>(null);')],
     ['a fetch of its own', (s: string) => s.replace('useEffect(() => startExhibits(', 'useEffect(() => { const c = new AbortController(); return () => c.abort(); }, []);\n  useEffect(() => startExhibits(')],

@@ -15,14 +15,15 @@
  * `ColophonPage` draws: the chrome row, then, once the files have arrived, each
  * file's text verbatim and in full in its own `<pre>`, career first.
  *
- * **The chrome row** (Epic 5 item 38, ruling (a) 2026-10-23), the chart's
- * mirrored, drawn unconditionally — before the exhibits arrive, and when they
- * never do: a `div.colophon-chrome` holding the `<h1>` (`h1.colophon-chrome-heading`,
- * `IDENTITY_NAME`, ` · ` and `IDENTITY_MODEL`: the identity line, `the model`
- * unlinked because it is this page), the contact route directly after it, and
- * the route line opposite (`p.colophon-routes`): the `links` prop's routes, each
- * an `<a href>` whose click is the link's own `follow`, joined by ` · ` —
- * `the scene · the chart` on a capable machine, `the chart` alone otherwise.
+ * **The chrome row** (Epic 5 item 38; Thomas's ruling 2026-10-30, replacing
+ * ruling (a) of 2026-10-23), the chart's mirrored, drawn unconditionally —
+ * before the exhibits arrive, and when they never do: a `div.colophon-chrome`
+ * holding the `<h1>` (`h1.colophon-chrome-heading`, `IDENTITY_NAME`, ` · ` and
+ * the `links` prop's `chart` as an `<a href>`: the identity line naming the
+ * other page, as the chart's names `the model`, so each page's cross-link sits
+ * in the same spot), the contact route directly after it, and the route line
+ * opposite (`p.colophon-routes`): the `links` prop's routes, `the scene` on a
+ * capable machine and nothing otherwise. Each link's click is its own `follow`.
  * The links are built by `src/shell/colophon-host.tsx` (`colophonLinks`), so
  * this file reads no router, store or machine surface; their type is declared
  * here structurally, as `chart-model.ts` declares `ChartLinks`, with React's
@@ -87,7 +88,7 @@
  *
  * It imports React, `exhibits.ts`, `derivations.ts`, `json-setting.ts`,
  * `absences.ts`, `live-solve.ts`, `../shell/chrome-model.ts` (the identity's
- * two words, in the `ui` chunk), `../shell/contact-route.tsx` and
+ * name, in the `ui` chunk), `../shell/contact-route.tsx` and
  * `colophon.css`, and nothing else: no other shell module — never the router,
  * `route-link.ts` or detection — not the motion
  * preference, never `src/data/` or `generated/`, and
@@ -95,17 +96,17 @@
  * statically.
  */
 
-import { Fragment, useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { EXHIBIT_NAMES, startExhibits, type Exhibits } from './exhibits.ts';
 import { DERIVATION_LABELS, derivationRows, type DerivationInput } from './derivations.ts';
 import { jsonRuns } from './json-setting.ts';
 import { ABSENCES, ABSENCES_HEADING } from './absences.ts';
 import { LIVE_SOLVE, createLiveSolve } from './live-solve.ts';
-import { IDENTITY_MODEL, IDENTITY_NAME } from '../shell/chrome-model.ts';
+import { IDENTITY_NAME } from '../shell/chrome-model.ts';
 import { ContactRoute } from '../shell/contact-route.tsx';
 import './colophon.css';
 
-/** One link on the route line, as the shell builds it: its key, its text, its `href`, and its click. */
+/** One link of the chrome row, as the shell builds it: its key, its text, its `href`, and its click. */
 export interface ColophonLink {
   readonly key: string;
   readonly text: string;
@@ -113,8 +114,9 @@ export interface ColophonLink {
   readonly follow: (event: MouseEvent<HTMLAnchorElement>) => void;
 }
 
-/** The Colophon's links: its route line — `the scene` where this machine is capable, then `the chart`. */
+/** The Colophon's links: `the chart` in its heading, and its route line — `the scene` where this machine is capable. */
 export interface ColophonLinks {
+  readonly chart: ColophonLink;
   readonly routes: readonly ColophonLink[];
 }
 
@@ -192,16 +194,15 @@ export function ColophonPage({ links, exhibits, solved, running, onSolve }: { re
   return (
     <div className="colophon">
       <div className="colophon-chrome">
-        <h1 className="colophon-chrome-heading">{IDENTITY_NAME} · {IDENTITY_MODEL}</h1>
+        <h1 className="colophon-chrome-heading">
+          {IDENTITY_NAME} · <a href={links.chart.href} onClick={links.chart.follow}>{links.chart.text}</a>
+        </h1>
         <ContactRoute />
         <p className="colophon-routes">
-          {links.routes.map((link, index) => (
-            <Fragment key={link.key}>
-              {index === 0 ? null : ' · '}
-              <a href={link.href} onClick={link.follow}>
-                {link.text}
-              </a>
-            </Fragment>
+          {links.routes.map((link) => (
+            <a key={link.key} href={link.href} onClick={link.follow}>
+              {link.text}
+            </a>
           ))}
         </p>
       </div>

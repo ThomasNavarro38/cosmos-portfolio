@@ -108,9 +108,9 @@ function chartAlone(root: MarkupElement, machine: Surface): string[] {
 
 /**
  * The Colophon: `main` holds its page (`div.colophon`, D-G6) and, in it, its
- * chrome row alone (Epic 5 item 38) — the `<h1>` reading the identity line, the
- * contact route (6.3), then the route line: `the scene` to `/` and `the chart`
- * to `/chart` on a capable machine, `the chart` alone on a fallback one — and
+ * chrome row alone (Epic 5 item 38) — the `<h1>` reading the identity line,
+ * `the chart` to `/chart` its one link, the contact route (6.3), then the route
+ * line: `the scene` to `/` on a capable machine, empty on a fallback one — and
  * nothing else.
  */
 function colophonAlone(root: MarkupElement, machine: Surface): string[] {
@@ -129,9 +129,11 @@ function colophonAlone(root: MarkupElement, machine: Surface): string[] {
   const parts = elementsOf(row).map(describe);
   if (JSON.stringify(parts) !== JSON.stringify(['h1.colophon-chrome-heading', 'p.contact-route', 'p.colophon-routes'])) return [`the chrome row holds ${parts.join(', ')} — not the <h1>, the contact route and the route line`];
   const failures: string[] = [];
-  if (textOf(elementsOf(row)[0] as MarkupElement) !== 'THOMAS NAVARRO · the model') failures.push('the Colophon’s <h1> is not the identity line');
+  if (textOf(elementsOf(row)[0] as MarkupElement) !== 'THOMAS NAVARRO · the chart') failures.push('the Colophon’s <h1> is not the identity line');
+  const chart = queryAll(row, 'h1.colophon-chrome-heading > a').map((link) => `${link.attrs['href'] ?? ''} ${textOf(link)}`);
+  if (JSON.stringify(chart) !== JSON.stringify(['/cosmos-portfolio/chart the chart'])) failures.push(`the Colophon's <h1> links ${JSON.stringify(chart)}, not the chart alone`);
   const routes = queryAll(row, 'p.colophon-routes > a').map((link) => `${link.attrs['href'] ?? ''} ${textOf(link)}`);
-  const want = machine === 'scene' ? ['/cosmos-portfolio/ the scene', '/cosmos-portfolio/chart the chart'] : ['/cosmos-portfolio/chart the chart'];
+  const want = machine === 'scene' ? ['/cosmos-portfolio/ the scene'] : [];
   if (JSON.stringify(routes) !== JSON.stringify(want)) failures.push(`the Colophon's route line links ${JSON.stringify(routes)} on a ${machine} machine, not ${JSON.stringify(want)}`);
   return failures;
 }
@@ -265,8 +267,9 @@ test('each rendered check is red against a broken render', async () => {
     ['the Colophon beside the index', colophon.replace(/<main[^>]*>/, (open) => `${open}${nav}`)],
     ['the Colophon twice', colophon.replace(colophonHeading, `${colophonHeading}${colophonHeading}`)],
     ['the Colophon gone', colophon.replace(colophonHeading, '')],
-    // Epic 5 item 38: the old shape — no route out of /colophon — and the route line emptied.
+    // Epic 5 item 38: the old shape — no route out of /colophon — the heading naming the page again, and the route line emptied.
     ['the old shape, no route out', colophon.replace(/<div class="colophon-chrome">([\s\S]*?)<p class="colophon-routes">[\s\S]*?<\/p><\/div>/, (_, kept: string) => kept.replace(colophonHeading, '<h1>the model</h1>'))],
+    ['the heading naming the page again', colophon.replace(colophonHeading, '<h1 class="colophon-chrome-heading">THOMAS NAVARRO · the model</h1>')],
     ['the route line emptied', colophon.replace(colophonRoutes, '<p class="colophon-routes"></p>')],
     // D-G6: the page wrapper dropped.
     ['the page wrapper dropped', colophon.replace('<div class="colophon">', '').replace(/<\/div>((?:<!--[^>]*-->)*)<\/main>/, '$1</main>')],

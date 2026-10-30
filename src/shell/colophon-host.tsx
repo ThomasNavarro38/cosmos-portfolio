@@ -13,11 +13,11 @@
  * root stays mounted, so a later route change still renders. No loader and no
  * retry, by the same decision as the entry's.
  *
- * **The Colophon's links are built here** (Epic 5 item 38, ruling (a)), from
- * the router and this machine's surface, by `colophonLinks` (`route-link.ts`),
- * as `fallback-host.tsx` builds the chart's: its route line, `the scene` to `/`
- * only where the surface is the scene, then `the chart` to `/chart` on any
- * machine. Each is `{ key, text, href, follow }`, so the Colophon reads no
+ * **The Colophon's links are built here** (Epic 5 item 38; Thomas's ruling
+ * 2026-10-30), from the router and this machine's surface, by `colophonLinks`
+ * (`route-link.ts`), as `fallback-host.tsx` builds the chart's: its heading's
+ * `the chart` to `/chart` on any machine, and its route line, `the scene` to
+ * `/` only where the surface is the scene. Each is `{ key, text, href, follow }`, so the Colophon reads no
  * router, store or machine surface of its own, and a primary click on `the
  * scene` is the router's push home — the scene resumes at the stop it was left.
  */

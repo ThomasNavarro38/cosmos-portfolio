@@ -917,9 +917,9 @@ test('the colophon is reached only from src/shell/colophon-host.tsx, and holds o
   // 6.3: the one shell module admitted is the shared contact route, imported once.
   const contactImport = "import { ContactRoute } from '../shell/contact-route.tsx';";
   assert.equal(colophon.split(contactImport).length, 2, 'the contact route imported once');
-  // Epic 5 item 38: the identity's two words for the chrome row's <h1>; its links arrive as a prop.
-  const identityImport = "import { IDENTITY_MODEL, IDENTITY_NAME } from '../shell/chrome-model.ts';";
-  assert.equal(colophon.split(identityImport).length, 2, 'the identity’s words imported once');
+  // The identity's name for the chrome row's <h1>; its links, the heading's chart link included, arrive as a prop.
+  const identityImport = "import { IDENTITY_NAME } from '../shell/chrome-model.ts';";
+  assert.equal(colophon.split(identityImport).length, 2, 'the identity’s name imported once');
   assert.doesNotMatch(colophon.replace(contactImport, '').replace(identityImport, ''), /shell\/|motion-preference|reducedMotion/, 'no other shell module — no router, route-link or detection — no preference');
   assert.equal((colophon.match(/<h1\b/g) ?? []).length, 1, 'one <h1>');
   assert.match(colophon, /export\s+default\s+function\s+Colophon\(\{\s*links\s*\}/, 'a default export for lazy(), taking the shell’s links');

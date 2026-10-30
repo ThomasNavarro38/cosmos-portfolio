@@ -123,19 +123,11 @@ test('the chart’s links: the model to /colophon on every machine, the scene to
   assert.deepEqual(incapable.routes, [], 'no scene link where the scene cannot run');
 });
 
-test('the Colophon’s route line: the scene then the chart on a capable machine; the chart alone on the fallback surface; never the Colophon', () => {
-  assert.deepEqual(colophonRoutes('scene'), [
-    { key: 'scene', text: 'the scene', to: 'home' },
-    { key: 'chart', text: 'the chart', to: 'chart' },
-  ]);
-  assert.deepEqual(colophonRoutes('fallback'), [{ key: 'chart', text: 'the chart', to: 'chart' }]);
+test('the Colophon’s route line: the scene on a capable machine, nothing on the fallback surface; never the Colophon nor the chart', () => {
+  assert.deepEqual(colophonRoutes('scene'), [{ key: 'scene', text: SCENE_LINK_TEXT, to: 'home' }]);
+  assert.deepEqual(colophonRoutes('fallback'), [], 'the chart is the heading’s link, so the line is empty where the scene cannot run');
   for (const machine of ['scene', 'fallback'] as const) {
-    assert.ok(colophonRoutes(machine).every((route) => route.to !== 'colophon'), `${machine}: no link to the page itself`);
-    assert.deepEqual(
-      colophonRoutes(machine).map((route) => route.text),
-      colophonRoutes(machine).map((route) => (route.to === 'home' ? SCENE_LINK_TEXT : CHART_LINK_TEXT)),
-      `${machine}: the texts are the existing constants`,
-    );
+    assert.ok(colophonRoutes(machine).every((route) => route.to !== 'colophon' && route.to !== 'chart'), `${machine}: no link to the page itself, nor the heading’s`);
   }
 });
 
@@ -149,16 +141,17 @@ function colophonRoutesBorrows(source: string): boolean {
 test('the Colophon’s route line is written out, not borrowed from the chart’s', () => {
   const real = readFileSync(ROUTE_LINK_TS, 'utf8').replace(/\r\n/g, '\n');
   assert.equal(colophonRoutesBorrows(real), false, 'colophonRoutes does not read chartRoutes');
-  const borrowed = real.replace(/(export function colophonRoutes\([^)]*\)[^{]*\{)[\s\S]*?\n\}/, "$1\n  return [...chartRoutes(machine), { key: 'chart', text: CHART_LINK_TEXT, to: 'chart' }];\n}");
+  const borrowed = real.replace(/(export function colophonRoutes\([^)]*\)[^{]*\{)[\s\S]*?\n\}/, '$1\n  return chartRoutes(machine);\n}');
   assert.notEqual(borrowed, real, 'the mutation applies');
   assert.equal(colophonRoutesBorrows(borrowed), true, 'a line built from chartRoutes is rejected');
 });
 
-test('the Colophon’s links: hrefs in order, a primary click routed, a modified click left to the browser', () => {
+test('the Colophon’s links: the chart to /chart on every machine, the scene to / on a capable one; a modified click left to the browser', () => {
   const capable = recorder();
   const links = colophonLinks('scene', capable.navigate);
-  assert.deepEqual(links.routes.map((link) => [link.key, link.text, link.href]), [['scene', 'the scene', '/cosmos-portfolio/'], ['chart', 'the chart', '/cosmos-portfolio/chart']]);
-  for (const link of links.routes) {
+  assert.deepEqual({ key: links.chart.key, text: links.chart.text, href: links.chart.href }, { key: 'chart', text: CHART_LINK_TEXT, href: '/cosmos-portfolio/chart' });
+  assert.deepEqual(links.routes.map((link) => [link.key, link.text, link.href]), [['scene', SCENE_LINK_TEXT, '/cosmos-portfolio/']]);
+  for (const link of [links.chart, ...links.routes]) {
     for (const overrides of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
       const modified = click(overrides);
       link.follow(modified.event);
@@ -166,14 +159,15 @@ test('the Colophon’s links: hrefs in order, a primary click routed, a modified
     }
   }
   assert.deepEqual(capable.went, [], 'no modified click navigated');
+  const chart = click();
+  links.chart.follow(chart.event);
   const scene = click();
   links.routes[0]?.follow(scene.event);
-  const chart = click();
-  links.routes[1]?.follow(chart.event);
-  assert.deepEqual(capable.went, ['home', 'chart'], 'the router pushes home, then the chart');
-  assert.deepEqual([scene.prevented(), chart.prevented()], [1, 1]);
+  assert.deepEqual(capable.went, ['chart', 'home'], 'the router pushes the chart, then home');
+  assert.deepEqual([chart.prevented(), scene.prevented()], [1, 1]);
   const incapable = colophonLinks('fallback', recorder().navigate);
-  assert.deepEqual(incapable.routes.map((link) => [link.key, link.text, link.href]), [['chart', 'the chart', '/cosmos-portfolio/chart']], 'the chart alone where the scene cannot run');
+  assert.equal(incapable.chart.href, '/cosmos-portfolio/chart', 'the chart link is present on any machine');
+  assert.deepEqual(incapable.routes, [], 'no scene link where the scene cannot run');
 });
 
 // --- Purity -------------------------------------------------------------------------------
