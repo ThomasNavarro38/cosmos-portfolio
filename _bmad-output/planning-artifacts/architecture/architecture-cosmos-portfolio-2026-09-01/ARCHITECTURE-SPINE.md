@@ -4,10 +4,10 @@ type: architecture-spine
 purpose: build-substrate
 altitude: feature
 paradigm: 'Build-time derivation pipeline feeding two read-only renderers'
-scope: 'M2 launch — the 3D Schematic scene, the Fallback star chart, the Colophon, and the build pipeline that feeds all three from one authored JSON file.'
+scope: 'M2 launch — the 3D Schematic scene, the Fallback star chart, the Colophon, and the build pipeline that feeds all three from one authored JSON file — and M3, the realism pass over the scene.'
 status: final
 created: '2026-09-01'
-updated: '2026-09-01'
+updated: '2026-11-01'
 binds:
   - FR-1..FR-6
   - FR-7..FR-12
@@ -17,6 +17,7 @@ binds:
   - FR-21
   - FR-22..FR-24
   - NFR-1..NFR-7
+  - NFR-2, NFR-2a, NFR-3 (M3 gate and floor)
 sources:
   - ../../prds/prd-cosmos-portfolio-2026-09-01/prd.md
   - ../../ux-designs/ux-cosmos-portfolio-2026-09-01/DESIGN.md
@@ -54,6 +55,7 @@ graph LR
 | Source of truth | `src/data/` |
 | Pipeline (validate, derive, solve) | `src/derive/` |
 | Renderers | `src/render-scene/`, `src/render-fallback/` |
+| M3 realism layer, scene only | `src/render-scene/realism/` |
 | Entry, routing, state, index | `src/shell/` |
 
 ## Invariants & Rules
@@ -104,7 +106,7 @@ graph LR
 
 - **Binds:** AD-1, AD-6, NFR-1, FR-21
 - **Prevents:** The solver landing in the First Paint bundle and defeating AD-1; the scene loading for Fallback visitors; the Colophon's demonstration cost being paid by every visitor.
-- **Rule:** `src/shell/entry` contains no React and no Three. **Four** chunks load dynamically and independently: `render-scene`, `render-fallback`, `colophon` (AD-17), and `solver` (the Colophon's live re-run only). **Nothing on the critical entry path may statically import the scene, the solver, or the raw career JSON.** This is a property of *bundler output*, not of source intent — a stray re-export can hoist a chunk into the entry silently. The build therefore asserts it: a CI check fails if the entry chunk exceeds its size budget or if its module graph reaches Three, the solver, or `src/data/`.
+- **Rule:** `src/shell/entry` contains no React and no Three. **Four** chunks load dynamically and independently: `render-scene`, `render-fallback`, `colophon` (AD-17), and `solver` (the Colophon's live re-run only). **Nothing on the critical entry path may statically import the scene, the solver, or the raw career JSON.** This is a property of *bundler output*, not of source intent — a stray re-export can hoist a chunk into the entry silently. The build therefore asserts it: a CI check fails if the entry chunk exceeds its size budget or if its module graph reaches Three, the solver, or `src/data/`. *[amended 2026-11-01 for M3: `realism` is a fifth lazy chunk, requested only by the running scene (AD-22), never by the entry or the mount chunk.]*
 
 ### AD-8 — Capability routes; performance offers
 
@@ -134,7 +136,7 @@ graph LR
 
 - **Binds:** FR-20, DESIGN.md
 - **Prevents:** The scene and the DOM surfaces drifting apart on colour, type, and stroke — invisible in code review, glaring on screen.
-- **Rule:** DESIGN.md's frontmatter is the token source of truth. It is transformed once into CSS custom properties (DOM surfaces) and a typed JS object (scene materials). Both are generated from that single source; **neither is hand-transcribed**, and no colour or type value is written literally in a component.
+- **Rule:** DESIGN.md's frontmatter is the token source of truth. It is transformed once into CSS custom properties (DOM surfaces) and a typed JS object (scene materials). Both are generated from that single source; **neither is hand-transcribed**, and no colour or type value is written literally in a component. *[amended 2026-11-01 for M3: the pixels of a texture map (AD-21) are the one colour source outside the tokens. Star glow and the ambient floor are tokens in a `realism-*` family, declared in DESIGN.md's frontmatter by the first M3 story; the achromatic audit exempts that one prefix by name and nothing else. Hue is confined to the realism layer; line-work, Dust and every DOM surface stay achromatic.]*
 
 ### AD-13 — Two files, one authored
 
@@ -172,6 +174,58 @@ graph LR
 - **Prevents:** Three independently reachable surfaces (scene, Fallback, Colophon) with no owner for how a visitor moves between them or what the browser Back button does. EXPERIENCE.md §4.7 specifies a return contract — the scene resumes at the stop it was left at, not at First Paint — which is unbuildable if navigation is unowned.
 - **Rule:** The three surfaces are the only addressable routes, resolved in `shell/` by AD-6's entry before any chunk loads. Route changes are real history entries, so Back works. Surface-level position (which Client stop the scene was left at) is preserved on departure and restored on return; **Focus is not a route** and does not create a history entry — it is scene state, released by Escape per AD-9, never by Back.
 
+### AD-19 — Realism draws beneath the line-work, with no full-screen pass [ADOPTED]
+
+- **Binds:** NFR-2, NFR-3, NFR-7, FR-15, FR-20, DESIGN.md "The M3 attachment surface", `scene.tsx`, `body-field.tsx`
+- **Prevents:** A full-frame cost nobody can measure on the target hardware; hairlines losing their token values; Dust painting over an opaque Body; a fill hiding a Star's core dot or spilling past or falling short of its outline; and units disagreeing on the draw order.
+- **Rule:** "Full post-FX" (NFR-2) means **no post pass**. The scene stays one forward pass on the default framebuffer: no `EffectComposer`, no full-screen render target, no shadow map, no scene light, no raymarching. `flat` stays, and `body-field.tsx` keeps drawing the line-work at its token values, with the vignette still the CSS overlay. The realism layer is exactly Body fills and Star glow sprites; **Dust stays exactly as M2 draws it**. **A fill is a sphere placed by its Body's billboard transform:** its vertices sit in view space at the Body's centre depth, biased behind that plane, so its silhouette is a true circle of `FILL_RADIUS_RATIO × bodyRadius` concentric with the outline at every pose. `FILL_RADIUS_RATIO` is one constant below 1, pinned by a test against the outline's radius. A Body's **marks** are its outline, core dot, Ring and Moon, and its own fill never hides them. Orbits and the Rail are not marks: as in M2, the near half of an orbit passes over its Planet. Another Body's fill hides whatever lies behind it. **The draw order is declared once, in `scene-model.ts`:** `DUST 1 < GLOW 1.25 < FILL 1.5 < BODY 2 < MOON 3`, with a test pinning the strict order. Fills stay in the transparent pass; at rest they are at opacity 1 and write depth. Glow tests depth and writes none. A custom shader sets the map's `colorSpace` and includes `<colorspace_fragment>`, so it matches `flat`. Hit spheres, `destinations` and raycasting (AD-15) do not change. Realism yields to legibility: every label keeps its contrast floor over a fill or glow. M3 changes M2 audits only where it must, and each change names its one allowance: the render-order pins, `scene.tsx`'s residual audit (one new mount), the `chart-offer.ts` importer table (AD-22), the glow/bloom scan (`realism/` only), and the achromatic audit (the `realism-*` prefix only). The first story spikes the depth bias on real hardware before any fill is built on it.
+
+### AD-20 — Each Planet is lit by its own Star, and nothing else
+
+- **Binds:** Thomas's ruling of 2026-11-01, FR-20, NFR-2, AD-3, AD-9
+- **Prevents:** Two lighting models across the units; scene lights evaluated per fragment that leak between Client systems; a lit map or a glowing Star swamping the recency outline or the one white subject; and a spin that speeds up under reduced motion.
+- **Rule:** A Planet's material takes one world-space direction, toward its own Star, computed in a pure `realism/` model from solved positions; like Dust, this is composition read off positions and not a data mapping (AD-3). Its fragment evaluates that one direction plus a constant ambient floor token, using a sphere normal that follows the map's spin but not the billboard. A Star is unlit and emissive with one additive glow sprite, drawn procedurally with no map. No Body casts a shadow on another. **Realism has a luminance ceiling:** each library entry records its map's mean luminance, the material normalises to it, and at rest no fill or glow exceeds `stroke-active`. Only the current subject's Star (`sceneSubject`) may rise above that, and never above `stroke-focus`. The ceiling is a shader constant pinned by a test against the tokens. A Planet spins about its axis at the rate AD-21 emits; the spin moves the map and never the light. **Spin stops when `reducedMotion()` is true**, read once per frame by the binding and handed to the pure model; it does not use `motionPace`. The camera, Focus framing and Mote layout are unchanged by realism: a Planet may be mostly dark in Focus, and that is accepted.
+
+### AD-21 — A Planet's appearance is derived, sourced and means nothing
+
+- **Binds:** AD-2, AD-3, AD-5, AD-13, AD-14, AD-17, FR-1, FR-3, FR-21, NFR-5, NFR-7
+- **Prevents:** Adding a Project becoming an art decision; rival owners of the map list; a re-solve that no longer matches `solveLive`; a visitor reading colour as data; a missing map failing silently with CI green; and an unlicensed map reaching the live site.
+- **Rule:** The library is one pure, browser-safe module, `src/derive/map-library.ts`: for each map its bare `id`, source URL, licence wording, credit line, retrieval date and mean luminance. `public/textures/` holds pixels only, named `<id>.webp`; there is no third data file. A **Planet's** `appearance` is `{ map, tilt, spinRate, spinPhase }`, assigned in `src/derive/` from its **entity ID alone**, the map by rendezvous hashing so neither a new Project nor a new map disturbs other Bodies' assignments beyond the ones the new map wins. A Star has no `appearance`. It is emitted under a new `SCHEMA_VERSION`, with no authored field and no per-Body override. The scene resolves a map by one rule, `<base>textures/<id>.webp`, and loads the distinct maps the artifact names. `solveLive(career.json)` stays byte-identical to the committed artifact. **The library is a build input alongside `career.json`:** the gate fails unless every `appearance.map` has a library entry and a file, every file has an entry, and the committed assignments match a re-derivation. **Colour and surface encode nothing:** recency stays on the outline's `luminanceBand`, the subject on the white stroke and Deep/Shallow on Ring and Moon. `appearance` is not a mapping rule and takes no row in the derivation table, which stays three rows; AD-13's "mapping rules" means FR-3's. The Colophon gives it one separate statement and the credit list, read through its existing dynamic edge into `src/derive/`. The Fallback reads no appearance. **A map is admitted only if** it is published by NASA or USGS, its page shows no third-party copyright, and its credit line is recorded; CC-licensed and author-copyright sets are refused. Bodies may share a map. The Colophon's section is ruled in principle, its exact wording, including how it sits beside "only career.json is authored", to be ruled when that story is built.
+
+### AD-22 — First Paint stays schematic; realism arrives after it
+
+- **Binds:** NFR-1, NFR-3, AD-6, AD-7, AD-25, UX-DR37
+- **Prevents:** Textures or shader compiles gating the frame NFR-1 protects; a half-realistic frame; lines popping when a fade begins; and an upload stall latching the chart offer.
+- **Rule:** The first frame is the M2 schematic frame, and `schematic-first-frame` keeps its meaning. After it, the maps load from the same origin under the site's base path. Each map is uploaded by `initTexture` and every shader compiled by `compileAsync` with one hidden warm draw before anything shows, then the layer fades in once, whole, never Body by Body, over `FADE_SECONDS × motionPace(reduced)`. **During the fade, fills share one fade uniform and write no depth; on the frame it ends, all of them write depth at once.** Frame-time sampling resets twice, when upload begins and when the fade begins, so upload always falls inside a warm-up; `realism-mount.tsx` is the one added caller of `resetFrameSampling`. On failure the schematic scene simply stays: no error, no retry in that document, no message.
+
+### AD-23 — NFR-2 ships on a budget, and a budget is never a pass
+
+- **Binds:** NFR-2, NFR-2a, NFR-3, NFR-4, NFR-1, SM-5, Thomas's rulings of 2026-10-30 and 2026-11-01
+- **Prevents:** An unbounded realism pass, because the only check that could catch one cannot run; a green CI being read as NFR-2 passing; a budget passing because it measured nothing; shader code growing the First Paint chunk unnoticed; and adaptive quality creeping in to protect the number.
+- **Rule:** M3 may go live with NFR-2 unmeasured. A record in `_bmad-output/implementation-artifacts/` states **not yet passed**, and only a run on a target-profile machine may change that; no other hardware counts. Quality never adapts: no `PerformanceMonitor`, no adaptive DPR, no quality tier, and `dpr` stays R3F's default of `[1, 2]`. The 24fps floor and its offer are unchanged. The monitor in `chart-offer.ts` stays the one instrument: it tracks its worst full window past the latch, pure and changing no latch, and a sink bound in `first-frame-mark.tsx`'s pattern writes it to the visitor's own performance timeline, sending nothing. A window never spans a reset, so a target run reads the worst window and the gap count together. These budgets live in one import-free module, `src/render-scene/realism/budgets.ts`, read by `realism/` and `scripts/` only, and change only by a ruling recorded in the memlog. **A check with nothing to measure fails.**
+
+| Budget | Limit | Enforced by |
+| --- | --- | --- |
+| `realism` chunk (minified, static closure outside the scene chunk) | 24,000 bytes | bundle assertion |
+| `scene` chunk (minified; 947,267 at M2) | 960,000 bytes | bundle assertion |
+| Texture library | 12 maps, each at most 1024×512 WebP, 4 MB in total | gate step in `scripts/` |
+| Sphere geometry | one shared geometry, at most 64×32 segments | test on the exported constant |
+| Added draw calls | 1 per Planet, 2 per Star, 0 for Dust | pure model count, with a source audit tying the binding to it |
+| Full-screen passes, render targets, shadow maps, scene lights | 0 | source scan extended to `realism/` |
+| New runtime dependencies | 0 | `check-pins` |
+
+### AD-24 — The link preview stays the composed schematic card
+
+- **Binds:** FR-24, SM-1, AD-22, `scripts/preview.ts`
+- **Prevents:** A share card that overstates what a mobile or Fallback visitor receives, since they get the achromatic chart; and a realistic capture in which a Planet is about 2px across, leaving a few glowing points as the product's first impression.
+- **Rule:** `public/preview.png` remains the composed schematic card, drawn from the committed artifact and the scene's pure models, captured by hand as at M2. It matches the true first frame, which AD-22 keeps schematic. M3 does not change the card, its tests or its alt text, and realism never reaches it. A re-solve still means a re-capture.
+
+### AD-25 — One owner for the realism lifecycle
+
+- **Binds:** AD-7, AD-9, AD-16, AD-22, AD-23
+- **Prevents:** Rival owners of "loaded"; a suspending or throwing child blanking the whole scene through R3F's boundary and `SceneBoundary`; a remount assuming GPU state survived; and a static import hoisting realism onto the First Paint path with every check green.
+- **Rule:** `render-scene/realism-mount.tsx`, mounted once in `scene.tsx` with no conditional, is the only module that imports `./realism/`, by one memoised `import()` per document. Its logic lives in a pure sibling, `realism-status.ts`, in `motion-preference.ts`'s shape and never in `navigationStore`, because it is not where the visitor is. Status has two scopes. **Document:** `idle → loading → decoded → shown`, or `failed`, which is terminal for the document. **Context:** `uploaded`, reset by every new `<Canvas>`. A later Canvas in the document holds decoded images but has a new renderer, so it uploads and compiles again before its first realism draw, then draws with no fade and no network. Decoded images are never closed. **Nothing under the `<Canvas>` may suspend or throw:** no `lazy`, `use`, `useLoader` or `useTexture`. Loading is imperative, every rejection is caught there, and realism's frame callback catches its own errors and sets `failed`. The bundle assertion requires a chunk whose facade is `render-scene/realism/index.ts`, and fails if it is missing or if any `realism/` module is in the static closure of the scene chunk or the entry.
+
 ```mermaid
 graph TD
   D["src/data/"]
@@ -201,13 +255,13 @@ graph TD
 
 ## Stack
 
-Verified against the npm registry 2026-09-01. Pin exact versions; stay off the R3F v10 / drei v11 alpha line.
+Verified against the npm registry 2026-09-01. Pin exact versions; stay off the R3F v10 / drei v11 alpha line. **M3 adds no dependency (AD-19, AD-23):** `postprocessing` and `@react-three/postprocessing` were weighed and rejected, though both fit these pins (npm registry, 2026-11-01); maps load through three's own loaders.
 
 | Name | Version |
 | --- | --- |
 | TypeScript | 7.0.x |
 | Vite | 8.2.x |
-| React | 19.x |
+| React | 19.2.x (fiber 9.7.0 peers below 19.3) |
 | @react-three/fiber | 9.7.x (stable — **not** v10 alpha) |
 | three | 0.185.x |
 | @react-three/drei | 10.7.x (stable — **not** v11 alpha) |
@@ -232,6 +286,7 @@ cosmos-portfolio/
       dwell.ts             #   Client-granularity tempo (AD-4a)
       shots.ts             #   default Shot templates, Client-granular (AD-4a)
       destinations.ts      #   the one emitted destination set (AD-15)
+      map-library.ts       #   the map list, licences and credits (AD-21)
       solve.ts             #   d3-force-3d, seeded and deterministic
       index.ts             #   pipeline entry, emits layout.generated.json
     shell/                 # entry, detection, routing, state, destination index
@@ -240,13 +295,16 @@ cosmos-portfolio/
       state.ts             #   navigation state machine (AD-9, AD-16)
       index-nav.tsx        #   persistent DOM destination index (AD-4)
     render-scene/          # R3F. Reads the artifact only.
+      realism-mount.tsx    #   the one importer of realism/; its pure status sibling (AD-25)
+      realism/             #   M3 lazy chunk: fills, glow, light direction, budgets (AD-19..AD-23)
     render-fallback/       # DOM + semantic HTML. Reads the artifact only.
     colophon/              # raw + rules + derived; lazily loads solver for live re-run
     tokens/                # generated from DESIGN.md frontmatter (AD-12)
   generated/
     layout.generated.json  # committed build artifact (AD-1, AD-13)
   public/
-    preview.png            # committed FR-24 og:image
+    preview.png            # committed FR-24 og:image (AD-24)
+    textures/              # committed map pixels only, <id>.webp (AD-21)
 ```
 
 ### Deployment & environments
@@ -275,6 +333,7 @@ graph LR
 | FR-5 classification by absence | `derive/rules.ts` | AD-3, AD-11 |
 | FR-9 Deep/Shallow signal | `derive/rules.ts` → both renderers | AD-3 |
 | FR-12a Focus model | `shell/state.ts` | AD-9, AD-10, AD-16 |
+| FR-3 appearance encodes nothing | `derive/` → `render-scene/realism/` | AD-21 |
 | FR-13 condensation | `render-scene/` | AD-3 (tiers derived) |
 | FR-16..FR-19 rails, dwell, free flight | `derive/shots.ts`, `derive/dwell.ts`, `shell/state.ts` | **AD-4a**, AD-5, AD-9, AD-15 |
 | FR-20 schematic identity | `tokens/` | AD-12 |
@@ -282,14 +341,23 @@ graph LR
 | FR-22 Fallback | `render-fallback/`, `shell/entry.ts` | AD-6, AD-8, AD-3, AD-14 |
 | Shared layout contract | `derive/artifact-schema.ts` | AD-14 |
 | Surface routing & history | `shell/router.ts` | AD-18 |
-| FR-24 shareability | `public/preview.png` | AD-1 |
+| FR-24 shareability | `public/preview.png` | AD-1, AD-24 |
+| M3 realism layer | `render-scene/realism/`, `render-scene/realism-mount.tsx` | AD-19, AD-20, AD-22, AD-25 |
+| Texture library & credit | `derive/map-library.ts`, `public/textures/`, `colophon/` | AD-21 |
+| NFR-2 budgets & status | `render-scene/realism/budgets.ts`, `shell/chart-offer.ts` | AD-23 |
 | a11y floor (EXPERIENCE.md §11) | `shell/index-nav.tsx` | AD-4, AD-5 |
 | NFR-1 First Paint | `shell/entry.ts` | AD-1, AD-6, AD-7 |
 | NFR-5 maintenance contract | whole pipeline | AD-1, AD-3, AD-11, AD-13 |
 
 ## Deferred
 
-- **M3 realism pass (textures, lighting, post-FX).** DESIGN.md already names its three attachment points — Body fill, the Dust medium, the vignette. No architectural decision is needed until M2 ships; taking one now would be guessing.
+- **Composer, film grain, chromatic aberration, lens flare.** Out of M3 by AD-19. Revisit only if the on-screen judgement says realism falls short; a composer then needs a new ruling, AD-23's budgets reopened and depth sharing for the line-work.
+- **Line-work and Focus framing over realistic Bodies.** Kept as shipped by Thomas's ruling (2026-11-01), to be judged on screen. A change later must move any data signal a removed line carries.
+- **Map choice, ambient floor, glow and fade values, spin rates.** Values, tuned on screen inside AD-23's budgets. The architecture fixes where they live, not what they are.
+- **Dust noise.** Dropped from M3 by Thomas's ruling (2026-11-01). Revisit if Dust falls short on screen; it needs its own material and cross-fade, and AD-23's budgets still hold.
+- **Upstream wording.** 35 sentences in DESIGN.md, the PRD and EXPERIENCE.md predate these rulings; `reviews/review-reconcile-m3.md` lists each with file and line, and its further list for the brightness and token rulings also applies. New tokens AD-12 requires are not deferred: they land in DESIGN.md's frontmatter in the first M3 story.
+- **Realism on a light theme.** M3 realism is dark-only. Additive glow and a dark terminator assume a dark void, and the scene's light theme has no milestone.
+- **A Mote's dot behind a fill while its label shows.** Does not occur on today's artifact at 16:9 (0 of 720 samples per orbit). Revisit if a new Project produces it.
 - **M4 collapse ending.** PRD R-6 proposes a procedural in-engine implementation; unratified and post-launch. It reuses the existing force system, so AD-1's build-time boundary is the only thing it must respect.
 - **Dwell, condensation, and dust-density numbers.** The PRD and UX both direct these to M1 greybox tuning, where they are cheapest. The architecture fixes *where* they are derived (AD-3), not their values.
 - **Free-flight camera interpolation.** EXPERIENCE.md ratifies the destination model; the interpolation curve is a motion-design decision for M1, not a structural one.
@@ -301,5 +369,4 @@ graph LR
 ## Open Questions
 
 - **FR-24 preview drift.** The committed `preview.png` can silently diverge from the opening frame if the layout is re-solved without regenerating it. Headless WebGL at build time was rejected (native dependency, fragile across years — the exact rebuild UJ-4 promises is cheap). Proposed: a build-time warning when `layout.generated.json` is newer than `preview.png`. Cheap, no native dependencies, fails loud. **The warning is implemented (6.2):** `scripts/preview-drift.ts` runs in `npm run build` between the gate and `vite build`, compares git committer times (mtimes for uncommitted changes or without git), warns on stderr and always exits 0. **Its limit:** it fires on a full-history checkout (the machine the re-solve happens on) and is structurally silent on a shallow clone — CI's `actions/checkout` and most host builds — where both files' last commit is HEAD; it also watches the layout only, not the preview's other inputs (chrome strings, tokens, `scripts/preview.ts`). **Escalating it to a build failure is open, not assumed** — it stays a warning until that is ratified.
-- **Host choice.** Cloudflare Pages and Netlify are equivalent for this purpose; the decision is preference, not architecture.
 - **`weight` semantics in the solver.** FR-3 binds distance-from-Rail to `weight`, but whether that is a force parameter or a post-solve transform is unsettled. It affects AD-2's determinism surface and is cheapest to settle when `solve.ts` is first written.
