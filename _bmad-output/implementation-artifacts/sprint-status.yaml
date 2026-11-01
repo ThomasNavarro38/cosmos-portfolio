@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 10-28-2026 12:00
+last_updated: 11-01-2026 21:19
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -109,6 +109,27 @@ development_status:
   6-4-first-paint-verified-on-target-hardware: done
   6-5-launch-readiness-pass: done
   epic-6-retrospective: done
+
+  epic-7: backlog
+  7-1-the-depth-spike: backlog
+  7-2-the-realism-tokens-and-the-draw-order: backlog
+  7-3-the-map-library: backlog
+  7-4-a-planet-s-appearance-in-the-artifact: backlog
+  7-5-realism-s-owner-and-failing-silently: backlog
+  7-6-planets-lit-by-their-own-star: backlog
+  7-7-stars-that-glow: backlog
+  7-8-arriving-after-the-first-frame: backlog
+  7-9-labels-and-the-signal-survive-realism: backlog
+  7-10-the-realism-definition-of-done: backlog
+  epic-7-retrospective: optional
+
+  epic-8: backlog
+  8-1-the-worst-window-on-the-visitor-s-own-timeline: backlog
+  8-2-the-colophon-credits-the-maps: backlog
+  8-3-the-record-says-not-yet-passed: backlog
+  8-4-thomas-s-on-screen-judgement: backlog
+  8-5-m3-reaches-the-live-site: backlog
+  epic-8-retrospective: optional
 action_items:
   - id: "epic-1-retro-item-1-ci-test-automation"
     epic: 1
@@ -341,12 +362,12 @@ action_items:
       manual check result in its spec"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-28: the review ran over fa581dc (src/ only), four layers, read
-      against HEAD; no AC violated; D1 (reduced motion as a 4x shorter move) kept as
-      ruled; five patches applied (an executed mount() test of the chrome's focus
-      hand-back, railFrame passing reduced on to the spring, the stale writer line in
-      motion-preference.ts, the panel test's field comparison, listener cleanup in
-      motion-preference.test.ts), one deferred to deferred-work.md. The reduced-motion
+    resolution: "2026-10-28: the review ran over fa581dc (src/ only), four layers,
+      read against HEAD; no AC violated; D1 (reduced motion as a 4x shorter move)
+      kept as ruled; five patches applied (an executed mount() test of the chrome's
+      focus hand-back, railFrame passing reduced on to the spring, the stale writer
+      line in motion-preference.ts, the panel test's field comparison, listener cleanup
+      in motion-preference.test.ts), one deferred to deferred-work.md. The reduced-motion
       manual check run via DevTools MCP and recorded in the spec's Verification: pass
       (0.2s transitions, the Motes still while Focused)"
     ref: "_bmad-output/implementation-artifacts/epic-2-retro-09-30-2026.md"
@@ -530,10 +551,10 @@ action_items:
       a shared /colophon URL is no dead end"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-23 (5b534e5): the Colophon draws the chart's chrome row, the
-      route line `the scene · the chart` on a capable machine and `the chart` alone
-      on a fallback one, built by colophonLinks in route-link.ts; colophon.css pinned
-      to the chart's chrome rules by the identity audit"
+    resolution: "2026-10-23 (5b534e5): the Colophon draws the chart's chrome row,
+      the route line `the scene · the chart` on a capable machine and `the chart`
+      alone on a fallback one, built by colophonLinks in route-link.ts; colophon.css
+      pinned to the chart's chrome rules by the identity audit"
     ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
   - id: "epic-5-retro-item-39-rule-d-g6-colophon-page-layout-gutter-co"
     epic: 5
@@ -541,13 +562,13 @@ action_items:
       in colophon.css, held by the identity audit"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-29 (spec-e5-r39-r40-favicon-colophon-layout-and-copy.md, Thomas's
-      ruling 2): ColophonPage draws one div.colophon around everything, and .colophon is
-      chart.css's .chart declaration for declaration (centred, max 1242px, space-xxl
-      above and below, space-xl at the sides), and at 640px and below the chart's phone
-      .chart (space-lg above, space-md at the sides); the identity audit pins both
-      pairs, either side's drift failing; prose stays at measure-prose, the h1 in the chrome role;
-      D-G6 moved to Resolved in DESIGN.md"
+    resolution: "2026-10-29 (spec-e5-r39-r40-favicon-colophon-layout-and-copy.md,
+      Thomas's ruling 2): ColophonPage draws one div.colophon around everything, and
+      .colophon is chart.css's .chart declaration for declaration (centred, max 1242px,
+      space-xxl above and below, space-xl at the sides), and at 640px and below the
+      chart's phone .chart (space-lg above, space-md at the sides); the identity audit
+      pins both pairs, either side's drift failing; prose stays at measure-prose,
+      the h1 in the chrome role; D-G6 moved to Resolved in DESIGN.md"
     ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
   - id: "epic-5-retro-item-40-re-rule-the-loose-copy-5-5-framing-does"
     epic: 5
@@ -556,21 +577,20 @@ action_items:
       hold each relation in tests"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-29 (spec-e5-r39-r40-favicon-colophon-layout-and-copy.md, Thomas's
-      ruling 3, re-ruled by Thomas the same day after review): the thesis ('Of the two
-      files above, only career.json is authored: layout.generated.json is solved from
-      it, shots included.'), the positions paragraph and the 5.5 framing ('This runs
-      the same solver on career.json, here in your browser. The shipped
-      layout.generated.json was solved from the same file and committed; the scene and
-      the chart read it, never this run.') replaced verbatim. The framing was re-ruled
-      twice more on 2026-10-29: first because the gate never solves (it compares
+    resolution: "2026-10-29 (spec-e5-r39-r40-favicon-colophon-layout-and-copy.md,
+      Thomas's ruling 3, re-ruled by Thomas the same day after review): the thesis
+      ('Of the two files above, only career.json is authored: layout.generated.json
+      is solved from it, shots included.'), the positions paragraph and the 5.5 framing
+      ('This runs the same solver on career.json, here in your browser. The shipped
+      layout.generated.json was solved from the same file and committed; the scene
+      and the chart read it, never this run.') replaced verbatim. The framing was
+      re-ruled twice more on 2026-10-29: first because the gate never solves (it compares
       digests), so 'every build checks it against a fresh solve' was false; then to
       drop the build clause altogether. Each relation held red-then-green: the committed
       layout is solveLive(career.json) byte for byte, its shots buildShots of career's
-      entity graph, career.json holding no shots key and no shot record
-      (src/derive/colophon-claims.test.ts); 'the two files above' the EXHIBIT_PATHS
-      count (absences.test.ts); the scene and the chart handed the committed artifact,
-      never the run (live-solve.test.ts)"
+      entity graph, career.json holding no shots key and no shot record (src/derive/colophon-claims.test.ts);
+      'the two files above' the EXHIBIT_PATHS count (absences.test.ts); the scene
+      and the chart handed the committed artifact, never the run (live-solve.test.ts)"
     ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
   - id: "epic-5-retro-item-41-run-the-follow-up-bmad-code-review-5-1-5"
     epic: 5
@@ -578,11 +598,12 @@ action_items:
       5782675^..1753811, then clear followup_review_recommended"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-28: one follow-up review over 5782675^..5b80137, run with item
-      47 in five chunks; 5.1, 5.4 and 5.5: six patches applied (the exhibit fetch refuses
-      an HTML page, the network admission binds the name to ./exhibits.ts, .colophon-solve
-      pinned to .panel-release, spec 5.5 aria-disabled, the tracker's non-latching stop
-      tested), four deferred to deferred-work.md; followup_review_recommended cleared"
+    resolution: "2026-10-28: one follow-up review over 5782675^..5b80137, run with
+      item 47 in five chunks; 5.1, 5.4 and 5.5: six patches applied (the exhibit fetch
+      refuses an HTML page, the network admission binds the name to ./exhibits.ts,
+      .colophon-solve pinned to .panel-release, spec 5.5 aria-disabled, the tracker's
+      non-latching stop tested), four deferred to deferred-work.md; followup_review_recommended
+      cleared"
     ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
   - id: "epic-5-retro-item-42-add-a-client-render-path-to-the-render-h"
     epic: 5
@@ -590,11 +611,11 @@ action_items:
       executed), closing deferred-work.md 5.1 and 5.2 entries"
     owner: "Thomas"
     status: done
-    resolution: "2026-10-28 (spec-e5-r42-client-render-harness.md): scripts/render.ts gains
-      mount() — happy-dom 20.14.6 (test-only, ruling (a)) as globals only while mounted,
-      react-dom/client createRoot under act; executed tests for the 5.1 effect, the 5.2
-      boundary, the 5.5 press and the 6.3 label, each shown red; the four deferrals closed;
-      the happy-dom advisory accepted, the move to 21.x owed (deferred-work.md)"
+    resolution: "2026-10-28 (spec-e5-r42-client-render-harness.md): scripts/render.ts
+      gains mount() — happy-dom 20.14.6 (test-only, ruling (a)) as globals only while
+      mounted, react-dom/client createRoot under act; executed tests for the 5.1 effect,
+      the 5.2 boundary, the 5.5 press and the 6.3 label, each shown red; the four
+      deferrals closed; the happy-dom advisory accepted, the move to 21.x owed (deferred-work.md)"
     ref: "_bmad-output/implementation-artifacts/epic-5-retro-10-21-2026.md"
   - id: "epic-5-retro-item-43-reconcile-epics-md-fourth-lazy-chunk-wor"
     epic: 5
@@ -627,7 +648,9 @@ action_items:
     action: "Schedule the open Epic 5 retro items (38-44) as stories before launch,
       item 38 (the /colophon route to the scene) first"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-11-01: items 38-43 are done, each with its own resolution; item
+      44 stays open as its own process item"
     ref: "_bmad-output/implementation-artifacts/epic-6-retro-10-23-2026.md"
   - id: "epic-6-retro-item-47-run-one-bmad-code-review-over-53e5fb5-5b"
     epic: 6

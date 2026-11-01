@@ -198,11 +198,11 @@ Technical requirements extracted from ARCHITECTURE-SPINE.md that impact epic and
 
 - AR-M3-1: **Depth spike first (AD-19).** The first story spikes the fill's depth bias on real hardware before any fill is built on it.
 - AR-M3-2: **Fills and draw order (AD-19).** A fill is a sphere placed by its Body's billboard transform, a true circle of `FILL_RADIUS_RATIO × bodyRadius` concentric with the outline at every pose, with the ratio one constant below 1 pinned by a test. A Body's own fill never hides its marks (outline, core dot, Ring, Moon). `DUST 1 < GLOW 1.25 < FILL 1.5 < BODY 2 < MOON 3` is declared once in `scene-model.ts`, with a test pinning the strict order. Hit spheres, `destinations` and raycasting do not change. A custom shader sets the map's `colorSpace` and includes `<colorspace_fragment>`.
-- AR-M3-3: **No post pass (AD-19, AD-23).** One forward pass on the default framebuffer: no `EffectComposer`, full-screen render target, shadow map, scene light or raymarching; `flat` stays; the vignette stays the CSS overlay; Dust stays exactly as M2 draws it. M3 changes M2 audits only where it must, each naming its one allowance: the render-order pins, `scene.tsx`'s residual audit (one new mount), the `chart-offer.ts` importer table, the glow/bloom scan (`realism/` only), the achromatic audit (the `realism-*` prefix only).
+- AR-M3-3: **No post pass (AD-19, AD-23).** One forward pass on the default framebuffer: no `EffectComposer`, full-screen render target, shadow map, scene light or raymarching; `flat` stays; the vignette stays the CSS overlay; Dust stays exactly as M2 draws it. M3 changes M2 audits only where it must, each naming its one allowance: the render-order pins, `scene.tsx`'s residual audit (one new mount), the `chart-offer.ts` importer table, the glow/bloom scan (`realism/`, and `GLOW_RENDER_ORDER` in `scene-model.ts`), the achromatic audit (the `realism-*` prefix only), the collection scan's off-site URL rule (`nasa.gov` and `usgs.gov` hosts in `src/derive/map-library.ts` only).
 - AR-M3-4: **Lighting (AD-20).** A Planet takes one world-space direction toward its own Star, computed in a pure `realism/` model from solved positions, plus a constant ambient floor token. A Star is unlit and emissive with one additive glow sprite, procedural, no map. No Body shadows another. A Planet's spin moves the map and never the light. The camera, Focus framing and Mote layout do not change.
 - AR-M3-5: **Map library (AD-21).** One pure, browser-safe module, `src/derive/map-library.ts`, holds each map's `id`, source URL, licence wording, credit line, retrieval date and mean luminance. `public/textures/` holds pixels only, `<id>.webp`; there is no third data file. A map is admitted only if published by NASA or USGS, its page shows no third-party copyright, and its credit line is recorded; CC-licensed and author-copyright sets are refused.
-- AR-M3-6: **Appearance (AD-21).** A Planet's `appearance` is `{ map, tilt, spinRate, spinPhase }`, from its entity ID alone, the map by rendezvous hashing. A Star has none. Emitted under a new `SCHEMA_VERSION`, with no authored field and no per-Body override; `solveLive(career.json)` stays byte-identical to the committed artifact. The gate fails unless every `appearance.map` has a library entry and a file, every file has an entry, and the committed assignments match a re-derivation. The Fallback reads no appearance.
-- AR-M3-7: **Lifecycle (AD-25, AD-7).** `render-scene/realism-mount.tsx`, mounted once in `scene.tsx` with no conditional, is the only importer of `./realism/`, by one memoised `import()` per document; its logic lives in a pure sibling, `realism-status.ts`, never in `navigationStore`. Document status runs `idle → loading → decoded → shown`, or `failed`, terminal for the document; context status `uploaded` resets with every new `<Canvas>`. Nothing under the `<Canvas>` may suspend or throw: no `lazy`, `use`, `useLoader` or `useTexture`. The bundle assertion requires a chunk whose facade is `render-scene/realism/index.ts`, and fails if it is missing or if any `realism/` module is in the static closure of the scene chunk or the entry.
+- AR-M3-6: **Appearance (AD-21).** A Planet's `appearance` is `{ map, meanLuminance, tilt, spinRate, spinPhase }`, from its entity ID alone, the map by rendezvous hashing, with `meanLuminance` copied from that map's library entry so the renderer never imports the library. A Star has none. Emitted under a new `SCHEMA_VERSION`, with no authored field and no per-Body override; `solveLive(career.json)` stays byte-identical to the committed artifact. The gate fails unless every `appearance.map` has a library entry and a file, every file has an entry, and the committed assignments match a re-derivation. The Fallback reads no appearance.
+- AR-M3-7: **Lifecycle (AD-25, AD-7).** `render-scene/realism-mount.tsx`, mounted once in `scene.tsx` with no conditional, is the only importer of `./realism/`, by one memoised `import()` per document; its logic lives in a pure sibling, `realism-status.ts`, never in `navigationStore`. Document status runs `idle → fetching → decoded → shown`, or `failed`, terminal for the document; context status `uploaded` resets with every new `<Canvas>`. Nothing under the `<Canvas>` may suspend or throw: no `lazy`, `use`, `useLoader` or `useTexture`. The bundle assertion requires a chunk whose facade is `render-scene/realism/index.ts`, and fails if it is missing or if any `realism/` module is in the static closure of the scene chunk or the entry.
 - AR-M3-8: **Arrival (AD-22).** The first frame stays the M2 schematic frame. Maps load from the same origin under the base path; each is uploaded by `initTexture`, and every shader compiled by `compileAsync` with one hidden warm draw, before anything shows. During the fade, fills share one uniform and write no depth; on the frame it ends, all write depth at once. Frame-time sampling resets when upload begins and when the fade begins, `realism-mount.tsx` being the one added caller. A later Canvas uploads and compiles again, then draws with no fade and no network; decoded images are never closed.
 - AR-M3-9: **Budgets (AD-23).** One import-free module, `src/render-scene/realism/budgets.ts`, read by `realism/` and `scripts/` only: `realism` chunk 24,000 bytes; `scene` chunk 960,000 bytes (minified); 12 maps, each at most 1024×512 WebP, 4 MB in total; one shared sphere geometry, at most 64×32; added draw calls 1 per Planet, 2 per Star, 0 for Dust; 0 full-screen passes, render targets, shadow maps and scene lights; 0 new runtime dependencies. A budget changes only by a ruling recorded in the memlog. **A check with nothing to measure fails.** No adaptive quality: no `PerformanceMonitor`, no adaptive DPR, no quality tier, `dpr` stays `[1, 2]`.
 - AR-M3-10: **Instrument (AD-23).** The monitor in `chart-offer.ts` stays the one instrument. It tracks its worst full window past the latch, pure and changing no latch; a sink bound in `first-frame-mark.tsx`'s pattern writes it to the visitor's own performance timeline, sending nothing. A window never spans a reset. The 24fps floor and its offer are unchanged.
@@ -2657,6 +2657,11 @@ So that no unlicensed image reaches the live site and adding one is a checked ac
 **Then** it is published by NASA or USGS, its page shows no third-party copyright, and its credit line is recorded
 **And** a CC-licensed or author-copyright set is refused, and the page's final URL is the one stored, never fetched by the build
 
+**Given** the collection scan rejects off-site URLs in shipped source (`first-paint.test.ts`)
+**When** the library's source URLs are added
+**Then** the scan admits an `https://` URL on a `nasa.gov` or `usgs.gov` host, or a subdomain of either, in `src/derive/map-library.ts` alone
+**And** mutation rows prove that the same URL in any other file, another host in that file, and a lookalike host each still fail
+
 **Given** conversion is a manual step (AR-M3-15)
 **When** a map is converted to WebP
 **Then** the tool, version and settings are recorded beside the library, and no encoder enters CI or the dependencies
@@ -2688,7 +2693,7 @@ So that adding a Project stays one JSON entry and one `weight`, with no art deci
 
 **Given** appearance is assigned in `src/derive/` (AD-21, AD-3, AD-14)
 **When** the artifact is solved
-**Then** each Planet carries `appearance: { map, tilt, spinRate, spinPhase }` from its entity ID alone, under a new `SCHEMA_VERSION`
+**Then** each Planet carries `appearance: { map, meanLuminance, tilt, spinRate, spinPhase }` from its entity ID alone, under a new `SCHEMA_VERSION`, with `meanLuminance` copied from that map's library entry
 **And** a Star has no `appearance`, and `career.json` gains no field and no per-Body override
 
 **Given** rendezvous hashing
@@ -2699,6 +2704,10 @@ So that adding a Project stays one JSON entry and one `weight`, with no art deci
 **Given** the only inputs are the entity ID and the library
 **When** the artifact is re-solved
 **Then** every position, and every other field, is byte-identical to the previous artifact, apart from `appearance` and the version
+
+**Given** this re-solve moves nothing, so `public/preview.png` is not recaptured (AD-24)
+**When** `scripts/preview-drift.ts` warns on a full-history checkout
+**Then** `src/derive/README.md` states that the warning is expected until the next recapture and why, and the guard is unchanged
 
 **Given** the Colophon's live re-solve (AD-17, AD-21)
 **When** `solveLive(career.json)` runs
@@ -2731,7 +2740,8 @@ So that I never see a blank canvas, an error or a retry.
 
 **Given** two scopes of status (AD-25)
 **When** the model is driven
-**Then** the document runs `idle → loading → decoded → shown`, or `failed`, terminal for the document; `uploaded` resets with every new `<Canvas>`
+**Then** the document runs `idle → fetching → decoded → shown`, or `failed`, terminal for the document; `uploaded` resets with every new `<Canvas>`
+**And** the status and every identifier avoid the gate words `loading` and `loader` (`first-paint.test.ts`), which stays unchanged
 
 **Given** nothing under the `<Canvas>` may suspend or throw (AD-25)
 **When** the source scan runs
@@ -2790,7 +2800,7 @@ So that the scene feels real while the line-work still says what it said.
 
 **Given** the luminance ceiling (AD-20, UX-DR57)
 **When** a fill is drawn at rest
-**Then** the material normalises to the map's recorded mean, no pixel exceeds `stroke-active`, and the ceiling is a shader constant pinned by a test against the token
+**Then** the material normalises to `appearance.meanLuminance`, no `realism/` module imports the library, no pixel exceeds `stroke-active`, and the ceiling is a shader constant pinned by a test against the token
 
 **Given** spin (AD-20, AD-21, UX-DR62)
 **When** time passes
@@ -2799,7 +2809,7 @@ So that the scene feels real while the line-work still says what it said.
 
 **Given** colour encodes nothing (AD-21)
 **When** the source is scanned
-**Then** recency stays on the outline's `luminanceBand`, the subject on the white stroke, Deep/Shallow on Ring and Moon, and no realism module reads a data-derived property to shade a fill
+**Then** recency stays on the outline's `luminanceBand`, the subject on the white stroke, Deep/Shallow on Ring and Moon, and no realism module reads a data-derived property to shade a fill; `appearance.meanLuminance` is admitted by name, since it describes a map and not career data
 
 **Given** the budgets (AD-19, AD-23)
 **When** the checks run
@@ -2837,7 +2847,7 @@ So that the scene has light in it and white is still spent once per frame.
 
 **Given** the budgets (AD-23)
 **When** the checks run
-**Then** the pure model counts 2 added draws per Star and 0 for Dust, and the glow/bloom scan admits this in `realism/` only
+**Then** the pure model counts 2 added draws per Star and 0 for Dust, and the glow/bloom scan admits this in `realism/` and for `GLOW_RENDER_ORDER` in `scene-model.ts` only, with a mutation row proving any other `glow` in `render-scene/` or `shell/` still fails
 
 ### Story 7.8: Arriving after the first frame
 
@@ -2872,6 +2882,11 @@ So that the scene seems to come alive, rather than to load.
 **Given** a failure during upload or in realism's frame callback (AD-25)
 **When** it happens
 **Then** the callback catches its own error, status becomes `failed`, and the schematic scene stays with the frame loop alive
+
+**Given** `first-paint-6-4.md` says nothing streams and `compileAsync` is not used
+**When** this story closes
+**Then** row 5 and the known limits name the realism fade and its executed test, say that Bodies still all draw in the first frame, and say that `compileAsync` runs only after the mark, so the first frame's compile stays synchronous
+**And** every test named in that record still resolves
 
 **Given** First Paint (NFR-1, AD-22)
 **When** the first frame is compared with M2's
@@ -2916,7 +2931,7 @@ So that nothing has quietly changed in the M2 product.
 
 **Given** M3 changes M2 audits only where it must (AD-19)
 **When** the audit changes are listed against the diff from M2
-**Then** the only ones are the render-order pins, `scene.tsx`'s residual audit (one new mount), the `chart-offer.ts` importer table, the glow/bloom scan (`realism/` only) and the achromatic audit (`realism-*` only)
+**Then** the only ones are the render-order pins, `scene.tsx`'s residual audit (one new mount), the `chart-offer.ts` importer table, the glow/bloom scan (`realism/`, and `GLOW_RENDER_ORDER` in `scene-model.ts`), the achromatic audit (`realism-*` only) and the collection scan's off-site URL rule (`map-library.ts` only)
 **And** any other change fails this story
 
 **Given** every budget row has an instrument (AD-23)
@@ -3005,7 +3020,7 @@ So that I don't read colour as data, and the claim that the model is the argumen
 
 **Given** the credits (AD-21)
 **When** the page renders
-**Then** every map in the library is listed with its credit line, licence wording and a real link to its source, whether or not a Planet is assigned it, because every committed file is publicly served (Thomas, 2026-11-01)
+**Then** every map in the library is listed with its credit line, licence wording and a real link to its source, the `href` read from the library with no URL written in `colophon/`, whether or not a Planet is assigned it, because every committed file is publicly served (Thomas, 2026-11-01)
 **And** a test fails if a library entry has no credit on the page, and a re-solve cannot change the list
 
 **Given** the existing dynamic edge (AD-17, AD-21)
