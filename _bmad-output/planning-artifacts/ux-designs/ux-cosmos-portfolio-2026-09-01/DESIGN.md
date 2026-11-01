@@ -2,7 +2,7 @@
 title: "Cosmos Portfolio — DESIGN.md (Visual Identity Spine)"
 status: final
 created: 2026-09-01
-updated: 2026-09-01
+updated: 2026-11-01
 sources:
   - ../../prds/prd-cosmos-portfolio-2026-09-01/prd.md
   - ../../prfaq-cosmos-portfolio.md
@@ -17,7 +17,8 @@ name: Deep Field
 description: >
   The Schematic Identity of Cosmos Portfolio (FR-20). Line-art in a true-neutral
   void. One uniform hairline draws every orbit and every Body; type sits at nine
-  and thirteen pixels; there is no chromatic accent anywhere. White is a scarce
+  and thirteen pixels; there is no chromatic accent in the line-work or on any
+  DOM surface, and only the M3 realism layer carries colour. White is a scarce
   resource, spent only on Focus and on reading prose. Authored as semantic
   light/dark token pairs from the outset; M2 ships dark only.
 
@@ -26,7 +27,8 @@ description: >
 # Every `-dark` key is the SHIPPED M2 value, taken from direction-03-deep-field.
 # Every bare key is the FUTURE LIGHT THEME value, taken from
 # direction-02-draughtsman. Light is not built at M2. It is declared so the
-# theme is later a token swap and not a redesign.
+# theme is later a token swap and not a redesign, for the line-work and the DOM
+# surfaces. M3 realism is dark-only; a light scene needs its own decision.
 # ---------------------------------------------------------------------------
 colors:
   # --- surfaces ---
@@ -366,8 +368,9 @@ own rigour — a deep-field plate, not an untextured asset awaiting a pass
 around them, not because of anything applied to them.
 
 The posture is **spent-almost-nothing**. One uniform hairline draws every orbit
-and every Body. There is no chromatic accent anywhere in the system — not one
-hex in the palette has a hue. Type sits at nine and thirteen pixels and rises
+and every Body. There is no chromatic accent in the line-work or on any DOM
+surface — no stroke, ink or surface hex has a hue. Colour lives only in the M3
+realism layer and encodes nothing. Type sits at nine and thirteen pixels and rises
 above sixteen only inside the reading panel. Annotation is one label per object:
 no graticule, no ticks, no console furniture, no frame. The chosen direction is
 [direction-03-deep-field.html](./.working/direction-03-deep-field.html), ranked
@@ -391,14 +394,21 @@ Two rules hold the identity together and both are inherited, not invented here:
 
 M2 ships no textures, no photographic lighting and no post-processing (§8.2).
 The realism pass is M3 and it must attach without invalidating this system. It
-attaches at exactly three points, and nowhere else:
+attaches at exactly two points, and nowhere else (AD-19):
 
-1. **Body fill.** Every Body is `fill: none` at M2. A texture map takes that
-   slot. Stroke, ring, moon and label geometry are unaffected.
-2. **The Dust medium.** The radial-gradient medium becomes a volumetric.
-   Particle count, colour and the never-fog rule (FR-15) carry over unchanged.
-3. **The vignette.** The vignette term is replaced by real optics. Its role —
-   see §5 — is already exactly what a lens does.
+1. **Body fill.** Every Body is `fill: none` at M2. At M3 a Planet's fill is a
+   colour texture map, lit by its own Star so it has a lit and a dark side
+   (AD-20). A Star's fill is procedural and unlit. Stroke, ring, moon and label
+   geometry are unaffected.
+2. **Star glow.** Each Star gets one additive glow sprite, drawn beneath the
+   fills.
+
+At rest no fill or glow exceeds `stroke-active`. Only the current subject's Star
+may rise above that, and never above `stroke-focus`, so white is still spent once
+per frame (AD-20). Every label keeps its contrast floor over a fill or glow.
+
+M3 adds no post-processing. The Dust medium stays exactly as M2 draws it, and the
+vignette stays the CSS overlay.
 
 Everything else in this file — the stroke ladder, the ink ladder, the type
 ramp, the label system, the panel — is the identity and survives M3 intact.
@@ -407,10 +417,13 @@ ramp, the label system, the panel — is the identity and survives M3 intact.
 
 ## 2. Colors
 
-Every colour in this system is achromatic. That is not a limitation carried
-from the greybox; it is the identity. A hue introduced anywhere would become
-the loudest thing on screen and would immediately read as decoration in a
-product whose whole argument is structure.
+Every colour in the line-work, Dust and the DOM surfaces is achromatic. That is
+not a limitation carried from the greybox; it is the identity. A hue introduced
+into any of them would become the loudest thing on screen and would immediately
+read as decoration in a product whose whole argument is structure. The one
+exception is the M3 realism layer: the pixels of a texture map and the
+`realism-*` tokens. They sit beneath the line-work and encode nothing (AD-12,
+AD-21).
 
 The palette is a **luminance ladder in two registers** — one for stroke, one
 for ink — plus three surfaces and one atmospheric term.
@@ -425,9 +438,17 @@ the **light theme**; the `-dark` suffixed key (`surface-base-dark`) is the
 lifted from
 [direction-02-draughtsman.html](./.working/direction-02-draughtsman.html),
 retained by ratified decision as the future light theme. They are present so
-that shipping light later is a token swap rather than a redesign. Do not
-hardcode a hex anywhere in the build; reference the token. A build that
-hardcodes `#08080A` has already broken the light theme before it exists.
+that shipping light later is a token swap rather than a redesign, for the
+line-work and the DOM surfaces. Do not hardcode a hex anywhere in the build;
+reference the token. A build that hardcodes `#08080A` has already broken the
+light theme before it exists.
+
+**The one exception is the `realism-*` family (M3).** Star glow and the ambient
+floor are the only hued tokens, and the achromatic audit exempts that prefix and
+nothing else (AD-12). Realism is dark-only, because additive glow and a dark side
+both assume a dark void. Each of these tokens still has a bare light key because
+the generator requires a pair, but that value is a placeholder. A light theme
+would need its own decision for the scene, not a token swap.
 
 `[NOTE FOR UX] Direction 02 pairs its palette with an editorial serif and a
 graded (not uniform) line weight. The colour swap alone will not reproduce
@@ -472,7 +493,7 @@ inverting on real data.
 
 Five steps, mirroring the strokes. Type never borrows a stroke token and a
 stroke never borrows an ink token, even where the hex is the same — the two
-ladders are separately tunable and will diverge at M3.
+ladders are separately tunable.
 
 | Token | Dark | Light | Story |
 |---|---|---|---|
@@ -647,10 +668,12 @@ not that something failed to load. No skeleton, no placeholder, no gap.
 
 ## 5. Elevation & Depth
 
-**There are no shadows in this product.** Not on the panel, not on a label, not
-on a Body, not on the Fallback. A drop shadow implies a light source and a
-surface, and this system has neither: it is line-art in a void. A single
-`box-shadow` anywhere breaks the idiom more completely than a wrong hex would.
+**There are no drop shadows in this product.** Not on the panel, not on a label,
+not on the Fallback, and no Body casts a shadow on another. A drop shadow implies
+a light source and a surface, and the line-art has neither. A single `box-shadow`
+anywhere breaks the idiom more completely than a wrong hex would. The one shading
+in the system is a Planet's dark side at M3, which is lighting from its own Star
+and belongs to the realism layer (AD-20).
 
 Depth is carried by four things instead, in this priority order:
 
@@ -667,8 +690,8 @@ Depth is carried by four things instead, in this priority order:
    opacity to 42% radius, rising to 0.9 at the edge. It does three jobs at
    once: it establishes a centre without drawing one, it prevents the frame
    corners from reading as a cut-off rectangle (which would make the void look
-   like a box), and it is the exact term that M3's real lens optics will
-   replace. It is also the reason the "no readable label near the frame edge"
+   like a box), and M3 keeps it as it is, as the CSS overlay (AD-19). It is
+   also the reason the "no readable label near the frame edge"
    rule in §2 exists.
 4. **Tonal layering of surfaces.** Five points of luminance between
    `surface-base` and `surface-raised` is the entire elevation vocabulary of
@@ -678,7 +701,8 @@ Depth is carried by four things instead, in this priority order:
 
 Depth is never carried by scale-on-hover, blur, opacity fades on Bodies, or
 any form of glow. Glow in particular is forbidden: it is the single most common
-way a schematic space scene degrades into a screensaver.
+way a schematic space scene degrades into a screensaver. The one exception is
+M3's Star glow sprite, held under the luminance ceiling (§1, AD-20).
 
 ---
 
@@ -1096,12 +1120,15 @@ describing what it shows. Page metadata is outside the five copy places
 
 **Don't**
 
-- **No shadows.** Not one, anywhere, at any milestone.
-- **No hue.** Not an accent, not a status colour, not a syntax highlight, not a
-  hover tint. The palette is achromatic by design and one hue would become the
-  loudest thing in the product.
-- **No glow, no bloom, no lens flare at M2.** These are M3 post-FX and applying
-  them early is the fastest route from schematic to screensaver.
+- **No drop shadows.** Not one, anywhere, at any milestone. No Body casts a
+  shadow on another; a Planet's dark side at M3 is lighting (§5).
+- **No hue outside the M3 realism layer.** Not an accent, not a status colour,
+  not a syntax highlight, not a hover tint. The line-work, Dust and every DOM
+  surface are achromatic by design, and one hue there would become the loudest
+  thing in the product.
+- **No glow at M2, and no bloom or lens flare at M2 or M3.** M3's one glow is the
+  Star sprite (§1). Reaching for more is the fastest route from schematic to
+  screensaver.
 - **No ring on hover.** The collision rule in §7.3 is absolute.
 - **No bold.** Weight never exceeds 400.
 - **No rounded corners.**

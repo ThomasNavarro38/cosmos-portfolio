@@ -1,8 +1,8 @@
-# Upstream edits for M3: draft
+# Upstream edits for M3
 
-Status: **draft, not applied.** `DESIGN.md`, `EXPERIENCE.md` and `prd.md` are unchanged. Date: 2026-11-01.
+Status: **applied 2026-11-01** on Thomas's approval. Sally and John have not reviewed the wording.
 
-These edits bring the three source documents into line with the final spine (AD-12, AD-19 to AD-25) and Thomas's rulings of 2026-11-01. They change wording only and make no new product decision, except the one marked in "Needs a ruling". Sally owns `DESIGN.md` and `EXPERIENCE.md`, and John owns `prd.md`.
+These edits bring the three source documents into line with the final spine (AD-12, AD-19 to AD-25) and Thomas's rulings of 2026-11-01. They change wording only and make no new product decision, except the one recorded under "Ruled". Sally owns `DESIGN.md` and `EXPERIENCE.md`, and John owns `prd.md`.
 
 Each "Now" block is verbatim and occurs exactly once in its document. Line numbers are those at commit 565d32b.
 
@@ -16,9 +16,9 @@ Each "Now" block is verbatim and occurs exactly once in its document. Line numbe
 - **No edit is needed for the rest of the reconcile's conditional list:** D457, D728, D1086, E458, E827-828, P54, P405, D1061-1062, D1075-1076 and E725. The luminance ceiling and the schematic card keep them true.
 - **No edit is needed for P505 and P565.** They plan "shaders and post-FX" for M4, not M3. Using a composer at M4 would still need a new ruling and reopened budgets.
 
-## Needs a ruling
+## Ruled
 
-**Light values for the `realism-*` tokens (edit D6).** The token generator requires a light value for every colour, but realism is dark-only, and `DESIGN.md` says its light values "are real, not placeholders". I recommend a named exception: each `realism-*` token carries a placeholder light value, and the document says so. The alternative is teaching the generator to allow dark-only tokens, which is more code to protect a theme that has no milestone.
+**Light values for the `realism-*` tokens (edit D6).** The token generator requires a light value for every colour, but realism is dark-only, and `DESIGN.md` says its light values "are real, not placeholders". Thomas ruled for a named exception (2026-11-01): each `realism-*` token carries a placeholder light value, and the document says so. The rejected alternative was teaching the generator to allow dark-only tokens, which is more code to protect a theme that has no milestone.
 
 ## DESIGN.md
 
@@ -121,7 +121,7 @@ exception is the M3 realism layer: the pixels of a texture map and the
 AD-21).
 ```
 
-### D6: L428-430, light/dark pairs (needs a ruling)
+### D6: L428-430, light/dark pairs (ruled)
 
 ```text
 that shipping light later is a token swap rather than a redesign. Do not
@@ -485,7 +485,7 @@ adds no post-FX (AD-19).
 
 ## Stale lines in the spine
 
-The spine is committed as finalized, and these lines are not edited. They are its own wording, and I found them while drafting this. None changes a decision.
+These were found while drafting and are now fixed in the spine, except that S358's item was removed rather than repointed, since nothing is left to defer. None changes a decision.
 
 | Line | Says | Proposed |
 | --- | --- | --- |

@@ -2,7 +2,7 @@
 title: "Cosmos Portfolio — EXPERIENCE.md (Behaviour Spine)"
 status: final
 created: 2026-09-01
-updated: 2026-09-01
+updated: 2026-11-01
 sources:
   - ../../prds/prd-cosmos-portfolio-2026-09-01/prd.md
   - ../../prfaq-cosmos-portfolio.md
@@ -223,7 +223,7 @@ Copy exists in exactly five places. There is no sixth.
 1. Notables and field values — the record.
 2. The Shallow Project rule line.
 3. Two lines of corner chrome per frame, `{typography.chrome}`.
-4. The Colophon's annotations on the mapping rules, its statement of what is not there, and the framing of its live re-solve (§4.7).
+4. The Colophon's annotations on the mapping rules, its statement of what is not there, the framing of its live re-solve (§4.7), and at M3 its one statement that a Planet's appearance is assigned, with the map credits (AD-21; exact wording ruled when that story is built).
 5. The contact route.
 
 Page metadata — the document's title, its description and the preview image's alt text — is never drawn on any surface; it is not a sixth place, and it is held to the same voice.
@@ -378,8 +378,9 @@ that exhibits it.
    Prose exists only to name what is being shown.
 2. **The file is present in full**, syntax-set and readable, not summarised and
    not excerpted behind a fold. A visitor may read every byte the scene reads.
-3. **Nothing is authored twice.** Every value on the page comes from the JSON at
-   render time. There is no hand-maintained copy of any number.
+3. **Nothing is authored twice.** Every career value on the page comes from the
+   JSON at render time. There is no hand-maintained copy of any number. M3's map
+   credits come from the one map library (AD-21), and they are not career data.
 4. **It states what is *not* there** — no backend, no CMS, no position
    overrides, no per-entry camera work — because several of the load-bearing
    claims are about absences, and an absence cannot be shown by rendering data.
@@ -522,12 +523,15 @@ assumption in the PRD and is not adopted here. See PRD §13 Q1 and §15 Flag 04.
 - **No skeleton screens.** A Body that has not streamed in is not there
   yet, in a frame that is already mostly empty.
 - **No 3D error state.** Capability is detected *before* rendering (FR-22), so
-  no visitor ever sees a failed or degraded scene. The Fallback is served
-  instead, and it is a designed view rather than an apology.
+  no visitor ever sees a failed scene. The Fallback is served instead, and it is
+  a designed view rather than an apology. If M3's realism layer fails to load,
+  the schematic scene simply stays, with no error, no retry and no message
+  (AD-22). The visitor is not told that realism is missing.
 - **No offline state.** There is no backend and no network request for career
-  data (FR-1, NFR-6). Once the page is loaded there is nothing to fail.
+  data (FR-1, NFR-6). Once the page is loaded, only M3's realism layer is still
+  to arrive, and losing it leaves the schematic scene whole (AD-22).
 
-The one genuine error surface is the contact route failing — see §7.5.
+The one error surface a visitor ever sees is the contact route failing — see §7.5.
 
 ---
 
@@ -535,8 +539,8 @@ The one genuine error surface is the contact route failing — see §7.5.
 
 *This product's defining concern.* The register is cinematic, not interface —
 the reference is filmic. Orbital motion, mass and rotation are M1/M2 geometry
-and in scope for launch; only textures, lighting and post-FX are deferred to
-M3.
+and in scope for launch; only textures and lighting are deferred to M3, and M3
+adds no post-FX (AD-19).
 
 ### 6.1 The governing law
 
@@ -1014,7 +1018,8 @@ consumer-grade floor, not an enterprise checkbox exercise.
 7. **The Deep/Shallow signal is never carried by colour alone.** Both ratified
    channels — Moon and Ring — are structural, which makes the signal
    greyscale-safe and colour-blind-safe by construction rather than by
-   remediation. The whole palette is achromatic, so this is free.
+   remediation. The line-work and every DOM surface are achromatic, so this is
+   free; M3's colour encodes nothing and carries no part of the signal.
 8. **Mote labels are text, not decoration.** Nine simultaneous Skill labels are
    information (FR-10's second channel) and must be exposed as such, not baked
    into a canvas texture. When a Project is Focused, its Skills are announced.
@@ -1096,6 +1101,7 @@ transition shortens, it does not become a jump):
   rather than playing its full arc. The camera still travels; it travels briefly.
 - Focus recompose and Condensation shorten identically.
 - Parallax, drift, and idle orbital motion stop. Orbits are drawn, not animated.
+  M3's Planet spin stops too (AD-20).
 - Dwell is unchanged. Reading time is not motion.
 
 **Reduced motion and Fallback routing are independent.** A visitor who prefers

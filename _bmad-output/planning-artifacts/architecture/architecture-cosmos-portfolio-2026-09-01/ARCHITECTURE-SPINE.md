@@ -32,7 +32,7 @@ companions: []
 
 **A build-time derivation pipeline feeding two read-only renderers.**
 
-All data-to-visual reasoning happens once, at build time, in a pure pipeline: authored JSON → validated → derived → solved → committed artifact. At runtime nothing derives, nothing solves, and nothing computes a visual property; two independent renderers read the finished artifact and draw it.
+All data-to-visual reasoning happens once, at build time, in a pure pipeline: authored JSON → validated → derived → solved → committed artifact. At runtime nothing derives from career data and nothing solves; two independent renderers read the finished artifact and draw it. Realism's light direction and spin are composition read off positions and time, not data (AD-20).
 
 The paradigm converts the product's three hardest constraints into structural properties rather than ongoing discipline: First Paint (NFR-1) is fast because the browser receives geometry rather than a physics problem; the opening frame (FR-24) is reproducible because the layout is committed rather than re-derived per load; and the two renderers cannot disagree (FR-22 content parity) because neither one interprets the source data.
 
@@ -249,7 +249,7 @@ graph TD
 | State mutation | Only through the state machine's named events (AD-9), one writer per field (AD-16). No component mutates navigation state directly. |
 | Boundary enforcement | AD-3's and AD-7's import bans are enforced by tooling, not honour — an ESLint import-boundary rule (or equivalent) fails the build on violation, and the AD-7 bundle assertion runs in CI. A rule the memlog itself predicts will "erode under pressure" is not left to discipline in a solo project promising a decade of health. |
 | Scene state reads | Inside `useFrame`, read via `store.getState()` — never a reactive hook binding, which would re-render every frame. |
-| Errors | Build-time errors fail loud and block the build (AD-11). Runtime has almost no error surface by construction — no backend, no fetch, no auth; the contact route is the one genuine exception. |
+| Errors | Build-time errors fail loud and block the build (AD-11). Runtime has almost no error surface by construction — no backend, no auth, and no fetch beyond M3's same-origin maps, which fail silently (AD-22); the contact route is the one error a visitor sees. |
 | Dates | ISO 8601 in authored data. All display formatting is derived, never authored. |
 | Config | None. No environment variables, no secrets, no runtime configuration — a static site with no backend has nothing to configure. |
 
@@ -355,10 +355,9 @@ graph LR
 - **Line-work and Focus framing over realistic Bodies.** Kept as shipped by Thomas's ruling (2026-11-01), to be judged on screen. A change later must move any data signal a removed line carries.
 - **Map choice, ambient floor, glow and fade values, spin rates.** Values, tuned on screen inside AD-23's budgets. The architecture fixes where they live, not what they are.
 - **Dust noise.** Dropped from M3 by Thomas's ruling (2026-11-01). Revisit if Dust falls short on screen; it needs its own material and cross-fade, and AD-23's budgets still hold.
-- **Upstream wording.** 35 sentences in DESIGN.md, the PRD and EXPERIENCE.md predate these rulings; `reviews/review-reconcile-m3.md` lists each with file and line, and its further list for the brightness and token rulings also applies. New tokens AD-12 requires are not deferred: they land in DESIGN.md's frontmatter in the first M3 story.
 - **Realism on a light theme.** M3 realism is dark-only. Additive glow and a dark terminator assume a dark void, and the scene's light theme has no milestone.
 - **A Mote's dot behind a fill while its label shows.** Does not occur on today's artifact at 16:9 (0 of 720 samples per orbit). Revisit if a new Project produces it.
-- **M4 collapse ending.** PRD R-6 proposes a procedural in-engine implementation; unratified and post-launch. It reuses the existing force system, so AD-1's build-time boundary is the only thing it must respect.
+- **M4 collapse ending.** PRD R-6 proposes a procedural in-engine implementation; unratified and post-launch. It reuses the existing force system, so AD-1's build-time boundary is the only thing it must respect. A post pass at M4 also needs a new ruling and AD-23's budgets reopened (AD-19).
 - **Dwell, condensation, and dust-density numbers.** The PRD and UX both direct these to M1 greybox tuning, where they are cheapest. The architecture fixes *where* they are derived (AD-3), not their values.
 - **Free-flight camera interpolation.** EXPERIENCE.md ratifies the destination model; the interpolation curve is a motion-design decision for M1, not a structural one.
 - **Fallback visual layout.** Ratified in UX (time-as-axis, transposing on phone) and drafted as a mock. No architectural call remains beyond AD-3's shared derivation.

@@ -2,7 +2,7 @@
 title: Cosmos Portfolio
 status: draft
 created: 2026-09-01
-updated: 2026-10-30
+updated: 2026-11-01
 ---
 
 # PRD: Cosmos Portfolio
@@ -115,13 +115,13 @@ A force simulation computes the position of every Body from the JSON. Realises U
 
 #### FR-3: Three mapping rules drive visual properties
 
-Body appearance derives from data via exactly three rules: mass from duration, brightness from recency, distance from the Rail by relevance.
+Data reaches Body appearance through exactly three rules: mass from duration, brightness from recency, distance from the Rail by relevance.
 
 **Consequences (testable):**
 - A longer engagement yields a more massive Body than a shorter one.
-- A more recent entry renders brighter than an older one.
+- A more recent entry's outline renders brighter than an older one's.
 - A higher `weight` places a Body nearer the Rail.
-- No fourth mapping rule exists.
+- No fourth mapping rule exists. M3's map, tilt and spin are assigned from the entity ID and encode nothing, so they are not a mapping rule (AD-21).
 
 #### FR-4: Single `weight` knob per entry
 
@@ -340,7 +340,7 @@ The visitor may leave the Rail and navigate freely.
 
 #### FR-20: Coherent schematic visual system
 
-The site presents a deliberate monochrome Schematic Identity across scene and information layer. Realises UJ-1.
+At M2 the site presents a deliberate monochrome Schematic Identity across scene and information layer. At M3 the line-work, Dust and the information layer stay monochrome, and colour enters only through the scene's realism layer (AD-12, AD-19). Realises UJ-1.
 
 **Consequences (testable):**
 - A defined palette, line weight, typography, label treatment, and UI chrome exist and are applied consistently.
@@ -348,7 +348,7 @@ The site presents a deliberate monochrome Schematic Identity across scene and in
 - No "work in progress" disclaimer appears anywhere. A disclaimer invites the exact judgement it tries to pre-empt and does not neutralise a first impression.
 
 **Out of Scope:**
-- Photographic textures, realistic lighting, and post-processing. These are M3, and M3 is now an upgrade to a live site rather than a launch gate.
+- Photographic textures and realistic lighting. These are M3, and M3 is now an upgrade to a live site rather than a launch gate. M3 itself has no post-processing (AD-19).
 
 ### 4.6 Technical Colophon
 
@@ -410,7 +410,7 @@ The link renders as a composed artifact when pasted into Slack, LinkedIn, or a m
 
 - **NFR-1 — First Paint.** `[ASSUMPTION: The first frame of the Schematic scene renders within 2.5 seconds on the target hardware profile over a median broadband connection. Everything behind it — full Dust density, remaining Bodies, complete Rail — may stream in.]` This is a **launch requirement**, not a tradeable. It exists because of The Forward, who has no context and no reason to wait, and it is affordable specifically because M2 ships no photographic textures. **Nothing gates the first frame:** no consent banner, no cookie notice, no splash, no "click to enter" — there is nothing to accept, and anything interposed spends the budget this NFR exists to protect.
 - **NFR-1a — The opening fifteen seconds.** Within roughly fifteen seconds of First Paint, an unprompted visitor should register three things: that this is a **real work history**, that it is **organised rather than listed**, and that it is **deliberately designed**. This is the contract UJ-1 and UJ-3 are both testing, and it sets what the opening Shot must frame. *(NFR-1 governs how fast the frame arrives; this governs what it must accomplish once it does.)*
-- **NFR-2 — Runtime framerate.** **30fps at 1080p on the hiring manager's work laptop** (the NFR-4 profile: a 2023-era laptop with integrated graphics), with the full M3 realism pass running. **Measured as the mean framerate over five-second windows across one complete scroll of the Rails, forward then back; every window must hold 30fps** — a whole-run mean would let one bad stretch hide behind good ones. The window is the one NFR-2a's floor monitor already uses, so target and floor are read by one instrument. Below 30fps the scene reads as broken. This is an **M3 gate, not a launch gate** — M2 ships no realism pass. Thirty rather than sixty because the content is slow camera movement through mostly static geometry, the exact case where 30 reads cinematic rather than broken, and holding 60 on integrated graphics would cost texture resolution and post-FX, both of which serve realism. *Ratified by Thomas, 2026-10-30 (§13 Q2).* **The gate is ratified but cannot be run:** no target-profile machine is available, and the dev machine has no integrated GPU, so — unlike First Paint's P1 — no proxy exists either. M3 does not pass NFR-2 until it is measured on a target-profile machine; a run on any other hardware is not a pass.
+- **NFR-2 — Runtime framerate.** **30fps at 1080p on the hiring manager's work laptop** (the NFR-4 profile: a 2023-era laptop with integrated graphics), with the full M3 realism pass running: Body fills and Star glow, with no post pass (AD-19). **Measured as the mean framerate over five-second windows across one complete scroll of the Rails, forward then back; every window must hold 30fps** — a whole-run mean would let one bad stretch hide behind good ones. The window is the one NFR-2a's floor monitor already uses, so target and floor are read by one instrument. Below 30fps the scene reads as broken. This is an **M3 gate, not a launch gate** — M2 ships no realism pass. Thirty rather than sixty because the content is slow camera movement through mostly static geometry, the exact case where 30 reads cinematic rather than broken, and holding 60 on integrated graphics would cost texture resolution and lighting, both of which serve realism. *Ratified by Thomas, 2026-10-30 (§13 Q2).* **The gate is ratified but cannot be run:** no target-profile machine is available, and the dev machine has no integrated GPU, so — unlike First Paint's P1 — no proxy exists either. M3 does not pass NFR-2 until it is measured on a target-profile machine; a run on any other hardware is not a pass. **M3 may go live before that** (Thomas, 2026-11-01), behind CI-enforced budgets and recorded as "not yet passed". A budget is never a pass (AD-23).
 - **NFR-2a — Fallback floor.** **The Fallback is offered below 24fps sustained, not below 30** — already shipped at M2 as a five-second mean. NFR-2 sets the *target*; this sets the *floor at which the 3D scene is abandoned*. The two numbers are deliberately different, and conflating them was an error in the draft: between 24 and 30fps the scene is below target but keeps running, an accepted degraded band, because NFR-3 says the real thing at 24fps beats a lesser thing at 30. *Ratified by Thomas, 2026-10-30 (§13 Q16).*
 - **NFR-3 — Degradation policy: quality holds, frames drop.** A viewer served a stripped-down render judges the stripped-down render, unaware a better version existed. Better the real thing at 24fps than a lesser thing at 30. A stable framerate reads smooth where a fluctuating one reads broken even at a higher average.
 - **NFR-4 — Target hardware profile.** A three-year-old laptop with integrated graphics at 1080p: the corporate work-laptop profile of the actual audience. Explicitly not a current Apple-silicon machine and not the dev machine.
@@ -420,11 +420,11 @@ The link renders as a composed artifact when pasted into Slack, LinkedIn, or a m
 
 ## 6. Constraints and Guardrails
 
-- **Not tradeable (quality gates for the finished artifact):** realism of materials and lighting, immersion, visitor awe, runtime framerate. **These are not launch gates.** They had been functioning as preconditions to existing, which is what kept the finish line receding. Reconciling them was Flag 03.
+- **Not tradeable (quality gates for the finished artifact):** realism of materials and lighting, immersion, visitor awe, runtime framerate. **These are not launch gates.** They had been functioning as preconditions to existing, which is what kept the finish line receding. Reconciling them was Flag 03. M3 going live before NFR-2 is measured does not trade runtime framerate away: the gate stays open until a target-profile run closes it (AD-23).
 - **Tradeable:** total load time for the full experience, breadth of content, build time. **First Paint is carved out** and is not tradeable (NFR-1).
 - **Scope guardrail.** M2 is frozen as defined in §8.1. Every subsequent addition routes to M3 by default. The bar for adding to M2 is **"the site is actively misleading without it,"** not "this makes it better." M2 roughly doubled in a single session and there is no architectural equivalent of the rot defence for scope — this rule is the substitute.
 - **Solver bounding as a safety net.** Bounding the force solver — minimum separation, bounding volume, no-fly zones — was never rejected outright and is retained specifically to guard background drift, which entity-relative framing does not cover.
-- **Realism is borrowed, not modelled.** This is the feasibility argument for the entire product and it constrains M3. The visual bar is met with NASA/ESA public-domain texture maps, drei built-ins, and post-processing film artifacts — not with authored 3D models. The subject was chosen partly *because* it needs almost no modelling: spheres, textures, and light. The author places his own 3D modelling skill below the quality bar he refuses to lower, so any requirement that reintroduces modelling reintroduces the risk the whole approach was designed to route around. This is a standing constraint, not backstory — it is why R-6 is scoped to the two bookend shots and nothing else.
+- **Realism is borrowed, not modelled.** This is the feasibility argument for the entire product and it constrains M3. The visual bar is met with NASA and USGS texture maps, each admitted and credited one by one (AD-21), one shared sphere, and one light direction per Planet — not with authored 3D models. ESA material and any other CC-licensed or author-copyright set is refused, and M3 has no post-processing (AD-19). The subject was chosen partly *because* it needs almost no modelling: spheres, textures, and light. The author places his own 3D modelling skill below the quality bar he refuses to lower, so any requirement that reintroduces modelling reintroduces the risk the whole approach was designed to route around. This is a standing constraint, not backstory — it is why R-6 is scoped to the two bookend shots and nothing else.
 - **Editorial constraint.** The author's motive (he wanted to build it) is stated plainly and is not to be sanitised in this or any downstream document.
 
 ## 7. Non-Goals (Explicit)
@@ -458,7 +458,7 @@ The launched site is M2: greybox with the information layer. This is the smalles
 
 ### 8.2 Out of Scope for MVP
 
-- **Realism pass** — textures, lighting, post-processing. **M3.** No longer a launch gate; an upgrade to a live site. This inverts the completion dynamic entirely.
+- **Realism pass** — textures and lighting, with no post-processing (AD-19). **M3.** No longer a launch gate; an upgrade to a live site. This inverts the completion dynamic entirely.
 - **Collapse ending and black-hole contact surface** — **M4.** Holds the emotional climax; the arc is awe then calm, and the universe ends peacefully.
 - **Fun layer** — **M5.** Anything remaining that earns its place.
 - **Mobile 3D** — the Fallback serves mobile.
@@ -485,7 +485,7 @@ Each milestone has a gate. No vertical slice first — deliberate.
 | **M0** | **Cold-read — no code.** Draft two Shallow Projects and one Deep Project in full text. Hand them to a technical reader with no context. | — | **Does a reader stop and read the `notable`? Can they tell the two classes apart on the page?** |
 | M1 | Greybox — schema, force layout, Rails, backward scroll, Focus, untextured | FR-1..FR-6, FR-12a, FR-16..FR-19, FR-17a | Does the pacing work with no visual polish at all? |
 | **M2** | **Information layer + Schematic Identity + Colophon — LAUNCH** | FR-7..FR-15, FR-20..FR-24, NFR-1 | **Can a stranger tell what he does, and which entries are worth reading?** |
-| M3 | Realism pass — textures, lighting, post-FX | NFR-2, NFR-2a | Does it hold NFR-2 on the target hardware profile? *(Unrunnable until a target-profile machine is available — §5 NFR-2.)* |
+| M3 | Realism pass — textures and lighting, no post-FX | NFR-2, NFR-2a | Does it hold NFR-2 on the target hardware profile? *(Unrunnable until a target-profile machine is available — §5 NFR-2. M3 may go live with this unanswered, recorded as "not yet passed".)* |
 | M4 | Collapse ending — bookends and contact surface | — | Does the ending land as awe then calm? |
 | M5 | Fun layer | — | Does each addition earn its place? |
 
@@ -516,7 +516,7 @@ Each milestone has a gate. No vertical slice first — deliberate.
 
 - **SM-3 — The reasoning lands.** A reader who reaches the Colophon can describe at least one architectural decision the site makes. This is the transfer claim's only observable. Validates FR-21.
 - **SM-4 — It stays alive.** Adding a Project costs one JSON entry and one `weight` value, with no layout, camera, or positioning work. Testable directly and at any time. Validates FR-1..FR-6, FR-18, NFR-5.
-- **SM-5 — It performs on a real machine.** First Paint within budget at launch (NFR-1); locked framerate at M3 (NFR-2), on the target hardware profile rather than the dev machine.
+- **SM-5 — It performs on a real machine.** First Paint within budget at launch (NFR-1); locked framerate at M3 (NFR-2), on the target hardware profile rather than the dev machine. Not yet shown at M3 until a target-profile run exists (AD-23).
 
 **Counter-metrics (do not optimise)**
 
@@ -577,7 +577,7 @@ All critical findings and both mechanical blockers were resolved in place. The f
 **For `bmad-architecture`:**
 - Build-time vs. runtime force settling is unstated, and it silently determines NFR-1's streaming plan, FR-24's reproducible opening frame, and FR-21's demonstrability. Highest-leverage missing decision.
 - Six FRs are epics rather than stories: FR-2, FR-13, FR-17, FR-20, FR-21, FR-22. Expect decomposition.
-- "Full post-FX" in NFR-2 is undefined until the M3 architecture names the realism stack. NFR-2's threshold (ratified 2026-10-30) applies to whatever that stack becomes; the architecture should define it with the 30fps window in view, not after.
+- ~~"Full post-FX" in NFR-2 is undefined until the M3 architecture names the realism stack.~~ *Resolved 2026-11-01 by AD-19: "full post-FX" means no post pass, and the realism stack is Body fills and Star glow. NFR-2's threshold applies to that stack, and AD-23 sets its budgets.*
 - The project ↔ skill relation dissolves through Condensation the way company ↔ client dissolves into a field lookup (FR-6). Neither is a stored graph edge. Stated in the brief addendum, not restated in FR-13.
 
 **For `bmad-ux`:**
