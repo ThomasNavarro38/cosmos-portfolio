@@ -1,6 +1,7 @@
 ---
 stepsCompleted: [1, 2, 3, 4]
 status: final
+scope: M2 (Epics 1-6, done) and M3 (Epics 7-8, added 2026-11-01)
 inputDocuments:
   - _bmad-output/planning-artifacts/prds/prd-cosmos-portfolio-2026-09-01/prd.md
   - _bmad-output/planning-artifacts/prds/prd-cosmos-portfolio-2026-09-01/addendum.md
@@ -8,6 +9,12 @@ inputDocuments:
   - _bmad-output/planning-artifacts/ux-designs/ux-cosmos-portfolio-2026-09-01/DESIGN.md
   - _bmad-output/planning-artifacts/ux-designs/ux-cosmos-portfolio-2026-09-01/EXPERIENCE.md
   - _bmad-output/planning-artifacts/briefs/brief-cosmos-portfolio-2026-08-31/inventory-draft.md
+  - _bmad-output/planning-artifacts/architecture/architecture-cosmos-portfolio-2026-09-01/.memlog.md
+  - _bmad-output/planning-artifacts/architecture/architecture-cosmos-portfolio-2026-09-01/upstream-edits-m3-draft.md
+  - _bmad-output/planning-artifacts/architecture/architecture-cosmos-portfolio-2026-09-01/reviews/review-adversarial-m3.md
+  - _bmad-output/planning-artifacts/architecture/architecture-cosmos-portfolio-2026-09-01/reviews/review-rubric-m3.md
+  - _bmad-output/planning-artifacts/architecture/architecture-cosmos-portfolio-2026-09-01/reviews/review-tech-currency-m3.md
+  - _bmad-output/planning-artifacts/architecture/architecture-cosmos-portfolio-2026-09-01/reviews/review-reconcile-m3.md
 ---
 
 # Cosmos Portfolio - Epic Breakdown
@@ -16,7 +23,7 @@ inputDocuments:
 
 This document provides the complete epic and story breakdown for Cosmos Portfolio, decomposing the requirements from the PRD, UX Design if it exists, and Architecture requirements into implementable stories.
 
-Scope is **M2 — the launch milestone** (PRD §8.1, frozen). M3 realism, M4 collapse ending, and M5 fun layer are out of scope and are not decomposed here.
+Scope is **M2 — the launch milestone** (PRD §8.1, frozen; Epics 1–6, done) and **M3 — the realism pass** (PRD §9; an upgrade to the live site, added 2026-11-01). M4 collapse ending and M5 fun layer are out of scope and are not decomposed here.
 
 **Reading order for anyone building from this document:** the UX spine (EXPERIENCE.md) and the architecture spine (ARCHITECTURE-SPINE.md) both **amend the PRD in effect** on the navigational model. See AD-4a and EXPERIENCE.md §9.2 — the Rail stops at Clients (~5–6), never at Projects. A unit built from the PRD alone will produce a structurally different product. This is recorded again in the Additional Requirements below because it is the single highest-consequence divergence available.
 
@@ -30,7 +37,7 @@ FR-1: The site reads all career data from one JSON file embedded in the project 
 
 FR-2: A force simulation computes the position of every Body from the JSON — no Body position appears as a literal coordinate in any source or data file; re-running from identical input settles every Client Star holding its own Projects in orbit; adding an entry requires no other file change.
 
-FR-3: Body appearance derives from data via exactly three mapping rules and no fourth — mass from duration, brightness from recency, distance from the Rail by relevance (`weight`).
+FR-3: Body appearance derives from data via exactly three mapping rules and no fourth — mass from duration, brightness from recency, distance from the Rail by relevance (`weight`). M3's map, tilt and spin are assigned from the entity ID and encode nothing, so they are not a mapping rule (AD-21).
 
 FR-4: Each entry carries one manual relevance value, `weight`, default `1` — the only hand-authored number in the data file; an entry omitting it is treated as `1`.
 
@@ -76,7 +83,7 @@ FR-19: The visitor may leave the Rail and navigate freely — free flight is opt
 
 **4.5 Schematic Visual Identity**
 
-FR-20: The site presents a deliberate monochrome Schematic Identity across scene and information layer — a defined palette, line weight, typography, label treatment, and UI chrome exist and are applied consistently; no element reads as a placeholder; **no "work in progress" disclaimer appears anywhere.**
+FR-20: At M2 the site presents a deliberate monochrome Schematic Identity across scene and information layer; at M3 the line-work, Dust and the information layer stay monochrome, and colour enters only through the scene's realism layer (AD-12, AD-19) — a defined palette, line weight, typography, label treatment, and UI chrome exist and are applied consistently; no element reads as a placeholder; **no "work in progress" disclaimer appears anywhere.**
 
 **4.6 Technical Colophon**
 
@@ -96,7 +103,7 @@ NFR-1: **First Paint.** The first frame of the Schematic scene renders within 2.
 
 NFR-1a: **The opening fifteen seconds.** Within roughly fifteen seconds of First Paint an unprompted visitor should register three things: that this is a **real work history**, that it is **organised rather than listed**, and that it is **deliberately designed**. Sets what the opening Shot must frame.
 
-NFR-2: **Runtime framerate.** 30fps at 1080p on the hiring manager's work laptop (2023-era integrated graphics) with the full M3 realism pass, in every five-second window across a full forward-and-back scroll of the Rails. **An M3 gate, not a launch gate.** *Ratified by Thomas, 2026-10-30 (PRD §13 Q2).* The gate cannot be run until a target-profile machine is available; no proxy.
+NFR-2: **Runtime framerate.** 30fps at 1080p on the hiring manager's work laptop (2023-era integrated graphics) with the full M3 realism pass (Body fills and Star glow, with no post pass, AD-19), in every five-second window across a full forward-and-back scroll of the Rails. **An M3 gate, not a launch gate.** *Ratified by Thomas, 2026-10-30 (PRD §13 Q2).* The gate cannot be run until a target-profile machine is available; no proxy. **M3 may go live before that** (Thomas, 2026-11-01), behind CI-enforced budgets and recorded as "not yet passed"; a budget is never a pass (AD-23).
 
 NFR-2a: **Fallback floor.** The Fallback is offered below 24fps sustained, not below 30 — deliberately different from NFR-2's target. *Ratified by Thomas, 2026-10-30 (PRD §13 Q16).*
 
@@ -117,7 +124,7 @@ Technical requirements extracted from ARCHITECTURE-SPINE.md that impact epic and
 **Starter template: NONE.** The architecture specifies no greenfield starter, boilerplate, or scaffold. It specifies a **paradigm** (build-time derivation pipeline feeding two read-only renderers), an exact **structural seed** (directory tree), and a **pinned stack**. Epic 1 Story 1 is therefore a hand-rolled Vite scaffold conforming to that seed, not a template instantiation.
 
 **Pinned stack — exact versions, verified against the npm registry 2026-09-01. Pairing is load-bearing, not incidental:**
-- TypeScript 7.0.x · Vite 8.2.x · React 19.x
+- TypeScript 7.0.x · Vite 8.2.x · React 19.2.x
 - @react-three/fiber 9.7.x (stable — **not** v10 alpha)
 - three 0.185.x · @react-three/drei 10.7.x (stable — **not** v11 alpha)
 - zod 4.5.x (build-time only — devDependencies; schema gate in src/data/ and src/derive/)
@@ -187,6 +194,25 @@ Technical requirements extracted from ARCHITECTURE-SPINE.md that impact epic and
 - Numbers that do exist and should be used: team size, engagement duration, system scale, what was replaced or consolidated.
 - **Promotion is free**, so incomplete excavation is not a launch blocker — an entry that later yields a decision gains a `notable` and self-promotes.
 
+**M3 — the realism pass (AD-19 to AD-25, Thomas's rulings of 2026-11-01). Nothing has been rendered or run on a GPU; the budgets are starting values, not measurements:**
+
+- AR-M3-1: **Depth spike first (AD-19).** The first story spikes the fill's depth bias on real hardware before any fill is built on it.
+- AR-M3-2: **Fills and draw order (AD-19).** A fill is a sphere placed by its Body's billboard transform, a true circle of `FILL_RADIUS_RATIO × bodyRadius` concentric with the outline at every pose, with the ratio one constant below 1 pinned by a test. A Body's own fill never hides its marks (outline, core dot, Ring, Moon). `DUST 1 < GLOW 1.25 < FILL 1.5 < BODY 2 < MOON 3` is declared once in `scene-model.ts`, with a test pinning the strict order. Hit spheres, `destinations` and raycasting do not change. A custom shader sets the map's `colorSpace` and includes `<colorspace_fragment>`.
+- AR-M3-3: **No post pass (AD-19, AD-23).** One forward pass on the default framebuffer: no `EffectComposer`, full-screen render target, shadow map, scene light or raymarching; `flat` stays; the vignette stays the CSS overlay; Dust stays exactly as M2 draws it. M3 changes M2 audits only where it must, each naming its one allowance: the render-order pins, `scene.tsx`'s residual audit (one new mount), the `chart-offer.ts` importer table, the glow/bloom scan (`realism/` only), the achromatic audit (the `realism-*` prefix only).
+- AR-M3-4: **Lighting (AD-20).** A Planet takes one world-space direction toward its own Star, computed in a pure `realism/` model from solved positions, plus a constant ambient floor token. A Star is unlit and emissive with one additive glow sprite, procedural, no map. No Body shadows another. A Planet's spin moves the map and never the light. The camera, Focus framing and Mote layout do not change.
+- AR-M3-5: **Map library (AD-21).** One pure, browser-safe module, `src/derive/map-library.ts`, holds each map's `id`, source URL, licence wording, credit line, retrieval date and mean luminance. `public/textures/` holds pixels only, `<id>.webp`; there is no third data file. A map is admitted only if published by NASA or USGS, its page shows no third-party copyright, and its credit line is recorded; CC-licensed and author-copyright sets are refused.
+- AR-M3-6: **Appearance (AD-21).** A Planet's `appearance` is `{ map, tilt, spinRate, spinPhase }`, from its entity ID alone, the map by rendezvous hashing. A Star has none. Emitted under a new `SCHEMA_VERSION`, with no authored field and no per-Body override; `solveLive(career.json)` stays byte-identical to the committed artifact. The gate fails unless every `appearance.map` has a library entry and a file, every file has an entry, and the committed assignments match a re-derivation. The Fallback reads no appearance.
+- AR-M3-7: **Lifecycle (AD-25, AD-7).** `render-scene/realism-mount.tsx`, mounted once in `scene.tsx` with no conditional, is the only importer of `./realism/`, by one memoised `import()` per document; its logic lives in a pure sibling, `realism-status.ts`, never in `navigationStore`. Document status runs `idle → loading → decoded → shown`, or `failed`, terminal for the document; context status `uploaded` resets with every new `<Canvas>`. Nothing under the `<Canvas>` may suspend or throw: no `lazy`, `use`, `useLoader` or `useTexture`. The bundle assertion requires a chunk whose facade is `render-scene/realism/index.ts`, and fails if it is missing or if any `realism/` module is in the static closure of the scene chunk or the entry.
+- AR-M3-8: **Arrival (AD-22).** The first frame stays the M2 schematic frame. Maps load from the same origin under the base path; each is uploaded by `initTexture`, and every shader compiled by `compileAsync` with one hidden warm draw, before anything shows. During the fade, fills share one uniform and write no depth; on the frame it ends, all write depth at once. Frame-time sampling resets when upload begins and when the fade begins, `realism-mount.tsx` being the one added caller. A later Canvas uploads and compiles again, then draws with no fade and no network; decoded images are never closed.
+- AR-M3-9: **Budgets (AD-23).** One import-free module, `src/render-scene/realism/budgets.ts`, read by `realism/` and `scripts/` only: `realism` chunk 24,000 bytes; `scene` chunk 960,000 bytes (minified); 12 maps, each at most 1024×512 WebP, 4 MB in total; one shared sphere geometry, at most 64×32; added draw calls 1 per Planet, 2 per Star, 0 for Dust; 0 full-screen passes, render targets, shadow maps and scene lights; 0 new runtime dependencies. A budget changes only by a ruling recorded in the memlog. **A check with nothing to measure fails.** No adaptive quality: no `PerformanceMonitor`, no adaptive DPR, no quality tier, `dpr` stays `[1, 2]`.
+- AR-M3-10: **Instrument (AD-23).** The monitor in `chart-offer.ts` stays the one instrument. It tracks its worst full window past the latch, pure and changing no latch; a sink bound in `first-frame-mark.tsx`'s pattern writes it to the visitor's own performance timeline, sending nothing. A window never spans a reset. The 24fps floor and its offer are unchanged.
+- AR-M3-11: **Status record (AD-23).** A record in `_bmad-output/implementation-artifacts/` states NFR-2 **not yet passed**; only a run on a target-profile machine may change that, and a target run reads the worst window and the gap count together.
+- AR-M3-12: **Link preview (AD-24).** `public/preview.png` remains the composed schematic card. M3 does not change the card, its tests or its alt text.
+- AR-M3-13: **On-screen judgement before deploy** (added at requirements confirmation, Thomas, 2026-11-01; the review-reconcile-m3 F3 gap). NFR-2 cannot be run, so Thomas judges the opening frame, one Client stop and one Focus against "realistic, not a screensaver" and label contrast, and records the result, before M3 is deployed.
+- AR-M3-14: **Colophon wording is a ruling** (AD-21). The story adding the appearance statement and credits waits on Thomas's ruling of its exact wording, including how it sits beside "only career.json is authored".
+- AR-M3-15: **WebP conversion is a recorded manual step** (added at requirements confirmation, Thomas, 2026-11-01; the review-tech-currency-m3 F7 gap). The tool and settings are recorded with the library; no encoder enters CI or the dependencies.
+- AR-M3-16: **Deep/Shallow signal occlusion check** (added at requirements confirmation, Thomas, 2026-11-01; the review-reconcile-m3 F8 gap). `npm test` fails if a fill hides a Ring or Moon at an integer Rail stop, so a re-solve cannot break FR-9 silently.
+
 ### UX Design Requirements
 
 Extracted from the DESIGN.md / EXPERIENCE.md spine pair. Both are `status: final`. Where a mock in `.working/` disagrees with either spine, **the spine wins and the mock is stale.**
@@ -205,7 +231,7 @@ UX-DR5: Implement the type ramp exactly as specified — `chrome` 9.5px/0.34em, 
 
 UX-DR6: Implement the spacing scale — 4/8/12/20/28/40/52/56, with **no 16 and no 24**. Fewer available gaps means fewer arbitrary ones.
 
-UX-DR7: **No shadows anywhere, at any milestone.** No `box-shadow` on the panel, a label, a Body, or the Fallback. Depth is carried by stroke luminance, emptiness, the vignette, and tonal surface layering — in that priority order. **No glow, no bloom, no lens flare at M2.** Never scale-on-hover, blur, or opacity fades on Bodies.
+UX-DR7: **No shadows anywhere, at any milestone.** No `box-shadow` on the panel, a label, a Body, or the Fallback; a Planet's dark side at M3 is lighting from its own Star, and no Body shadows another (AD-20). Depth is carried by stroke luminance, emptiness, the vignette, and tonal surface layering — in that priority order. **No glow at M2, and no bloom or lens flare at M2 or M3;** M3's one glow is the Star glow sprite. Depth is never carried by scale-on-hover, blur, or opacity fades on Bodies.
 
 UX-DR8: Implement the shape vocabulary and nothing else — the circle (Bodies, Motes, Moons; `fill:none` at M2 with a filled core dot at ~15% radius on Client Stars only), the ellipse (orbits only, off-axis Mote orbits at −16°/+26°/−46°), the straight line (leader lines only, single segment, **no elbows, no dog-legs, no curves**), and the square-cornered rectangle (radius `0` everywhere — **not one rounded corner in this product**). No polygons, no icons, no glyphs beyond the type family. The one permitted text arrow is the corner-chrome scroll instruction.
 
@@ -321,6 +347,24 @@ UX-DR54: Colophon entry is the **left-top corner chrome slot appended to identit
 
 UX-DR55: Compose the link preview image from the same system — the opening frame at `surface-base`, one white Client Star, the Rail at `stroke-dust`, corner chrome. **It must not overstate what a mobile visitor receives** (they get the Fallback), and the forbidden move is any disclaimer. `[GAP D-G5: "honest without being self-deprecating" — no treatment decided.]`
 
+**M3 realism layer**
+
+UX-DR56: Realism attaches at **exactly two points**, Body fill and Star glow (DESIGN.md "The M3 attachment surface"). A Planet's fill is a colour map, lit by its own Star; a Star's fill is procedural and unlit; each Star has one additive glow sprite beneath the fills. Stroke, Ring, Moon and label geometry do not change.
+
+UX-DR57: Apply the **luminance ceiling** (AD-20). Each library entry records its map's mean luminance and the material normalises to it. At rest no fill or glow exceeds `stroke-active`; only the current subject's Star (`sceneSubject`) may rise above that, never above `stroke-focus`. The ceiling is a shader constant pinned by a test against the tokens, so white is still spent once per frame.
+
+UX-DR58: Declare the **`realism-*` token family** in DESIGN.md's frontmatter (Star glow, ambient floor), in the first M3 story. Each carries a placeholder light value, named as an exception by Thomas's ruling (2026-11-01); the generator does not change. The achromatic audit exempts that one prefix and nothing else.
+
+UX-DR59: **Realism yields to legibility** (NFR-7, AD-19). Every label keeps its contrast floor over a fill or glow.
+
+UX-DR60: The layer **fades in once, whole, never Body by Body**, over `FADE_SECONDS × motionPace(reduced)`, with no line-work popping when the fade begins (AD-22).
+
+UX-DR61: If realism fails to load, **the schematic scene simply stays**: no error, no retry in that document, no message. The visitor is not told realism is missing (EXPERIENCE.md §5, AD-22).
+
+UX-DR62: **Planet spin stops under reduced motion**, read from `reducedMotion()` once per frame by the binding and handed to the pure model; spin does not use `motionPace` (AD-20, EXPERIENCE.md).
+
+UX-DR63: The Colophon gives appearance **one separate statement and the map credits**, read through its existing dynamic edge into `src/derive/`. `appearance` takes no row in the derivation table, which stays three rows. Colour and surface encode nothing: recency stays on the outline's `luminanceBand`, the subject on the white stroke, Deep/Shallow on Ring and Moon (AD-21, EXPERIENCE.md copy place 4).
+
 ### FR Coverage Map
 
 Every FR is mapped to exactly one owning epic. NFRs are listed against the epic that verifies them, not every epic that respects them.
@@ -355,7 +399,7 @@ Every FR is mapped to exactly one owning epic. NFRs are listed against the epic 
 | FR-24 | Epic 6 | Designed shareability — composed preview image, honest about the Fallback |
 | NFR-1 | Epic 6 | First Paint budget **verified** on target hardware (enablers built in Epics 1 and 4) |
 | NFR-1a | Epic 3 | The opening fifteen seconds — what the opening Shot must accomplish |
-| NFR-2 | — | **M3 gate, not launch.** Out of M2 scope. Threshold ratified 2026-10-30; gate unrunnable until target hardware. |
+| NFR-2 | Epics 7, 8 | **M3 gate, not launch.** Budgets constrain the build in Epic 7; Epic 8 records it **not yet passed**. Threshold ratified 2026-10-30; gate unrunnable until target hardware; a budget is never a pass. |
 | NFR-2a | Epic 4 | Fallback floor — the scene is offered, never forced, below the sustained-fps floor |
 | NFR-3 | Epic 4 | Degradation policy: quality holds, frames drop |
 | NFR-4 | Epic 4 | Target hardware profile governs detection and verification |
@@ -363,10 +407,25 @@ Every FR is mapped to exactly one owning epic. NFRs are listed against the epic 
 | NFR-6 | Epic 1 | No backend, enforced structurally: no fetch, no config, no runtime data path |
 | NFR-7 | Epic 3 | Legibility outranks awe — the tie-breaker where identity conflicts with reading |
 
+**M3 coverage.** Every FR keeps its owning epic above; these rows are what M3 adds to it.
+
+| Req | Epic | Coverage |
+|---|---|---|
+| FR-3 (M3) | Epic 7 | Appearance assigned from the entity ID, encoding nothing; no fourth mapping rule |
+| FR-9 (M3) | Epic 7 | The signal stays on Ring and Moon; occlusion checked at the integer stops |
+| FR-20 (M3) | Epic 7 | Colour only in the realism layer; line-work, Dust and DOM surfaces stay achromatic |
+| FR-21 (M3) | Epic 8 | One separate appearance statement and the map credits; the derivation table stays three rows |
+| NFR-1 (M3) | Epic 7 | First Paint stays the schematic frame; realism arrives after it |
+| NFR-2a, NFR-3 (M3) | Epics 7, 8 | Floor and offer unchanged; no adaptive quality; the worst window instrumented |
+| AR-M3-1..9, 12, 15, 16 | Epic 7 | Spike, fills, no post pass, lighting, library, appearance, lifecycle, arrival, budgets, preview, conversion, occlusion |
+| AR-M3-10, 11, 13, 14 | Epic 8 | Instrument, status record, on-screen judgement, Colophon wording |
+| UX-DR56..62 | Epic 7 | Attachment points, luminance ceiling, tokens, legibility, fade, silent failure, reduced motion |
+| UX-DR63 | Epic 8 | The Colophon's appearance statement and credits |
+
 **Out of scope for this breakdown** (recorded so the omission is deliberate, not an oversight):
 - **M0 — the cold-read** (PRD §9). Needs no code; mitigates R-2 and R-3; tracked outside this document by user decision.
 - **Content authoring** (PRD §8.3). ~9 entries remain and they gate M2, but the work is editorial rather than developmental; tracked outside this document by user decision. **The `inventory-draft.md` schema fix (`duration`, `weight`) belongs to that workstream and blocks drafting the remaining nine.**
-- **M3 realism, M4 collapse ending, M5 fun layer.** Post-launch by PRD §8.2.
+- **M4 collapse ending, M5 fun layer.** Post-launch by PRD §8.2.
 
 ## Epic List
 
@@ -422,6 +481,26 @@ A visitor who receives the link in Slack sees a composed image rather than a bla
 **NFRs verified:** NFR-1
 **Standalone:** The last mile before the CV link goes live. Requires a scene to measure and a Fallback to be honest about, so it lands after Epics 2 and 4.
 
+### Epic 7: The Realistic Scene
+
+On a capable machine, the visitor still gets the schematic first frame as fast as today. Then the scene fades, once and whole, into coloured Planets lit by their own Stars, with glowing Stars behind the same line-work. Every label stays readable, and colour means nothing. If realism fails to load, the visitor keeps the schematic scene and never knows.
+
+**FRs honoured:** FR-3, FR-9, FR-15, FR-20, and FR-1 and FR-2 through the unchanged `solveLive`
+**NFRs held:** NFR-1, NFR-3, NFR-5, NFR-6, NFR-7, and NFR-2's budgets, which constrain the build and do not pass the gate
+**Requirements:** AR-M3-1..9, AR-M3-12, AR-M3-15, AR-M3-16, UX-DR56..62
+**ADs realised:** AD-19, AD-20, AD-21 (except the Colophon part), AD-22, AD-23's budgets, AD-25, and the AD-7 and AD-12 amendments
+**Standalone:** Runs complete on Epics 1–6. **Stop rule:** the depth spike comes first; if the bias fails, stop and take AD-19 back to a ruling. **Epic 7 is not deployed on its own:** it would put NASA and USGS maps on the live site with no credit shown and without Thomas's judgement.
+
+### Epic 8: M3 Goes Live, Credited and Honest
+
+A visitor who opens the Colophon reads that a Planet's appearance is assigned and encodes nothing, and sees every map credited. Thomas can see exactly what has and has not been proven: the recorded judgement, and NFR-2 marked "not yet passed", with an instrument ready for the day a target machine turns up. M3 then deploys.
+
+**FRs covered:** FR-21 (the separate appearance statement and credits)
+**NFRs recorded:** NFR-2 and NFR-2a, recorded and not passed; the 24fps floor unchanged
+**Requirements:** AR-M3-10, AR-M3-11, AR-M3-13, AR-M3-14, UX-DR63
+**ADs realised:** AD-21's Colophon part, AD-23's instrument and record
+**Standalone:** Requires Epic 7 and nothing later. Needs two of Thomas's rulings: the Colophon wording and the on-screen judgement. A failed judgement returns to Epic 7's tunable values; moving line-work or adding a composer needs a new ruling (spine, Deferred).
+
 ### Dependency flow
 
 ```
@@ -430,9 +509,11 @@ Epic 1 (pipeline + artifact)
   ├─→ Epic 4 (fallback + routing)
   ├─→ Epic 5 (colophon)
   └─→ Epic 6 (launch surface — needs Epic 2 and Epic 4 in place to verify)
+
+Epics 1–6 (done) ─→ Epic 7 (the realistic scene) ─→ Epic 8 (credited, recorded, deployed)
 ```
 
-Epic 1 → 2 → 3 is a hard chain. Epics 4, 5, and 6 depend only on Epic 1's artifact; 6 additionally needs 2 and 4 present to verify against. No epic requires a later epic to function.
+Epic 1 → 2 → 3 is a hard chain. Epics 4, 5, and 6 depend only on Epic 1's artifact; 6 additionally needs 2 and 4 present to verify against. Epics 7 and 8 are M3, an upgrade to the live site. No epic requires a later epic to function.
 
 ---
 
@@ -2487,3 +2568,537 @@ So that the link goes live only once the site answers the question it exists to 
 **When** launch readiness is assessed
 **Then** no analytics, tracking, or measurement instrumentation is added to observe it
 **And** the weak instrument is accepted rather than solved, because instrumenting it would contradict NFR-6 and serve the counter-metric SM-C1
+
+---
+
+## Epic 7: The Realistic Scene
+
+On a capable machine, the visitor still gets the schematic first frame as fast as today. Then the scene fades, once and whole, into coloured Planets lit by their own Stars, with glowing Stars behind the same line-work. Every label stays readable, and colour means nothing. If realism fails to load, the visitor keeps the schematic scene and never knows.
+
+**FRs honoured:** FR-3, FR-9, FR-15, FR-20 · **NFRs held:** NFR-1, NFR-3, NFR-5, NFR-6, NFR-7, NFR-2's budgets · **ADs:** AD-19, AD-20, AD-21 (except the Colophon part), AD-22, AD-23's budgets, AD-25, AD-7 and AD-12 amended
+
+**Delivery:** `deploy.yml` publishes on every push to `main`, so Epic 7 is built on the branch `m3-realism`, where `ci.yml` still runs on every push. It reaches `main` only in the story that deploys M3 (Epic 8). A fix to the live site stays free to land on `main` meanwhile.
+
+**Every budget lands with the first code that can break it** (AD-23), and each budget check fails when it has nothing to measure.
+
+### Story 7.1: The depth spike
+
+As Thomas,
+I want the fill's depth bias proven on real hardware before anything is built on it,
+So that AD-19 fails cheaply, if it is going to fail.
+
+**Acceptance Criteria:**
+
+**Given** a throwaway scene, kept out of `src/` and the shipped chunks, using the committed artifact and the shipped `body-field.tsx` line-work
+**When** a view-space sphere is drawn by the Body's billboard transform, biased behind its plane, at the widest Rail distance, at a Client stop and at the closest Focus pose
+**Then** a Star's core dot, a Planet's outline, a Ring and a Moon all survive with no z-fighting while the camera moves
+
+**Given** another Body passes in front (AD-19)
+**When** its fill covers the first Body's line-work
+**Then** the line-work behind it is hidden, and the bias does not let it show through
+
+**Given** the bias may be a polygon offset or a clip-space offset
+**When** the spike ends
+**Then** the chosen mechanism and value are recorded in the architecture memlog with the machine, GPU, browser and depth-buffer bits they were seen on
+
+**Given** the dev machine is not the target profile (NFR-4)
+**When** the result is recorded
+**Then** the record says it does not show the bias holds on integrated graphics
+
+**Given** the stop rule of this epic
+**When** no bias holds at every pose
+**Then** the epic stops and AD-19 goes back to Thomas for a ruling; no later story starts
+
+### Story 7.2: The realism tokens and the draw order
+
+As Thomas,
+I want the realism layer's colours and draw order declared once, before any of it draws,
+So that hue has one audited home and no two units disagree on what draws over what.
+
+**Acceptance Criteria:**
+
+**Given** DESIGN.md's frontmatter is the token source (AD-12, UX-DR58)
+**When** the `realism-*` family (Star glow, ambient floor) is added
+**Then** `npm run tokens` generates it, `tokens --check` passes, and each token carries a placeholder light value named as an exception in DESIGN.md
+**And** the generator itself is unchanged
+
+**Given** the achromatic audit (AD-12)
+**When** a hued token named `realism-*` is present
+**Then** the audit passes
+**And** a hued token under any other name still fails, proven by a mutation row
+
+**Given** hue is confined to the realism layer (FR-20)
+**When** the audit scans DOM stylesheets and components
+**Then** a reference to a `--realism-*` custom property or `realism-*` token anywhere outside `realism/` and the generated token files fails it
+
+**Given** the draw order is declared once (AD-19)
+**When** `scene-model.ts` is read
+**Then** it declares `DUST 1 < GLOW 1.25 < FILL 1.5 < BODY 2 < MOON 3` as named constants, with M2's three values unchanged, and a test pins the strict order
+
+**Given** this story adds no drawing
+**When** the scene runs
+**Then** it is pixel-for-pixel the M2 scene
+
+### Story 7.3: The map library
+
+As Thomas,
+I want a small, credited library of maps whose every entry I can defend,
+So that no unlicensed image reaches the live site and adding one is a checked act.
+
+**Acceptance Criteria:**
+
+**Given** the library is one module (AD-21)
+**When** `src/derive/map-library.ts` is read
+**Then** it is pure and browser-safe and holds, per map, a bare `id`, source URL, licence wording, credit line, retrieval date and mean luminance
+**And** `public/textures/` holds pixels only, named `<id>.webp`, with no third data file
+
+**Given** the admission test (AD-21)
+**When** a map is admitted
+**Then** it is published by NASA or USGS, its page shows no third-party copyright, and its credit line is recorded
+**And** a CC-licensed or author-copyright set is refused, and the page's final URL is the one stored, never fetched by the build
+
+**Given** conversion is a manual step (AR-M3-15)
+**When** a map is converted to WebP
+**Then** the tool, version and settings are recorded beside the library, and no encoder enters CI or the dependencies
+
+**Given** the budgets module (AD-23)
+**When** `src/render-scene/realism/budgets.ts` is created
+**Then** it imports nothing, and is read only by `realism/` and `scripts/`
+
+**Given** the library budget, 12 maps, each at most 1024×512, 4 MB in total
+**When** the gate step in `scripts/`, added to `npm run gate`, runs
+**Then** it reads each file's size and its dimensions from the WebP header, with no decoder, and fails over budget, on a non-WebP file, or on an empty library
+
+**Given** both directions of the library (AD-21)
+**When** a file has no entry, or an entry no file
+**Then** the gate fails
+
+**Given** CI has no decoder, so it cannot recompute a map's mean luminance
+**When** a mean is recorded
+**Then** the conversion record says how it was measured, and the gate checks only that it is a number in range
+**And** this limit is stated rather than presented as a verified value
+
+### Story 7.4: A Planet's appearance in the artifact
+
+As Thomas,
+I want every Planet's appearance derived from its ID,
+So that adding a Project stays one JSON entry and one `weight`, with no art decision.
+
+**Acceptance Criteria:**
+
+**Given** appearance is assigned in `src/derive/` (AD-21, AD-3, AD-14)
+**When** the artifact is solved
+**Then** each Planet carries `appearance: { map, tilt, spinRate, spinPhase }` from its entity ID alone, under a new `SCHEMA_VERSION`
+**And** a Star has no `appearance`, and `career.json` gains no field and no per-Body override
+
+**Given** rendezvous hashing
+**When** a Project is added
+**Then** no other Body's appearance changes
+**And** when a map is added, only the Bodies that map wins change
+
+**Given** the only inputs are the entity ID and the library
+**When** the artifact is re-solved
+**Then** every position, and every other field, is byte-identical to the previous artifact, apart from `appearance` and the version
+
+**Given** the Colophon's live re-solve (AD-17, AD-21)
+**When** `solveLive(career.json)` runs
+**Then** it stays byte-identical to the committed artifact, with no extra argument and no extra fetch
+
+**Given** the library is a build input (AD-21)
+**When** an `appearance.map` has no entry or no file, or a committed assignment differs from a re-derivation
+**Then** `npm run gate` fails
+
+**Given** FR-3 stays three rules
+**When** the Colophon's derivation table renders
+**Then** it still has three rows
+
+**Given** the Fallback reads no appearance (AD-21)
+**When** its source is scanned
+**Then** it has no reference to `appearance`, and FR-22's content parity is unchanged
+
+### Story 7.5: Realism's owner, and failing silently
+
+As a visitor on a capable machine,
+I want a realism failure to leave my scene exactly as it was,
+So that I never see a blank canvas, an error or a retry.
+
+**Acceptance Criteria:**
+
+**Given** one owner (AD-25)
+**When** the source is read
+**Then** `render-scene/realism-mount.tsx`, mounted once in `scene.tsx` with no conditional, is the only shipped module importing `./realism/`, by one memoised `import()` per document; `scripts/` may read `budgets.ts`, and tests their own module
+**And** its logic is in the pure sibling `realism-status.ts`, tested under `node --test`, and nothing about it is in `navigationStore`
+
+**Given** two scopes of status (AD-25)
+**When** the model is driven
+**Then** the document runs `idle → loading → decoded → shown`, or `failed`, terminal for the document; `uploaded` resets with every new `<Canvas>`
+
+**Given** nothing under the `<Canvas>` may suspend or throw (AD-25)
+**When** the source scan runs
+**Then** `lazy`, `use`, `useLoader` and `useTexture` under the Canvas fail it, and every rejection is caught in the imperative load
+
+**Given** the artifact names its maps (AD-21)
+**When** the chunk loads
+**Then** it requests only the distinct maps the artifact names, at `<base>textures/<id>.webp`, decodes each ahead of its upload, keeps the decoded images and never closes them
+**And** the flip is set where the chosen loader honours it, so a map is not drawn upside-down
+
+**Given** a failure: a missing map, a failed `import()`, a decode error
+**When** it happens
+**Then** the schematic scene stays, Rail input still works, and there is no error, retry or message in that document (UX-DR61)
+**And** this is checked in a real browser with a map returning 404, as well as in the model
+
+**Given** AD-7's fifth chunk and the budgets (AD-23)
+**When** the bundle assertion runs
+**Then** it requires a chunk whose facade is `render-scene/realism/index.ts`, and fails if it is missing, if any `realism/` module is in the static closure of the scene chunk or the entry, or if `realism` exceeds 24,000 or `scene` 960,000 minified bytes
+**And** where three lands in the build output is checked and recorded, so a shared chunk is not missed by these budgets
+
+**Given** the first frame is schematic (AD-22, NFR-1)
+**When** the page loads
+**Then** `schematic-first-frame` keeps its meaning and is marked before any realism request
+
+### Story 7.6: Planets, lit by their own Star
+
+As a visitor on a capable machine,
+I want each Planet to have a coloured surface with a lit side facing its Star and a dark side away,
+So that the scene feels real while the line-work still says what it said.
+
+**Acceptance Criteria:**
+
+**Given** the shape of a fill (AD-19)
+**When** a Planet is drawn
+**Then** its fill is one shared sphere, at most 64×32, placed by the Body's billboard transform with the bias recorded in 7.1, a true circle of `FILL_RADIUS_RATIO × bodyRadius` concentric with the outline at every pose
+**And** `FILL_RADIUS_RATIO` is below 1 and pinned by a test against the outline's radius
+**And** fills stay in the transparent pass, at opacity 1 and writing depth at rest, so Dust cannot paint over a Body
+
+**Given** the status model from 7.5
+**When** the maps have decoded
+**Then** the fills appear at once, with no fade, and a failure still leaves the schematic scene
+
+**Given** the marks (AD-19, UX-DR56)
+**When** a fill is present
+**Then** its outline, Ring and Moon draw over it at their token values, as M2 draws them, and `body-field.tsx` keeps drawing them
+**And** the near half of an orbit passes over its Planet, and another Body's fill hides what lies behind it
+
+**Given** one light direction per Planet (AD-20)
+**When** a Planet is shaded
+**Then** a pure `realism/` model computes one world-space direction toward its own Star from solved positions, and the fragment evaluates only that direction plus the ambient floor token, using a sphere normal that follows the spin and not the billboard
+**And** another Client's Star never lights it, and no Body shadows another
+
+**Given** colour management (AD-19)
+**When** a map is sampled by the custom shader
+**Then** its `colorSpace` is set and the shader includes `<colorspace_fragment>`, matching `flat`
+
+**Given** the luminance ceiling (AD-20, UX-DR57)
+**When** a fill is drawn at rest
+**Then** the material normalises to the map's recorded mean, no pixel exceeds `stroke-active`, and the ceiling is a shader constant pinned by a test against the token
+
+**Given** spin (AD-20, AD-21, UX-DR62)
+**When** time passes
+**Then** the map turns at the emitted rate from the emitted phase, and the light does not move
+**And** with `reducedMotion()` true, read once per frame by the binding and handed to the pure model, spin stops; `motionPace` is not used
+
+**Given** colour encodes nothing (AD-21)
+**When** the source is scanned
+**Then** recency stays on the outline's `luminanceBand`, the subject on the white stroke, Deep/Shallow on Ring and Moon, and no realism module reads a data-derived property to shade a fill
+
+**Given** the budgets (AD-19, AD-23)
+**When** the checks run
+**Then** the pure model counts 1 added draw per Planet, a source audit ties the binding to that count, and the scan extended to `realism/` finds no composer, render target, shadow map or scene light
+**And** hit spheres, `destinations` and raycasting are unchanged
+
+### Story 7.7: Stars that glow
+
+As a visitor on a capable machine,
+I want each Star to burn with a soft glow, and only the current subject's Star to burn brightest,
+So that the scene has light in it and white is still spent once per frame.
+
+**Acceptance Criteria:**
+
+**Given** a Star is unlit and emissive (AD-20, UX-DR56)
+**When** it is drawn
+**Then** its fill is procedural with no map and no `appearance`, and its core dot and outline stay on top of it at their token values
+
+**Given** one glow sprite per Star (AD-19, AD-20)
+**When** glow is drawn
+**Then** it is additive, procedural, coloured by a `realism-*` token, at `GLOW 1.25` beneath every fill, tests depth and writes none, so it cuts no square from the line-work
+
+**Given** the ceiling (AD-20, UX-DR57)
+**When** a Star is at rest
+**Then** no fill or glow exceeds `stroke-active`
+**And** only the current `sceneSubject`'s Star may rise above that, and never above `stroke-focus`, with both limits pinned by a test against the tokens
+
+**Given** the subject changes along the Rail
+**When** the camera moves between stops
+**Then** the rise and fall follow `sceneSubject` with no cut
+
+**Given** the attachment list is closed (UX-DR56, AD-19)
+**When** the scene is inspected
+**Then** Dust draws exactly as at M2, the vignette stays the CSS overlay, and there is no bloom or lens flare
+
+**Given** the budgets (AD-23)
+**When** the checks run
+**Then** the pure model counts 2 added draws per Star and 0 for Dust, and the glow/bloom scan admits this in `realism/` only
+
+### Story 7.8: Arriving after the first frame
+
+As a visitor on a capable machine,
+I want realism to arrive once, whole, with nothing popping,
+So that the scene seems to come alive, rather than to load.
+
+**Acceptance Criteria:**
+
+**Given** nothing shows until it is ready (AD-22)
+**When** the maps have decoded
+**Then** each is uploaded by `initTexture` and every shader compiled by `compileAsync` with one hidden warm draw, before the first visible realism frame
+
+**Given** one fade (AD-22, UX-DR60)
+**When** the layer appears
+**Then** it fades once, whole, on one uniform, over `FADE_SECONDS × motionPace(reduced)`, never Body by Body
+
+**Given** depth during the fade (AD-22)
+**When** the fade runs
+**Then** fills write no depth, so no line-work vanishes on its first frame; on the frame it ends, all of them write depth at once
+
+**Given** the chart offer must not latch on an upload (AD-22, NFR-2a)
+**When** upload begins, and again when the fade begins
+**Then** frame-time sampling resets, with `realism-mount.tsx` the one added caller of `resetFrameSampling`, and the `chart-offer.ts` importer table changes for that one name
+**And** the model is driven with a stall inside upload to show the offer does not latch, while a machine truly below the floor still gets the offer
+
+**Given** a return to the scene (AD-25, AD-18)
+**When** a later `<Canvas>` mounts in the document
+**Then** it uploads and compiles again before its first realism draw, then draws with no fade and no network
+**And** a return during the fade, during loading and after `failed` each behave as the status model says
+
+**Given** a failure during upload or in realism's frame callback (AD-25)
+**When** it happens
+**Then** the callback catches its own error, status becomes `failed`, and the schematic scene stays with the frame loop alive
+
+**Given** First Paint (NFR-1, AD-22)
+**When** the first frame is compared with M2's
+**Then** it is the M2 schematic frame, and the entry and mount chunks gain no realism module
+
+### Story 7.9: Labels and the signal survive realism
+
+As a reader,
+I want every label and the Deep/Shallow signal to hold up over realism,
+So that a more beautiful scene is not a less legible one.
+
+**Acceptance Criteria:**
+
+**Given** the ceiling alone does not protect a label (UX-DR59, NFR-7)
+**When** `ink-label` (`#8A8A94`) sits on a surface at `stroke-active` (`#B6B6BE`)
+**Then** this story treats that 1.7:1 as a known failure to design out, since the same ink measures 5.85:1 on `surface-base-dark`
+
+**Given** the contrast floor (DESIGN.md, UX-DR59)
+**When** a label sits inside a Star's glow or beside a fill, at every Client stop, at the opening frame, and at each Focus with its Motes
+**Then** the actual pixels behind the label, sampled from a real render, keep it at its floor
+
+**Given** a label misses its floor
+**When** that is found
+**Then** realism gives way: glow reach or fill brightness comes down (NFR-7)
+**And** label ink, label position, a plate behind the label and the panel do not change, so any such need goes to Thomas as a ruling
+
+**Given** a re-solve can move Bodies with nothing failing (AR-M3-16, FR-9)
+**When** `npm test` runs over the integer Rail stops at 16:9
+**Then** it fails if a fill hides a Ring or a Moon, and a check with no Ring or Moon to test fails too
+
+**Given** transit is accepted
+**When** a Ring or Moon is hidden only between stops
+**Then** the check does not fail, and this is stated in the test
+
+### Story 7.10: The realism definition of done
+
+As Thomas,
+I want the whole layer audited against what M3 promised to leave alone,
+So that nothing has quietly changed in the M2 product.
+
+**Acceptance Criteria:**
+
+**Given** M3 changes M2 audits only where it must (AD-19)
+**When** the audit changes are listed against the diff from M2
+**Then** the only ones are the render-order pins, `scene.tsx`'s residual audit (one new mount), the `chart-offer.ts` importer table, the glow/bloom scan (`realism/` only) and the achromatic audit (`realism-*` only)
+**And** any other change fails this story
+
+**Given** every budget row has an instrument (AD-23)
+**When** each row is broken on purpose, one at a time
+**Then** its check goes red, and a check given nothing to measure also goes red
+
+**Given** quality never adapts (AD-23, NFR-3)
+**When** the source scan runs
+**Then** there is no `PerformanceMonitor`, adaptive DPR or quality tier, `dpr` stays `[1, 2]`, and `check-pins` shows 0 new runtime dependencies
+
+**Given** the link preview stays schematic (AD-24, AR-M3-12)
+**When** this epic's diff is read
+**Then** `public/preview.png`, `scripts/preview.ts`, its tests and its alt text are unchanged
+
+**Given** the camera, Focus framing and Mote layout do not change (AD-20)
+**When** this epic's diff is read
+**Then** the camera, Rail, Focus and Mote models and their tests are unchanged, and `flat` stays on the Canvas
+
+**Given** one maintenance contract (NFR-5)
+**When** a Project is added to a copy of `career.json` and solved
+**Then** it receives an appearance and a light direction with no other file changed
+
+**Given** the routes stay as they were (FR-22, AD-6, AD-18)
+**When** Fallback and Colophon load
+**Then** neither requests a map or the `realism` chunk
+
+**Given** the whole epic
+**When** `npm test`, `tsc` and `npm run build` run on `m3-realism`
+**Then** they pass, with any skip named and explained
+
+---
+
+## Epic 8: M3 Goes Live, Credited and Honest
+
+A visitor who opens the Colophon reads that a Planet's appearance is assigned and encodes nothing, and sees every map credited. Thomas can see exactly what has and has not been proven: the recorded judgement, and NFR-2 marked "not yet passed", with an instrument ready for the day a target machine turns up. M3 then deploys.
+
+**FRs covered:** FR-21 (the separate appearance statement and credits) · **NFRs recorded:** NFR-2 and NFR-2a, recorded and not passed; the 24fps floor unchanged · **ADs:** AD-21's Colophon part, AD-23's instrument and record
+
+**Delivery:** continues on `m3-realism`. Story 8.5 alone reaches `main`, and so the live site.
+
+### Story 8.1: The worst window, on the visitor's own timeline
+
+As Thomas,
+I want the shipped monitor to keep its worst five-second window,
+So that the day a target-profile machine is available, one run can answer NFR-2 with no new instrument.
+
+**Acceptance Criteria:**
+
+**Given** one instrument (AD-23, NFR-2)
+**When** `chart-offer.ts` samples frames
+**Then** it tracks its worst full window past the latch, stays pure, imports nothing and touches no DOM
+**And** the latch, the 24fps floor and the offer behave exactly as shipped, proven by the existing rows unchanged
+
+**Given** a window never spans a reset (AD-23)
+**When** the model is driven across a reset, a gap and a tab return
+**Then** no window spans any of them, gaps are counted, and a partial window never counts as the worst
+
+**Given** the sink follows `first-frame-mark.tsx`'s pattern (AD-23)
+**When** the worst window falls
+**Then** a sink bound outside the monitor writes it to the visitor's own performance timeline under one fixed entry name
+
+**Given** no backend and no analytics (NFR-6, SM-1)
+**When** the source and a real page's network log are read
+**Then** nothing is sent anywhere
+
+**Given** this story adds work to every frame
+**When** the sampler runs
+**Then** it allocates nothing per frame, and any new importer is the one named change to `chart-offer.test.ts`'s table
+
+### Story 8.2: The Colophon credits the maps
+
+As a technical reader on the Colophon,
+I want to be told plainly that a Planet's appearance is assigned, and where each map came from,
+So that I don't read colour as data, and the claim that the model is the argument stays true.
+
+**Acceptance Criteria:**
+
+**Given** the exact wording is a ruling (AD-21, AR-M3-14)
+**When** this story starts
+**Then** it first puts proposed wording to Thomas, including how it sits beside "only career.json is authored" and "The two files above are all the data there is"
+**And** no copy ships before that ruling, and the ruled copy is verbatim in the page, in EXPERIENCE.md copy place 4 and in the identity audit's allowlist
+
+**Given** appearance is not a mapping rule (UX-DR63, AD-13, FR-3)
+**When** the page renders
+**Then** the derivation table stays three rows, and appearance has one separate statement that it is assigned from the entity's ID and encodes nothing
+
+**Given** the credits (AD-21)
+**When** the page renders
+**Then** every map in the library is listed with its credit line, licence wording and a real link to its source, whether or not a Planet is assigned it, because every committed file is publicly served (Thomas, 2026-11-01)
+**And** a test fails if a library entry has no credit on the page, and a re-solve cannot change the list
+
+**Given** the existing dynamic edge (AD-17, AD-21)
+**When** the Colophon reads the library
+**Then** it goes through its dynamic edge into `src/derive/`, makes no third fetch, and the entry and scene chunks gain nothing
+**And** `EXHIBIT_PATHS` stays two, unless the ruling changes the copy that pins it
+
+**Given** the Colophon is a conventional document (UX-DR50, FR-20)
+**When** the section is read
+**Then** it has a real heading in order, stays achromatic, keeps its contrast floor, reaches a screen reader as text, and works from both the scene and the Fallback
+
+### Story 8.3: The record says "not yet passed"
+
+As Thomas,
+I want a record stating what M3 has and has not proven,
+So that a green CI is never read as NFR-2 passing, and a later run knows exactly what to do.
+
+**Acceptance Criteria:**
+
+**Given** the record (AD-23, NFR-2)
+**When** `_bmad-output/implementation-artifacts/` is read
+**Then** a record states NFR-2 **not yet passed**, and that only a run on a target-profile machine may change that, no other hardware counting and no proxy existing
+
+**Given** a budget is never a pass (AD-23)
+**When** the record lists the budgets
+**Then** it gives each limit and its measured value at this commit, labelled as a budget and a starting value, not a measurement of framerate
+
+**Given** a future target run (NFR-2, NFR-4)
+**When** the record's protocol is followed
+**Then** it fixes the steps: a machine matching NFR-4, 1080p, a fresh load, one full forward-and-back scroll of the Rails, reading the worst window from the entry 8.1 writes, together with the gap count
+**And** it states the pass condition, every window at 30fps, and the 24–30fps band as accepted degraded but not a pass
+
+**Given** no disclaimer anywhere (FR-20)
+**When** every surface is scanned
+**Then** "not yet passed" and any equivalent appear only in the record, with no note, badge or apology to a visitor
+**And** no surface claims a framerate
+
+### Story 8.4: Thomas's on-screen judgement
+
+As Thomas,
+I want to look at the finished layer at named poses and record what I see,
+So that M3 ships on a decision, since the framerate gate can't make it.
+
+**Acceptance Criteria:**
+
+**Given** a production build from `m3-realism` with Epic 7 and stories 8.1–8.3 done (AR-M3-13)
+**When** Thomas views it on a real display
+**Then** the opening frame after the fade, one Client stop and one Focus are each judged against "realistic, not a screensaver" and against label contrast
+
+**Given** the result
+**When** it is recorded in the 8.3 record
+**Then** it holds the date, machine, browser, build commit, poses and verdict in Thomas's words, with screenshots stored beside it
+**And** it says the machine is not the target profile, so nothing about framerate follows from it
+
+**Given** a failed judgement
+**When** Thomas rejects a pose
+**Then** the change goes to Epic 7's tunable values (map choice, ambient floor, glow and fade values, spin rates) inside AD-23's budgets, and the judgement is taken again
+**And** moving line-work, changing Focus framing, adding a post pass or changing a budget needs a new ruling recorded in the memlog (spine, Deferred)
+
+**Given** this story depends on a person
+**When** an agent reaches it
+**Then** the agent prepares the build and the record and stops; it does not record a verdict for Thomas
+
+### Story 8.5: M3 reaches the live site
+
+As a visitor,
+I want the realistic scene on the real site, with nothing else having changed,
+So that the upgrade arrives and the link I was sent still works as before.
+
+**Acceptance Criteria:**
+
+**Given** the gates before merging
+**When** `m3-realism` is ready
+**Then** the 8.4 verdict is a pass for the build being merged, and `npm test`, `tsc` and `npm run build` pass, with any skip named
+**And** Thomas gives the go-ahead for the merge, since merging to `main` publishes
+
+**Given** silent failure hides a broken deploy (AD-22, UX-DR61)
+**When** the site is live at `https://thomasnavarro38.github.io/cosmos-portfolio/`
+**Then** on a real browser every map and the `realism` chunk return 200 under the `/cosmos-portfolio/` base, and the layer is actually seen to fade in
+**And** "no error on screen" is not accepted as evidence
+
+**Given** First Paint (NFR-1, story 6.4)
+**When** the live first frame is measured by 6.4's P1 procedure
+**Then** the frame is schematic and the result is recorded beside the M2 figure, labelled with the machine it ran on
+
+**Given** other visitors must be untouched (FR-22, AD-6, AD-24)
+**When** the live chart, Colophon and link preview are checked, the chart on a phone
+**Then** the chart and the preview are unchanged, no map or `realism` chunk is requested on either reading surface, and the Colophon shows the ruled copy and credits
+
+**Given** a bad deploy (spine, Deployment)
+**When** the live check fails
+**Then** rollback is redeploying the previous commit, and the failure is recorded
+
+**Given** the record (AD-23)
+**When** this story closes
+**Then** the 8.3 record names the live commit and still reads NFR-2 **not yet passed**
