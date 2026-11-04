@@ -15,9 +15,12 @@
  *   off-site URL, `http(s)://` or protocol-relative (`'//host…'`,
  *   `url(//…)`). An XML namespace URI (`http://www.w3.org/2000/svg` and the
  *   other namespace paths, never the rest of w3.org) names a vocabulary and is
- *   fetched by nothing, so it passes. The First Paint mark
- *   (`src/render-scene/first-frame.ts`) stays on the visitor's own performance
- *   timeline, so it passes this scan by construction.
+ *   fetched by nothing, so it passes. So does a map's source page in
+ *   `src/derive/map-library.ts` alone (AD-19, 7.3): an `https://` URL on
+ *   `nasa.gov`, `usgs.gov` or a subdomain of either, directly followed by its
+ *   closing quote. It is provenance, and neither the build nor the page requests
+ *   it. The First Paint mark (`src/render-scene/first-frame.ts`) stays on the
+ *   visitor's own performance timeline, so it passes this scan by construction.
  * - **The body.** `index.html`'s `<body>` holds exactly `#root`, the
  *   `<noscript>` and the entry `<script>`: no overlay, banner or splash markup
  *   paints before the scene.
@@ -126,8 +129,19 @@ function withoutOwnMetaUrls(file: Shipped): Shipped {
   return { ...file, text: file.text.replace(own, (_match, open: string, close: string) => `${open}${close}`) };
 }
 
+/**
+ * A map's source page, in the library alone (AD-19): provenance a person reads,
+ * which nothing requests. Requiring the closing quote is what fails `@`, a port,
+ * a query and a URL followed off-site: each leaves the URL unblanked, and the
+ * rule fires on it. Anywhere else, or on any other host, is still a reach.
+ */
+function withoutLibrarySourceUrls(file: Shipped): Shipped {
+  if (file.path !== 'src/derive/map-library.ts') return file;
+  return { ...file, text: file.text.replace(/https:\/\/(?:[a-z0-9-]+\.)*(?:nasa|usgs)\.gov(?:\/[\w./%-]*)?(?=['"])/g, '') };
+}
+
 function auditCollection(files: readonly Shipped[]): string[] {
-  return scan(files.map(withoutOwnMetaUrls), COLLECTION);
+  return scan(files.map(withoutOwnMetaUrls).map(withoutLibrarySourceUrls), COLLECTION);
 }
 
 test('the site collects nothing: no storage, no request and no off-site URL in shipped source', () => {
@@ -147,6 +161,71 @@ test('the site’s own URL is admitted as a <meta> content in index.html alone',
   ] as const) {
     assert.match(auditCollection(files).join('\n'), /an http\(s\) URL/, `"${name}" must be rejected`);
   }
+});
+
+test('the real library is read by the collection scan, and holds source URLs to be admitted', () => {
+  const library = shippedSources().find((file) => file.path === 'src/derive/map-library.ts');
+  assert.ok(library !== undefined, 'the library is a shipped file the scan reads');
+  assert.match(library.text, /https:\/\/[\w.-]*nasa\.gov/);
+  assert.match(library.text, /https:\/\/[\w.-]*usgs\.gov/);
+  assert.deepEqual(auditCollection([library]), []);
+  for (const [name, mutate] of [
+    ['a source moved to another host', (text: string) => text.replace(/https:\/\/svs\.gsfc\.nasa\.gov\/\d+/, 'https://example.com/4720')],
+    ['a source moved to http://', (text: string) => text.replace(/https:\/\/svs\.gsfc\.nasa\.gov/, 'http://svs.gsfc.nasa.gov')],
+    ['a source followed off-site', (text: string) => text.replace(/(https:\/\/svs\.gsfc\.nasa\.gov\/\d+)/, '$1?u=https://evil.example')],
+  ] as const) {
+    const mutated = mutate(library.text);
+    assert.notEqual(mutated, library.text, `the mutation "${name}" must apply`);
+    assert.match(auditCollection([{ ...library, text: mutated }]).join('\n'), /an http\(s\) URL/, `"${name}" must be rejected`);
+  }
+  assert.match(auditCollection([{ path: 'src/derive/other.ts', text: library.text }]).join('\n'), /an http\(s\) URL/, 'the library’s own text, in another file');
+});
+
+test('a map’s source URL is admitted on NASA and USGS hosts, in map-library.ts alone, and each near miss fails', () => {
+  const LIBRARY = 'src/derive/map-library.ts';
+  const inLibrary = (text: string): Shipped[] => [{ path: LIBRARY, text }];
+  for (const line of [
+    "sourceUrl: 'https://svs.gsfc.nasa.gov/4720',",
+    "sourceUrl: 'https://astrogeology.usgs.gov/search/map/mars_viking_global_color_mosaic_925m',",
+    "sourceUrl: 'https://science.nasa.gov/photojournal/cassinis-best-maps-of-jupiter-cylindrical-map/',",
+    "sourceUrl: 'https://nasa.gov',",
+    "sourceUrl: 'https://usgs.gov/',",
+    'sourceUrl: "https://nasa.gov/a%20b",',
+  ]) {
+    assert.deepEqual(auditCollection(inLibrary(line)), [], line);
+  }
+  for (const [name, files] of [
+    ['the same URL in another file', [{ path: 'src/derive/other.ts', text: "sourceUrl: 'https://svs.gsfc.nasa.gov/4720'," }]],
+    ['the same URL in the scene', [{ path: 'src/render-scene/x.ts', text: "const u = 'https://svs.gsfc.nasa.gov/4720';" }]],
+    ['a file of the library’s name elsewhere', [{ path: 'src/shell/map-library.ts', text: "const u = 'https://svs.gsfc.nasa.gov/4720';" }]],
+    ['the library’s path as a prefix', [{ path: 'src/derive/map-library.tsx', text: "const u = 'https://svs.gsfc.nasa.gov/4720';" }]],
+    ['the same URL in index.html', [{ path: 'index.html', text: '<meta content="https://svs.gsfc.nasa.gov/4720" />' }]],
+    ['example.com in the library', inLibrary("sourceUrl: 'https://example.com/moon',")],
+    ['a host ending past the name', inLibrary("sourceUrl: 'https://nasa.gov.evil.example/moon',")],
+    ['a host with the name inside', inLibrary("sourceUrl: 'https://evilnasa.gov/moon',")],
+    ['a hyphenated lookalike', inLibrary("sourceUrl: 'https://evil-usgs.gov/moon',")],
+    ['another .gov', inLibrary("sourceUrl: 'https://noaa.gov/moon',")],
+    ['the name under another suffix', inLibrary("sourceUrl: 'https://nasa.gov.example/moon',")],
+    ['a user@host', inLibrary("sourceUrl: 'https://nasa.gov@evil.example/moon',")],
+    ['a subdomain then user@host', inLibrary("sourceUrl: 'https://svs.nasa.gov@evil.example',")],
+    ['http://', inLibrary("sourceUrl: 'http://svs.gsfc.nasa.gov/4720',")],
+    ['an upper-case scheme', inLibrary("sourceUrl: 'HTTPS://svs.gsfc.nasa.gov/4720',")],
+    ['an upper-case host', inLibrary("sourceUrl: 'https://SVS.NASA.GOV/4720',")],
+    ['a port', inLibrary("sourceUrl: 'https://nasa.gov:8443/moon',")],
+    ['a query', inLibrary("sourceUrl: 'https://nasa.gov/moon?x=1',")],
+    ['a fragment', inLibrary("sourceUrl: 'https://nasa.gov/moon#x',")],
+    ['a URL followed off-site by a query', inLibrary("sourceUrl: 'https://nasa.gov/x?u=https://evil.example',")],
+    ['a URL followed off-site by a path', inLibrary("sourceUrl: 'https://nasa.gov/https://evil.example',")],
+    ['a NASA URL inside another host’s', inLibrary("sourceUrl: 'https://example.com/https://nasa.gov/x',")],
+    ['a NASA URL inside another NASA URL’s query', inLibrary("sourceUrl: 'https://nasa.gov/x?u=https://nasa.gov/y',")],
+    ['a URL with no closing quote', inLibrary('const u = `${base}https://nasa.gov/x`;')],
+    ['an interpolated path', inLibrary('const u = `https://nasa.gov/${path}`;')],
+    ['a URL before a concatenation', inLibrary("const u = 'https://nasa.gov/' + 'https://evil.example';")],
+  ] as const) {
+    assert.match(auditCollection(files).join('\n'), /an http\(s\) URL/, `"${name}" must be rejected`);
+  }
+  assert.match(auditCollection(inLibrary("fetch('https://nasa.gov/x');")).join('\n'), /sends: fetch/, 'the allowance admits the URL, never a request of it');
+  assert.match(auditCollection(inLibrary("const u = '//nasa.gov/x';")).join('\n'), /a protocol-relative URL/, 'nor a protocol-relative form');
 });
 
 test('the collection scan rejects each reach, and ignores one written in a comment', () => {

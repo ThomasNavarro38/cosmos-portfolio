@@ -1331,3 +1331,11 @@ Still open after 3.5:
   evidence: auditAchromatic and auditCast filter on the -dark suffix, as they did before this story. Bare stroke-dust and ink-faint (#BCB6A8) are about chroma 0.0206, above the 0.02 threshold, so holding bare keys to it would fail real light values and needs its own ruling. The AC reads "a hued token under any other name"; its mutation rows are all -dark.
   location: src/identity-audit.test.ts:88
   severity: low
+
+## Deferred from: code review of spec-7-3-the-map-library.md (2026-11-04)
+
+- source_spec: spec-7-3-the-map-library.md
+  summary: NASA's media guidelines summarise the permission behind the Moon and Jupiter entries as non-commercial use, and those entries' recorded licence wording leaves that out.
+  evidence: https://www.nasa.gov/nasa-brand-center/images-and-media/ permits texture maps on Internet and personal Web pages for educational or informational purposes, summarises this as for non-commercial use, has separate commercial-use rules, and asks that NASA be acknowledged. AD-21's admission test (NASA or USGS, no third-party copyright, a recorded credit) is met, so nothing here failed it, but whether a personal portfolio counts as educational or informational is Thomas's ruling. src/derive/README.md states the full wording; the licence screen refuses non-commercial wording, so recording the summary line in the entries would refuse them. Settle before Epic 8's credits and the merge.
+  location: src/derive/map-library.ts:31
+  severity: medium

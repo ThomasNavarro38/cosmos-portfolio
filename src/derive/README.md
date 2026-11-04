@@ -33,6 +33,8 @@ Pure pipeline: validate → derive → solve. No DOM, no React, no Three. The si
 | `live.ts` | The Colophon's live re-solve (5.5), browser-safe: `solveLive(careerText)` → `JSON.parse`, `CareerSchema.parse`, the digest by `globalThis.crypto.subtle` (sha256, lowercase hex, over the normalised text; outside a secure context, where `crypto.subtle` is absent, it rejects naming that), then `serializeArtifact(solveArtifact(…))`. No `node:*`, not `index.ts`, not `../data/validate.ts`, no network. Reached only by `src/colophon/colophon.tsx`'s one dynamic import. |
 | `live.test.ts` | The framing's "same solver", in Node: the shipped `career.json` solved live equals the committed artifact (CRLF-normalised); line endings do not change it; the digest is `sourceDigestOf`'s; the output passes the artifact schema; bad JSON, a refused career and a missing `crypto.subtle` reject; and a browser-safe source audit, each part driven red by a mutation. |
 | `colophon-claims.test.ts` | The Colophon's re-ruled thesis and positions paragraph (Epic 5 item 40, 2026-10-29), each held by its relation and driven red by a falsifying edit: the committed layout is `solveLive(career.json)` byte for byte (every position and every shot the solve's), and the solve carries the shots; the shots are `buildShots` of the entity graph `career.json` derives to; and `career.json` holds no `shots` key at any depth and no object carrying two or more of a shot's fields (`subject`, `angle`, `distance`, `framing`). Each `career.json` edit is made to its text at anchors read off the file itself, never re-serialised, and must change the solve beyond its `sourceDigest` line, which a whitespace-only control shows is all reformatting moves. The sentences are read as text off `src/colophon/absences.ts`, so a rewording fails here. |
+| `map-library.ts` | The map library (7.3): the `MapEntry` type and `MAP_LIBRARY`, each map's bare `id`, source URL, licence wording, credit line, retrieval date and mean luminance. No import, no I/O. Nothing reads it yet: 7.4 assigns maps, Epic 8 credits them. See **The map library** below. |
+| `map-library.test.ts` | The four admitted maps as their pages gave them, the module held free of an import, `node:` and the DOM, the conversion record held by a test that fails when it loses a claim, its table held to each real file's size and SHA-256, and the audit that nothing reads the library or names a map yet, each driven red by mutations. The gate step and its fixture trees are `scripts/check-maps.test.ts`. |
 | `boundaries.ts` | The import-boundary rule table and the walker that evaluates it over `src/`. Runs from the gate; no dependency. |
 | `artifact-schema.test.ts` | What the schema *rejects*: a later story's field, a version mismatch, a truncated payload. |
 | `artifact.test.ts` | Content parity field-by-field, the `timeAxis`↔`luminanceBand` binding, and the AD-1 script-graph walk. |
@@ -308,6 +310,88 @@ It counts from the artifact's `clients` tree, **never from a fresh derive** — 
 ### Each Body against its own content (3.12)
 
 `checkContent` (pre-write and at the gate) asserts what the schema cannot see because it spans two fields or two entities, naming the offending ID: a Project whose `clientId` is not the Client carrying it (both IDs named), an `isDeep` that disagrees with `content.notable` — judged by `entities.ts`'s own `isDeepProject`, never a restated predicate — and two Bodies, Star or Planet, at one position (both IDs and the point named). The schema's `min(1)`s close the empty cases: an empty `clients`, `destinations`, `dwell` or `shots` — and a Client with no Projects, already guarded and now named as an empty Client — fails naming the field path rather than certifying an empty scene as correct.
+
+## The map library
+
+`map-library.ts` holds where each surface map came from, and `public/textures/<id>.webp` holds its pixels. Nothing draws them yet, and no page requests them: they reach `dist/textures/` only because Vite copies `public/`. It sits here because 7.4's appearance reads it, and no renderer may import from `src/derive/`.
+
+**The admission test.** A map is admitted only if NASA or USGS publishes it, its page shows no third-party copyright, and its credit line is recorded from that page. The stored URL is the page's final URL after redirects, and the build never fetches it. Admission is reading the page, by a person, on the recorded date.
+
+**The policy pages behind the wording.** The Moon's and Jupiter's pages carry no licence statement, so their entries quote NASA's media guidelines, at `https://www.nasa.gov/nasa-brand-center/images-and-media/`. The sentence in full: "NASA content – images, audio, video, and media files used in the rendition of 3-dimensional models, such as texture maps and polygon data in any format – generally are not subject to copyright in the United States. You may use this material for educational or informational purposes, including photo collections, textbooks, public exhibits, computer graphical simulations and Internet Web pages. This general permission extends to personal Web pages." The same page summarises this as "for non-commercial use", and asks that NASA be acknowledged as the source. USGS's policy page is `https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits`; the Mars and Io entries rest on what their own pages state.
+
+**What the machine refuses.** `scripts/check-maps.ts` refuses these in the licence wording and in the credit: `©`, `&copy;`, `(c)` before a year, `creative commons` (also hyphenated or joined), `CC BY` (also `cc-by`, `cc_by`), `CC0`, `non-commercial` (also `noncommercial`), `all rights reserved`, and `copyright` or `copyrighted` followed by an optional `by` and a capital or a digit. So "Copyright 2024 Foo Corp" fails, and "not subject to copyright in the United States" and "no third-party copyright" pass. It also refuses any host but NASA's or USGS's. **The limit:** this is a screen over the wording recorded. It cannot show what a page says, or that a page says what an entry records, and an entry that leaves a restriction out passes.
+
+**Admitted and refused.** Moon, Mars, Io and Jupiter were admitted on 2026-11-04: four maps for eight Planets, since Bodies may share a map. Which maps ship stays tunable in Epic 8's judgement. Three candidates were refused, each page read on 2026-11-04:
+
+- Triton, `https://astrogeology.usgs.gov/search/map/triton_voyager_2_global_color_mosaic_600m`: the mosaic is about half black, with no coverage.
+- Mercury, `https://astrogeology.usgs.gov/search/map/mercury_messenger_mdis_global_color_mosaic_665m`: the colour mosaic has black gaps at the north pole and across the disc.
+- Blue Marble, `https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/base-topography-bathymetry/`: the page gave no credit line, so its credit could not be recorded from the page.
+
+Triton and Mercury were licensed correctly: those are refusals of pixels, and Blue Marble's of evidence, not of a licence.
+
+**The gate.** `npm run gate` runs `node scripts/check-maps.ts`, which holds the library and the directory against each other by name in both directions, each file's WebP header, a 2:1 aspect (another aspect stretches on the sphere), and the budgets in `src/render-scene/realism/budgets.ts`: 12 maps, 1024×512 each, 4,000,000 bytes in all, the stricter reading of "4 MB". It reads only each file's size and first 30 bytes, with no decoder, so a corrupt body behind a good header passes. An empty library or a missing directory fails: a check with nothing to measure is not a pass. `npm test` goes further than the gate: `map-library.test.ts` holds each file's size and SHA-256 against the table below, so a swapped map fails there.
+
+**Nothing reads it yet.** `map-library.test.ts` fails if a non-test module under `src/` imports the library, or a shipped file or `index.html` names `textures/` or `.webp`. The change that adds a reader edits that test's table.
+
+**The library's allowance.** The collection scan (`src/first-paint.test.ts`) admits an `https://` URL on `nasa.gov`, `usgs.gov` or a subdomain of either, directly followed by its closing quote, in `src/derive/map-library.ts` alone (AD-19). The scan's other allowances, the site's own `<meta>` URLs and XML namespaces, are its own.
+
+### The conversion record
+
+Conversion is a manual step, run outside the repo. No encoder or decoder enters the repo or CI.
+
+- **Tool:** Pillow 11.3.0 with libwebp 1.5.0, in a scratch virtual environment.
+- **Settings:** `convert('RGB')`, Lanczos to 1024×512 only where the source is larger, `save(path, 'WEBP', quality=80, method=6)`, no metadata. Every map came out in the `VP8 ` form.
+- **Mean luminance:** decode the WebP; sRGB to linear per channel (IEC 61966-2-1); `0.2126 R + 0.7152 G + 0.0722 B`; an unweighted mean over all pixels, so an equirectangular map's poles count more than their area. Rounded to four places.
+
+**The stated limit: CI cannot recompute a mean.** It has no decoder, so it checks only that a recorded mean is a number in (0, 1], and the gate's pass line reports each as recorded, not verified. The material normalises to this number in 7.6, so a tuned map needs a re-measure by the steps above.
+
+The sources, as downloaded on 2026-11-04:
+
+- `moon`: `https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720/lroc_color_poles_1k.jpg`
+- `mars`: `https://astrogeology.usgs.gov/ckan/dataset/dfdc2242-52dc-4126-bc89-03af8253ae79/resource/0d7b31dc-0b2e-4ca6-89dc-e3c1404c0232/download/mars_viking_clrmosaic_global_1024.jpg`
+- `io`: `https://astrogeology.usgs.gov/ckan/dataset/f6924861-ce9c-490d-8a4b-7812a20f2de5/resource/a9fab679-8081-4144-9f58-45848836c8f5/download/full.jpg`
+- `jupiter`: `https://assets.science.nasa.gov/content/dam/science/psd/photojournal/pia/pia07/pia07782/PIA07782.jpg`
+
+The steps, in Python, with Pillow installed outside the repo. A histogram sums the same values as a walk over the pixels:
+
+```python
+from PIL import Image
+
+MAX = (1024, 512)
+
+
+def convert(source, path):
+    with Image.open(source) as image:
+        image.load()
+        rgb = image.convert('RGB')
+    if rgb.width > MAX[0] or rgb.height > MAX[1]:
+        rgb = rgb.resize(MAX, Image.LANCZOS)
+    rgb.save(path, 'WEBP', quality=80, method=6)
+
+
+def linear(value):
+    c = value / 255
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def mean_luminance(path):
+    with Image.open(path) as image:
+        image.load()
+        rgb = image.convert('RGB')
+    total = 0
+    for channel, weight in zip(rgb.split(), (0.2126, 0.7152, 0.0722)):
+        total += sum(n * linear(i) * weight for i, n in enumerate(channel.histogram()))
+    return round(total / (rgb.width * rgb.height), 4)
+```
+
+`map-library.test.ts` holds each row's mean, bytes and SHA-256 against the library and the real file, so a replaced map fails `npm test` until this table changes with it.
+
+| id | Source pixels | Source size | Mean luminance | Bytes | SHA-256 |
+| --- | --- | --- | --- | --- | --- |
+| `moon` | `lroc_color_poles_1k.jpg` | 1024×512 | 0.324 | 73908 | `021d93dff4a4e038af75c78fe05fd5b1c65661caa52fff811b6e39cf1ef6c0b7` |
+| `mars` | `mars_viking_clrmosaic_global_1024.jpg` | 1024×512 | 0.123 | 33952 | `f965bd6746773008007ac74d8e85933f208536ffd555c04cf9ca5a365cb0ad2e` |
+| `io` | `full.jpg` | 1024×512 | 0.2447 | 49950 | `4d00de0f88341ee57166f55709385e1bae24887b08cbd2bd540aadba4da50885` |
+| `jupiter` | `PIA07782.jpg` | 3601×1801 | 0.3295 | 38640 | `c5cbfc856d503008bb0138b27f2e5de57b54b78c4916351b08af7da2871a9ae2` |
 
 ## The import boundaries are enforced by the gate
 

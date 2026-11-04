@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run gate && node scripts/preview-drift.ts && vite build",
-    "gate": "node src/derive/index.ts --check && node scripts/tokens.ts --check && node scripts/check-pins.ts",
+    "gate": "node src/derive/index.ts --check && node scripts/tokens.ts --check && node scripts/check-maps.ts && node scripts/check-pins.ts",
     "solve": "node src/derive/index.ts",
     "tokens": "node scripts/tokens.ts",
     "preview": "vite preview",
