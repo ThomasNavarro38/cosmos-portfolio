@@ -28,6 +28,10 @@
   --color-ink-lift-dark: #F2F2F4;
   --color-vignette: #F2EFE9;
   --color-vignette-dark: #08080A;
+  --color-realism-star-glow: #B09468;
+  --color-realism-star-glow-dark: #B09468;
+  --color-realism-ambient-floor: #0E1626;
+  --color-realism-ambient-floor-dark: #0E1626;
 
   --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-sans-light-theme: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;

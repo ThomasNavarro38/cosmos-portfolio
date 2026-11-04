@@ -26,7 +26,7 @@
  */
 
 import { CIRCLE_SEGMENTS, bodyRadius, circlePoints, strokeColor, strokeWidthPx, type LinePoint } from './stroke-model.ts';
-import { BODY_RENDER_ORDER, type Body, type ScenePosition } from './scene-model.ts';
+import type { Body, ScenePosition } from './scene-model.ts';
 
 // --- The marks (DESIGN.md `components.ring-notable`, `components.moon-notable`) ---
 
@@ -50,7 +50,8 @@ export const MOON_OFFSET_RATIO = 2;
 export const MOON_ANGLE = Math.PI / 12;
 
 /**
- * The render order a Moon carries: one above `BODY_RENDER_ORDER`.
+ * The render order a Moon carries: one above `BODY_RENDER_ORDER` (the whole draw
+ * order is declared in `scene-model.ts`).
  *
  * The Moon and its Ring are coplanar in one billboard and overlap, and both are
  * in three's transparent pass. At one shared order three would sort them by
@@ -58,7 +59,7 @@ export const MOON_ANGLE = Math.PI / 12;
  * overlap would flicker. One step above, the Moon always draws over its Ring —
  * and, since `BODY_RENDER_ORDER` is already above the Dust's, still after the Dust.
  */
-export const MOON_RENDER_ORDER = BODY_RENDER_ORDER + 1;
+export { MOON_RENDER_ORDER } from './scene-model.ts';
 
 /** Whether a Body carries the marks: a Planet the artifact classified Deep. */
 function carriesMarks(body: Body): boolean {

@@ -35,6 +35,10 @@ export const tokens = {
     'ink-lift-dark': '#F2F2F4',
     vignette: '#F2EFE9',
     'vignette-dark': '#08080A',
+    'realism-star-glow': '#B09468',
+    'realism-star-glow-dark': '#B09468',
+    'realism-ambient-floor': '#0E1626',
+    'realism-ambient-floor-dark': '#0E1626',
   },
   typography: {
     fontFamily: {

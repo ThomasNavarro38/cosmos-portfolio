@@ -22,7 +22,6 @@ On a capable machine the visitor still gets the schematic first frame as fast as
 ## Requirements & Constraints
 
 - **Delivery:** build on `m3-realism`; `deploy.yml` publishes every push to `main`. Epic 7 is never deployed alone, since maps would go live uncredited and unjudged. Live-site fixes may still land on `main`.
-- **Stop rule:** if no depth bias holds at every pose in the spike, stop and return the decision to Thomas; no later story starts.
 - **First Paint:** the first frame stays the M2 schematic frame, and `schematic-first-frame` is marked before any realism request. Entry and mount chunks gain no realism module.
 - **Framerate:** the 30fps gate cannot be run here (no target-profile machine, no proxy). Budgets constrain the build and are never a pass; no text may present one as a framerate result.
 - **Quality never adapts:** no `PerformanceMonitor`, adaptive DPR or quality tier; `dpr` stays `[1, 2]`. The 24fps floor and chart offer are unchanged.
@@ -39,7 +38,14 @@ On a capable machine the visitor still gets the schematic first frame as fast as
 
 - **Scene shape:** one forward pass on the default framebuffer. No composer or raymarching; `flat` stays on the Canvas; the vignette stays the CSS overlay; Dust stays exactly as M2.
 - **Draw order**, declared once in `scene-model.ts`: `DUST 1 < GLOW 1.25 < FILL 1.5 < BODY 2 < MOON 3`.
-- **Fills:** a shared sphere placed by the Body's billboard transform and biased behind its plane, a true circle of `FILL_RADIUS_RATIO × bodyRadius` (one constant below 1) concentric with the outline. Fills stay in the transparent pass, opacity 1 and depth-writing at rest. `body-field.tsx` keeps drawing the line-work at token values. A Body's fill never hides its own marks (outline, core dot, Ring, Moon); another Body's fill hides what lies behind it; the near half of an orbit passes over its Planet.
+- **Fills:** a shared sphere placed by the Body's billboard transform, a true circle of `FILL_RADIUS_RATIO × bodyRadius` (one constant below 1) concentric with the outline. Fills stay in the transparent pass, opacity 1 and depth-writing at rest. `body-field.tsx` keeps drawing the line-work at token values. A Body's fill never hides its own marks (outline, core dot, Ring, Moon); another Body's fill hides what lies behind it; the near half of an orbit passes over its Planet.
+- **Measured depth bias:** a clip-space offset of 1e-6, `gl_Position.z += 1e-6 * gl_Position.w`, for a fill **flattened in the vertex shader to z = 0 in the Billboard's plane**. A sphere keeping its relief would not hold at this value. Measured at render order 1.5 in the transparent pass, depth write on, opacity 1. Passing range: clip 0 to 2e-6 (polygon offset 0 to 16 units also passed), with 0 lost mark pixels and 0 show-through at 1920×1080 and 390×844.
+- **Limits of that measurement (do not overstate it):**
+  - Seen only on the dev machine (i9-14900KF, RTX 4080 SUPER, Chrome 156, 24-bit depth). It does not show the bias holds on integrated graphics.
+  - The upper limit comes only from enlarged-disc rows at the widest distance with the front marks hidden. Nothing failed below it, so the lower side is a judgement.
+  - By Thomas's ruling, marks were judged with orbits and the Rail hidden, so flicker where a line crosses a fill was not measured. The own-marks test cannot fail at `focus-deep`, or at `focus-closest` on 390×844, where no mark overlaps a fill.
+  - The margin comes from the committed solve; closer Bodies or a wider Rail change it (the gap reaches 10 units near distance 1,409, against 893 today), and no gate checks this.
+  - Full record: `_bmad-output/implementation-artifacts/depth-spike-7-1.md`.
 - **Lighting:** one world-space direction toward the Planet's own Star, computed in a pure `realism/` model from solved positions, plus a constant ambient floor token. The sphere normal follows the spin, not the billboard. No Body shadows another. Custom shaders set the map's `colorSpace` and include `<colorspace_fragment>`.
 - **Stars:** unlit, emissive and procedural, with one additive glow sprite that tests depth and writes none.
 - **Luminance ceiling:** a shader constant pinned against tokens. At rest no fill or glow exceeds `stroke-active`; only the current `sceneSubject`'s Star may rise above it, never above `stroke-focus`.
@@ -74,7 +80,7 @@ On a capable machine the visitor still gets the schematic first frame as fast as
 
 ## Cross-Story Dependencies
 
-- 7.1 gates everything; its recorded bias mechanism and value feed 7.6.
+- 7.1 has recorded a bias that holds at the poses it tested, within the limits above, so the epic's stop rule (no bias holding at every pose sends AD-19 back to Thomas, and no later story starts) did not fire. 7.6 must build on that exact mechanism and value, including the flattening; changing either reopens the measurement.
 - 7.2's tokens and draw constants come before any drawing (7.6, 7.7).
 - 7.3 precedes 7.4 (the library feeds appearance) and creates `budgets.ts`.
 - 7.5's status model and chunk underlie 7.6, 7.7 and 7.8. 7.6 first shows fills with no fade; 7.8 adds warm-up and the fade.

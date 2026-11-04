@@ -7,7 +7,10 @@
  * names.
  *
  * - **Achromatic** — every `-dark` colour token has OKLCH chroma < 0.02 (ruling
- *   1b). The cool cast (hue ≈ 286°, chroma ≤ 0.016) is deliberate and stays.
+ *   1b). The cool cast (hue ≈ 286°, chroma ≤ 0.016) is deliberate and stays. The
+ *   `realism-*` family alone is exempt (AD-19).
+ * - **Realism reach** — no shipped file outside `render-scene/realism/`, nor
+ *   `index.html`, nor the preview's composer, names a realism token.
  * - **Contrast** — one table maps each text role to its ink and its ground, both
  *   read from the shipping source (a CSS declaration or a model constant), never
  *   restated here; a second maps the chart's non-text indicators — the link
@@ -85,9 +88,21 @@ export function oklch(hex: string): { readonly chroma: number; readonly hue: num
 /** The achromatic threshold: OKLCH chroma below this reads as no hue (ruling 1b). */
 const ACHROMATIC_CHROMA = 0.02;
 
+/**
+ * The one exemption from both audits below (AD-19): a `-dark` key whose name
+ * starts `realism-` and has a name of its own after it. Anchored, so
+ * `stroke-realism-dark` and `xrealism-a-dark` stay audited, and so does
+ * `realism-dark`, which is the prefix with nothing behind it.
+ */
+const REALISM_DARK_KEY = /^realism-[a-z0-9]+(?:-[a-z0-9]+)*-dark$/;
+
+/** The `-dark` tokens the achromatic audits hold: every one but the realism family. */
+const auditedDark = (colors: Readonly<Record<string, string>>): [string, string][] =>
+  Object.entries(colors).filter(([key]) => key.endsWith('-dark') && !REALISM_DARK_KEY.test(key));
+
 function auditAchromatic(colors: Readonly<Record<string, string>>): string[] {
   const failures: string[] = [];
-  const dark = Object.entries(colors).filter(([key]) => key.endsWith('-dark'));
+  const dark = auditedDark(colors);
   if (dark.length === 0) return ['achromatic: no -dark colour token to inspect'];
   for (const [key, value] of dark) {
     let chroma: number;
@@ -106,7 +121,7 @@ function auditAchromatic(colors: Readonly<Record<string, string>>): string[] {
 
 test('achromatic: every -dark colour token has OKLCH chroma < 0.02', () => {
   assert.deepEqual(auditAchromatic(tokens.colors), []);
-  assert.ok(Object.keys(tokens.colors).filter((key) => key.endsWith('-dark')).length >= 14, 'every surface, stroke and ink step is inspected');
+  assert.ok(auditedDark(tokens.colors).length >= 14, 'every surface, stroke and ink step is inspected');
 });
 
 /**
@@ -117,7 +132,7 @@ test('achromatic: every -dark colour token has OKLCH chroma < 0.02', () => {
  */
 function auditCast(colors: Readonly<Record<string, string>>): string[] {
   const failures: string[] = [];
-  for (const [key, value] of Object.entries(colors).filter(([name]) => name.endsWith('-dark'))) {
+  for (const [key, value] of auditedDark(colors)) {
     const { chroma, hue } = oklch(value);
     if (chroma > 0.016) failures.push(`cast: ${key} (${value}) has chroma ${chroma.toFixed(4)} > 0.016 — beyond the recorded neutral`);
     else if (chroma > 0.004 && Math.abs(hue - 286) >= 20) failures.push(`cast: ${key} (${value}) leans to hue ${hue.toFixed(1)}° — the cast is one cool neutral, near 286°`);
@@ -144,6 +159,28 @@ test('achromatic: a hue in any -dark token fails, naming it', () => {
   assert.match(auditAchromatic(tinted).join('\n'), /^achromatic: ink-label-dark \(#8A8AB4\) carries a hue/);
   assert.match(auditAchromatic({ ...tokens.colors, 'stroke-rest-dark': 'teal' }).join('\n'), /^achromatic: stroke-rest-dark is teal, which is not a #rrggbb/);
   assert.deepEqual(auditAchromatic({}), ['achromatic: no -dark colour token to inspect']);
+});
+
+test('achromatic: the realism exemption does work — both shipped tokens are hued, and pass only under their own names', () => {
+  const glow = tokens.colors['realism-star-glow-dark'];
+  assert.ok(oklch(glow).chroma >= ACHROMATIC_CHROMA, `the shipped glow ${glow} carries a hue, or the exemption exempts nothing`);
+  const floor = tokens.colors['realism-ambient-floor-dark'];
+  assert.ok(oklch(floor).chroma >= ACHROMATIC_CHROMA, `the shipped floor ${floor} carries a hue, as DESIGN.md says it does`);
+  assert.deepEqual(auditAchromatic(tokens.colors), []);
+  assert.deepEqual(auditCast(tokens.colors), []);
+  // The same hex under a non-realism key, in the shipped table, is what the exemption spares it from.
+  assert.match(auditAchromatic({ ...tokens.colors, 'ink-label-dark': glow }).join('\n'), /^achromatic: ink-label-dark /);
+  assert.match(auditCast({ ...tokens.colors, 'ink-label-dark': glow }).join('\n'), /^cast: ink-label-dark /);
+  assert.deepEqual(auditAchromatic({ 'realism-star-glow-dark': glow }), ['achromatic: no -dark colour token to inspect'], 'an exempt key is not an inspected one');
+});
+
+test('achromatic: a hued key that merely contains realism fails both audits, naming it', () => {
+  const hue = tokens.colors['realism-star-glow-dark'];
+  for (const key of ['stroke-realism-dark', 'xrealism-a-dark', 'realism-dark', 'realism--dark', 'realism---dark', 'realism--x-dark', 'Realism-a-dark', 'surface-realism-a-dark']) {
+    const colors = { ...tokens.colors, [key]: hue };
+    assert.ok(auditAchromatic(colors).some((line) => line.startsWith(`achromatic: ${key} (`)), `achromatic must name ${key}`);
+    assert.ok(auditCast(colors).some((line) => line.startsWith(`cast: ${key} (`)), `cast must name ${key}`);
+  }
 });
 
 // --- CSS, parsed just enough --------------------------------------------------------------------
@@ -814,6 +851,84 @@ function shippedFiles(): Record<string, string> {
   }
   return found;
 }
+
+// --- Realism reach (AD-19) ----------------------------------------------------------------
+
+/**
+ * A reference to a realism token, on comments-blanked source: its custom property,
+ * or its key, or a key built from a `'realism-'` prefix. The quote anchor is what
+ * separates a key from `'./realism-mount.tsx'`, and the left anchor separates a
+ * property from a class like `.card--realism-on`. Any other quoted string opening
+ * `realism-` reads as a key too, so a mark or a class outside the family's home
+ * takes another name. **Out of reach:** a property name assembled wholly at
+ * runtime, like `` `--color-${x}` ``, and code that enumerates `tokens.colors`,
+ * which only a type checker or a parser could follow.
+ */
+const REALISM_REFERENCE = /(?<![\w-])--(?:color-)?realism-|['"`]realism-/g;
+
+/** With the slash, so `render-scene/realism-mount.tsx` is still scanned. */
+const REALISM_HOME = 'render-scene/realism/';
+
+/** Every reference to a realism token outside its home, each as `file:line`. */
+function auditRealismReach(files: Readonly<Record<string, string>>): string[] {
+  return Object.entries(files).flatMap(([path, source]) => {
+    if (path.startsWith(REALISM_HOME)) return [];
+    const code = codeOf(source, languageOf(basename(path)) ?? 'script');
+    return [...code.matchAll(REALISM_REFERENCE)].map((match) => {
+      const line = code.slice(0, match.index).split('\n').length;
+      return `realism reach: ${path}:${line} holds ${match[0]}`;
+    });
+  });
+}
+
+test('realism reach: no shipped file outside render-scene/realism/, nor index.html, nor the preview, names a realism token', () => {
+  const files = { ...shippedFiles(), 'index.html': read('../index.html'), 'scripts/preview.ts': read('../scripts/preview.ts') };
+  for (const path of ['render-scene/scene.tsx', 'shell/page.css', 'index.html', 'scripts/preview.ts']) {
+    assert.ok(path in files, `the walk reaches ${path}`);
+  }
+  assert.deepEqual(auditRealismReach(files), []);
+});
+
+test('realism reach: a reference outside the family\'s home fails naming the file; one inside it, a module name or a comment does not', () => {
+  const rejected: readonly (readonly [string, string])[] = [
+    ['shell/x.css', '.a { color: var(--color-realism-star-glow-dark); }'],
+    ['shell/x.css', '.a { --realism-x: 1; }'],
+    ['shell/x.tsx', "const a = tokens.colors['realism-star-glow-dark'];"],
+    ['shell/x.tsx', 'const a = tokens.colors["realism-star-glow-dark"];'],
+    ['shell/x.tsx', "const prefix = 'realism-';"],
+    ['shell/x.tsx', 'const a = `realism-${name}-dark`;'],
+    ['index.html', '<style>.a { color: var(--realism-x); }</style>'],
+    ['scripts/preview.ts', "const a = tokens.colors['realism-star-glow-dark'];"],
+    ['render-scene/realism-mount.tsx', "const a = tokens.colors['realism-star-glow-dark'];"],
+    ['render-scene/realismx/x.ts', "const a = 'realism-star-glow-dark';"],
+    ['shell/render-scene/realism/x.ts', "const a = 'realism-star-glow-dark';"],
+  ];
+  for (const [path, source] of rejected) {
+    assert.ok(auditRealismReach({ [path]: source }).some((line) => line.startsWith(`realism reach: ${path}:1 holds `)), `${path}: ${source} must be rejected`);
+  }
+  const admitted: readonly (readonly [string, string])[] = [
+    ['render-scene/realism/x.ts', "const a = tokens.colors['realism-star-glow-dark'];"],
+    ['render-scene/realism/x.ts', "const prefix = 'realism-'; const b = 'var(--color-realism-star-glow-dark)';"],
+    ['render-scene/scene.tsx', "import { RealismMount } from './realism-mount.tsx';"],
+    ['render-scene/scene.tsx', "const a = import('./realism/index.ts');"],
+    ['render-scene/scene.tsx', "// the realism-* tokens, and --color-realism-star-glow-dark\n/* 'realism-x' */"],
+    ['shell/x.css', '/* var(--color-realism-star-glow-dark) */'],
+    ['shell/x.css', '.card--realism-on { top: 0; }'],
+    ['shell/x.tsx', 'const a = <p className="card--realism-on" />;'],
+    ['index.html', '<!-- --realism-x -->'],
+  ];
+  for (const [path, source] of admitted) {
+    assert.deepEqual(auditRealismReach({ [path]: source }), [], `${path}: ${source} must be admitted`);
+  }
+  // Each reference reported, on its own line.
+  assert.deepEqual(auditRealismReach({ 'shell/x.css': '.a {}\n.b { color: var(--color-realism-a-dark); }' }), ['realism reach: shell/x.css:2 holds --color-realism-']);
+  // A real shipped file, mutated, is caught.
+  const files = shippedFiles();
+  assert.match(
+    auditRealismReach({ ...files, 'shell/page.css': `${files['shell/page.css'] as string}\n.a { color: var(--color-realism-star-glow-dark); }` }).join('\n'),
+    /^realism reach: shell\/page\.css:\d+ holds --color-realism-$/,
+  );
+});
 
 // --- JSX, read as JSX ----------------------------------------------------------------------------
 

@@ -1323,3 +1323,11 @@ Still open after 3.5:
 - source_spec: spec-7-1-the-depth-spike.md
   summary: 7.6 should recheck its own marks against real fills in the focused and subject states, and with its final FILL_RADIUS_RATIO.
   evidence: The spike draws resting strokes at every pose, and at focus-deep no outline overlaps a 0.96 fill, so a larger ratio or a heavier stroke puts marks at risk that the spike never tested. 7.6 must also keep the fill flattened to the Billboard's plane, because 1e-6 was measured only on that fill, and should check show-through on the Rail under real camera motion and the glow sprite's depth test.
+
+## Deferred from: code review of spec-7-2-the-realism-tokens-and-the-draw-order.md (2026-11-04)
+
+- source_spec: spec-7-2-the-realism-tokens-and-the-draw-order.md
+  summary: The achromatic audits inspect only -dark keys, so a hued bare (light) token under any name passes.
+  evidence: auditAchromatic and auditCast filter on the -dark suffix, as they did before this story. Bare stroke-dust and ink-faint (#BCB6A8) are about chroma 0.0206, above the 0.02 threshold, so holding bare keys to it would fail real light values and needs its own ruling. The AC reads "a hued token under any other name"; its mutation rows are all -dark.
+  location: src/identity-audit.test.ts:88
+  severity: low

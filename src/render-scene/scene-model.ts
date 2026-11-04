@@ -356,17 +356,52 @@ export const BODY_MARGIN = 3;
  */
 export const STOP_MARGIN = 3;
 
+/*
+ * The draw order, declared once, here: DUST 1 < GLOW 1.25 < FILL 1.5 < BODY 2 <
+ * MOON 3. Constants need no import, so this module keeps importing nothing at
+ * all. `dust-model.ts` and `notable-model.ts` re-export their own step, so their
+ * importers are unchanged. The two realism steps sit between Dust and the Bodies,
+ * which is why the steps are not whole numbers: Dust, Bodies and Moons keep their
+ * M2 values.
+ */
+
+/**
+ * The render order every Dust draw carries: first. With Dust writing no depth, a
+ * Body drawn later is never painted over by it. Why is told at the re-export, in
+ * `dust-model.ts`.
+ */
+export const DUST_RENDER_ORDER = 1;
+
+/**
+ * The render order of a Star's additive glow: after the Dust, so the glow adds
+ * over the medium around it; before the fills and the line-work, so both draw over
+ * it. It writes no depth, so it holds nothing drawn later back.
+ */
+export const GLOW_RENDER_ORDER = 1.25;
+
+/**
+ * The render order of a Planet's fill: after the glow and before the line-work, so
+ * a fill lies beneath its own outline, core dot, Ring and Moon, and never hides
+ * them. Fills stay in the transparent pass, since three draws its opaque list
+ * first whatever the `renderOrder`.
+ */
+export const FILL_RENDER_ORDER = 1.5;
+
 /**
  * The render order every Body draw carries.
  *
- * A Body concern, so it lives with the Body: `dust-model.ts` sets its own order
- * below this one, which is what puts every Dust draw before every Body draw. A
- * constant needs no import, so this module keeps importing nothing at all. The
+ * Above the Dust's, which is what puts every Dust draw before every Body draw. The
  * renderer pairs it with a `transparent` material at opacity 1, because three
  * draws its whole opaque list before its transparent list whatever the
  * `renderOrder`.
  */
 export const BODY_RENDER_ORDER = 2;
+
+/**
+ * The render order a Moon carries: one above the Body's, so a Moon always draws
+ * over its Ring. Why is told at the re-export, in `notable-model.ts`.
+ */
+export const MOON_RENDER_ORDER = 3;
 
 /**
  * Where the default camera stands and how it is turned, computed from the Bodies.

@@ -34,13 +34,19 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { SOURCE_MODULE, filesUnder, isTestFile, sourceFilesUnder, stripComments, stripCommentsAndStrings } from '../../scripts/source-scan.ts';
 import { Frustum, Matrix4, PerspectiveCamera, Quaternion, Vector3 } from 'three';
-import { DUST_PARTICLE_RADIUS } from './dust-model.ts';
+import { DUST_PARTICLE_RADIUS, DUST_RENDER_ORDER as DUST_ORDER_AS_IMPORTED } from './dust-model.ts';
 import { FOCUS_REACH } from './focus-model.ts';
 import { MOTE_ORBIT_RADII, MOTE_RADIUS } from './mote-model.ts';
+import { MOON_RENDER_ORDER as MOON_ORDER_AS_IMPORTED } from './notable-model.ts';
 import { PLANET_RADIUS, STAR_RADIUS } from './stroke-model.ts';
 import {
   BODY_MARGIN,
+  BODY_RENDER_ORDER,
   DEFAULT_FOV,
+  DUST_RENDER_ORDER,
+  FILL_RENDER_ORDER,
+  GLOW_RENDER_ORDER,
+  MOON_RENDER_ORDER,
   NARROWEST_ASPECT,
   STOP_MARGIN,
   buildScene,
@@ -54,6 +60,7 @@ import {
 const SCENE_DIR = fileURLToPath(new URL('.', import.meta.url));
 const MODEL_TS = fileURLToPath(new URL('./scene-model.ts', import.meta.url));
 const DUST_TS = fileURLToPath(new URL('./dust-model.ts', import.meta.url));
+const NOTABLE_TS = fileURLToPath(new URL('./notable-model.ts', import.meta.url));
 const SCENE_TSX = fileURLToPath(new URL('./scene.tsx', import.meta.url));
 const RAIL_CAMERA_TSX = fileURLToPath(new URL('./rail-camera.tsx', import.meta.url));
 const SCENE_PICK_TS = fileURLToPath(new URL('./scene-pick.ts', import.meta.url));
@@ -1459,12 +1466,16 @@ const EFFECTS =
 
 /**
  * Every effect in code, each reported as `file:line` — comments blanked (line count
- * kept), strings kept, since a CSS value is a string.
+ * kept), strings kept, since a CSS value is a string. The one allowance (AD-19):
+ * the identifier `GLOW_RENDER_ORDER`, whole, in `scene-model.ts`, the file that
+ * declares the draw order. It is blanked only there, so any other `glow` in that
+ * file, and that identifier in any other file, still fails.
  */
 function effectsIn(files: readonly { readonly path: string; readonly source: string }[]): string[] {
   const every = new RegExp(EFFECTS.source, `${EFFECTS.flags.replace('g', '')}g`);
   return files.flatMap((file) => {
-    const code = stripComments(file.source);
+    const stripped = stripComments(file.source);
+    const code = file.path === 'src/render-scene/scene-model.ts' ? stripped.replace(/\bGLOW_RENDER_ORDER\b/g, '') : stripped;
     return [...code.matchAll(every)].map((match) => {
       const line = code.slice(0, match.index).split('\n').length;
       return `${file.path}:${line} holds ${match[0]}`;
@@ -1514,6 +1525,90 @@ test('the effects audit rejects each form, in code, and ignores comments', () =>
     effectsIn([{ path: 'src/shell/x.tsx', source: "const a = 1;\n<ambientLight />\n// glow\nstyle={{ boxShadow: 'x', borderRadius: 2 }}" }]),
     ['src/shell/x.tsx:2 holds ambientLight', 'src/shell/x.tsx:4 holds boxShadow', 'src/shell/x.tsx:4 holds borderRadius'],
   );
+});
+
+test('the glow allowance is the one identifier in the one file, and it is in use', () => {
+  const MODEL = 'src/render-scene/scene-model.ts';
+  assert.match(stripComments(readFileSync(MODEL_TS, 'utf8')), /\bGLOW_RENDER_ORDER = 1\.25\b/, 'the allowance has something to admit');
+  assert.deepEqual(effectsIn([{ path: MODEL, source: 'export const GLOW_RENDER_ORDER = 1.25;' }]), []);
+  const rejected: readonly (readonly [string, string])[] = [
+    ['src/shell/x.tsx', 'const a = GLOW_RENDER_ORDER;'],
+    ['src/render-scene/dust-model.ts', 'export { GLOW_RENDER_ORDER } from "./scene-model.ts";'],
+    ['src/render-scene/realism/scene-model.ts', 'const a = GLOW_RENDER_ORDER;'],
+    ['src/render-scene/scene-model.tsx', 'const a = GLOW_RENDER_ORDER;'],
+    [MODEL, 'export const GLOW_RENDER_ORDER_2 = 1.25;'],
+    [MODEL, 'export const MY_GLOW_RENDER_ORDER = 1.25;'],
+    [MODEL, 'export const glow_render_order = 1.25;'],
+    [MODEL, 'const glowing = true;'],
+    [MODEL, 'const a = GLOW_RENDER_ORDER + glow;'],
+  ];
+  for (const [path, source] of rejected) {
+    assert.notDeepEqual(effectsIn([{ path, source }]), [], `${path}: ${source} must be rejected`);
+  }
+  // Line numbers survive the blanking.
+  assert.deepEqual(effectsIn([{ path: MODEL, source: 'const a = GLOW_RENDER_ORDER;\nconst glowing = a;' }]), [`${MODEL}:2 holds glow`]);
+});
+
+// --- The draw order, declared once ----------------------------------------------
+
+/** Every `renderOrder` set to a number rather than one of the named steps, as `file:line`. */
+function literalOrders(files: readonly { readonly path: string; readonly source: string }[]): string[] {
+  return files.flatMap((file) => {
+    const code = stripComments(file.source);
+    return [...code.matchAll(/\brenderOrder\s*[=:]\s*\{?\s*[-+.\d]/g)].map(
+      (match) => `${file.path}:${code.slice(0, match.index).split('\n').length}`,
+    );
+  });
+}
+
+test('no draw carries a numeric renderOrder: every step is a name scene-model.ts declares', () => {
+  const files = sourceFiles().filter((file) => file.path.startsWith('src/') && !/\.test\.ts$/.test(file.path));
+  assert.ok(files.some((file) => file.path === 'src/render-scene/body-field.tsx'), 'the walk reaches the draws');
+  assert.deepEqual(literalOrders(files), []);
+  for (const source of ['<mesh renderOrder={1.75} />', 'mesh.renderOrder = 1.75;', 'const a = { renderOrder: 3 };', '<mesh renderOrder={.5} />']) {
+    assert.notDeepEqual(literalOrders([{ path: 'src/x.tsx', source }]), [], `${source} must be rejected`);
+  }
+  assert.deepEqual(literalOrders([{ path: 'src/x.tsx', source: '<mesh renderOrder={FILL_RENDER_ORDER} />\n// renderOrder={3}' }]), []);
+});
+
+
+/** What makes a source a re-exporter of `name` with no value of its own: the failures, or none. */
+function ownOrderFailures(source: string, name: string): string[] {
+  const code = stripComments(source);
+  const failures: string[] = [];
+  if (new RegExp(`\\b(?:const|let|var)\\s+${name}\\b`).test(code)) failures.push(`declares ${name} itself`);
+  if (!new RegExp(`export\\s*\\{\\s*${name}\\s*\\}\\s*from\\s*'\\./scene-model\\.ts'`).test(code)) failures.push(`does not re-export ${name} from scene-model.ts`);
+  return failures;
+}
+
+test('the draw order is five named constants, strictly increasing: DUST 1 < GLOW 1.25 < FILL 1.5 < BODY 2 < MOON 3', () => {
+  const order: readonly number[] = [DUST_RENDER_ORDER, GLOW_RENDER_ORDER, FILL_RENDER_ORDER, BODY_RENDER_ORDER, MOON_RENDER_ORDER];
+  assert.deepEqual(order, [1, 1.25, 1.5, 2, 3]);
+  for (let index = 1; index < order.length; index += 1) {
+    assert.ok((order[index - 1] as number) < (order[index] as number), `step ${index} of the draw order must rise`);
+  }
+});
+
+test('the Dust and Moon orders, as importers see them, are scene-model.ts\'s own constants', () => {
+  assert.equal(DUST_ORDER_AS_IMPORTED, DUST_RENDER_ORDER);
+  assert.equal(MOON_ORDER_AS_IMPORTED, MOON_RENDER_ORDER);
+  assert.deepEqual(ownOrderFailures(readFileSync(DUST_TS, 'utf8'), 'DUST_RENDER_ORDER'), []);
+  assert.deepEqual(ownOrderFailures(readFileSync(NOTABLE_TS, 'utf8'), 'MOON_RENDER_ORDER'), []);
+  const declared = sourceFilesUnder(SRC_ROOT).filter((path) => !isTestFile(path)).flatMap((path) =>
+    [...stripComments(readFileSync(path, 'utf8')).matchAll(/\b(\w+_RENDER_ORDER)\s*(?::[^=;\n]+)?=(?!=)/g)].map((match) => `${srcPath(path)} ${match[1]}`),
+  );
+  assert.deepEqual(
+    declared.sort(),
+    ['BODY', 'DUST', 'FILL', 'GLOW', 'MOON'].map((step) => `src/render-scene/scene-model.ts ${step}_RENDER_ORDER`),
+    'every render order is declared in scene-model.ts and nowhere else',
+  );
+  // The pin bites on each way back to a second declaration.
+  const REEXPORT = "export { DUST_RENDER_ORDER } from './scene-model.ts';";
+  assert.deepEqual(ownOrderFailures(REEXPORT, 'DUST_RENDER_ORDER'), []);
+  assert.deepEqual(ownOrderFailures('export const DUST_RENDER_ORDER = BODY_RENDER_ORDER - 1;', 'DUST_RENDER_ORDER'), ['declares DUST_RENDER_ORDER itself', 'does not re-export DUST_RENDER_ORDER from scene-model.ts']);
+  assert.deepEqual(ownOrderFailures(`const DUST_RENDER_ORDER = 1;\n${REEXPORT}`, 'DUST_RENDER_ORDER'), ['declares DUST_RENDER_ORDER itself']);
+  assert.deepEqual(ownOrderFailures("export { DUST_RENDER_ORDER } from './other.ts';", 'DUST_RENDER_ORDER'), ['does not re-export DUST_RENDER_ORDER from scene-model.ts']);
+  assert.deepEqual(ownOrderFailures(`// ${REEXPORT}`, 'DUST_RENDER_ORDER'), ['does not re-export DUST_RENDER_ORDER from scene-model.ts']);
 });
 
 // --- The ARIA ratchet -------------------------------------------------------

@@ -2,7 +2,7 @@
 title: "Cosmos Portfolio — DESIGN.md (Visual Identity Spine)"
 status: final
 created: 2026-09-01
-updated: 2026-11-01
+updated: 2026-11-04
 sources:
   - ../../prds/prd-cosmos-portfolio-2026-09-01/prd.md
   - ../../prfaq-cosmos-portfolio.md
@@ -66,6 +66,15 @@ colors:
   # --- vignette: the atmospheric term. Same hex as surface-base by rule. ---
   vignette: "#F2EFE9"
   vignette-dark: "#08080A"
+
+  # --- realism: M3's Star glow and ambient floor, the only hued tokens. By ruling,
+  # the exception to the note above: realism is dark-only, so each bare value is a
+  # placeholder, the same hex as its -dark value, held only because the generator
+  # requires a pair. Starting values, tuned by on-screen judgement in Epic 8. ---
+  realism-star-glow: "#B09468"
+  realism-star-glow-dark: "#B09468"
+  realism-ambient-floor: "#0E1626"
+  realism-ambient-floor-dark: "#0E1626"
 
 typography:
   fontFamily:
@@ -449,6 +458,13 @@ nothing else (AD-12). Realism is dark-only, because additive glow and a dark sid
 both assume a dark void. Each of these tokens still has a bare light key because
 the generator requires a pair, but that value is a placeholder. A light theme
 would need its own decision for the scene, not a token swap.
+
+The family has two tokens. Only `render-scene/realism/` may read them, and what the shader outputs from them stays under the luminance ceiling (AD-20).
+
+| Token | Dark | Light | Story |
+|---|---|---|---|
+| `realism-star-glow` | `#B09468` | `#B09468` (placeholder) | The colour of a Star's additive glow. A starting value, tuned by on-screen judgement in Epic 8. The bare value is a placeholder by ruling, the dark hex repeated so it cannot be mistaken for a designed light theme. |
+| `realism-ambient-floor` | `#0E1626` | `#0E1626` (placeholder) | The constant floor under a Planet's lighting, so its dark side is not the void. A starting value, tuned by on-screen judgement in Epic 8. The bare value is a placeholder by ruling, as above. |
 
 `[NOTE FOR UX] Direction 02 pairs its palette with an editorial serif and a
 graded (not uniform) line weight. The colour swap alone will not reproduce

@@ -43,7 +43,7 @@
  */
 
 import { tokens } from '../tokens/tokens.ts';
-import { BODY_MARGIN, BODY_RENDER_ORDER, type Body, type ScenePosition } from './scene-model.ts';
+import { BODY_MARGIN, type Body, type ScenePosition } from './scene-model.ts';
 
 // --- Tuning ------------------------------------------------------------------
 
@@ -132,12 +132,12 @@ export const DUST_MEDIUM_TEXTURE_SIZE = 65;
 // --- Draw order --------------------------------------------------------------
 
 /**
- * The render order every Dust draw carries. Below `BODY_RENDER_ORDER` (declared in
- * `scene-model.ts`, because it is a Body concern), so every Dust draw precedes
- * every Body draw; with Dust writing no depth, a Body is never painted over by
- * Dust, whether that Dust is in front of it or behind it.
+ * The render order every Dust draw carries. Below `BODY_RENDER_ORDER` (the whole
+ * draw order is declared in `scene-model.ts`), so every Dust draw precedes every
+ * Body draw; with Dust writing no depth, a Body is never painted over by Dust,
+ * whether that Dust is in front of it or behind it.
  */
-export const DUST_RENDER_ORDER = BODY_RENDER_ORDER - 1;
+export { DUST_RENDER_ORDER } from './scene-model.ts';
 
 // --- Shapes ------------------------------------------------------------------
 

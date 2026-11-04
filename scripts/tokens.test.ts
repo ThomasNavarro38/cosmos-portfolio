@@ -575,6 +575,28 @@ test('tokens.css: every colour key as --color-<key>, and the spacing ramp withou
   }
 });
 
+test('the realism family is exactly four keys, the bare value a placeholder of the dark one, emitted to both files by the unchanged generator (7.2)', () => {
+  const family = ['realism-ambient-floor', 'realism-ambient-floor-dark', 'realism-star-glow', 'realism-star-glow-dark'];
+  const colors: Readonly<Record<string, string>> = tokens.colors;
+  assert.deepEqual(Object.keys(colors).filter((key) => key.includes('realism')).sort(), family);
+  assert.equal(colors['realism-star-glow'], colors['realism-star-glow-dark'], 'the bare value is a placeholder, not a designed light theme');
+  assert.equal(colors['realism-ambient-floor'], colors['realism-ambient-floor-dark'], 'the bare value is a placeholder, not a designed light theme');
+  const committedCss = readFileSync(join(TOKENS_DIR, CSS_FILE), 'utf8');
+  const committedTs = readFileSync(join(TOKENS_DIR, TS_FILE), 'utf8');
+  for (const key of family) {
+    assert.ok(committedCss.includes(`  --color-${key}: #`), `tokens.css holds --color-${key}`);
+    assert.ok(committedTs.includes(`    '${key}': '#`), `tokens.ts holds ${key}`);
+  }
+  // Read off the frozen fixture, keeping the one coupling to the live DESIGN.md single.
+  const pairs = '  realism-a: "#B09468"\n  realism-a-dark: "#B09468"\n';
+  const { css, ts } = generate(mutate('  vignette-dark: "#08080A"\n', `  vignette-dark: "#08080A"\n${pairs}`));
+  for (const key of ['realism-a', 'realism-a-dark']) {
+    assert.ok(css.includes(`  --color-${key}: #B09468;\n`), `generate emits --color-${key}`);
+    assert.ok(ts.includes(`    '${key}': '#B09468',\n`), `generate emits ${key}`);
+  }
+  assertFailsNaming(mutate('  vignette-dark: "#08080A"\n', '  vignette-dark: "#08080A"\n  realism-a-dark: "#B09468"\n'), 'colors.realism-a-dark');
+});
+
 test('the generated files import nothing, keeping src/tokens/ a leaf', () => {
   for (const name of [TS_FILE, CSS_FILE]) {
     const text = readFileSync(join(TOKENS_DIR, name), 'utf8');
