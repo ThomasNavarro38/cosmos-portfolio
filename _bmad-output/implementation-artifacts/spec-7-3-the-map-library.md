@@ -183,7 +183,7 @@ deferred:
 **Review delivery.** Reviewers read the diff from a scratch file instead of receiving it inline. Subagents ran in the background because this platform launched them so, and each was awaited before going on.
 
 **Residual risks.**
-- **Licence, for Thomas (deferred).** NASA's guidelines summarise the permission behind Moon and Jupiter as non-commercial use, for educational or informational purposes. Whether a personal portfolio qualifies is his ruling. Settle it before Epic 8's credits and the merge. Jupiter's credit also names the Space Science Institute, though its page shows no copyright.
+- **Licence, for Thomas (deferred).** NASA's guidelines summarise the permission behind Moon and Jupiter as non-commercial use, for educational or informational purposes. Whether a personal portfolio qualifies is his ruling. Settle it before Epic 8's credits and the merge. Jupiter's credit also names the Space Science Institute, though its page shows no copyright. **Update:** Thomas ruled on 2026-11-04 that this personal portfolio counts as informational use, so the Moon and Jupiter entries stand. The credits must still acknowledge NASA. Jupiter's credit naming the Space Science Institute was not part of this ruling.
 - **Unjudged.** Four maps for eight Planets, chosen without seeing them lit; the set is tunable in Epic 8. The WebP settings are also unjudged on screen.
 - **Page evidence.** Pages were read once, on 2026-11-04; the gate cannot see them. The USGS general policy page answered 403 to curl and was read through WebFetch at planning; Mars and Io rest on their own pages.
 - **Means.** CI cannot recompute a mean. It is an unweighted pixel mean, so an equirectangular map's poles count more than their area; 7.6 normalises to it.
