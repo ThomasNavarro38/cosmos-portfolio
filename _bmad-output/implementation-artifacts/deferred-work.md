@@ -1308,3 +1308,18 @@ Still open after 3.5:
 - **The entry's base strip is held by a source-text audit alone.** `src/shell/entry.ts` hands the mount `resolveRoute(appPath(location.pathname))`; `detect.test.ts`'s entry audit pins the line by regex, with a mutation row, and `appPath`, `resolveRoute` and `browserHistory().pathname()` are executed on their own, but nothing executes the entry and observes the route it hands the mount at `/cosmos-portfolio/chart`. An executed check (the render harness's `mount` path, or the entry loaded with a stubbed `location` and a recording `./mount.tsx`) would close it. L3 step 3's direct loads cover it by hand.
 - **A direct load of `/cosmos-portfolio/chart/index.html` resolves home.** It is a real file Pages serves, but `appPath` gives `/chart/index.html`, which `resolveRoute` reads as unknown, so the router canonicalizes to the base. No link writes that URL.
 - **A stale chunk after a redeploy has no recovery.** It is now an honest 404, but a visitor holding the old page still gets a failed lazy import, logged, with the ground alone (the entry never retries, by decision). Pre-existing.
+
+## Deferred from: code review of spec-7-1-the-depth-spike.md (2026-11-04)
+
+- source_spec: spec-7-1-the-depth-spike.md
+  summary: 7.6 needs to look at orbits and the Rail where they cross a fill, because flicker there was not measured.
+  evidence: The ruling hid those lines from the comparator that decides a pass; they run through a Planet's centre, and lostAsWritten changes with the bias (depth-spike-7-1.md, Not shown).
+- source_spec: spec-7-1-the-depth-spike.md
+  summary: The bias's depth margin has no check, so a re-solve could break it silently.
+  evidence: At 1e-6 the gap reaches 10 units near distance 1,409, against 893 today, and closer Bodies shrink the 10; neither npm run gate nor the tests look at it. Candidate owners: 7.6 or 7.10.
+- source_spec: spec-7-1-the-depth-spike.md
+  summary: No story owns repeating the depth spike on a target-profile laptop, or says what happens if it disagrees.
+  evidence: The result is from an RTX 4080 SUPER only; the record and memlog state it does not show the bias holds on integrated graphics, and spikes/depth-bias/README.md gives the rerun, which is only valid with both controls. Phones and tile-based GPUs, other browsers and backends, and depth buffers below 24 bits are likewise untested and unowned; no story in epics.md names this work.
+- source_spec: spec-7-1-the-depth-spike.md
+  summary: 7.6 should recheck its own marks against real fills in the focused and subject states, and with its final FILL_RADIUS_RATIO.
+  evidence: The spike draws resting strokes at every pose, and at focus-deep no outline overlaps a 0.96 fill, so a larger ratio or a heavier stroke puts marks at risk that the spike never tested. 7.6 must also keep the fill flattened to the Billboard's plane, because 1e-6 was measured only on that fill, and should check show-through on the Rail under real camera motion and the glow sprite's depth test.
