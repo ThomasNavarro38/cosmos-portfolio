@@ -380,7 +380,7 @@ export const DUST_RENDER_ORDER = 1;
 export const GLOW_RENDER_ORDER = 1.25;
 
 /**
- * The render order of a Planet's fill: after the glow and before the line-work, so
+ * The render order of a Body's fill: after the glow and before the line-work, so
  * a fill lies beneath its own outline, core dot, Ring and Moon, and never hides
  * them. Fills stay in the transparent pass, since three draws its opaque list
  * first whatever the `renderOrder`.

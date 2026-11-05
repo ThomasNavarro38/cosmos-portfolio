@@ -315,11 +315,11 @@ It counts from the artifact's `clients` tree, **never from a fresh derive** — 
 
 `map-library.ts` holds where each surface map came from, and `public/textures/<id>.webp` holds its pixels. Nothing draws them yet, and no page requests them: they reach `dist/textures/` only because Vite copies `public/`. It sits here because 7.4's appearance reads it, and no renderer may import from `src/derive/`.
 
-**The admission test.** A map is admitted only if NASA or USGS publishes it, its page shows no third-party copyright, and its credit line is recorded from that page. The stored URL is the page's final URL after redirects, and the build never fetches it. Admission is reading the page, by a person, on the recorded date.
+**The admission test.** A map is admitted only if NASA or USGS publishes it, its page shows no third-party copyright, and its credit line is recorded from that page. The stored URL is the page's final URL after redirects, and the build never fetches it. Admission is reading the page on the recorded date. An agent read the four admitted pages on 2026-11-04; no person has read them.
 
 **The policy pages behind the wording.** The Moon's and Jupiter's pages carry no licence statement, so their entries quote NASA's media guidelines, at `https://www.nasa.gov/nasa-brand-center/images-and-media/`. The sentence in full: "NASA content – images, audio, video, and media files used in the rendition of 3-dimensional models, such as texture maps and polygon data in any format – generally are not subject to copyright in the United States. You may use this material for educational or informational purposes, including photo collections, textbooks, public exhibits, computer graphical simulations and Internet Web pages. This general permission extends to personal Web pages." The same page summarises this as "for non-commercial use", and asks that NASA be acknowledged as the source. Thomas ruled on 2026-11-04 that this personal portfolio counts as informational use, so both entries stand; the credits still have to acknowledge NASA. USGS's policy page is `https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits`; the Mars and Io entries rest on what their own pages state.
 
-**What the machine refuses.** `scripts/check-maps.ts` refuses these in the licence wording and in the credit: `©`, `&copy;`, `(c)` before a year, `creative commons` (also hyphenated or joined), `CC BY` (also `cc-by`, `cc_by`), `CC0`, `non-commercial` (also `noncommercial`), `all rights reserved`, and `copyright` or `copyrighted` followed by an optional `by` and a capital or a digit. So "Copyright 2024 Foo Corp" fails, and "not subject to copyright in the United States" and "no third-party copyright" pass. It also refuses any host but NASA's or USGS's. **The limit:** this is a screen over the wording recorded. It cannot show what a page says, or that a page says what an entry records, and an entry that leaves a restriction out passes.
+**What the machine refuses.** `scripts/check-maps.ts` refuses these in the licence wording and in the credit: `©`, `&copy;`, `(c)`, `creative commons` (also hyphenated or joined), `CC BY` (also `cc-by`, `cc_by`), `CC0` (also `CC-0`, `CC 0`), `non-commercial` (also `noncommercial`, or with a dash), `not for commercial`, `all rights reserved` and `some rights reserved`, and `copyright`, `copyrights` or `copyrighted` followed by a space, colon or comma, an optional `held` and `by`, and a capital or a digit. So "Copyright 2024 Foo Corp" fails, and "not subject to copyright in the United States" and "no third-party copyright" pass. It also refuses any host but NASA's or USGS's. **The limit:** this is a screen over the wording recorded. It cannot show what a page says, or that a page says what an entry records, and an entry that leaves a restriction out passes.
 
 **Admitted and refused.** Moon, Mars, Io and Jupiter were admitted on 2026-11-04: four maps for eight Planets, since Bodies may share a map. Which maps ship stays tunable in Epic 8's judgement. Three candidates were refused, each page read on 2026-11-04:
 
@@ -340,7 +340,7 @@ Triton and Mercury were licensed correctly: those are refusals of pixels, and Bl
 Conversion is a manual step, run outside the repo. No encoder or decoder enters the repo or CI.
 
 - **Tool:** Pillow 11.3.0 with libwebp 1.5.0, in a scratch virtual environment.
-- **Settings:** `convert('RGB')`, Lanczos to 1024×512 only where the source is larger, `save(path, 'WEBP', quality=80, method=6)`, no metadata. Every map came out in the `VP8 ` form.
+- **Settings:** `convert('RGB')`, Lanczos to 1024×512 only where the source is larger, `save(path, 'WEBP', quality=80, method=6)`, no metadata. Every map came out in the `VP8 ` form. A source more than a pixel from 2:1 is refused, since the resize would stretch it and the gate would then see a valid header.
 - **Mean luminance:** decode the WebP; sRGB to linear per channel (IEC 61966-2-1); `0.2126 R + 0.7152 G + 0.0722 B`; an unweighted mean over all pixels, so an equirectangular map's poles count more than their area. Rounded to four places.
 
 **The stated limit: CI cannot recompute a mean.** It has no decoder, so it checks only that a recorded mean is a number in (0, 1], and the gate's pass line reports each as recorded, not verified. The material normalises to this number in 7.6, so a tuned map needs a re-measure by the steps above.
@@ -364,6 +364,8 @@ def convert(source, path):
     with Image.open(source) as image:
         image.load()
         rgb = image.convert('RGB')
+    if abs(rgb.width - 2 * rgb.height) > 1:
+        raise ValueError('source is not 2:1')
     if rgb.width > MAX[0] or rgb.height > MAX[1]:
         rgb = rgb.resize(MAX, Image.LANCZOS)
     rgb.save(path, 'WEBP', quality=80, method=6)

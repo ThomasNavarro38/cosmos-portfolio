@@ -1322,6 +1322,7 @@ Still open after 3.5:
   evidence: The result is from an RTX 4080 SUPER only; the record and memlog state it does not show the bias holds on integrated graphics, and spikes/depth-bias/README.md gives the rerun, which is only valid with both controls. Phones and tile-based GPUs, other browsers and backends, and depth buffers below 24 bits are likewise untested and unowned; no story in epics.md names this work.
 - source_spec: spec-7-1-the-depth-spike.md
   summary: 7.6 should recheck its own marks against real fills in the focused and subject states, and with its final FILL_RADIUS_RATIO.
+  ruling: On 2026-11-05 Thomas accepted that the own-marks test cannot fail at any Focus pose on 390×844 or at focus-deep on 1920×1080, and attributed no pixel to a Ring or Moon, with this recheck covering it. So it must include a Ring and a Moon at their closest, at both viewports.
   evidence: The spike draws resting strokes at every pose, and at focus-deep no outline overlaps a 0.96 fill, so a larger ratio or a heavier stroke puts marks at risk that the spike never tested. 7.6 must also keep the fill flattened to the Billboard's plane, because 1e-6 was measured only on that fill, and should check show-through on the Rail under real camera motion and the glow sprite's depth test.
 
 ## Deferred from: code review of spec-7-2-the-realism-tokens-and-the-draw-order.md (2026-11-04)
@@ -1331,6 +1332,7 @@ Still open after 3.5:
   evidence: auditAchromatic and auditCast filter on the -dark suffix, as they did before this story. Bare stroke-dust and ink-faint (#BCB6A8) are about chroma 0.0206, above the 0.02 threshold, so holding bare keys to it would fail real light values and needs its own ruling. The AC reads "a hued token under any other name"; its mutation rows are all -dark.
   location: src/identity-audit.test.ts:88
   severity: low
+  resolution: Thomas ruled on 2026-11-05 that AC3 covers -dark keys, as bare values are unused placeholders in a dark-only scene. AC3 and epics.md were reworded.
 
 ## Deferred from: code review of spec-7-3-the-map-library.md (2026-11-04)
 
@@ -1340,3 +1342,19 @@ Still open after 3.5:
   location: src/derive/map-library.ts:31
   severity: medium
   resolution: Thomas ruled on 2026-11-04 that this personal portfolio counts as informational use, so the Moon and Jupiter entries stand. The credits must still acknowledge NASA. Jupiter's credit naming the Space Science Institute was not part of this ruling.
+
+## Deferred from: code review of spec-7-2-the-realism-tokens-and-the-draw-order.md (2026-11-05)
+
+- source_spec: spec-7-2-the-realism-tokens-and-the-draw-order.md
+  summary: 7.7 should settle how a Star's glow and a farther Planet's fill overlap, because drawing the glow first lets that fill paint over a nearer Star's glow.
+  evidence: GLOW_RENDER_ORDER is 1.25, before FILL 1.5 and BODY 2, and the glow writes no depth. A fill or outline farther than the Star therefore passes its depth test and draws over the glow. At 1.25 only Dust has drawn in the transparent pass, and Dust writes no depth, so the glow's depth test has nothing to reject unless the opaque list wrote some. Nothing draws a glow yet, so this cannot be seen today.
+  location: src/render-scene/scene-model.ts:380
+  severity: medium
+
+## Deferred from: code review of spec-7-3-the-map-library.md (2026-11-05)
+
+- source_spec: spec-7-3-the-map-library.md
+  summary: Thomas settles in 8.2, before the credits ship, whether Jupiter's credit naming the Space Science Institute stands.
+  evidence: AD-21 admits a map only if its page shows no third-party copyright. Jupiter's credit is 'NASA/JPL/Space Science Institute', and the 2026-11-04 ruling on NASA's guidelines left this out, closing the only deferred entry that mentioned it.
+  location: src/derive/map-library.ts:67
+  severity: medium

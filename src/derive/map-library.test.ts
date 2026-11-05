@@ -130,6 +130,13 @@ function shippedFiles(): Module[] {
   });
 }
 
+/**
+ * An `import.meta.glob` naming `derive/` or a `map-` file, or any glob written
+ * inside `src/derive/`. Not seen: a glob wide enough to match the directory from
+ * elsewhere without naming it.
+ */
+const GLOB = /\bimport\.meta\.glob\s*(?:<[^>]*>\s*)?\(([^)]*)\)/g;
+
 /** A string naming the library as a module, whatever holds it, or a built dynamic import that mentions it. */
 const NAMES_LIBRARY = /['"`](?:[^'"`\n]*\/)?map-library(?:\.[cm]?[jt]sx?)?(?:[?#][^'"`\n]*)?['"`]|\bimport\s*\([^)]*\bmap-library\b/;
 const NAMES_MAP = /\btextures\/|\.webp\b/i;
@@ -138,6 +145,11 @@ function auditLibraryReach(files: readonly Module[]): string[] {
   const failures: string[] = [];
   for (const { path, text } of files) {
     if (SOURCE_MODULE.test(path) && !LIBRARY_READERS.includes(path) && NAMES_LIBRARY.test(text)) failures.push(`library reach: ${path} imports the library`);
+    if (SOURCE_MODULE.test(path) && !LIBRARY_READERS.includes(path)) {
+      for (const match of text.matchAll(GLOB)) {
+        if (path.startsWith('src/derive/') || /\bderive\/|\bmap-/.test(match[1] as string)) failures.push(`library reach: ${path} globs the library: ${(match[1] as string).trim()}`);
+      }
+    }
     if (!MAP_REQUESTERS.includes(path) && NAMES_MAP.test(text)) failures.push(`library reach: ${path} names a map`);
   }
   return failures;
@@ -163,6 +175,11 @@ test('the library reach audit rejects each form, and a comment, a near name or a
     ['src/shell/x.ts', 'const m = await import(`../derive/map-library.ts`);', /imports the library/],
     ['src/shell/x.ts', "const m = await import('../derive/' + 'map-library.ts');", /imports the library/],
     ['src/shell/x.tsx', "const m = require('../derive/map-library.ts');", /imports the library/],
+    ['src/shell/x.ts', "const m = import.meta.glob('../derive/map-library*');", /globs the library/],
+    ['src/shell/x.ts', "const m = import.meta.glob('../derive/*.ts', { eager: true });", /globs the library/],
+    ['src/shell/x.ts', "const m = import.meta.glob(['../derive/map-*.ts']);", /globs the library/],
+    ['src/shell/x.ts', 'const m = import.meta.glob<Module>("../**/map-*.ts");', /globs the library/],
+    ['src/derive/x.ts', "const m = import.meta.glob('./*.ts');", /globs the library/],
     ['src/shell/x.ts', "const u = '/textures/moon.webp';", /names a map/],
     ['src/shell/x.ts', 'const u = `textures/${id}.webp`;', /names a map/],
     ['src/shell/x.ts', "const u = 'textures/' + id;", /names a map/],
@@ -181,6 +198,7 @@ test('the library reach audit rejects each form, and a comment, a near name or a
     ['src/shell/x.ts', "import { x } from './map-library-notes.ts';"],
     ['src/shell/x.ts', "const u = 'subtextures';"],
     ['src/shell/x.ts', "const u = 'webp';"],
+    ['src/shell/x.ts', "const m = import.meta.glob('./shaders/*.glsl');"],
   ] as const) {
     assert.deepEqual(auditLibraryReach([{ path, text: shippedText(path, text) }]), [], `${path}: ${text}`);
   }
@@ -262,6 +280,10 @@ function realFacts(): MapFact[] {
 function auditConversionTable(readme: string, facts: readonly MapFact[]): string[] {
   const rows = (recordOf(readme) ?? '').split(/\r?\n/).filter((line) => line.startsWith('|'));
   const failures: string[] = [];
+  for (const line of rows) {
+    const id = line.match(/^\| `([^`]+)` \|/)?.[1];
+    if (id !== undefined && !facts.some((fact) => fact.id === id)) failures.push(`conversion table: the row for ${id} has no map`);
+  }
   for (const fact of facts) {
     const row = rows.find((line) => line.startsWith(`| \`${fact.id}\` |`));
     if (row === undefined) {
@@ -307,6 +329,7 @@ test('the conversion table fails on a swapped file, a changed mean, a lost colum
     ['its hash moved to another row', (text: string) => text.replace(moon.sha256, 'x').replace(mars.sha256, moon.sha256), /moon's row does not hold its SHA-256/],
     ['its bytes edited', (text: string) => text.replace(new RegExp(`\\| ${moon.bytes} \\|`), '| 1 |'), /moon's row does not hold its bytes/],
     ['the record gone', (text: string) => text.replace(RECORD_HEADING, '### Elsewhere'), /no row for moon/],
+    ['a stale row', (text: string) => text.replace(/^(\| `moon` \|.*\r?\n)/m, '$1| `triton` | x.jpg | 1024×512 | 0.1 | 1 | y |\n'), /the row for triton has no map/],
   ] as const) {
     const mutated = mutate(README);
     assert.notEqual(mutated, README, `the mutation "${name}" must apply`);

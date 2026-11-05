@@ -803,7 +803,8 @@ export function install(world: SpikeWorld): void {
     const out: Record<string, unknown> = {};
     for (const v of VIEWPORTS) {
       await mountViewport(v);
-      out.environment ??= guardHardware();
+      const environmentHere = guardHardware();
+      out.environment ??= environmentHere;
       // If magenta does not read back exactly, every testable pixel would count as show-through.
       const colour = guardFillColour();
       if (colour.pixelsExactlyMagentaWithFillInMagenta === 0) throw new Error(`depth spike controls failed: fill colour ${JSON.stringify(colour)}`);

@@ -4,8 +4,8 @@ type: 'feature'
 created: '2026-11-04'
 status: 'done'
 baseline_revision: '875761910d6c34b57594b6507a5a9e227a46dc6c'
-review_loop_iteration: 0
-followup_review_recommended: true
+review_loop_iteration: 1
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-7-context.md'
 warnings: ['oversized']
@@ -17,6 +17,8 @@ deferred:
     location: >-
       src/identity-audit.test.ts:88
     severity: low
+    resolution: >-
+      Thomas ruled on 2026-11-05 that AC3 covers -dark keys: bare values are unused placeholders in a dark-only scene.
 ---
 
 <intent-contract>
@@ -89,13 +91,26 @@ deferred:
 **Acceptance Criteria:**
 - Given DESIGN.md's frontmatter holds the family, when `npm run tokens` then `node scripts/tokens.ts --check` run, then both pass, both generated files hold all four keys, and `git diff` shows `scripts/tokens.ts` unchanged.
 - Given the DESIGN.md prose, when it is read, then each `realism-*` token's bare value is named as a placeholder exception.
-- Given the committed tokens, including a star glow at chroma ≥ 0.02, when the achromatic audits run, then they pass; and given a hued token under any other name, including one that merely contains `realism`, then they fail naming it.
+- Given the committed tokens, including a star glow at chroma ≥ 0.02, when the achromatic audits run, then they pass; and given a hued `-dark` token under any other name, including one that merely contains `realism`, then they fail naming it.
 - Given a `--realism-*` or `--color-realism-*` property or a `realism-*` token key in any shipped file outside `render-scene/realism/`, or in `index.html` or `scripts/preview.ts`, when the reach audit runs, then it fails naming the file; the real tree passes.
 - Given `scene-model.ts`, when it is read and tested, then it declares `DUST 1 < GLOW 1.25 < FILL 1.5 < BODY 2 < MOON 3` as named constants, a test pins the values and the strict order, and `DUST_RENDER_ORDER` and `MOON_RENDER_ORDER` as importers see them are those same constants.
 - Given any `glow` in `render-scene/` or `shell/` other than `GLOW_RENDER_ORDER` in `scene-model.ts`, when the effects audit runs, then it fails.
 - Given the baseline build and this story's build, when each is served and captured in Chrome at the same pose and viewport under reduced motion, then the screenshots are pixel-identical; a capture of a different pose differs, so the comparison can detect a change.
 
+### Review Findings
+
+- [x] [Review][Patch] AC3 reads wider than what was built; Thomas ruled 2026-11-05 to reword it to `-dark` keys, as bare values are unused placeholders in a dark-only scene [_bmad-output/implementation-artifacts/spec-7-2-the-realism-tokens-and-the-draw-order.md]
+- [x] [Review][Patch] The numeric-order scan misses computed and aliased orders, and the declared-once scan has no rejection rows [src/render-scene/scene-model.test.ts:1555]
+- [x] [Review][Patch] Reach audit misses a key after an interpolation or split across literals, and its comment names only runtime assembly as out of reach [src/identity-audit.test.ts:867]
+- [x] [Review][Patch] Glow allowance admits `$GLOW_RENDER_ORDER` and `GLOW_RENDER_ORDER-on` [src/render-scene/scene-model.test.ts:1478]
+- [x] [Review][Patch] Two achromatic test titles say every -dark token, and the realism keys are exempt [src/identity-audit.test.ts:122]
+- [x] [Review][Patch] "The only hued tokens" is untrue of bare `stroke-dust` and `ink-faint` [_bmad-output/planning-artifacts/ux-designs/ux-cosmos-portfolio-2026-09-01/DESIGN.md:70]
+- [x] [Review][Patch] `FILL_RENDER_ORDER`'s comment says a Planet's fill, then lists a core dot, which only a Star has [src/render-scene/scene-model.ts:383]
+- [x] [Review][Defer] Glow drawn before fills means a farther Planet's fill paints over a nearer Star's glow, since the glow writes no depth [src/render-scene/scene-model.ts:380] — deferred, not reachable until 7.7 draws a glow
+
 ## Spec Change Log
+
+- 2026-11-05, Thomas's ruling at code review. AC3 and epics.md's 7.2 criterion now read "a hued `-dark` token": the audits hold only `-dark` keys, and bare values are unused placeholders in a dark-only scene.
 
 ## Review Triage Log
 

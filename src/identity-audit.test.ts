@@ -119,7 +119,7 @@ function auditAchromatic(colors: Readonly<Record<string, string>>): string[] {
   return failures;
 }
 
-test('achromatic: every -dark colour token has OKLCH chroma < 0.02', () => {
+test('achromatic: every -dark colour token outside the realism family has OKLCH chroma < 0.02', () => {
   assert.deepEqual(auditAchromatic(tokens.colors), []);
   assert.ok(auditedDark(tokens.colors).length >= 14, 'every surface, stroke and ink step is inspected');
 });
@@ -153,7 +153,7 @@ test('achromatic: a token drifting toward the threshold, or warming, fails the c
   assert.match(auditCast({ ...tokens.colors, 'ink-label-dark': '#857F7A' }).join('\n'), /^cast: ink-label-dark \(#857F7A\) leans to hue \d+\.\d°/);
 });
 
-test('achromatic: a hue in any -dark token fails, naming it', () => {
+test('achromatic: a hue in any -dark token outside the realism family fails, naming it', () => {
   assert.deepEqual(oklch('#808080').chroma < 1e-6, true, 'a true grey has no chroma');
   const tinted = { ...tokens.colors, 'ink-label-dark': '#8A8AB4' };
   assert.match(auditAchromatic(tinted).join('\n'), /^achromatic: ink-label-dark \(#8A8AB4\) carries a hue/);
@@ -856,15 +856,17 @@ function shippedFiles(): Record<string, string> {
 
 /**
  * A reference to a realism token, on comments-blanked source: its custom property,
- * or its key, or a key built from a `'realism-'` prefix. The quote anchor is what
+ * or its key, or a key built from a `'realism-'` or `'realism'` piece, or one
+ * following an interpolation. The quote anchor is what
  * separates a key from `'./realism-mount.tsx'`, and the left anchor separates a
  * property from a class like `.card--realism-on`. Any other quoted string opening
  * `realism-` reads as a key too, so a mark or a class outside the family's home
  * takes another name. **Out of reach:** a property name assembled wholly at
- * runtime, like `` `--color-${x}` ``, and code that enumerates `tokens.colors`,
- * which only a type checker or a parser could follow.
+ * runtime, like `` `--color-${x}` ``, a key split inside the word, like
+ * `'real' + 'ism-x'`, and code that enumerates `tokens.colors`, which only a type
+ * checker or a parser could follow.
  */
-const REALISM_REFERENCE = /(?<![\w-])--(?:color-)?realism-|['"`]realism-/g;
+const REALISM_REFERENCE = /(?<![\w-])--(?:color-)?realism-|['"`}]realism-|['"`]realism['"`]/g;
 
 /** With the slash, so `render-scene/realism-mount.tsx` is still scanned. */
 const REALISM_HOME = 'render-scene/realism/';
@@ -897,6 +899,9 @@ test('realism reach: a reference outside the family\'s home fails naming the fil
     ['shell/x.tsx', 'const a = tokens.colors["realism-star-glow-dark"];'],
     ['shell/x.tsx', "const prefix = 'realism-';"],
     ['shell/x.tsx', 'const a = `realism-${name}-dark`;'],
+    ['shell/x.tsx', "const a = tokens.colors['realism' + '-star-glow-dark'];"],
+    ['shell/x.tsx', 'const a = `${prefix}realism-star-glow-dark`;'],
+    ['shell/x.tsx', "const a = key.startsWith('realism');"],
     ['index.html', '<style>.a { color: var(--realism-x); }</style>'],
     ['scripts/preview.ts', "const a = tokens.colors['realism-star-glow-dark'];"],
     ['render-scene/realism-mount.tsx', "const a = tokens.colors['realism-star-glow-dark'];"],

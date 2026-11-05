@@ -2,7 +2,7 @@
 
 Throwaway. This measures whether a Planet fill can sit behind its own marks by a small depth bias without z-fighting, and without letting another Body's marks show through. Nothing here ships: `spikes/` is outside `src/`, typecheck, the tests and the build. The result is in `_bmad-output/implementation-artifacts/depth-spike-7-1.md`.
 
-It measures no framerate. A target-profile laptop can repeat the run later, because a result from one GPU says nothing about another. After later stories change the scene, `scan()` may stop matching it, so a rerun of this exact measurement is safest at the revision the record names.
+It measures no framerate. A target-profile laptop can repeat the run later, because a result from one GPU says nothing about another. After later stories change the scene, `scan()` may stop matching it, so a rerun of this exact measurement is safest at `8757619`, the commit that adds this harness and the record. On a machine with two GPUs, confirm that `environment` names the integrated part: the guard refuses only a software renderer, so a run on the discrete GPU would still read as valid.
 
 ## Rerun
 
@@ -61,7 +61,7 @@ A run is invalid if `environment.renderer` is a software renderer (the harness t
 
 - `lost`: pixels where marks alone (`M`) differ from the background and from marks + fills (`C`) by more than 2 in any channel. **This decides a pass.**
 - `excluded`: changed pixels where a mark lies inside the disc (dilated 2px) of a nearer Body's fill. That hiding is correct.
-- `lostAsWritten`: the first comparator, the same test on full line-work with and without fills. It also counts an orbit or the Rail hidden beneath a mark, which the design intends, so it decides nothing.
+- `lostAsWritten`: the first comparator, on full line-work with and without fills, at pixels where marks alone draw something. It skips pixels holding only an orbit or the Rail, and its exclusion differs from `excluded`, to stay comparable with the first sweep. It also counts an orbit or the Rail hidden beneath a mark, which the design intends, so it decides nothing.
 - `lostFromLinesOnly`: the part of `lostAsWritten` where marks + fills still equal marks alone.
 
 **Other Body** (fill in magenta):

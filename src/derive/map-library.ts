@@ -29,7 +29,7 @@ export interface MapEntry {
 }
 
 const NASA_MEDIA_GUIDELINES =
-  'No licence statement, no third-party copyright. NASA media guidelines: "generally are not subject to copyright in the United States".';
+  'No licence statement, no third-party copyright. NASA media guidelines: "generally are not subject to copyright in the United States". Used as informational under NASA\'s media guidelines.';
 
 const USGS_CONSTRAINTS = 'Access constraints: public domain. Use constraints: None.';
 

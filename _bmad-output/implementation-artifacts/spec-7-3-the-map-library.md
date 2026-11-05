@@ -4,8 +4,8 @@ type: 'feature'
 created: '2026-11-04'
 status: 'done'
 baseline_revision: '810f76b88927ed93a4537abfb29cbe83818eba45'
-review_loop_iteration: 0
-followup_review_recommended: true
+review_loop_iteration: 1
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-7-context.md'
 warnings: ['oversized']
@@ -100,7 +100,21 @@ deferred:
 - Given the README's conversion record, when it is read, then it names the tool, version, settings and how each mean was measured, and states that CI cannot recompute a mean; a test fails if the record loses any of these.
 - Given the build, when compared with the baseline, then the shipped JS chunks are byte-identical, content hashes normalised, and `dist/textures/` holds the maps with no page requesting them.
 
+### Review Findings
+
+- [x] [Review][Patch] "By a person" is untrue; Thomas stated 2026-11-05 that an agent read the four map pages, so reword it to say so [src/derive/README.md:318]
+- [x] [Review][Defer] Jupiter's Space Science Institute credit has no owner [src/derive/map-library.ts:67] — deferred by Thomas 2026-11-05, to settle in 8.2 before the credits ship
+- [x] [Review][Patch] Moon and Jupiter's licence wording omits what the ruling rests on; Thomas ruled 2026-11-05 to add "used as informational under NASA's media guidelines", a wording change only, with the gate unchanged [src/derive/map-library.ts:32]
+- [x] [Review][Patch] Licence screen passes `Copyright (c) Foo Corp`, `(c) Foo Corp`, `Copyright: Foo Corp`, `CC-0`, `Not for commercial use` and `Some rights reserved`; the spec refuses `Copyright <year or holder>` [scripts/check-maps.ts:53]
+- [x] [Review][Patch] Library reach audit does not reject `import.meta.glob`, though the budgets audit does [src/derive/map-library.test.ts:134]
+- [x] [Review][Patch] Budgets reach walk leaves out `spikes/`, and its limits don't say so [scripts/check-maps.test.ts:620]
+- [x] [Review][Patch] The unreadable-map branch behind "never a crash" has no test [scripts/check-maps.ts:272]
+- [x] [Review][Patch] Conversion table is checked library-to-table only, so a stale row passes [src/derive/map-library.test.ts:265]
+- [x] [Review][Patch] Recorded conversion step resizes a non-2:1 source to 1024×512 without complaint, and the gate then sees a valid header [src/derive/README.md:367]
+
 ## Spec Change Log
+
+- 2026-11-05, code review. The licence screen widened to the wordings the review found passing, and Moon and Jupiter's licence wording now states informational use, by Thomas's ruling. An agent read the four admitted pages, as Thomas confirmed, so the README no longer says a person did.
 
 ## Review Triage Log
 
@@ -149,7 +163,7 @@ deferred:
 
 **URL allowance.** On `src/derive/map-library.ts` alone, blank each `https://(?:[a-z0-9-]+\.)*(?:nasa|usgs)\.gov(?:/[\w./%-]*)?` directly followed by a closing quote. Requiring the quote is what fails `@`, a port, a query and a URL followed off-site.
 
-**Licence refusal.** The gate refuses, in licence wording and in the credit, `©`, `&copy;`, `(c) <year>`, `Copyright <year or holder>`, Creative Commons, CC BY, CC0, non-commercial wording and `all rights reserved`, and any host but NASA's or USGS's. That is what a machine can check; reading the page was the admission. Tightened at review, as is the 2:1 requirement, which goes beyond the matrix's wording.
+**Licence refusal.** The gate refuses, in licence wording and in the credit, `©`, `&copy;`, `(c)`, `Copyright <year or holder>`, Creative Commons, CC BY, CC0, non-commercial wording and `all rights reserved` or `some rights reserved`, and any host but NASA's or USGS's. That is what a machine can check; reading the page was the admission. Tightened at review, as is the 2:1 requirement, which goes beyond the matrix's wording.
 
 ## Verification
 

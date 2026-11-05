@@ -1,6 +1,6 @@
 # Depth spike record (story 7.1)
 
-**Result: on this machine, a clip-space offset of `1e-6` keeps every mark and shows no other Body's marks through a fill, at every pose and both viewports.** `gl_Position.z += 1e-6 * gl_Position.w`, in the fill's vertex shader.
+**Result: on this machine, a clip-space offset of `1e-6` loses no mark and shows no other Body's marks through a fill, at both viewports. The own-marks half has no evidence at any Focus pose on 390×844, at `focus-deep` on 1920×1080, or for a Ring or Moon against its own fill. Thomas accepted that limit on 2026-11-05, with 7.6's recheck against real fills covering it.** `gl_Position.z += 1e-6 * gl_Position.w`, in the fill's vertex shader.
 
 **This does not show the bias holds on integrated graphics.** The dev machine is not NFR-4's target profile, and nothing here was run on one. No framerate was measured.
 
@@ -26,7 +26,7 @@ Three limits on that result:
 | Code | Revision `ecccae125d666500889513c76522fe71027177f6`, with `src/` unchanged and the spike harness as committed with this record |
 | Closest pairs | `client:transilien` with `project:transilien/stream-aggregator-compiler`, and `client:sncf` with `project:sncf/client-referential`, each 10.0 units apart |
 
-Each viewport's new WebGL context passed the hardware check and the fill-colour check before measuring. The depth bits and samples above are the first viewport's. With the fill in the background colour, 0 pixels were off background at either viewport. With the fill in magenta, 39,009 pixels (1920×1080) and 94,304 (390×844) read exactly magenta. WebGL errors: 0.
+Each viewport's new WebGL context passed the hardware check and the fill-colour check before measuring in the sweep. The `show-control` runs checked the hardware at the first viewport only, so their 390×844 context went unchecked; `runShowControl` now checks each, and those runs were not repeated. The depth bits and samples above are the first viewport's. With the fill in the background colour, 0 pixels were off background at either viewport. With the fill in magenta, 39,009 pixels (1920×1080) and 94,304 (390×844) read exactly magenta. WebGL errors: 0.
 
 Raw results are in `spikes/depth-bias/results/`. `first-sweep.json` is the sweep behind the ruling, from the first harness.
 
@@ -80,7 +80,7 @@ Values marked "added" are outside the spec's sweep. They were added to locate th
 - **The depth formula predicts the edge.** Using the exact form, 2e-6 at distance 893 gives a gap of 8.05 units and passes; 2.5e-6 gives 10.09, past the pair's 10.0 separation, and fails. The approximation `δ·d²/(2·near)` reads about 1% low there.
 - **Bias relates to depth precision.** One step of a 24-bit buffer is about 1.2e-7 in clip space, so `1e-6` is about 8 steps. Polygon 16 and clip 2e-6 sharing an edge fits one polygon unit being one step on this driver. On a 16-bit depth buffer `1e-6` would be well under one step, so the bias would do nothing. The Canvas requests R3F's default depth and nothing here tested any other depth size.
 - **Zero bias passes here.** That is a result on this GPU only. Fills draw before marks (render order 1.5 against 2), so draw order may be resolving the ties rather than the bias. No z-fighting was seen at any value, so nothing here shows how small a bias could safely be on other hardware.
-- **The negative values hint at how far fill and mark depths scatter.** At `-2e-7` the fill in front takes 395,557 of the 454,844 at-risk pixels at 1920×1080, and at `-5e-7` it takes all of them. So on this GPU the scatter looks to be under `5e-7`, and `1e-6` clears it. This is a reading of those counts, not a separate measurement.
+- **The negative values hint at how far fill and mark depths scatter.** At `-2e-7` the fill in front takes 395,557 of the 454,844 at-risk pixels at 1920×1080, and at `-5e-7` it takes all of them. So on this GPU marks look to lead the fill by under `5e-7`. This is a reading of those counts, not a separate measurement, and it covers one side only: a positive bias guards against a mark behind its fill, which no run probed, so it does not show that `1e-6` clears anything.
 - **`excluded` doesn't depend on the bias.** All 816 pixels are on the Rail run at 1920×1080, and the count is the same at every value. A z-fight would change with the bias; a nearer fill hiding a farther Body would not.
 - **Repeatable.** Runs before and after the comparator change gave the same as-written figures at the values compared, and the `keyframe-0` screenshot was byte-identical across the earlier runs.
 
@@ -90,7 +90,7 @@ The rule: at least twice the smallest passing value that also has its doubled va
 
 **Chosen: clip-space offset `1e-6`.** It clears that floor, it is half the largest passing value (2e-6), and its doubled value passes. Clip was preferred over polygon as the design notes direct, because the shader defines its arithmetic, whereas polygon units scale by an implementation-specific constant.
 
-The upper side of that is measured, on enlarged-disc rows. The lower side isn't, since nothing failed below it, and no run drew fills after marks to take draw order out of it. The value was picked to sit well above the depth buffer's step and the scatter above, and well below the measured limit.
+The upper side of that is measured, on enlarged-disc rows. The lower side isn't, since nothing failed below it, and no run drew fills after marks to take draw order out of it. The value was picked to sit well above the depth buffer's step and well below the measured limit.
 
 ## Per-pose results at the chosen value
 

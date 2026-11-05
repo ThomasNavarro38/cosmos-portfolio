@@ -181,6 +181,18 @@ const REFUSED_WORDINGS: readonly string[] = [
   'non-commercial use only',
   'Noncommercial',
   'All rights reserved.',
+  'Copyright (c) Foo Corp',
+  'Copyright (C) NASA',
+  '(c) Foo Corp',
+  'Copyright: Foo Corp',
+  'Copyright: 2024 Foo',
+  'Copyright, Foo Corp',
+  'Copyrights held by Foo Corp',
+  'CC-0',
+  'CC 0',
+  'non–commercial',
+  'Not for commercial use',
+  'Some rights reserved',
 ];
 
 /** Every failing row of the matrix: the fixture, and what its one failure must name. */
@@ -591,7 +603,8 @@ function specifierTarget(path: string, specifier: string): string {
  * importer of it would pass the scan above.
  *
  * Not seen: a `realism/` module importing a budget and exporting it under its
- * own name, and a glob wide enough to match the directory without naming it.
+ * own name, a glob wide enough to match the directory without naming it, and any
+ * tracked directory other than `src/`, `spikes/` and the repo root's own files.
  */
 function auditBudgetsImporters(files: readonly Source[]): string[] {
   const failures: string[] = [];
@@ -617,7 +630,7 @@ function auditBudgetsImporters(files: readonly Source[]): string[] {
 }
 
 function repoSources(): Source[] {
-  const paths = [...filesUnder(join(REPO_ROOT, 'src')), ...readdirSync(REPO_ROOT).map((name) => join(REPO_ROOT, name)).filter((path) => SOURCE_MODULE.test(path) || path.endsWith('.html'))];
+  const paths = [...filesUnder(join(REPO_ROOT, 'src')), ...filesUnder(join(REPO_ROOT, 'spikes')), ...readdirSync(REPO_ROOT).map((name) => join(REPO_ROOT, name)).filter((path) => SOURCE_MODULE.test(path) || path.endsWith('.html'))];
   return paths
     .filter((path) => SOURCE_MODULE.test(path) || path.endsWith('.html'))
     .map((path) => {
@@ -627,10 +640,19 @@ function repoSources(): Source[] {
     });
 }
 
+test('an unreadable map is one failure line naming the file, not a crash and not also a missing file', async () => {
+  const unreadable = (): never => {
+    throw new Error('EACCES: permission denied\n    at openSync');
+  };
+  const report = await measureMaps(treeOf({ textures: { 'mars.webp': GOOD_MAP } }), unreadable);
+  assert.deepEqual(report.failures, ['public/textures/mars.webp could not be read: EACCES: permission denied']);
+});
+
 test('nothing outside render-scene/realism/ and scripts/ reaches the budgets', () => {
   const sources = repoSources();
   assert.ok(sources.some((source) => source.path === 'src/App.tsx'), 'the walk reads src/');
   assert.ok(sources.some((source) => source.path === 'vite.config.ts'), 'the walk reads the root');
+  assert.ok(sources.some((source) => source.path === 'spikes/depth-bias/main.tsx'), 'the walk reads spikes/');
   assert.deepEqual(auditBudgetsImporters(sources), []);
 });
 
@@ -654,6 +676,7 @@ test('the budgets reach audit rejects every form, from every near miss of the ho
     ['src/shell/scripts/x.ts', "import { MAP_COUNT_BUDGET } from '../../render-scene/realism/budgets.ts';"],
     ['src/derive/map-library.test.ts', "import { MAP_COUNT_BUDGET } from '../render-scene/realism/budgets.ts';"],
     ['vite.config.ts', "import { MAP_COUNT_BUDGET } from './src/render-scene/realism/budgets.ts';"],
+    ['spikes/depth-bias/main.tsx', "import { MAP_COUNT_BUDGET } from '../../src/render-scene/realism/budgets.ts';"],
     ['index.html', '<script type="module" src="/src/render-scene/realism/budgets.ts"></script>'],
     ['src/shell/x.ts', "import text from '../render-scene/realism/budgets.ts?raw';"],
     ['src/shell/x.ts', "import url from '../render-scene/realism/budgets.ts?url';"],

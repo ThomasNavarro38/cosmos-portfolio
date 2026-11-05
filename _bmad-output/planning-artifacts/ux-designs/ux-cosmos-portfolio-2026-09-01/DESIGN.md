@@ -67,7 +67,7 @@ colors:
   vignette: "#F2EFE9"
   vignette-dark: "#08080A"
 
-  # --- realism: M3's Star glow and ambient floor, the only hued tokens. By ruling,
+  # --- realism: M3's Star glow and ambient floor, the only hued -dark tokens. By ruling,
   # the exception to the note above: realism is dark-only, so each bare value is a
   # placeholder, the same hex as its -dark value, held only because the generator
   # requires a pair. Starting values, tuned by on-screen judgement in Epic 8. ---
@@ -453,7 +453,7 @@ reference the token. A build that hardcodes `#08080A` has already broken the
 light theme before it exists.
 
 **The one exception is the `realism-*` family (M3).** Star glow and the ambient
-floor are the only hued tokens, and the achromatic audit exempts that prefix and
+floor are the only hued `-dark` tokens, and the achromatic audit exempts that prefix and
 nothing else (AD-12). Realism is dark-only, because additive glow and a dark side
 both assume a dark void. Each of these tokens still has a bare light key because
 the generator requires a pair, but that value is a placeholder. A light theme

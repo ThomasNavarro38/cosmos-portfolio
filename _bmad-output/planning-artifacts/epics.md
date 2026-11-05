@@ -2625,7 +2625,7 @@ So that hue has one audited home and no two units disagree on what draws over wh
 **Given** the achromatic audit (AD-12)
 **When** a hued token named `realism-*` is present
 **Then** the audit passes
-**And** a hued token under any other name still fails, proven by a mutation row
+**And** a hued `-dark` token under any other name still fails, proven by a mutation row
 
 **Given** hue is confined to the realism layer (FR-20)
 **When** the audit scans DOM stylesheets and components
@@ -2776,7 +2776,7 @@ So that the scene feels real while the line-work still says what it said.
 
 **Given** the shape of a fill (AD-19)
 **When** a Planet is drawn
-**Then** its fill is one shared sphere, at most 64×32, placed by the Body's billboard transform with the bias recorded in 7.1, a true circle of `FILL_RADIUS_RATIO × bodyRadius` concentric with the outline at every pose
+**Then** its fill is one shared sphere, at most 64×32, placed by the Body's billboard transform with the bias recorded in 7.1 and the flattening it depends on (z = 0 in the Billboard's plane, in the vertex shader), a true circle of `FILL_RADIUS_RATIO × bodyRadius` concentric with the outline at every pose
 **And** `FILL_RADIUS_RATIO` is below 1 and pinned by a test against the outline's radius
 **And** fills stay in the transparent pass, at opacity 1 and writing depth at rest, so Dust cannot paint over a Body
 

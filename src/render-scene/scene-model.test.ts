@@ -1475,7 +1475,7 @@ function effectsIn(files: readonly { readonly path: string; readonly source: str
   const every = new RegExp(EFFECTS.source, `${EFFECTS.flags.replace('g', '')}g`);
   return files.flatMap((file) => {
     const stripped = stripComments(file.source);
-    const code = file.path === 'src/render-scene/scene-model.ts' ? stripped.replace(/\bGLOW_RENDER_ORDER\b/g, '') : stripped;
+    const code = file.path === 'src/render-scene/scene-model.ts' ? stripped.replace(/(?<![\w$-])GLOW_RENDER_ORDER(?![\w$-])/g, '') : stripped;
     return [...code.matchAll(every)].map((match) => {
       const line = code.slice(0, match.index).split('\n').length;
       return `${file.path}:${line} holds ${match[0]}`;
@@ -1541,6 +1541,9 @@ test('the glow allowance is the one identifier in the one file, and it is in use
     [MODEL, 'export const glow_render_order = 1.25;'],
     [MODEL, 'const glowing = true;'],
     [MODEL, 'const a = GLOW_RENDER_ORDER + glow;'],
+    [MODEL, 'const a = $GLOW_RENDER_ORDER;'],
+    [MODEL, 'const a = GLOW_RENDER_ORDER$x;'],
+    [MODEL, "const a = 'GLOW_RENDER_ORDER-on';"],
   ];
   for (const [path, source] of rejected) {
     assert.notDeepEqual(effectsIn([{ path, source }]), [], `${path}: ${source} must be rejected`);
@@ -1551,26 +1554,82 @@ test('the glow allowance is the one identifier in the one file, and it is in use
 
 // --- The draw order, declared once ----------------------------------------------
 
-/** Every `renderOrder` set to a number rather than one of the named steps, as `file:line`. */
-function literalOrders(files: readonly { readonly path: string; readonly source: string }[]): string[] {
+const ORDER_NAME = '(?:DUST|GLOW|FILL|BODY|MOON)_RENDER_ORDER';
+/** The value alone: braced in JSX, or ending its statement or property. */
+const ONE_ORDER_NAME = new RegExp(`^(?:\\{\\s*${ORDER_NAME}\\s*\\}|${ORDER_NAME}\\s*(?:[;,}\\n]|$))`);
+
+/** Every `renderOrder` set to anything but exactly one of the five named steps, as `file:line`. */
+function undeclaredOrders(files: readonly { readonly path: string; readonly source: string }[]): string[] {
   return files.flatMap((file) => {
     const code = stripComments(file.source);
-    return [...code.matchAll(/\brenderOrder\s*[=:]\s*\{?\s*[-+.\d]/g)].map(
-      (match) => `${file.path}:${code.slice(0, match.index).split('\n').length}`,
-    );
+    return [...code.matchAll(/\brenderOrder['"`]?\]?\s*([-+*/]?=(?!=)|:)\s*/g)].flatMap((match) => {
+      const value = code.slice((match.index as number) + match[0].length);
+      if ((match[1] === '=' || match[1] === ':') && ONE_ORDER_NAME.test(value)) return [];
+      return [`${file.path}:${code.slice(0, match.index).split('\n').length}`];
+    });
   });
 }
 
-test('no draw carries a numeric renderOrder: every step is a name scene-model.ts declares', () => {
+/** Every render order declared, or exported under a new name: the second home the draw order must not have. */
+function declaredOrders(path: string, source: string): string[] {
+  return [...stripComments(source).matchAll(/\b(?:(?:const|let|var)\s+|as\s+)(\w+_RENDER_ORDER)\b/g)].map((match) => `${path} ${match[1]}`);
+}
+
+test('every renderOrder is exactly one of the five names scene-model.ts declares', () => {
   const files = sourceFiles().filter((file) => file.path.startsWith('src/') && !/\.test\.ts$/.test(file.path));
   assert.ok(files.some((file) => file.path === 'src/render-scene/body-field.tsx'), 'the walk reaches the draws');
-  assert.deepEqual(literalOrders(files), []);
-  for (const source of ['<mesh renderOrder={1.75} />', 'mesh.renderOrder = 1.75;', 'const a = { renderOrder: 3 };', '<mesh renderOrder={.5} />']) {
-    assert.notDeepEqual(literalOrders([{ path: 'src/x.tsx', source }]), [], `${source} must be rejected`);
+  assert.deepEqual(undeclaredOrders(files), []);
+  for (const source of [
+    '<mesh renderOrder={1.75} />',
+    'mesh.renderOrder = 1.75;',
+    'const a = { renderOrder: 3 };',
+    '<mesh renderOrder={.5} />',
+    '<mesh renderOrder={BODY_RENDER_ORDER + 0.5} />',
+    '<mesh renderOrder={BODY_RENDER_ORDER - 0.25} />',
+    '<mesh renderOrder={(1.75)} />',
+    '<mesh renderOrder={c ? 1 : 2} />',
+    '<mesh renderOrder={c ? FILL_RENDER_ORDER : BODY_RENDER_ORDER} />',
+    'mesh.renderOrder += 1;',
+    'mesh.renderOrder += BODY_RENDER_ORDER;',
+    'const FILL_STEP = 1.75;\n<mesh renderOrder={FILL_STEP} />',
+    '<mesh renderOrder={MY_FILL_RENDER_ORDER} />',
+    '<mesh renderOrder={FILL_RENDER_ORDER_2} />',
+    "const a = { 'renderOrder': 1.75 };",
+    "mesh['renderOrder'] = 1.75;",
+    '<mesh renderOrder={-x} />',
+  ]) {
+    assert.notDeepEqual(undeclaredOrders([{ path: 'src/x.tsx', source }]), [], `${source} must be rejected`);
   }
-  assert.deepEqual(literalOrders([{ path: 'src/x.tsx', source: '<mesh renderOrder={FILL_RENDER_ORDER} />\n// renderOrder={3}' }]), []);
+  for (const source of [
+    '<mesh renderOrder={FILL_RENDER_ORDER} />\n// renderOrder={3}',
+    '<mesh renderOrder={ GLOW_RENDER_ORDER } />',
+    'mesh.renderOrder = MOON_RENDER_ORDER;',
+    'const a = { renderOrder: DUST_RENDER_ORDER, b: 1 };',
+    'const a = { renderOrder: BODY_RENDER_ORDER };',
+    'mesh.renderOrder === 1;',
+  ]) {
+    assert.deepEqual(undeclaredOrders([{ path: 'src/x.tsx', source }]), [], `${source} must be admitted`);
+  }
 });
 
+test('the declared-once scan finds each second home, and a plain use is not one', () => {
+  for (const source of [
+    'const X_RENDER_ORDER = 1;',
+    'export const X_RENDER_ORDER: number = 1;',
+    'let X_RENDER_ORDER;',
+    "export { FILL_RENDER_ORDER as X_RENDER_ORDER } from './scene-model.ts';",
+  ]) {
+    assert.deepEqual(declaredOrders('src/x.ts', source), ['src/x.ts X_RENDER_ORDER'], source);
+  }
+  for (const source of [
+    '<mesh renderOrder={BODY_RENDER_ORDER} />',
+    'const a = c ? BODY_RENDER_ORDER : b != d;',
+    "export { DUST_RENDER_ORDER } from './scene-model.ts';",
+    '// const X_RENDER_ORDER = 1;',
+  ]) {
+    assert.deepEqual(declaredOrders('src/x.ts', source), [], source);
+  }
+});
 
 /** What makes a source a re-exporter of `name` with no value of its own: the failures, or none. */
 function ownOrderFailures(source: string, name: string): string[] {
@@ -1594,9 +1653,7 @@ test('the Dust and Moon orders, as importers see them, are scene-model.ts\'s own
   assert.equal(MOON_ORDER_AS_IMPORTED, MOON_RENDER_ORDER);
   assert.deepEqual(ownOrderFailures(readFileSync(DUST_TS, 'utf8'), 'DUST_RENDER_ORDER'), []);
   assert.deepEqual(ownOrderFailures(readFileSync(NOTABLE_TS, 'utf8'), 'MOON_RENDER_ORDER'), []);
-  const declared = sourceFilesUnder(SRC_ROOT).filter((path) => !isTestFile(path)).flatMap((path) =>
-    [...stripComments(readFileSync(path, 'utf8')).matchAll(/\b(\w+_RENDER_ORDER)\s*(?::[^=;\n]+)?=(?!=)/g)].map((match) => `${srcPath(path)} ${match[1]}`),
-  );
+  const declared = sourceFilesUnder(SRC_ROOT).filter((path) => !isTestFile(path)).flatMap((path) => declaredOrders(srcPath(path), readFileSync(path, 'utf8')));
   assert.deepEqual(
     declared.sort(),
     ['BODY', 'DUST', 'FILL', 'GLOW', 'MOON'].map((step) => `src/render-scene/scene-model.ts ${step}_RENDER_ORDER`),

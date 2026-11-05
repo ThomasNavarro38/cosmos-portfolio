@@ -4,7 +4,7 @@ type: 'chore'
 created: '2026-11-04'
 status: 'done'
 baseline_revision: 'ecccae125d666500889513c76522fe71027177f6'
-review_loop_iteration: 1
+review_loop_iteration: 2
 followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-7-context.md'
@@ -77,6 +77,16 @@ deferred: ['deferred-work.md, code review of spec-7-1 (2026-11-04), 4 entries']
 - Given the controls in the design notes, when the record is read, then each control's measured result is present, showing that the comparators detect both failures.
 - Given no value passes every pose, when the sweep ends, then the failure is recorded and the run HALTs per Block If, with no value chosen.
 
+### Review Findings
+
+- [x] [Review][Decision] Confirm the comparator ruling is Thomas's — Resolved 2026-11-05: Thomas confirmed the ruling is his, so the result stands and the stop rule did not fire.
+- [x] [Review][Patch] Record's headline says every pose, though the own-marks test cannot fail at Focus on 390×844 and no pixel was attributed to a Ring or Moon; Thomas ruled 2026-11-05 to accept the limit, with 7.6's existing recheck covering it, so narrow the headline and answer the "For Thomas" note [_bmad-output/implementation-artifacts/depth-spike-7-1.md:3]
+- [x] [Review][Patch] Hardware check runs only at the first viewport in `runShowControl`, and the record says each passed [spikes/depth-bias/harness.ts:806]
+- [x] [Review][Patch] 7.6's acceptance criterion omits the flattening the bias depends on [_bmad-output/planning-artifacts/epics.md:2779]
+- [x] [Review][Patch] Scatter reading only probes marks leading the fill, yet supports the value chosen [_bmad-output/implementation-artifacts/depth-spike-7-1.md:83]
+- [x] [Review][Patch] Rerun pointer names a revision with no harness, and gives no check that the integrated GPU was used [spikes/depth-bias/README.md:5]
+- [x] [Review][Patch] `lostAsWritten` is described as the same test, but it skips pixels with no mark [spikes/depth-bias/README.md:64]
+
 ## Spec Change Log
 
 - 2026-11-04, Thomas's ruling, after the first full sweep. **Finding:** as first written, the own-marks comparator failed every value of both mechanisms, so the stop rule would have fired. 227,566 of 227,794 lost pixels still matched marks alone once orbits and the Rail were removed: the fill was hiding a line beneath the mark, as the epic intends (a fill hides the far half of an orbit). The other 228 were the same 6 pixels on the Rail run, 12 per sweep value at 1920×1080, where a nearer Star's fill hides a farther Star's outline. **Amended:** the second AC and the own-marks comparator judge marks with orbits and the Rail hidden, and exclude a pixel when a mark there lies under a nearer fill. **Avoids:** stopping Epic 7 over correct occlusion. **KEEP:** the first comparator still runs and is reported as `lostAsWritten`, so the record shows both results; thresholds, poses and the spec's sweep values are unchanged.
@@ -88,7 +98,7 @@ deferred: ['deferred-work.md, code review of spec-7-1 (2026-11-04), 4 entries']
 
 **Round 2 (2026-11-04), three reviewers.** Patched: the record's false claim that a Moon is safe by geometry, its unreliable mark labels, and "stricter than a visitor could see"; the memlog line now states the fill's conditions and the poses that cannot fail; `runShowControl` guards the fill colour and throws on a silent row (control rerun); raw results indexed; AC terms brought into line with the ruling. Rejected as out of proportion for a throwaway harness: concurrent-run locks, tag and option validation, sink origin checks and overwrite refusal, a built-in control preflight (the README requires the controls instead). Deferred: 4 entries in `deferred-work.md`.
 
-**For Thomas:** the own-marks control loses nothing at `focus-deep`, or at `focus-closest` on 390×844, so a Ring and a Moon are not tested against their own fill at their closest, as the epic's AC reads. The record says so, and this was not treated as a failed control, since the spec's own code map says they lie outside their fill there.
+**For Thomas:** the own-marks control loses nothing at `focus-deep`, or at `focus-closest` on 390×844, so a Ring and a Moon are not tested against their own fill at their closest, as the epic's AC reads. The record says so, and this was not treated as a failed control, since the spec's own code map says they lie outside their fill there. **Answer (2026-11-05):** Thomas accepted this limit, with 7.6's recheck against real fills covering it.
 
 ## Design Notes
 

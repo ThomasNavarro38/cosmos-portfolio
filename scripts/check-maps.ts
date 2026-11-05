@@ -50,15 +50,16 @@ const TEXTURES_DISPLAY = 'public/textures';
 const BARE_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 /** Whole-string: no `@`, port, query or fragment, on the two hosts or their subdomains. */
 const SOURCE_URL = /^https:\/\/(?:[a-z0-9-]+\.)*(?:nasa|usgs)\.gov(?:\/[\w./%-]*)?$/;
-const REFUSED_WORDING = /©|&copy;|\(c\)\s*\d{4}|\bcreative[\s_-]*commons\b|\bcc[\s_-]*by(?![a-z])|\bcc0\b|\bnon[\s_-]?commercial|\ball\s+rights\s+reserved\b/i;
+const REFUSED_WORDING = /©|&copy;|\(c\)|\bcreative[\s_-]*commons\b|\bcc[\s_-]*by(?![a-z])|\bcc[\s_-]*0\b|\bnon[\s_\u2010-\u2015-]?commercial|\bnot\s+for\s+commercial|\b(?:all|some)\s+rights\s+reserved\b/i;
 /**
- * A copyright claimed, not mentioned: the word, then an optional `by`, then a
- * capital or a digit. That last part is case-sensitive, and it is the whole test:
+ * A copyright claimed, not mentioned: the word, then a space, colon or comma, an
+ * optional `held` and `by`, then a capital or a digit. That last part is
+ * case-sensitive, and it is the whole test:
  * NASA's "not subject to copyright in the United States" and "no third-party
  * copyright" must pass, and `Copyright 2024 Foo Corp` must not. Spelled by class
  * because a flag would apply to the whole pattern.
  */
-const COPYRIGHT_CLAIM = /\b[Cc][Oo][Pp][Yy][Rr][Ii][Gg][Hh][Tt](?:[Ee][Dd])?\s+(?:[Bb][Yy]\s+)?[A-Z0-9]/;
+const COPYRIGHT_CLAIM = /\b[Cc][Oo][Pp][Yy][Rr][Ii][Gg][Hh][Tt](?:[Ee][Dd]|[Ss])?[\s:,]+(?:[Hh][Ee][Ll][Dd]\s+)?(?:[Bb][Yy]\s+)?[A-Z0-9]/;
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** RIFF (12) + chunk header (8) + the longest frame header read, VP8's or VP8X's 10. */
@@ -225,7 +226,9 @@ export function readWebpHeader(head: Buffer, fileBytes: number): WebpHeader | st
 }
 
 /** The file's size and its first bytes, and nothing more of it. */
-function readHead(path: string): { head: Buffer; bytes: number } {
+type ReadHead = (path: string) => { head: Buffer; bytes: number };
+
+const readHead: ReadHead = (path) => {
   const fd = openSync(path, 'r');
   try {
     const bytes = fstatSync(fd).size;
@@ -235,14 +238,14 @@ function readHead(path: string): { head: Buffer; bytes: number } {
   } finally {
     closeSync(fd);
   }
-}
+};
 
 /**
  * `public/textures/` against the library: both directions, each file's header and
  * the size limits. With the library unread, `known` is undefined and no file is
  * compared with an entry, though each is still read.
  */
-function checkTextures(root: string, ids: readonly string[], known: ReadonlySet<string> | undefined, failures: string[]): { maps: MeasuredMap[]; totalBytes: number } {
+function checkTextures(root: string, ids: readonly string[], known: ReadonlySet<string> | undefined, failures: string[], read: ReadHead): { maps: MeasuredMap[]; totalBytes: number } {
   const dir = join(root, 'public', 'textures');
   const measured = new Map<string, MeasuredMap>();
   let totalBytes = 0;
@@ -266,20 +269,21 @@ function checkTextures(root: string, ids: readonly string[], known: ReadonlySet<
       failures.push(`${display} is stray: ${TEXTURES_DISPLAY}/ holds <id>.webp files and nothing else.`);
       if (!entry.isFile()) continue;
     }
+    // Present before it is read: an unreadable file is that one fault, not also a missing one.
+    const id = entry.name.endsWith('.webp') ? entry.name.slice(0, -'.webp'.length) : undefined;
+    if (id !== undefined && wanted.has(id)) present.add(id);
     let head: Buffer;
     let bytes: number;
     try {
-      ({ head, bytes } = readHead(path));
+      ({ head, bytes } = read(path));
     } catch (error) {
       failures.push(`${display} could not be read: ${messageOf(error)}`);
       continue;
     }
     totalBytes += bytes;
-    if (!entry.name.endsWith('.webp')) continue;
+    if (id === undefined) continue;
 
-    const id = entry.name.slice(0, -'.webp'.length);
-    if (wanted.has(id)) present.add(id);
-    else if (known !== undefined && !known.has(id)) failures.push(`${display} has no entry in ${LIBRARY_DISPLAY}.`);
+    if (!wanted.has(id) && known !== undefined && !known.has(id)) failures.push(`${display} has no entry in ${LIBRARY_DISPLAY}.`);
 
     const header = readWebpHeader(head, bytes);
     if (typeof header === 'string') {
@@ -319,8 +323,8 @@ async function loadLibrary(root: string, failures: string[]): Promise<readonly u
   return module.MAP_LIBRARY as readonly unknown[];
 }
 
-/** Everything measured under `root`, and every failure found. */
-export async function measureMaps(root: string): Promise<MapsReport> {
+/** Everything measured under `root`, and every failure found. `read` is a test seam: no fixture can make a file unreadable on every OS. */
+export async function measureMaps(root: string, read: ReadHead = readHead): Promise<MapsReport> {
   const failures: string[] = [];
   const recordedMeans: [string, number][] = [];
   const library = await loadLibrary(root, failures);
@@ -332,7 +336,7 @@ export async function measureMaps(root: string): Promise<MapsReport> {
     failures.push(`${LIBRARY_DISPLAY} holds ${entries.length} maps; the limit is ${MAP_COUNT_BUDGET}.`);
   }
   const { ids, known } = checkEntries(entries, failures, recordedMeans);
-  const { maps, totalBytes } = checkTextures(root, ids, library === undefined ? undefined : known, failures);
+  const { maps, totalBytes } = checkTextures(root, ids, library === undefined ? undefined : known, failures, read);
   return { failures, maps, totalBytes, recordedMeans };
 }
 
