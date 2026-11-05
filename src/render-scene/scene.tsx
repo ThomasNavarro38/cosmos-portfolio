@@ -55,6 +55,12 @@
  * Nothing streams in, so every Body is in that first frame at its final
  * luminance.
  *
+ * **Realism has one owner** (`<RealismMount>`, 7.5), mounted last and once, with
+ * no conditional. On the frame after the first it imports the `realism` chunk and
+ * decodes the maps the artifact names, and nothing it does can suspend, throw or
+ * change this surface: when it fails, this scene is what stays. It is the only
+ * way from here to the realism directory, and draws nothing yet (7.6, 7.8).
+ *
  * **Dust is drawn strictly behind every Body** (FR-15). The model in
  * `dust-model.ts` decides what Dust exists; this file only guarantees the Dust's
  * half of the draw order: every Dust draw carries `DUST_RENDER_ORDER` and writes
@@ -103,6 +109,8 @@ import { MoonField } from './moon-field.tsx';
 import { MoteField } from './mote-field.tsx';
 import type { MoteArtifact } from './mote-model.ts';
 import { RailCamera } from './rail-camera.tsx';
+import { RealismMount } from './realism-mount.tsx';
+import type { RealismArtifact } from './realism-status.ts';
 import { BodyField } from './body-field.tsx';
 import { buildRail, railFarPlane } from './rail-model.ts';
 import { buildScene, frameBodies, type SceneArtifact } from './scene-model.ts';
@@ -127,9 +135,9 @@ MEDIUM_TEXTURE.magFilter = LinearFilter;
 MEDIUM_TEXTURE.minFilter = LinearFilter;
 MEDIUM_TEXTURE.needsUpdate = true;
 
-/** What the scene needs: the artifact, and nothing else — the Bodies' slice, the Motes' and the affordance's. */
+/** What the scene needs: the artifact, and nothing else — the Bodies' slice, the Motes', the affordance's and realism's. */
 export interface SceneProps {
-  readonly artifact: SceneArtifact & MoteArtifact & AffordanceArtifact;
+  readonly artifact: SceneArtifact & MoteArtifact & AffordanceArtifact & RealismArtifact;
 }
 
 /**
@@ -225,6 +233,8 @@ export function Scene({ artifact }: SceneProps) {
         <FrameSampler />
         {/* The First Paint mark (6.4): marks the first frame once per document, on the visitor's own timeline. Draws nothing, sends nothing. */}
         <FirstFrameMark />
+        {/* Realism's owner (7.5): decodes the maps after the first frame, draws nothing, and on any failure leaves this scene exactly as it was. */}
+        <RealismMount artifact={artifact} />
       </Canvas>
       {/* The vignette: the ground over the frame's edge, 0 inside 42% rising to 0.9. Inert, and not narrated. */}
       <div aria-hidden="true" style={vignetteStyle()} />

@@ -1371,3 +1371,16 @@ Still open after 3.5:
   evidence: generated/layout.generated.json. This is correct rendezvous output, and AD-21 forbids a per-Body override, so the levers are the library or the salt. For Thomas's on-screen judgement in Epic 8.
   location: generated/layout.generated.json
   severity: low
+
+## Deferred from: code review of spec-7-5-realism-s-owner-and-failing-silently.md (2026-11-05)
+
+- source_spec: spec-7-5-realism-s-owner-and-failing-silently.md
+  summary: `uploaded` stays true when the WebGL context is lost and restored under the same Canvas, so textures would be gone with the status saying otherwise.
+  evidence: AD-25 resets `uploaded` only with a new Canvas, and nothing uploads until 7.6, so nothing can go wrong yet. 7.6 owns the upload, and should settle whether a context restore resets the flag or fails the document.
+  location: src/render-scene/realism-status.ts
+  severity: medium
+- source_spec: spec-7-5-realism-s-owner-and-failing-silently.md
+  summary: `scripts/bundle-assertion.ts` still calls 3,033 the entry's figure of record, while the entry measured 3,271 at this story's baseline and 3,278 now.
+  evidence: The figure was already out of date at 007106e; 7 of the bytes are this story's, one export binding for `BASE`. The budget of 4,000 still holds.
+  location: scripts/bundle-assertion.ts:54
+  severity: low

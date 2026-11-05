@@ -101,12 +101,12 @@ test('the library audit rejects each reach, and a comment is prose', () => {
 /**
  * The modules that may read the library, and the shipped files that may name a
  * map's path. The readers are the assignment (7.4) and the gate that re-derives
- * through it. `MAP_REQUESTERS` is empty on purpose: nothing requests a map until
- * a later change names the requester, and that change must edit this table.
- * Until then a map cannot reach a visitor by accident, uncredited.
+ * through it. `MAP_REQUESTERS` is the one requester (7.5), the realism chunk's
+ * URL rule; another needs a change to this table. Maps are now requested, and
+ * their credits are Epic 8's, so this branch does not merge before them.
  */
 const LIBRARY_READERS: readonly string[] = ['src/derive/appearance.ts', 'src/derive/index.ts'];
-const MAP_REQUESTERS: readonly string[] = [];
+const MAP_REQUESTERS: readonly string[] = ['src/render-scene/realism/map-urls.ts'];
 
 interface Module {
   readonly path: string;
@@ -218,7 +218,18 @@ test('the assignment and the gate alone are admitted, and each does read the lib
   for (const path of ['src/derive/artifact.ts', 'src/derive/artifact-schema.ts', 'src/derive/pipeline.ts', 'src/derive/live.ts', 'src/derive/entities.ts', 'src/derive/rules.ts', 'src/render-scene/scene.tsx', 'src/render-fallback/chart.tsx', 'src/shell/entry.ts', 'src/colophon/colophon.tsx']) {
     assert.match(auditLibraryReach([{ path, text: line }]).join('\n'), /imports the library/, path);
   }
-  assert.deepEqual(MAP_REQUESTERS, []);
+});
+
+test('the realism chunk\'s URL rule alone may name a map, and does', () => {
+  const line = 'const u = `${base}textures/${id}.webp`;';
+  assert.deepEqual([...MAP_REQUESTERS], ['src/render-scene/realism/map-urls.ts']);
+  assert.deepEqual(auditLibraryReach([{ path: 'src/render-scene/realism/map-urls.ts', text: line }]), [], 'admitted');
+  for (const path of ['src/render-scene/realism/decode-maps.ts', 'src/render-scene/realism/index.ts', 'src/render-scene/realism-mount.tsx', 'src/render-scene/realism-status.ts', 'src/render-scene/scene.tsx', 'src/render-scene/realism/map-urls.tsx', 'src/shell/realism/map-urls.ts']) {
+    assert.match(auditLibraryReach([{ path, text: line }]).join('\n'), /names a map/, path);
+  }
+  const requester = shippedFiles().find((file) => file.path === 'src/render-scene/realism/map-urls.ts');
+  assert.ok(requester !== undefined && NAMES_MAP.test(requester.text), 'it still names one, or the table is stale');
+  assert.match(auditLibraryReach([{ path: 'src/render-scene/realism/map-urls.ts', text: "import { MAP_LIBRARY } from '../../derive/map-library.ts';" }]).join('\n'), /imports the library/, 'it names a map, and may not read the library');
 });
 
 // --- The conversion record ------------------------------------------------------------------------

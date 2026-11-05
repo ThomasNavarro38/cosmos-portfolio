@@ -3,18 +3,22 @@
  * chunk graphs, then the real bundler — the shipped `vite.config.ts` building
  * two fixture entries, one statically importing `three` and one not, and the
  * shipped app itself. Nothing here edits a shipped source or writes `dist/`:
- * every build runs with `write: false`.
+ * every build runs with `write: false`. Since 7.5 also `checkRealism`, and the
+ * source half of the same split: who reaches the realism directory.
  */
 
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, posix, relative, sep } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { build, createBuilder, createLogger, type Logger, type Rolldown } from 'vite';
-import { ENTRY_BUDGET_BYTES, bundleAssertion, checkBundle, entryBytes, passLine, type BundleView, type ChunkView } from './bundle-assertion.ts';
+import { REALISM_CHUNK_BYTES_BUDGET, SCENE_CHUNK_BYTES_BUDGET } from '../src/render-scene/realism/budgets.ts';
+import { ENTRY_BUDGET_BYTES, bundleAssertion, checkBundle, checkRealism, entryBytes, passLine, realismBytes, realismLine, type BundleView, type ChunkView } from './bundle-assertion.ts';
 import { EXHIBITS } from './exhibits.ts';
 import { PAGE_COPIES } from './pages.ts';
 import { BASE } from './site.ts';
+import { filesUnder, isTestFile, SOURCE_MODULE, stripComments, stripCommentsAndStrings } from './source-scan.ts';
 
 const ROOT = 'E:/repo';
 const CONFIG = fileURLToPath(new URL('../vite.config.ts', import.meta.url));
@@ -166,6 +170,91 @@ test('the pass line names the measured size against the budget', () => {
   assert.equal(ENTRY_BUDGET_BYTES, 4_000, 'about 1.44× the measured 2,777 (4.1)');
 });
 
+// --- checkRealism (7.5), over hand-built graphs -------------------------------------------------
+
+const REALISM_INDEX = `${ROOT}/src/render-scene/realism/index.ts`;
+const REALISM_DECODE = `${ROOT}/src/render-scene/realism/decode-maps.ts`;
+const SCENE_TSX = `${ROOT}/src/render-scene/scene.tsx`;
+const MOUNT_TSX = `${ROOT}/src/shell/mount.tsx`;
+
+/** The shape measured today: the mount, the scene with three, a shared chunk both load, one the scene alone loads, and realism beside them. */
+function realismGraph(): ChunkView[] {
+  return [
+    entry([]),
+    chunk('assets/mount.js', [MOUNT_TSX], { imports: ['assets/ui.js'], bytes: 200_000 }),
+    chunk('assets/ui.js', [`${ROOT}/src/shell/panel-model.ts`], { bytes: 50_000 }),
+    chunk('assets/scene.js', [SCENE_TSX, THREE_MODULE, THREE_CORE], { imports: ['assets/ui.js', 'assets/mount.js', 'assets/tokens.js'], bytes: 900_000 }),
+    chunk('assets/tokens.js', [`${ROOT}/src/tokens/tokens.ts`], { bytes: 3_000 }),
+    chunk('assets/realism.js', [REALISM_INDEX, REALISM_DECODE], { facadeModuleId: REALISM_INDEX, imports: ['assets/scene.js'], bytes: 2_000 }),
+  ];
+}
+
+function changed(chunks: readonly ChunkView[], fileName: string, change: Partial<ChunkView>): ChunkView[] {
+  return chunks.map((out) => (out.fileName === fileName ? { ...out, ...change } : out));
+}
+
+const fileOf = (chunks: readonly ChunkView[], fileName: string): ChunkView => chunks.find((out) => out.fileName === fileName) as ChunkView;
+
+test('checkRealism: the expected shape passes, and scene counts its closure minus the mount\'s', () => {
+  const view = viewOf(realismGraph());
+  assert.deepEqual(checkRealism(view, ROOT), []);
+  assert.deepEqual(realismBytes(view, ROOT), { realism: 2_000, scene: 903_000 }, 'scene plus tokens; never ui or the mount; realism alone');
+  assert.deepEqual(checkRealism(viewOf(realismGraph()), 'e:\\repo'), [], 'the root is matched as Windows spells it');
+});
+
+test('checkRealism fails naming each break', () => {
+  const base = realismGraph();
+  const extraRealism = (name: string, change: Partial<ChunkView>) => changed(base, name, { moduleIds: [...fileOf(base, name).moduleIds, REALISM_DECODE], ...change });
+  const threeOut = changed(base, 'assets/scene.js', { moduleIds: [SCENE_TSX] });
+  for (const [name, chunks, message] of [
+    ['no chunk with the facade', changed(base, 'assets/realism.js', { facadeModuleId: null }), /no chunk has src\/render-scene\/realism\/index\.ts as its facade/],
+    ['no realism chunk at all', base.filter((out) => out.fileName !== 'assets/realism.js'), /no chunk has src\/render-scene\/realism\/index\.ts as its facade/],
+    ['no scene chunk', base.filter((out) => out.fileName !== 'assets/scene.js'), /no chunk holds src\/render-scene\/scene\.tsx/],
+    ['no mount chunk', changed(base, 'assets/mount.js', { moduleIds: [] }), /no chunk holds src\/shell\/mount\.tsx/],
+    ['a realism module in the scene chunk', extraRealism('assets/scene.js', {}), /decode-maps\.ts is in the static closure of the scene chunk \(in assets\/scene\.js\)/],
+    ['a realism module in a chunk the scene imports', extraRealism('assets/tokens.js', {}), /static closure of the scene chunk \(in assets\/tokens\.js\)/],
+    ['the realism chunk statically imported by the scene', changed(base, 'assets/scene.js', { imports: [...fileOf(base, 'assets/scene.js').imports, 'assets/realism.js'] }), /static closure of the scene chunk \(in assets\/realism\.js\)/],
+    ['a realism module in the mount chunk', extraRealism('assets/mount.js', {}), /static closure of the mount chunk \(in assets\/mount\.js\)/],
+    ['a realism module in a chunk the mount imports', extraRealism('assets/ui.js', {}), /static closure of the mount chunk \(in assets\/ui\.js\)/],
+    ['the realism chunk statically imported by the mount', changed(base, 'assets/mount.js', { imports: ['assets/ui.js', 'assets/realism.js'] }), /static closure of the mount chunk \(in assets\/realism\.js\)/],
+    ['a realism module on the entry', changed(base, 'assets/index.js', { moduleIds: [MAIN, REALISM_DECODE] }), /static closure of the entry \(in assets\/index\.js\)/],
+    ['the realism chunk statically imported by the entry', changed(base, 'assets/index.js', { imports: ['assets/realism.js'] }), /static closure of the entry \(in assets\/realism\.js\)/],
+    ['realism over budget', changed(base, 'assets/realism.js', { bytes: REALISM_CHUNK_BYTES_BUDGET + 1 }), /realism is 24,001 bytes, over its budget of 24,000/],
+    ['realism over budget through its closure outside the scene', [...changed(base, 'assets/realism.js', { imports: ['assets/scene.js', 'assets/own.js'] }), chunk('assets/own.js', [`${ROOT}/src/x.ts`], { bytes: REALISM_CHUNK_BYTES_BUDGET })], /realism is 26,000 bytes/],
+    ['scene over budget', changed(base, 'assets/scene.js', { bytes: SCENE_CHUNK_BYTES_BUDGET + 1 }), /scene is 963,001 bytes, over its budget of 960,000/],
+    ['scene over budget through its closure', changed(base, 'assets/tokens.js', { bytes: 60_001 }), /scene is 960,001 bytes/],
+    ['three in the mount', [...threeOut.filter((out) => out.fileName !== 'assets/mount.js'), { ...fileOf(base, 'assets/mount.js'), moduleIds: [MOUNT_TSX, THREE_MODULE] }], /three is in assets\/mount\.js, inside the mount's closure/],
+    ['three in a chunk the mount imports', changed(threeOut, 'assets/ui.js', { moduleIds: [THREE_CORE] }), /three is in assets\/ui\.js, inside the mount's closure/],
+    ['three in a chunk nothing measured reaches', [...threeOut, chunk('assets/other.js', [THREE_CORE], { bytes: 100 })], /three is in assets\/other\.js, a chunk the scene's measure does not count/],
+    ['three reached only by realism', changed(threeOut, 'assets/realism.js', { moduleIds: [REALISM_INDEX, THREE_MODULE] }), /three is reached only by realism, in assets\/realism\.js/],
+    ['three in a chunk only realism imports', [...changed(threeOut, 'assets/realism.js', { imports: ['assets/own.js'] }), chunk('assets/own.js', [THREE_CORE], { bytes: 100 })], /three is reached only by realism, in assets\/own\.js/],
+    ['three nowhere', threeOut, /no chunk holds three/],
+  ] as const) {
+    assert.match(checkRealism(viewOf(chunks), ROOT).join('\n'), message, name);
+  }
+});
+
+test('checkRealism: a shared chunk holding three counts against scene, exactly at each budget passes', () => {
+  const base = realismGraph();
+  const atRealism = changed(base, 'assets/realism.js', { bytes: REALISM_CHUNK_BYTES_BUDGET });
+  assert.deepEqual(checkRealism(viewOf(atRealism), ROOT), []);
+  const atScene = changed(base, 'assets/scene.js', { bytes: SCENE_CHUNK_BYTES_BUDGET - 3_000 });
+  assert.deepEqual(checkRealism(viewOf(atScene), ROOT), []);
+  assert.equal(realismBytes(viewOf(atScene), ROOT).scene, SCENE_CHUNK_BYTES_BUDGET);
+  const shared = [...changed(base, 'assets/scene.js', { moduleIds: [SCENE_TSX], imports: [...fileOf(base, 'assets/scene.js').imports, 'assets/three.js'], bytes: 10_000 }), chunk('assets/three.js', [THREE_MODULE], { bytes: 880_000 })];
+  const sharedWithRealism = changed(shared, 'assets/realism.js', { imports: ['assets/three.js'] });
+  assert.deepEqual(checkRealism(viewOf(sharedWithRealism), ROOT), []);
+  assert.deepEqual(realismBytes(viewOf(sharedWithRealism), ROOT), { realism: 2_000, scene: 893_000 }, 'the shared three counts against scene, not realism');
+  const over = changed(shared, 'assets/three.js', { bytes: 950_000 });
+  assert.match(checkRealism(viewOf(over), ROOT).join('\n'), /scene is 963,000 bytes/);
+});
+
+test('the realism budgets, and the line that reports them', () => {
+  assert.equal(REALISM_CHUNK_BYTES_BUDGET, 24_000);
+  assert.equal(SCENE_CHUNK_BYTES_BUDGET, 960_000);
+  assert.equal(realismLine(1_234, 950_000), 'realism is 1,234 of 24,000 bytes, and scene is 950,000 of 960,000 bytes.');
+});
+
 /** A logger that keeps what the plugin reports, so a passing build proves the assertion ran. */
 function capturing(): { readonly logger: Logger; readonly lines: string[] } {
   const base = createLogger('silent');
@@ -251,6 +340,7 @@ test('the same entry without the import builds, and the assertion reports a fixt
   await buildFixtures(['thin-entry.ts'], logger);
   const bytes = passedBytes(lines);
   assert.ok(bytes > 0 && bytes < 1_000, `the thin fixture, not the app, was measured: ${bytes}`);
+  assert.deepEqual(lines.filter((line) => line.startsWith('realism is')), [], 'a fixture has no realism chunk, and the check does not run');
 });
 
 test('three hoisted into a shared chunk the entries import statically fails the real build', async () => {
@@ -570,7 +660,64 @@ test('the shipped app builds under the assertion, measured within its budget', a
     importedIds: () => [],
   };
   assert.equal(bytes, entryBytes(view), 'the budget counts the code as emitted, after every rewrite');
+  // 7.5: the realism check, over the real chunk list. It ran, it reported both
+  // figures, and each mutation of what it saw is rejected.
+  const real: ChunkView[] = chunks.map((out) => ({
+    fileName: out.fileName,
+    isEntry: out.isEntry,
+    facadeModuleId: out.facadeModuleId,
+    imports: out.imports,
+    moduleIds: Object.keys(out.modules),
+    bytes: Buffer.byteLength(out.code),
+  }));
+  const realView: BundleView = { chunks: real, importedIds: () => [] };
+  assert.deepEqual(checkRealism(realView, REPO), []);
+  const measured = realismBytes(realView, REPO);
+  assert.deepEqual(lines.filter((line) => line.startsWith('realism is')), [realismLine(measured.realism, measured.scene)], 'the build reports both figures');
+  assert.ok(measured.realism > 0 && measured.realism <= REALISM_CHUNK_BYTES_BUDGET, `realism measured ${measured.realism}`);
+  assert.ok(measured.scene > 0 && measured.scene <= SCENE_CHUNK_BYTES_BUDGET, `scene measured ${measured.scene}`);
+  const holding = (module: string): ChunkView => real.find((out) => out.moduleIds.some((id) => local(id) === module)) as ChunkView;
+  const realismChunk = real.find((out) => out.facadeModuleId !== null && local(out.facadeModuleId) === 'src/render-scene/realism/index.ts');
+  assert.ok(realismChunk !== undefined, 'the realism chunk was emitted, with its facade');
+  const realScene = holding('src/render-scene/scene.tsx');
+  const realMount = holding('src/shell/mount.tsx');
+  assert.ok(chunks.find((out) => out.fileName === realScene.fileName)?.dynamicImports.includes(realismChunk.fileName), 'the scene chunk imports realism dynamically');
+  assert.ok(realScene.moduleIds.some((id) => /\/node_modules\/three\//.test(forward(id))), 'three is in the scene chunk');
+  const realEntry = real.find((out) => out.isEntry) as ChunkView;
+  const threeIds = realScene.moduleIds.filter((id) => /\/node_modules\/three\//.test(forward(id)));
+  const decodeId = realismChunk.moduleIds.find((id) => local(id) === 'src/render-scene/realism/decode-maps.ts') as string;
+  assert.ok(decodeId !== undefined, 'decode-maps is in the realism chunk');
+  const swap = (target: ChunkView, change: Partial<ChunkView>): ChunkView[] => real.map((out) => (out === target ? { ...out, ...change } : out));
+  const withoutThree = (out: ChunkView): ChunkView => (out === realScene ? { ...out, moduleIds: out.moduleIds.filter((id) => !threeIds.includes(id)) } : out);
+  for (const [name, mutated, message] of [
+    ['the facade lost', swap(realismChunk, { facadeModuleId: null }), /as its facade/],
+    ['the scene chunk gone', real.filter((out) => out !== realScene), /no chunk holds src\/render-scene\/scene\.tsx/],
+    ['a realism module in the scene chunk', swap(realScene, { moduleIds: [...realScene.moduleIds, decodeId] }), /static closure of the scene chunk/],
+    ['the realism chunk imported statically by the scene', swap(realScene, { imports: [...realScene.imports, realismChunk.fileName] }), /static closure of the scene chunk/],
+    ['the realism chunk imported statically by the entry', swap(realEntry, { imports: [...realEntry.imports, realismChunk.fileName] }), /static closure of the entry/],
+    ['realism over budget', swap(realismChunk, { bytes: REALISM_CHUNK_BYTES_BUDGET + 1 }), /realism is .* over its budget/],
+    ['scene over budget', swap(realScene, { bytes: SCENE_CHUNK_BYTES_BUDGET + 1 }), /scene is .* over its budget/],
+    ['three moved into the mount', real.map(withoutThree).map((out) => (out.fileName === realMount.fileName ? { ...out, moduleIds: [...out.moduleIds, ...threeIds] } : out)), /inside the mount's closure/],
+    ['three moved under realism', real.map(withoutThree).map((out) => (out === realismChunk ? { ...out, moduleIds: [...out.moduleIds, ...threeIds] } : out)), /reached only by realism/],
+    ['three moved into a chunk nothing counts', [...real.map(withoutThree), chunk('assets/three-mutant.js', threeIds)], /a chunk the scene's measure does not count/],
+  ] as const) {
+    assert.match(checkRealism({ chunks: mutated, importedIds: () => [] }, REPO).join('\n'), message, name);
+  }
 });
+
+// The plugin's half (7.5): the same shipped build, with a second assertion over a
+// tiny limit. Delete the `checkRealism` call and these stop rejecting.
+for (const [name, realismBudgets, message] of [
+  ['realism', { realism: 10 }, /realism is [\d,]+ bytes, over its budget of 10 bytes/],
+  ['scene', { scene: 10 }, /scene is [\d,]+ bytes, over its budget of 10 bytes/],
+] as const) {
+  test(`the shipped build fails on a ${name} over its budget, by the checkRealism message`, async () => {
+    await assert.rejects(
+      build({ configFile: CONFIG, root: REPO, logLevel: 'silent', plugins: [bundleAssertion({ realismBudgets })], build: { write: false } }),
+      message,
+    );
+  });
+}
 
 /**
  * The host's view of the page: `index.html` and its copies (`PAGE_COPIES`),
@@ -636,4 +783,252 @@ test('a single SSR build is not asserted on', async () => {
 test('`npm run build` ends in `vite build`, so CI\'s Build step runs the assertion', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { scripts: Record<string, string> };
   assert.match(pkg.scripts['build'] ?? '', /&& vite build$/);
+});
+
+// --- Who reaches the realism directory ------------------------------------------------------------
+
+const STATUS_PATH = 'src/render-scene/realism-status.ts';
+const MOUNT_PATH = 'src/render-scene/realism-mount.tsx';
+const SCENE_DIR = 'src/render-scene/';
+const REALISM_DIR = 'src/render-scene/realism/';
+const THE_IMPORT = "import('./realism/index.ts')";
+
+const read = (path: string): string => readFileSync(join(REPO, path), 'utf8');
+const toRepoPath = (path: string): string => relative(REPO, path).split(sep).join('/');
+
+interface Source {
+  readonly path: string;
+  readonly text: string;
+}
+
+/** Comments blanked by the file's own language. */
+function withoutComments(path: string, source: string): string {
+  const blank = (match: string): string => match.replace(/[^\n]/g, ' ');
+  if (SOURCE_MODULE.test(path)) return stripComments(source);
+  if (path.endsWith('.css')) return source.replace(/\/\*[\s\S]*?\*\//g, blank);
+  if (path.endsWith('.html')) return source.replace(/<!--[\s\S]*?-->/g, blank);
+  return source;
+}
+
+/** A shipped string naming the directory, a split literal first rejoined: `realism/…`, or the directory as a whole specifier. */
+const NAMES_DIRECTORY = /\brealism\/|[./]realism(?=['"`?#])/gi;
+const DYNAMIC_IMPORT = /\bimport\s*\(([^)]*)\)/g;
+const GLOB = /\bimport\.meta\.glob\s*(?:<[^>]*>\s*)?\(([^)]*)\)/g;
+
+/**
+ * Every shipped way to the realism directory but the one. Outside it, no shipped
+ * file may name it, glob it, or build a dynamic import that could reach it. The
+ * mount names it exactly once, as `import('./realism/index.ts')`, and has no other
+ * dynamic import. A module inside it is not read here: `index.ts`'s shape is
+ * audited in `realism/map-urls.test.ts`, and the budgets by `check-maps.test.ts`.
+ *
+ * Not seen: a path built outside the import's own argument from a variable with
+ * no fragment of the name in the expression, in a module outside `render-scene/`.
+ */
+function auditShippedReach(files: readonly Source[]): string[] {
+  const failures: string[] = [];
+  for (const { path, text: raw } of files) {
+    if (path.startsWith(REALISM_DIR)) continue;
+    const text = raw.replace(/(['"`])\s*\+\s*(['"`])/g, '');
+    const names = text.match(NAMES_DIRECTORY) ?? [];
+    if (path === MOUNT_PATH) {
+      if (names.length !== 1 || text.split(THE_IMPORT).length !== 2) failures.push(`reach: ${path} must name the directory by exactly one ${THE_IMPORT}, and names it ${names.length} times`);
+      for (const match of text.matchAll(DYNAMIC_IMPORT)) {
+        if (match[0] !== THE_IMPORT) failures.push(`reach: ${path} has another dynamic import: ${match[0]}`);
+      }
+    } else if (names.length > 0) {
+      failures.push(`reach: ${path} names the realism directory`);
+    }
+    if (!SOURCE_MODULE.test(path)) continue;
+    for (const match of text.matchAll(GLOB)) {
+      if (path.startsWith(SCENE_DIR) || /real|\*\*/i.test(match[1] as string)) failures.push(`reach: ${path} globs: ${(match[1] as string).trim()}`);
+    }
+    for (const match of text.matchAll(DYNAMIC_IMPORT)) {
+      const argument = (match[1] as string).trim();
+      const literal = /^(['"`])[^'"`$]*\1$/.test(argument);
+      if (!literal && (path.startsWith(SCENE_DIR) || /real|ism/i.test(argument))) failures.push(`reach: ${path} builds a dynamic import: ${argument}`);
+    }
+  }
+  return failures;
+}
+
+/**
+ * The module specifiers a file really writes, whatever a test's own strings say:
+ * the code view finds the import forms with every string blanked, and the same
+ * offset in the comments-only view gives the specifier, the two being the same
+ * width by construction.
+ */
+function specifiersOf(source: string): string[] {
+  const code = stripCommentsAndStrings(source);
+  const kept = stripComments(source);
+  const found: string[] = [];
+  for (const match of code.matchAll(/(?:\bfrom|\bimport|\bimport\s*\(|\brequire\s*\(|\bnew\s+URL\s*\(|\bimport\.meta\.glob\s*(?:<[^>]*>\s*)?\(\s*\[?)\s*(['"`])/g)) {
+    const quote = match[1] as string;
+    const open = (match.index ?? 0) + match[0].length;
+    const close = kept.indexOf(quote, open);
+    if (close !== -1) found.push(kept.slice(open, close));
+  }
+  return found;
+}
+
+/** A specifier's repo path without a query, if it is relative or root-absolute. A bare package name is not a path. */
+function resolved(path: string, specifier: string): string | null {
+  const bare = specifier.replace(/[?#].*$/, '');
+  if (bare.startsWith('/')) return posix.normalize(bare.slice(1));
+  if (!bare.startsWith('.')) return null;
+  return posix.join(posix.dirname(path), bare);
+}
+
+/**
+ * The tests, the scripts, the root's config and the spikes: a test may import
+ * its own directory's realism module, `scripts/` may read `budgets.ts` alone, and
+ * the directory named whole, with or without its slash, is no module of anyone's.
+ */
+function auditHarnessReach(files: readonly Source[]): string[] {
+  const failures: string[] = [];
+  for (const { path, text } of files) {
+    for (const specifier of specifiersOf(text)) {
+      const target = resolved(path, specifier)?.toLowerCase();
+      if (target === undefined) continue;
+      if (target === REALISM_DIR || target === REALISM_DIR.slice(0, -1)) {
+        // A test reading its own directory's path, to walk it, imports nothing.
+        if (isTestFile(path) && `${posix.dirname(path).toLowerCase()}/` === REALISM_DIR) continue;
+        failures.push(`reach: ${path} imports the directory: ${specifier}`);
+        continue;
+      }
+      if (!target.startsWith(REALISM_DIR)) continue;
+      const ownDirectory = isTestFile(path) && posix.dirname(path).toLowerCase() === posix.dirname(target);
+      const budgets = path.startsWith('scripts/') && target === `${REALISM_DIR}budgets.ts`;
+      if (!ownDirectory && !budgets) failures.push(`reach: ${path} imports ${specifier}`);
+    }
+  }
+  return failures;
+}
+
+function shippedFiles(): Source[] {
+  const paths = [...filesUnder(join(REPO, 'src')).filter((path) => !isTestFile(path) && !path.endsWith('.md')), join(REPO, 'index.html')];
+  return paths.map((path) => {
+    const rel = toRepoPath(path);
+    return { path: rel, text: withoutComments(rel, readFileSync(path, 'utf8')) };
+  });
+}
+
+function harnessFiles(): Source[] {
+  const rootModules = readdirSync(REPO).map((name) => join(REPO, name)).filter((path) => SOURCE_MODULE.test(path));
+  const outsideSrc = [...filesUnder(join(REPO, 'scripts')), ...filesUnder(join(REPO, 'spikes')), ...rootModules].filter((path) => SOURCE_MODULE.test(path));
+  const paths = [...filesUnder(join(REPO, 'src')).filter(isTestFile), ...outsideSrc];
+  return paths.map((path) => ({ path: toRepoPath(path), text: readFileSync(path, 'utf8') }));
+}
+
+test('only the mount names the realism directory, by the one dynamic import', () => {
+  const files = shippedFiles();
+  for (const path of [MOUNT_PATH, STATUS_PATH, 'src/render-scene/scene.tsx', 'src/shell/entry.ts', 'index.html']) {
+    assert.ok(files.some((file) => file.path === path), `the walk reads ${path}`);
+  }
+  assert.deepEqual(auditShippedReach(files), []);
+});
+
+test('no test imports another directory\'s realism module, and scripts read the budgets alone', () => {
+  const files = harnessFiles();
+  for (const path of ['src/render-scene/realism/map-urls.test.ts', 'src/render-scene/realism-status.test.ts', 'scripts/check-maps.ts', 'scripts/bundle-assertion.ts', 'vite.config.ts', 'spikes/depth-bias/main.tsx', 'spikes/realism-failure/serve.mjs']) {
+    assert.ok(files.some((file) => file.path === path), `the walk reads ${path}`);
+  }
+  assert.deepEqual(auditHarnessReach(files), []);
+  assert.ok(specifiersOf(read('scripts/bundle-assertion.ts')).includes('../src/render-scene/realism/budgets.ts'), 'the walk sees a real specifier');
+});
+
+test('the shipped reach audit rejects every form, and a comment or a near name does not count', () => {
+  const realMount = withoutComments(MOUNT_PATH, read(MOUNT_PATH));
+  const mountWith = (addition: string): string => `${realMount}\n${addition}`;
+  for (const [name, path, text, message] of [
+    ['a static import elsewhere', 'src/render-scene/scene.tsx', "import { decodeMaps } from './realism/index.ts';", /names the realism directory/],
+    ['a type import elsewhere', 'src/render-scene/scene.tsx', "import type { X } from './realism/index.ts';", /names the realism directory/],
+    ['a static import, from the shell', 'src/shell/entry.ts', "import '../render-scene/realism/decode-maps.ts';", /names the realism directory/],
+    ['a dynamic import elsewhere', 'src/shell/x.ts', "const m = await import('../render-scene/realism/index.ts');", /names the realism directory/],
+    ['the directory as a whole', 'src/render-scene/x.ts', "const m = await import('./realism');", /names the realism directory/],
+    ['a glob naming it', 'src/render-scene/x.ts', "const m = import.meta.glob('./realism/*.ts');", /globs/],
+    ['a glob around the name', 'src/render-scene/x.ts', "const m = import.meta.glob('./real*/*.ts');", /globs/],
+    ['a wide glob in the scene', 'src/render-scene/x.ts', "const m = import.meta.glob('./*/*.ts');", /globs/],
+    ['a deep glob elsewhere', 'src/shell/x.ts', "const m = import.meta.glob('../**/*.ts');", /globs/],
+    ['a split literal', 'src/render-scene/x.ts', "const m = await import('./real' + 'ism/index.ts');", /names the realism directory/],
+    ['a built path', 'src/render-scene/x.ts', 'const m = await import(`./${name}/index.ts`);', /builds a dynamic import/],
+    ['a built path, by a variable', 'src/render-scene/x.ts', 'const m = await import(path);', /builds a dynamic import/],
+    ['a built path, from the shell', 'src/shell/x.ts', "const m = await import(realPrefix + 'index.ts');", /builds a dynamic import/],
+    ['?url', 'src/shell/x.ts', "import u from '../render-scene/realism/index.ts?url';", /names the realism directory/],
+    ['?raw on the directory', 'src/render-scene/x.ts', "import u from './realism?raw';", /names the realism directory/],
+    ['a re-export', 'src/render-scene/x.ts', "export * from './realism/index.ts';", /names the realism directory/],
+    ['a named re-export', 'src/render-scene/x.ts', "export { decodeMaps } from './realism/decode-maps.ts';", /names the realism directory/],
+    ['new URL', 'src/render-scene/x.ts', "const u = new URL('./realism/index.ts', import.meta.url);", /names the realism directory/],
+    ['a preload in the page', 'index.html', '<link rel="modulepreload" href="/src/render-scene/realism/index.ts" />', /names the realism directory/],
+    ['another case', 'src/render-scene/x.ts', "const m = await import('./Realism/index.ts');", /names the realism directory/],
+    ['upper case, whole', 'src/render-scene/x.ts', "const m = await import('./REALISM');", /names the realism directory/],
+    ['another case in the mount', MOUNT_PATH, mountWith("const again = () => import('./REALISM/index.ts');"), /exactly one/],
+    ['a stylesheet', 'src/shell/x.css', '@import "../render-scene/realism/x.css";', /names the realism directory/],
+    ['a static import in the mount', MOUNT_PATH, mountWith("import { decodeMaps } from './realism/index.ts';"), /exactly one/],
+    ['a second import() in the mount', MOUNT_PATH, mountWith(`const again = () => ${THE_IMPORT};`), /exactly one/],
+    ['another module in the mount', MOUNT_PATH, mountWith("const again = () => import('./realism/decode-maps.ts');"), /exactly one/],
+    ['?url in the mount', MOUNT_PATH, mountWith("import u from './realism/index.ts?url';"), /exactly one/],
+    ['a re-export in the mount', MOUNT_PATH, mountWith("export * from './realism/index.ts';"), /exactly one/],
+    ['a glob in the mount', MOUNT_PATH, mountWith("const m = import.meta.glob('./realism/*.ts');"), /exactly one/],
+    ['a built import in the mount', MOUNT_PATH, mountWith('const m = () => import(path);'), /another dynamic import/],
+    ['the import swapped for a built one', MOUNT_PATH, realMount.replace(THE_IMPORT, 'import(`./realism/${x}.ts`)'), /exactly one/],
+  ] as const) {
+    assert.match(auditShippedReach([{ path, text: withoutComments(path, text) }]).join('\n'), message, name);
+  }
+  for (const [name, path, text] of [
+    ['a comment', 'src/render-scene/x.ts', "// import { x } from './realism/index.ts';\nexport const y = 1;"],
+    ['a block comment in the page', 'index.html', '<!-- /src/render-scene/realism/index.ts --><p></p>'],
+    ['the status module', 'src/render-scene/x.ts', "import { x } from './realism-status.ts';"],
+    ['the mount itself', 'src/render-scene/x.tsx', "import { RealismMount } from './realism-mount.tsx';"],
+    ['a token name', 'src/tokens/x.ts', "const t = 'realism-star-glow';"],
+    ['surrealism', 'src/shell/x.ts', "const t = 'surrealism';"],
+    ['a literal import outside the scene', 'src/shell/x.ts', "const m = await import('./colophon.tsx');"],
+    ['a narrow glob outside the scene', 'src/shell/x.ts', "const m = import.meta.glob('./shaders/*.glsl');"],
+    ['a module inside the directory', `${REALISM_DIR}decode-maps.ts`, "import { x } from './map-urls.ts';"],
+  ] as const) {
+    assert.deepEqual(auditShippedReach([{ path, text: withoutComments(path, text) }]), [], name);
+  }
+  assert.match(auditShippedReach([{ path: MOUNT_PATH, text: '' }]).join('\n'), /exactly one/, 'a mount with no import fails');
+});
+
+test('the harness reach audit: a test may read its own directory, scripts the budgets, and a string is not an import', () => {
+  for (const [path, text] of [
+    ['src/render-scene/scene-model.test.ts', "import { decodeMaps } from './realism/decode-maps.ts';"],
+    ['src/render-scene/x.test.ts', "const m = await import('./realism/index.ts');"],
+    ['src/render-scene/x.test.ts', "const u = new URL('./realism/index.ts', import.meta.url);"],
+    ['src/shell/x.test.ts', "import { budget } from '../render-scene/realism/budgets.ts';"],
+    ['src/render-scene/realism/sub/x.test.ts', "import { x } from '../map-urls.ts';"],
+    ['scripts/x.ts', "import { decodeMaps } from '../src/render-scene/realism/decode-maps.ts';"],
+    ['scripts/x.test.ts', "import { mapUrl } from '../src/render-scene/realism/map-urls.ts';"],
+    ['scripts/x.ts', "export * from '../src/render-scene/realism/index.ts';"],
+    ['src/shell/x.test.ts', "import { x } from '/src/render-scene/realism/map-urls.ts';"],
+    ['scripts/x.ts', "const m = await import('/src/render-scene/realism/decode-maps.ts');"],
+    ['src/render-scene/x.test.ts', "const m = await import('./realism');"],
+    ['src/render-scene/x.test.ts', "const m = await import('./realism/');"],
+    ['scripts/x.test.ts', "import m from '../src/render-scene/realism';"],
+    ['scripts/x.ts', "import m from '/src/render-scene/realism';"],
+    ['src/render-scene/x.test.ts', "const m = await import('./Realism/index.ts');"],
+    ['vite.config.ts', "import { decodeMaps } from './src/render-scene/realism/index.ts';"],
+    ['vite.config.ts', "import { MAP_COUNT_BUDGET } from './src/render-scene/realism/budgets.ts';"],
+    ['spikes/x/main.tsx', "import { decodeMaps } from '../../src/render-scene/realism/index.ts';"],
+    ['spikes/x/main.tsx', "import { MAP_COUNT_BUDGET } from '../../src/render-scene/realism/budgets.ts';"],
+    ['spikes/x/serve.mjs', "const u = new URL('../../src/render-scene/realism/map-urls.ts', import.meta.url);"],
+  ] as const) {
+    assert.match(auditHarnessReach([{ path, text }]).join('\n'), /reach:/, `${path}: ${text}`);
+  }
+  for (const [path, text] of [
+    ['src/render-scene/realism/x.test.ts', "import { mapUrl } from './map-urls.ts';"],
+    ['src/render-scene/realism/x.test.ts', "const u = new URL('./index.ts', import.meta.url);"],
+    ['scripts/x.ts', "import { MAP_COUNT_BUDGET } from '../src/render-scene/realism/budgets.ts';"],
+    ['scripts/x.test.ts', "import { MAP_COUNT_BUDGET } from '../src/render-scene/realism/budgets.ts';"],
+    ['src/render-scene/x.test.ts', "const row = \"import { x } from './realism/index.ts';\";"],
+    ['src/render-scene/x.test.ts', "// import { x } from './realism/index.ts';"],
+    ['src/render-scene/x.test.ts', "import { x } from './realism-status.ts';"],
+    ['src/render-scene/realism/x.test.ts', "const dir = new URL('./', import.meta.url);"],
+    ['scripts/x.ts', "import { MAP_COUNT_BUDGET } from '/src/render-scene/realism/budgets.ts';"],
+    ['src/render-scene/x.test.ts', "import x from 'realism';"],
+    ['spikes/x/main.tsx', "import { x } from '../../src/render-scene/realism-status.ts';"],
+  ] as const) {
+    assert.deepEqual(auditHarnessReach([{ path, text }]), [], `${path}: ${text}`);
+  }
 });

@@ -27,9 +27,20 @@
  * failure at once, and logs a pass line so a passing build is visibly not unrun.
  * It runs on the client build only: an SSR bundle's entry legitimately holds
  * what the browser's must not.
+ *
+ * `checkRealism(view, root)` (7.5) holds the `realism` chunk, the closures and
+ * both byte budgets. **`scene`** measures the closure of the chunk holding
+ * `scene.tsx` minus the closure of the chunk holding `mount.tsx`, since those
+ * load anyway. **`realism`** measures its facade's chunk plus its static closure
+ * outside the scene's. So a shared chunk holding three counts against `scene`,
+ * three inside the mount's closure fails outright, and three under `realism`
+ * alone fails however little it weighs. It always fails on a missing chunk when
+ * called, and the plugin calls it only when an entry's facade is `index.html`,
+ * so fixture builds pass through untouched.
  */
 
 import type { Plugin } from 'vite';
+import { REALISM_CHUNK_BYTES_BUDGET, SCENE_CHUNK_BYTES_BUDGET } from '../src/render-scene/realism/budgets.ts';
 
 /**
  * Minified bytes, not gzip: exact and deterministic. Declared at 240,000 over a
@@ -116,10 +127,15 @@ function bannedAs(id: string, root: string): string | null {
 
 /** The entry chunks and every chunk they reach through static imports. */
 function entryGraph(view: BundleView): ChunkView[] {
+  return staticClosure(view, view.chunks.filter((chunk) => chunk.isEntry));
+}
+
+/** These chunks and every chunk they reach through static imports. */
+function staticClosure(view: BundleView, from: readonly ChunkView[]): ChunkView[] {
   const byName = new Map(view.chunks.map((chunk) => [chunk.fileName, chunk]));
   const seen = new Set<string>();
   const graph: ChunkView[] = [];
-  const queue = view.chunks.filter((chunk) => chunk.isEntry);
+  const queue = [...from];
   for (let i = 0; i < queue.length; i += 1) {
     const chunk = queue[i] as ChunkView;
     if (seen.has(chunk.fileName)) continue;
@@ -187,13 +203,102 @@ export function checkBundle(view: BundleView, root: string, budget: number = ENT
   return failures;
 }
 
+const REALISM_DIR = 'src/render-scene/realism/';
+const REALISM_FACADE = `${REALISM_DIR}index.ts`;
+const SCENE_MODULE = 'src/render-scene/scene.tsx';
+const MOUNT_MODULE = 'src/shell/mount.tsx';
+
+const sumBytes = (chunks: readonly ChunkView[]): number => chunks.reduce((sum, chunk) => sum + chunk.bytes, 0);
+
+/** The chunks and closures the realism check reads; a missing chunk is `undefined`, with an empty closure. */
+function realismChunks(view: BundleView, root: string) {
+  const base = normalise(root).replace(/\/?$/, '/');
+  const isModule = (id: string, module: string): boolean => normalise(id).toLowerCase() === `${base}${module}`.toLowerCase();
+  const holding = (module: string): ChunkView | undefined => view.chunks.find((chunk) => chunk.moduleIds.some((id) => isModule(id, module)));
+  const closure = (chunk: ChunkView | undefined): ChunkView[] => (chunk === undefined ? [] : staticClosure(view, [chunk]));
+  const realism = view.chunks.find((chunk) => chunk.facadeModuleId !== null && isModule(chunk.facadeModuleId, REALISM_FACADE));
+  const scene = holding(SCENE_MODULE);
+  const mount = holding(MOUNT_MODULE);
+  const sceneClosure = closure(scene);
+  const mountClosure = closure(mount);
+  const realismClosure = closure(realism);
+  return {
+    base,
+    realism,
+    scene,
+    mount,
+    sceneClosure,
+    mountClosure,
+    realismClosure,
+    /** What `scene` counts. */
+    sceneMeasured: sceneClosure.filter((chunk) => !mountClosure.includes(chunk)),
+    /** What `realism` counts: its own chunk always, even one something has pulled into the scene's closure. */
+    realismMeasured: realismClosure.filter((chunk) => chunk === realism || !sceneClosure.includes(chunk)),
+  };
+}
+
+/** The two limits `checkRealism` measures against. */
+export interface RealismBudgets {
+  readonly realism: number;
+  readonly scene: number;
+}
+
+const REALISM_BUDGETS: RealismBudgets = { realism: REALISM_CHUNK_BYTES_BUDGET, scene: SCENE_CHUNK_BYTES_BUDGET };
+
+/** Every way the build breaks realism's chunk, closures or budgets; empty when it holds. */
+export function checkRealism(view: BundleView, root: string, limits: RealismBudgets = REALISM_BUDGETS): string[] {
+  const { base, realism, scene, mount, sceneClosure, mountClosure, realismClosure, sceneMeasured, realismMeasured } = realismChunks(view, root);
+  const failures: string[] = [];
+  if (realism === undefined) failures.push(`no chunk has ${REALISM_FACADE} as its facade, so there is no realism chunk to measure.`);
+  if (scene === undefined) failures.push(`no chunk holds ${SCENE_MODULE}, so there is no scene to measure.`);
+  if (mount === undefined) failures.push(`no chunk holds ${MOUNT_MODULE}, so what the scene adds to it cannot be measured.`);
+  const isRealism = (id: string): boolean => normalise(id).toLowerCase().startsWith(`${base}${REALISM_DIR}`.toLowerCase());
+  for (const [name, closure] of [['the scene chunk', sceneClosure], ['the mount chunk', mountClosure], ['the entry', entryGraph(view)]] as const) {
+    for (const chunk of closure) {
+      for (const id of chunk.moduleIds) {
+        if (isRealism(id)) failures.push(`${display(id, base)} is in the static closure of ${name} (in ${chunk.fileName}).`);
+      }
+    }
+  }
+  const budgets = [
+    ['realism', realism, realismMeasured, limits.realism],
+    ['scene', scene, sceneMeasured, limits.scene],
+  ] as const;
+  for (const [name, chunk, measured, budget] of budgets) {
+    const bytes = sumBytes(measured);
+    if (chunk !== undefined && bytes > budget) failures.push(`${name} is ${bytesOf(bytes)} bytes, over its budget of ${bytesOf(budget)} bytes (${measured.map((out) => out.fileName).join(', ')}).`);
+  }
+  const holdingThree = view.chunks.filter((chunk) => chunk.moduleIds.some((id) => packageOf(normalise(id)) === 'three'));
+  if (holdingThree.length === 0) failures.push('no chunk holds three, so where it landed cannot be read.');
+  for (const chunk of holdingThree) {
+    if (sceneMeasured.includes(chunk)) continue;
+    if (mountClosure.includes(chunk)) failures.push(`three is in ${chunk.fileName}, inside the mount's closure, which loads whether or not the scene does.`);
+    else if (realismClosure.includes(chunk) && !sceneClosure.includes(chunk)) failures.push(`three is reached only by realism, in ${chunk.fileName}.`);
+    else failures.push(`three is in ${chunk.fileName}, a chunk the scene's measure does not count.`);
+  }
+  return failures;
+}
+
+/** The two measured figures. Read after `checkRealism` passes; a missing chunk reads as 0. */
+export function realismBytes(view: BundleView, root: string): { readonly realism: number; readonly scene: number } {
+  const { realismMeasured, sceneMeasured } = realismChunks(view, root);
+  return { realism: sumBytes(realismMeasured), scene: sumBytes(sceneMeasured) };
+}
+
+export function realismLine(realism: number, scene: number, limits: RealismBudgets = REALISM_BUDGETS): string {
+  return `realism is ${bytesOf(realism)} of ${bytesOf(limits.realism)} bytes, and scene is ${bytesOf(scene)} of ${bytesOf(limits.scene)} bytes.`;
+}
+
 export interface BundleAssertionOptions {
   /** A test seam; the shipped config takes the declared budget. */
   readonly budget?: number;
+  /** A test seam; the shipped config takes the two declared in `budgets.ts`. */
+  readonly realismBudgets?: Partial<RealismBudgets>;
 }
 
 /** The Vite plugin: client builds only, after the chunks are final. */
-export function bundleAssertion({ budget = ENTRY_BUDGET_BYTES }: BundleAssertionOptions = {}): Plugin {
+export function bundleAssertion({ budget = ENTRY_BUDGET_BYTES, realismBudgets = {} }: BundleAssertionOptions = {}): Plugin {
+  const limits: RealismBudgets = { ...REALISM_BUDGETS, ...realismBudgets };
   let root = '';
   let info: (message: string) => void = () => undefined;
   return {
@@ -224,9 +329,16 @@ export function bundleAssertion({ budget = ENTRY_BUDGET_BYTES }: BundleAssertion
             : [],
         );
         const view: BundleView = { chunks, importedIds: (id) => this.getModuleInfo(id)?.importedIds ?? [] };
-        const failures = checkBundle(view, root, budget);
+        // The app, not a fixture: fixture builds pass through this plugin too.
+        const page = `${normalise(root).replace(/\/?$/, '/')}index.html`.toLowerCase();
+        const isApp = chunks.some((chunk) => chunk.isEntry && chunk.facadeModuleId !== null && normalise(chunk.facadeModuleId).toLowerCase() === page);
+        const failures = [...checkBundle(view, root, budget), ...(isApp ? checkRealism(view, root, limits) : [])];
         if (failures.length > 0) this.error(failures.join('\n'));
         info(passLine(entryBytes(view), budget));
+        if (isApp) {
+          const measured = realismBytes(view, root);
+          info(realismLine(measured.realism, measured.scene, limits));
+        }
       },
     },
   };

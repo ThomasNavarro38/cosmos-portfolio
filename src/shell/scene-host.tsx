@@ -142,6 +142,8 @@ export interface SceneHostArtifact {
       readonly moteTier: string;
       readonly position: { readonly x: number; readonly y: number; readonly z: number };
       readonly orbitNormal: { readonly x: number; readonly y: number; readonly z: number };
+      // The map the realism owner decodes for this Planet (7.5). The host reads nothing of it.
+      readonly appearance: { readonly map: string };
       readonly content: {
         readonly skills: readonly string[];
         readonly project: string;
