@@ -143,8 +143,8 @@ export const BOUNDARY_RULES: readonly BoundaryRule[] = [
     directory: 'derive',
     source: 'src/derive/README.md:5',
     // `derive/` may import `data/` — it is the only directory that may. It may
-    // never import `tokens/`: derivation is pure and knows nothing of
-    // appearance, so an import here would be the first step toward a fourth
+    // never import `tokens/`: derivation is pure and knows nothing of tokens or
+    // how a value is drawn, so an import here would be the first step toward a fourth
     // mapping rule living where nobody looks for one. Nor may it import any
     // consumer directory: derivation runs ahead of the build and must not know
     // what renders its output.

@@ -37,7 +37,7 @@ import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { stripBanner } from './artifact.ts';
-import { parseArtifact } from './artifact-schema.ts';
+import { parseArtifact, type Artifact } from './artifact-schema.ts';
 import { SRC_ROOT, findImports } from './boundaries.ts';
 import { filesUnder, isTestFile, sourceFilesUnder, stripComments, stripCommentsAndStrings } from '../../scripts/source-scan.ts';
 import { DWELL_TEMPOS } from './dwell.ts';
@@ -193,6 +193,53 @@ test('an entry appended with no `weight` at all re-solves clean too', () => {
 
   const result = runPipeline(writeTemp(JSON.stringify(career, null, 2)));
   assert.ok(result.ok, `an entry with no weight must re-solve:\n${result.ok ? '' : result.failures.join('\n')}`);
+});
+
+/** Each Project's `appearance` in a solved career, by ID. */
+function appearances(career: unknown): Map<string, unknown> {
+  const document = solve(writeTemp(JSON.stringify(career, null, 2))).document as Artifact;
+  return new Map(document.clients.flatMap((client) => client.projects.map((project) => [project.id, project.appearance])));
+}
+
+test('appending a Project, under a known Client or a new one, leaves every prior appearance deep-equal', () => {
+  const before = appearances(committedCareer());
+  assert.ok(before.size > 0);
+  for (const [name, added] of [
+    ['a known Client', appendedEntry()],
+    ['a new Client', appendedEntry({ client: 'A Client Nobody Has Seen', project: 'First engagement' })],
+  ] as const) {
+    const career = committedCareer();
+    assert.equal(career.projects.some((project) => project['client'] === added['client']), name === 'a known Client', 'the fixture Client is what it says');
+    career.projects.push(added);
+    const after_ = appearances(career);
+    assert.equal(after_.size, before.size + 1, `${name}: one new Planet`);
+    for (const [id, look] of before) assert.deepEqual(after_.get(id), look, `${name}: ${id} did not move`);
+  }
+});
+
+test('editing a Project’s weight, notable, dates or skills leaves its appearance unchanged', () => {
+  const before = appearances(committedCareer());
+  for (const [name, edit] of [
+    ['weight', { weight: 5 }],
+    ['notable', { notable: 'Problem stated. [[The constraint, in one sentence.]] The decision taken.' }],
+    ['dates', { duration: { start: '2011-01', end: '2012-01' } }],
+    ['skills', { skills: ['Fortran'] }],
+  ] as const) {
+    const career = committedCareer();
+    Object.assign(career.projects[0] as Record<string, unknown>, edit);
+    assert.deepEqual(appearances(career), before, name);
+  }
+});
+
+test('career.json gains no appearance field, and refuses one on an entry', () => {
+  const text = readFileSync(CAREER_JSON, 'utf8');
+  assert.doesNotMatch(text, /"appearance"|"spinRate"|"spinPhase"|"tilt"|"meanLuminance"/, 'nothing is authored');
+  const career = committedCareer();
+  const authored = career.projects[0] as Record<string, unknown>;
+  authored['appearance'] = { map: 'moon' };
+  assert.throws(() => CareerSchema.parse(career), (error: Error) => /appearance/.test(error.message), 'an authored override is refused by the closed schema, by name');
+  delete authored['appearance'];
+  assert.doesNotThrow(() => CareerSchema.parse(career), 'and the same fixture parses without it');
 });
 
 test('appending a Project reframes only its own Client and adds no stop of its own', () => {

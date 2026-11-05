@@ -12,6 +12,7 @@
  * the document rather than of the data.
  */
 
+import { appearanceOf } from './appearance.ts';
 import { byId, type ClientEntity, type EntityGraph, type ProjectEntity } from './entities.ts';
 import type { Position, SolvedLayout } from './solve.ts';
 import { SCHEMA_VERSION, type Artifact, type ArtifactClient, type ArtifactProject } from './artifact-schema.ts';
@@ -56,7 +57,7 @@ function orbitNormalOf(layout: SolvedLayout, id: string): Position {
   return normal;
 }
 
-/** One Project, with its solved position and orbit plane folded in. */
+/** One Project, with its solved position and orbit plane folded in, and its appearance. */
 function projectOf(entity: ProjectEntity, layout: SolvedLayout): ArtifactProject {
   return {
     id: entity.id,
@@ -69,6 +70,8 @@ function projectOf(entity: ProjectEntity, layout: SolvedLayout): ArtifactProject
     timeAxis: entity.timeAxis,
     position: positionOf(layout, entity.id),
     orbitNormal: orbitNormalOf(layout, entity.id),
+    // From the ID alone, so nothing authored and nothing solved reaches it (7.4).
+    appearance: appearanceOf(entity.id),
     // The authored record, carried **whole** and by reference to the object the
     // schema produced — never field-by-field. A hand-written projection is a
     // list that goes stale the first time a field is added to `ProjectSchema`,

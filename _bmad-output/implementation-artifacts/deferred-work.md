@@ -1358,3 +1358,16 @@ Still open after 3.5:
   evidence: AD-21 admits a map only if its page shows no third-party copyright. Jupiter's credit is 'NASA/JPL/Space Science Institute', and the 2026-11-04 ruling on NASA's guidelines left this out, closing the only deferred entry that mentioned it.
   location: src/derive/map-library.ts:67
   severity: medium
+
+## Deferred from: code review of spec-7-4-a-planet-s-appearance-in-the-artifact.md (2026-11-05)
+
+- source_spec: spec-7-4-a-planet-s-appearance-in-the-artifact.md
+  summary: The Colophon's "only career.json is authored" and the artifact banner's "from src/data/career.json" no longer say all of it, since the layout now carries map and meanLuminance from map-library.ts.
+  evidence: src/colophon/absences.ts:35 and BANNER in src/derive/artifact.ts. Changing the banner now would move artifact bytes beyond appearance and the version. AD-21 and AR-M3-14 leave the Colophon's wording to Thomas's ruling in the story adding the statement and credits, so settle the banner with it, before the merge.
+  location: src/colophon/absences.ts:35
+  severity: medium
+- source_spec: spec-7-4-a-planet-s-appearance-in-the-artifact.md
+  summary: Jupiter is worn by no Planet (moon 5, io 2, mars 1, jupiter 0), yet jupiter.webp ships, counts against the budget and needs a credit.
+  evidence: generated/layout.generated.json. This is correct rendezvous output, and AD-21 forbids a per-Body override, so the levers are the library or the salt. For Thomas's on-screen judgement in Epic 8.
+  location: generated/layout.generated.json
+  severity: low

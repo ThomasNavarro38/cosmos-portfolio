@@ -96,8 +96,8 @@ test('SCHEMA_VERSION is a literal in the schema, so a mismatch fails', () => {
   }
 });
 
-test('the version is 9 now that each Client carries its span, and changing the shape means changing it', () => {
-  assert.equal(SCHEMA_VERSION, 9, 'Story 4.5 added each Client’s `span`, so the shape version is 9');
+test('the version is 10 now that each Project carries its appearance, and changing the shape means changing it', () => {
+  assert.equal(SCHEMA_VERSION, 10, 'Story 7.4 added each Project’s `appearance`, so the shape version is 10');
   assert.equal(valid().schemaVersion, SCHEMA_VERSION, 'the emitter declares it');
 
   // Read off the source: the literal must be in the schema, not merely compared
@@ -661,6 +661,83 @@ test('an artifact still declaring schemaVersion 8 is rejected', () => {
   const old = copy(valid());
   old['schemaVersion'] = 8;
   assertFails(validateArtifact(old), /schemaVersion/, 'a span-less artifact must not be read on a guess');
+});
+
+test('an artifact still declaring schemaVersion 9 is rejected', () => {
+  const old = copy(valid());
+  old['schemaVersion'] = 9;
+  assertFails(validateArtifact(old), /schemaVersion/, 'an artifact with no appearance must not be read on a guess');
+});
+
+/** A real artifact as a mutable document, with its first Project's appearance to break. */
+function withAppearance(): { doc: Record<string, unknown>; project: Record<string, unknown>; look: Record<string, unknown>; client: Record<string, unknown> } {
+  const doc = copy(valid());
+  const client = (doc['clients'] as Record<string, unknown>[])[0] as Record<string, unknown>;
+  const project = (client['projects'] as Record<string, unknown>[])[0] as Record<string, unknown>;
+  return { doc, client, project, look: project['appearance'] as Record<string, unknown> };
+}
+
+const LOOK_PATH = /clients\.0\.projects\.0\.appearance/;
+
+test('a Project’s appearance is required, closed, and sits after orbitNormal', () => {
+  const missing = withAppearance();
+  delete missing.project['appearance'];
+  assertFails(validateArtifact(missing.doc), LOOK_PATH, 'a Project with no appearance is rejected, naming the path');
+
+  for (const field of ['map', 'meanLuminance', 'tilt', 'spinRate', 'spinPhase']) {
+    const lost = withAppearance();
+    delete lost.look[field];
+    assertFails(validateArtifact(lost.doc), new RegExp(`${LOOK_PATH.source}\\.${field}`), `an appearance with no ${field} is rejected`);
+  }
+
+  const extra = withAppearance();
+  extra.look['hue'] = 0.5;
+  assertFails(validateArtifact(extra.doc), LOOK_PATH, 'an extra key in it is rejected, naming the path');
+
+  const keys = Object.keys(withAppearance().project);
+  assert.equal(keys[keys.indexOf('orbitNormal') + 1], 'appearance', 'the key follows orbitNormal');
+});
+
+test('a Client carrying an appearance fails, since a Star has none', () => {
+  const broken = withAppearance();
+  broken.client['appearance'] = broken.look;
+  assertFails(validateArtifact(broken.doc), /clients\.0/, 'the closed schema refuses it');
+  assert.ok(ArtifactSchema.safeParse(copy(valid())).success, 'and the unbroken document has no such key');
+});
+
+test('each appearance number outside its range, or not finite, fails naming the path; its bounds are inclusive', () => {
+  for (const [field, below, above, min, max] of [
+    ['tilt', -0.5001, 0.5001, -0.5, 0.5],
+    ['spinRate', 0.0199, 0.1001, 0.02, 0.1],
+    ['spinPhase', -0.0001, 6.2833, 0, 6.2832],
+  ] as const) {
+    for (const bad of [below, above, Number.NaN, Number.POSITIVE_INFINITY, null, '0.1']) {
+      const broken = withAppearance();
+      broken.look[field] = bad;
+      assertFails(validateArtifact(broken.doc), new RegExp(`${LOOK_PATH.source}\\.${field}`), `${field} ${String(bad)} must be rejected`);
+    }
+    for (const edge of [min, max]) {
+      const held = withAppearance();
+      held.look[field] = edge;
+      assert.deepEqual(validateArtifact(held.doc), [], `${field} ${edge} lies on an inclusive bound`);
+    }
+  }
+  for (const bad of [0, -0.1, 1.0001, Number.NaN, Number.NEGATIVE_INFINITY, null]) {
+    const broken = withAppearance();
+    broken.look['meanLuminance'] = bad;
+    assertFails(validateArtifact(broken.doc), new RegExp(`${LOOK_PATH.source}\\.meanLuminance`), `meanLuminance ${String(bad)} must be rejected`);
+  }
+  const whole = withAppearance();
+  whole.look['meanLuminance'] = 1;
+  assert.deepEqual(validateArtifact(whole.doc), [], 'a mean of exactly 1 is in range');
+});
+
+test('a map that is not bare fails naming the path', () => {
+  for (const bad of ['', 'Moon', 'moon.webp', 'textures/moon', '../moon', 'moon ', '-moon', 'moon-', 'mo--on', 42, null]) {
+    const broken = withAppearance();
+    broken.look['map'] = bad;
+    assertFails(validateArtifact(broken.doc), new RegExp(`${LOOK_PATH.source}\\.map`), `map ${JSON.stringify(bad)} must be rejected`);
+  }
 });
 
 test('a Client span is required, closed and a pair of year-months', () => {

@@ -30,14 +30,17 @@ import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { validateCareer } from '../data/validate.ts';
+import { appearanceOf } from './appearance.ts';
 import { BANNER, buildArtifact, serializeArtifact, stripBanner } from './artifact.ts';
 import { SCHEMA_VERSION, validateArtifact, type Artifact } from './artifact-schema.ts';
 import { DWELL_TEMPOS } from './dwell.ts';
 import type { EntityGraph } from './entities.ts';
 import { BOUNDARY_RULES, SRC_ROOT } from './boundaries.ts';
+import { MAP_LIBRARY } from './map-library.ts';
 import {
   ARTIFACT_PATH,
   CAREER_JSON as SHIPPED_CAREER_JSON,
+  checkAppearance,
   checkArtifact,
   checkContent,
   checkDestinations,
@@ -2500,4 +2503,152 @@ test('the committed career.json solves with no fold warning', () => {
 
 after(() => {
   if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
+});
+
+// --- A Planet's appearance at the gate (7.4) ----------------------------------
+
+type Look = Artifact['clients'][number]['projects'][number]['appearance'];
+
+/** A fixture artifact with appearances to break, its first Project picked out. */
+function appearanceFixture(): {
+  doc: Artifact;
+  project: Artifact['clients'][number]['projects'][number];
+  write: () => string;
+} {
+  const doc = JSON.parse(JSON.stringify(artifactOf(...opposedEntries()))) as Artifact;
+  const project = doc.clients[0]?.projects[0];
+  assert.ok(project !== undefined);
+  return { doc, project, write: () => writeTemp(serializeArtifact(doc)) };
+}
+
+test('the assembler emits each Project’s appearanceOf its ID, after orbitNormal, and a Star none', () => {
+  const artifact = artifactOf(...opposedEntries());
+  for (const client of artifact.clients) {
+    assert.ok(!('appearance' in client), client.id);
+    for (const project of client.projects) {
+      assert.deepEqual(project.appearance, appearanceOf(project.id), project.id);
+      const keys = Object.keys(project);
+      assert.equal(keys[keys.indexOf('orbitNormal') + 1], 'appearance', project.id);
+    }
+  }
+});
+
+test('checkAppearance passes a sound artifact, and fails a hand edit of each field naming the Project and the field', () => {
+  assert.deepEqual(checkAppearance(appearanceFixture().doc), []);
+  const edits: readonly (readonly [string, (look: { -readonly [K in keyof Look]: Look[K] }) => void])[] = [
+    ['map', (look) => { look.map = MAP_LIBRARY.find((map) => map.id !== look.map)?.id as string; }],
+    ['meanLuminance', (look) => { look.meanLuminance = look.meanLuminance === 0.5 ? 0.6 : 0.5; }],
+    ['tilt', (look) => { look.tilt = look.tilt === 0.25 ? 0.3 : 0.25; }],
+    ['spinRate', (look) => { look.spinRate = look.spinRate === 0.05 ? 0.06 : 0.05; }],
+    ['spinPhase', (look) => { look.spinPhase = look.spinPhase === 1 ? 2 : 1; }],
+  ];
+  for (const [field, edit] of edits) {
+    const { doc, project } = appearanceFixture();
+    edit(project.appearance);
+    const failures = checkAppearance(doc);
+    assert.ok(failures.some((line) => line.includes(project.id) && line.includes(`appearance.${field}`)), `${field}: ${failures.join('\n')}`);
+  }
+});
+
+test('checkAppearance compares every key either side holds: a key lost, and a key the re-derivation lacks', () => {
+  const lost = appearanceFixture();
+  delete (lost.project.appearance as Partial<Look>).spinPhase;
+  const lostLines = checkAppearance(lost.doc);
+  assert.equal(lostLines.length, 1, lostLines.join('\n'));
+  assert.ok((lostLines[0] as string).includes(lost.project.id) && (lostLines[0] as string).includes('appearance.spinPhase undefined'), lostLines.join('\n'));
+
+  const extra = appearanceFixture();
+  (extra.project.appearance as Record<string, unknown>)['hue'] = 0.5;
+  const extraLines = checkAppearance(extra.doc);
+  assert.equal(extraLines.length, 1, extraLines.join('\n'));
+  assert.ok((extraLines[0] as string).includes(extra.project.id) && (extraLines[0] as string).includes('appearance.hue'), extraLines.join('\n'));
+});
+
+test('checkAppearance names the Project and the map when the map has no library entry', () => {
+  const { doc, project } = appearanceFixture();
+  project.appearance.map = 'pluto';
+  const failures = checkAppearance(doc);
+  assert.equal(failures.length, 1, failures.join('\n'));
+  assert.ok((failures[0] as string).includes(project.id) && (failures[0] as string).includes('"pluto"'), failures.join('\n'));
+});
+
+test('checkAppearance fails when the library changed and no re-solve followed', () => {
+  const { doc, project } = appearanceFixture();
+  // A mean changed: the Projects holding that map fail, on the mean alone.
+  const remeasured = MAP_LIBRARY.map((map) => (map.id === project.appearance.map ? { ...map, meanLuminance: 0.9999 } : map));
+  const failures = checkAppearance(doc, remeasured);
+  assert.ok(failures.some((line) => line.includes(project.id) && line.includes('appearance.meanLuminance')), failures.join('\n'));
+  assert.ok(!failures.some((line) => line.includes('appearance.map')), failures.join('\n'));
+  // The set changed: the map removed is unknown, by name.
+  const removed = checkAppearance(doc, MAP_LIBRARY.filter((map) => map.id !== project.appearance.map));
+  assert.ok(removed.some((line) => line.includes(project.id) && line.includes(`"${project.appearance.map}"`)), removed.join('\n'));
+  // Maps added: the IDs they win now disagree on their map.
+  const base = MAP_LIBRARY[0] as (typeof MAP_LIBRARY)[number];
+  const added = Array.from({ length: 64 }, (_, index) => ({ ...base, id: `grown-${index}` }));
+  const grown = checkAppearance(doc, [...MAP_LIBRARY, ...added]);
+  assert.ok(grown.some((line) => line.includes('appearance.map')), grown.join('\n'));
+});
+
+test('checkAppearance over an empty library fails rather than throws: a check with nothing to hold against is no pass', () => {
+  const { doc, project } = appearanceFixture();
+  const failures = checkAppearance(doc, []);
+  assert.ok(failures.some((line) => line.includes(project.id)), failures.join('\n'));
+});
+
+test('a hand-edited or unknown map fails the pre-write check and the gate, with a heading and the fix', () => {
+  for (const edit of ['unknown', 'other'] as const) {
+    const { doc, project, write } = appearanceFixture();
+    project.appearance.map = edit === 'unknown' ? 'pluto' : (MAP_LIBRARY.find((map) => map.id !== project.appearance.map)?.id as string);
+
+    const emitted = checkEmittedArtifact(doc);
+    assert.match(emitted[0] as string, /appearance/, emitted.join('\n'));
+    assert.ok(emitted.some((line) => line.includes(project.id)), emitted.join('\n'));
+
+    const gate = checkArtifact(write());
+    assert.match(gate[0] as string, /committed layout artifact.*appearance/, gate.join('\n'));
+    assert.ok(gate.some((line) => line.includes(project.id)), gate.join('\n'));
+    assert.match(gate.at(-1) as string, /npm run solve/);
+  }
+});
+
+test('the appearance check runs after checkContent and before the import boundaries', () => {
+  // A broken appearance reports ahead of a boundary violation...
+  const violating = sourceTree({ 'render-fallback/x.ts': "import three from 'three';\n" });
+  const broken = appearanceFixture();
+  broken.project.appearance.tilt = broken.project.appearance.tilt === 0.25 ? 0.3 : 0.25;
+  assert.match(checkArtifact(broken.write(), violating)[0] as string, /appearance/);
+  // ...and behind a broken content check.
+  const both = appearanceFixture();
+  both.project.clientId = 'client:other';
+  both.project.appearance.tilt = both.project.appearance.tilt === 0.25 ? 0.3 : 0.25;
+  assert.match(checkArtifact(both.write())[0] as string, /disagree with their own content/);
+  // And a sound appearance does reach the boundaries.
+  assert.match(checkArtifact(appearanceFixture().write(), violating).join('\n'), /violates the import boundaries/);
+});
+
+test('the gate re-derives appearance only: the check solves nothing and reads no file', () => {
+  const body = stripComments(readFileSync(INDEX_TS, 'utf8'));
+  const start = body.indexOf('export function checkAppearance');
+  const end = body.indexOf('\n}\n', start);
+  assert.ok(start >= 0 && end > start);
+  const check = body.slice(start, end);
+  assert.match(check, /appearanceOf\(project\.id, library\)/, 'it reads the ID in the document and the library');
+  assert.doesNotMatch(check, /solveArtifact|solveLayout|deriveEntities|runPipeline|readFileSync|existsSync/, 'and solves nothing');
+});
+
+test('the CLI gate exits 1 naming a hand-edited map, and an unknown one', () => {
+  const careerPath = writeTemp(`${JSON.stringify({ asOf: AS_OF, projects: opposedEntries() }, null, 2)}\n`);
+  const result = runPipeline(careerPath);
+  assert.ok(result.ok);
+  const doc = stripBanner(JSON.parse(result.contents)) as Artifact;
+  const project = doc.clients[0]?.projects[0];
+  assert.ok(project !== undefined);
+  assert.equal(runIndex('--check', writeTemp(result.contents), careerPath).status, 0, 'the unbroken pair passes');
+  const held = project.appearance.map;
+  for (const [map, named] of [['pluto', '"pluto"'], [MAP_LIBRARY.find((entry) => entry.id !== held)?.id as string, 'appearance.map']] as const) {
+    project.appearance.map = map;
+    const run = runIndex('--check', writeTemp(serializeArtifact(doc)), careerPath);
+    assert.equal(run.status, 1, run.stderr);
+    assert.ok(run.stderr.includes(project.id) && run.stderr.includes(named), run.stderr);
+  }
 });

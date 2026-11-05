@@ -96,15 +96,16 @@ test('the library audit rejects each reach, and a comment is prose', () => {
   assert.deepEqual(auditLibrarySource(`${SOURCE}\n// import x from 'node:fs'; document.title;\n`), [], 'a comment is prose');
 });
 
-// --- Nothing reads it yet -------------------------------------------------------------------------
+// --- Who reads it ---------------------------------------------------------------------------------
 
 /**
  * The modules that may read the library, and the shipped files that may name a
- * map's path. Both are empty on purpose: nothing reads the library or requests a
- * map until a later change names the intended reader, and that change must edit
- * this table. Until then a map cannot reach a visitor by accident, uncredited.
+ * map's path. The readers are the assignment (7.4) and the gate that re-derives
+ * through it. `MAP_REQUESTERS` is empty on purpose: nothing requests a map until
+ * a later change names the requester, and that change must edit this table.
+ * Until then a map cannot reach a visitor by accident, uncredited.
  */
-const LIBRARY_READERS: readonly string[] = [];
+const LIBRARY_READERS: readonly string[] = ['src/derive/appearance.ts', 'src/derive/index.ts'];
 const MAP_REQUESTERS: readonly string[] = [];
 
 interface Module {
@@ -155,7 +156,7 @@ function auditLibraryReach(files: readonly Module[]): string[] {
   return failures;
 }
 
-test('no shipped module imports the library, and no shipped file nor index.html names a map', () => {
+test('among shipped modules only the assignment and the gate import the library, and no shipped file nor index.html names a map', () => {
   const files = shippedFiles();
   assert.ok(files.some((file) => file.path === 'src/derive/map-library.ts'), 'the walk reads src/');
   assert.ok(files.some((file) => file.path === 'index.html'), 'the walk reads index.html');
@@ -202,6 +203,22 @@ test('the library reach audit rejects each form, and a comment, a near name or a
   ] as const) {
     assert.deepEqual(auditLibraryReach([{ path, text: shippedText(path, text) }]), [], `${path}: ${text}`);
   }
+});
+
+test('the assignment and the gate alone are admitted, and each does read the library', () => {
+  const line = "import { MAP_LIBRARY } from './map-library.ts';";
+  const files = shippedFiles();
+  for (const path of LIBRARY_READERS) {
+    assert.deepEqual(auditLibraryReach([{ path, text: line }]), [], `${path} is admitted`);
+    const file = files.find((candidate) => candidate.path === path);
+    assert.ok(file !== undefined && NAMES_LIBRARY.test(file.text), `${path} still reads it, or the table is stale`);
+    assert.match(auditLibraryReach([{ path, text: "const u = 'textures/' + id;" }]).join('\n'), /names a map/, `${path} may read the library, not name a map`);
+  }
+  assert.deepEqual([...LIBRARY_READERS].sort(), ['src/derive/appearance.ts', 'src/derive/index.ts']);
+  for (const path of ['src/derive/artifact.ts', 'src/derive/artifact-schema.ts', 'src/derive/pipeline.ts', 'src/derive/live.ts', 'src/derive/entities.ts', 'src/derive/rules.ts', 'src/render-scene/scene.tsx', 'src/render-fallback/chart.tsx', 'src/shell/entry.ts', 'src/colophon/colophon.tsx']) {
+    assert.match(auditLibraryReach([{ path, text: line }]).join('\n'), /imports the library/, path);
+  }
+  assert.deepEqual(MAP_REQUESTERS, []);
 });
 
 // --- The conversion record ------------------------------------------------------------------------

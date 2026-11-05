@@ -1,5 +1,5 @@
 { "$banner": "GENERATED FILE — do not edit by hand. Produced by src/derive/index.ts from src/data/career.json; run `npm run solve` to regenerate. Hand edits are overwritten by the next solve. The build gate rejects an artifact that breaks its invariants or was solved from a different career.json, but not a hand edit that keeps both.",
-  "schemaVersion": 9,
+  "schemaVersion": 10,
   "asOf": "2026-09",
   "sourceDigest": "7495d150d1bff922fbc94a7f7ec261df2bfd1ab1643948f4510c9fb573aec253",
   "clients": [
@@ -35,6 +35,13 @@
             "x": 0,
             "y": -1,
             "z": 0
+          },
+          "appearance": {
+            "map": "moon",
+            "meanLuminance": 0.324,
+            "tilt": -0.3836,
+            "spinRate": 0.0512,
+            "spinPhase": 4.7977
           },
           "content": {
             "client": "SIMSU",
@@ -95,6 +102,13 @@
             "y": -0.978,
             "z": 0
           },
+          "appearance": {
+            "map": "io",
+            "meanLuminance": 0.2447,
+            "tilt": 0.0404,
+            "spinRate": 0.044,
+            "spinPhase": 1.64
+          },
           "content": {
             "client": "Transilien",
             "project": "Stream aggregator-compiler",
@@ -141,6 +155,13 @@
             "x": -0.2085,
             "y": -0.978,
             "z": 0
+          },
+          "appearance": {
+            "map": "moon",
+            "meanLuminance": 0.324,
+            "tilt": -0.138,
+            "spinRate": 0.0414,
+            "spinPhase": 0.0586
           },
           "content": {
             "client": "Transilien",
@@ -203,6 +224,13 @@
             "x": 0,
             "y": -1,
             "z": 0
+          },
+          "appearance": {
+            "map": "io",
+            "meanLuminance": 0.2447,
+            "tilt": 0.4796,
+            "spinRate": 0.0776,
+            "spinPhase": 3.6923
           },
           "content": {
             "client": "SNCF Connect & Tech",
@@ -269,6 +297,13 @@
             "x": 0,
             "y": -1,
             "z": 0
+          },
+          "appearance": {
+            "map": "moon",
+            "meanLuminance": 0.324,
+            "tilt": 0.4091,
+            "spinRate": 0.0541,
+            "spinPhase": 0.704
           },
           "content": {
             "client": "Air France-KLM",
@@ -337,6 +372,13 @@
             "y": -0.978,
             "z": 0
           },
+          "appearance": {
+            "map": "mars",
+            "meanLuminance": 0.123,
+            "tilt": 0.0558,
+            "spinRate": 0.0222,
+            "spinPhase": 1.2087
+          },
           "content": {
             "client": "SNCF",
             "project": "Client referential",
@@ -398,6 +440,13 @@
             "y": -0.978,
             "z": 0
           },
+          "appearance": {
+            "map": "moon",
+            "meanLuminance": 0.324,
+            "tilt": -0.2235,
+            "spinRate": 0.0653,
+            "spinPhase": 2.8852
+          },
           "content": {
             "client": "SNCF",
             "project": "File aggregator-transcoder",
@@ -455,6 +504,13 @@
             "x": 0,
             "y": -1,
             "z": 0
+          },
+          "appearance": {
+            "map": "moon",
+            "meanLuminance": 0.324,
+            "tilt": 0.099,
+            "spinRate": 0.0398,
+            "spinPhase": 1.5713
           },
           "content": {
             "client": "Decathlon",

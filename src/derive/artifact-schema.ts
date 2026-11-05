@@ -16,6 +16,7 @@
 
 import { z } from 'zod';
 import { ProjectSchema } from '../data/schema.ts';
+import { SPIN_PHASE_MAX, SPIN_PHASE_MIN, SPIN_RATE_MAX, SPIN_RATE_MIN, TILT_MAX, TILT_MIN } from './appearance.ts';
 import { DWELL_TEMPOS } from './dwell.ts';
 import { MOTE_TIERS, RESTING_BANDS, SKILL_TIERS } from './rules.ts';
 import { SHOT_FRAMINGS } from './shots.ts';
@@ -35,7 +36,9 @@ import { SHOT_FRAMINGS } from './shots.ts';
  * `span`: each time the contract's shape changed, the number it declares
  * changed with it. An artifact carrying `8` gives the Fallback no Client
  * dates, so it would have to aggregate its Projects' `duration`s itself — the
- * derivation AD-3 keeps out of a renderer. An artifact carrying `7` names no source, so the gate could
+ * derivation AD-3 keeps out of a renderer. **10** is Story 7.4's each Project's
+ * `appearance`: an artifact carrying `9` names no map, so a renderer would have
+ * to import the library or pick one itself. An artifact carrying `7` names no source, so the gate could
  * not tell whether it was solved from the `career.json` beside it. An artifact
  * still carrying `5` publishes no Skill tiers, and must fail rather than be read
  * by a scene that seats Motes by them — it would have to count shares itself,
@@ -47,7 +50,7 @@ import { SHOT_FRAMINGS } from './shots.ts';
  * the artifact fail its own gate, which is precisely what the gate exists to
  * prevent, and is why each was deliberately absent until the story that emits it.
  */
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 /** ISO 8601 year-month, matching the authored form exactly. */
 const IsoYearMonth = z
@@ -122,6 +125,22 @@ const ClientSpanSchema = z.strictObject({
 });
 
 /**
+ * A Planet's appearance (Story 7.4), closed at five fields; a Star has none.
+ * Its agreement with the library and the ID is the gate's (`checkAppearance`).
+ *
+ * The bounds are inclusive and come from `appearance.ts`, because a rounded value
+ * can land exactly on one. `map` is bare, since it is also a file's name: a path
+ * or an extension here would reach a URL the scene builds from it.
+ */
+const AppearanceSchema = z.strictObject({
+  map: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'must be a bare map id, e.g. "moon"'),
+  meanLuminance: z.number().finite().gt(0).max(1),
+  tilt: z.number().finite().min(TILT_MIN).max(TILT_MAX),
+  spinRate: z.number().finite().min(SPIN_RATE_MIN).max(SPIN_RATE_MAX),
+  spinPhase: z.number().finite().min(SPIN_PHASE_MIN).max(SPIN_PHASE_MAX),
+});
+
+/**
  * One Project in the artifact: everything a surface renders, derived and
  * authored alike.
  *
@@ -145,6 +164,9 @@ const ArtifactProjectSchema = z.strictObject({
   // The plane the Project orbits its Star in, solved with its position (3.2).
   // Emitted so the scene draws the orbit rather than reconstructing it (AD-3).
   orbitNormal: UnitVectorSchema,
+  // From the ID and the map library alone (7.4), emitted so the renderer never
+  // imports the library. Colour and surface encode nothing.
+  appearance: AppearanceSchema,
   content: ProjectSchema,
 });
 

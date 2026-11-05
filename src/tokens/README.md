@@ -3,7 +3,7 @@
 Design tokens generated from the YAML frontmatter of `_bmad-output/planning-artifacts/ux-designs/ux-cosmos-portfolio-2026-09-01/DESIGN.md` (AD-12). One source for colour, type, spacing, radius and stroke-weight values shared by both rendering surfaces, so the scene and the DOM cannot drift apart visually. DESIGN.md carries no motion values, and none are emitted here: timing constants stay in `src/shell/`.
 
 **Imports:** nothing. Tokens are leaves.
-**Imported by:** `src/shell/`, `src/render-scene/`, `src/render-fallback/`, `src/colophon/`, and the tooling in `scripts/` (`scripts/tokens.test.ts` reads `tokens.ts` to check the acceptance values). Never by `src/derive/` — derivation is pure and knows nothing of appearance. The direction is one-way: `scripts/` imports `src/derive/boundaries.ts` (the comment stripper and import scanner) and `src/tokens/`, and nothing under `src/` imports `scripts/`.
+**Imported by:** `src/shell/`, `src/render-scene/`, `src/render-fallback/`, `src/colophon/`, and the tooling in `scripts/` (`scripts/tokens.test.ts` reads `tokens.ts` to check the acceptance values). Never by `src/derive/` — derivation is pure and knows nothing of tokens or how a value is drawn. The direction is one-way: `scripts/` imports `src/derive/boundaries.ts` (the comment stripper and import scanner) and `src/tokens/`, and nothing under `src/` imports `scripts/`.
 
 ## Never hand-edit
 

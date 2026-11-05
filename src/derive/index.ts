@@ -26,10 +26,12 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { readCareerFile, validateCareer } from '../data/validate.ts';
+import { appearanceOf } from './appearance.ts';
 import { BANNER, serializeArtifact, stripBanner } from './artifact.ts';
 import { parseArtifact, validateArtifact, type Artifact } from './artifact-schema.ts';
 import { SRC_ROOT, checkImportBoundaries } from './boundaries.ts';
 import { clientFoldWarnings, isDeepProject } from './entities.ts';
+import { MAP_LIBRARY, type MapEntry } from './map-library.ts';
 import { normaliseLineEndings, solveArtifact } from './pipeline.ts';
 import { compareRailKeys, earliestStart } from './rail.ts';
 import { rankSkills, shareCounts } from './skills.ts';
@@ -73,11 +75,12 @@ export type PipelineResult =
  * The checks an assembled artifact must pass **before its bytes are written**.
  * Returns the failure lines, empty on success.
  *
- * Five of them: the document against its own declared schema, the destination
+ * Six of them: the document against its own declared schema, the destination
  * set against the entities it addresses, the Dwell, Shot and Rail lists
  * against the Client set they pace, frame and order, the Skill list against
- * the Projects whose Skills it ranks, and each Body against its own content
- * (`checkContent`). None is redundant with the
+ * the Projects whose Skills it ranks, each Body against its own content
+ * (`checkContent`), and each Planet's appearance against a re-derivation
+ * (`checkAppearance`). None is redundant with the
  * gate — without them the *first* bad emission would be the one committed, and
  * the gate would only ever reject it afterwards, when the artifact on disk is
  * already wrong.
@@ -124,6 +127,11 @@ export function checkEmittedArtifact(artifact: Artifact): string[] {
   const contentFailures = checkContent(artifact);
   if (contentFailures.length > 0) {
     return ['the emitted Bodies disagree with their own content:', ...contentFailures];
+  }
+
+  const appearanceFailures = checkAppearance(artifact);
+  if (appearanceFailures.length > 0) {
+    return ['the emitted appearances disagree with the map library:', ...appearanceFailures];
   }
 
   return [];
@@ -173,9 +181,10 @@ export function runPipeline(careerPath: string = CAREER_JSON): PipelineResult {
 
     contents = serializeArtifact(artifact);
   } catch (error) {
-    // `deriveEntities` and `solveLayout` throw on the conditions they refuse to
-    // emit plausible-but-wrong data for — an ID collision, a non-finite
-    // coordinate, a Project adopted by the wrong Star. Each message already
+    // `deriveEntities`, `solveLayout` and `appearanceOf` throw on the conditions
+    // they refuse to emit plausible-but-wrong data for — an ID collision, a
+    // non-finite coordinate, a Project adopted by the wrong Star, an empty map
+    // library. Each message already
     // names the entity, so it is reported rather than re-wrapped.
     return { ok: false, failures: [error instanceof Error ? error.message : String(error)], warnings };
   }
@@ -583,6 +592,52 @@ export function checkContent(artifact: Artifact): string[] {
 }
 
 /**
+ * Asserts each Planet's `appearance` against the library and its own ID (AD-21).
+ * Returns the failure lines, empty on success, each naming the Project and either
+ * the map no entry holds or the field that differs. So a hand edit fails, and so
+ * does a library changed with no re-solve.
+ *
+ * **This re-derives and does not solve** (AD-1): `appearanceOf` runs no force
+ * solve and reads no authored field, only the ID in the document. It reads no
+ * file either: that a map has a file is `scripts/check-maps.ts`'s, later in the
+ * same `npm run gate`, which holds every entry to a file and every file to an
+ * entry. Together they are AD-21's "a library entry and a file".
+ *
+ * An unknown map is reported alone for its Project: there is no entry to compare
+ * its mean with, and over an empty library nothing to re-derive from at all.
+ */
+export function checkAppearance(artifact: Artifact, library: readonly MapEntry[] = MAP_LIBRARY): string[] {
+  const failures: string[] = [];
+  const known = new Set(library.map((entry) => entry.id));
+  for (const client of artifact.clients) {
+    for (const project of client.projects) {
+      if (!known.has(project.appearance.map)) {
+        failures.push(`"${project.id}" names appearance.map "${project.appearance.map}", which has no entry in the map library.`);
+        continue;
+      }
+      // Every key either side holds, not a hand list: a field added to the
+      // assignment is compared without a change here.
+      const held: Readonly<Record<string, unknown>> = project.appearance;
+      const expected: Readonly<Record<string, unknown>> = { ...appearanceOf(project.id, library) };
+      for (const field of Object.keys(expected)) {
+        if (held[field] !== expected[field]) {
+          failures.push(
+            `"${project.id}" has appearance.${field} ${String(JSON.stringify(held[field]))}, ` +
+              `but its ID and the map library derive ${JSON.stringify(expected[field])}.`,
+          );
+        }
+      }
+      for (const field of Object.keys(held)) {
+        if (!(field in expected)) {
+          failures.push(`"${project.id}" has appearance.${field}, which its ID and the map library do not derive.`);
+        }
+      }
+    }
+  }
+  return failures;
+}
+
+/**
  * The indices of one longest strictly increasing subsequence of `values` — the
  * entries that already stand in order. O(n log n), deterministic: among equally
  * long runs it keeps the one ending earliest at each length.
@@ -744,6 +799,18 @@ function inspectArtifact(
     return fail([
       'the committed layout artifact has Bodies that disagree with their own content:',
       ...content,
+      'Run `npm run solve` and commit the result.',
+    ]);
+  }
+
+  // Each Planet's appearance against its ID and the map library (7.4). The one
+  // re-derivation the gate makes, and AD-21 asks for it by name: it reads an ID
+  // off the document, and runs no solve (AD-1).
+  const appearance = checkAppearance(schema.artifact);
+  if (appearance.length > 0) {
+    return fail([
+      'the committed layout artifact has appearances that disagree with the map library:',
+      ...appearance,
       'Run `npm run solve` and commit the result.',
     ]);
   }

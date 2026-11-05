@@ -283,7 +283,7 @@ test('src/tokens/ importing anything outside itself fails, in either direction',
   assertRejects(
     { 'derive/rules.ts': "import { colour } from '../tokens/index.ts';\n" },
     /derive\/rules\.ts:1/,
-    'tokens/README.md:6 forbids src/derive/ from importing tokens — derivation knows nothing of appearance',
+    'tokens/README.md:6 forbids src/derive/ from importing tokens — derivation knows nothing of tokens or how a value is drawn',
   );
 });
 
