@@ -11,7 +11,14 @@ import { decodeMaps } from './decode-maps.ts';
 const BASE = '/cosmos-portfolio/';
 
 function artifactWearing(...maps: readonly string[]): RealismArtifact {
-  return { clients: [{ projects: maps.map((map) => ({ appearance: { map } })) }] };
+  const position = { x: 0, y: 0, z: 0 };
+  return {
+    clients: [{
+      id: 'client:a',
+      position,
+      projects: maps.map((map, at) => ({ id: `project:a/${at}`, clientId: 'client:a', position, appearance: { map, meanLuminance: 0.3, tilt: 0, spinRate: 0.05, spinPhase: 0 } })),
+    }],
+  };
 }
 
 interface FakeBitmap {

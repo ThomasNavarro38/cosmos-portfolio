@@ -879,10 +879,14 @@ function resolved(path: string, specifier: string): string | null {
   return posix.join(posix.dirname(path), bare);
 }
 
+const FILL_RECHECK_ENTRY = 'spikes/realism-fills/main.tsx';
+
 /**
  * The tests, the scripts, the root's config and the spikes: a test may import
  * its own directory's realism module, `scripts/` may read `budgets.ts` alone, and
  * the directory named whole, with or without its slash, is no module of anyone's.
+ * One spike is admitted, by story 7.6's task: the fill recheck's entry may import
+ * the facade alone, since it measures the shipped layer. It ships nowhere.
  */
 function auditHarnessReach(files: readonly Source[]): string[] {
   const failures: string[] = [];
@@ -899,7 +903,8 @@ function auditHarnessReach(files: readonly Source[]): string[] {
       if (!target.startsWith(REALISM_DIR)) continue;
       const ownDirectory = isTestFile(path) && posix.dirname(path).toLowerCase() === posix.dirname(target);
       const budgets = path.startsWith('scripts/') && target === `${REALISM_DIR}budgets.ts`;
-      if (!ownDirectory && !budgets) failures.push(`reach: ${path} imports ${specifier}`);
+      const fillRecheck = path === FILL_RECHECK_ENTRY && target === `${REALISM_DIR}index.ts`;
+      if (!ownDirectory && !budgets && !fillRecheck) failures.push(`reach: ${path} imports ${specifier}`);
     }
   }
   return failures;
@@ -1013,6 +1018,10 @@ test('the harness reach audit: a test may read its own directory, scripts the bu
     ['spikes/x/main.tsx', "import { decodeMaps } from '../../src/render-scene/realism/index.ts';"],
     ['spikes/x/main.tsx', "import { MAP_COUNT_BUDGET } from '../../src/render-scene/realism/budgets.ts';"],
     ['spikes/x/serve.mjs', "const u = new URL('../../src/render-scene/realism/map-urls.ts', import.meta.url);"],
+    ['spikes/realism-fills/harness.ts', "import { createFillLayer } from '../../src/render-scene/realism/index.ts';"],
+    ['spikes/realism-fills/main.tsx', "import { FILL_RADIUS_RATIO } from '../../src/render-scene/realism/fill-model.ts';"],
+    ['spikes/realism-fills/main.tsx', "import { MAP_COUNT_BUDGET } from '../../src/render-scene/realism/budgets.ts';"],
+    ['spikes/realism-fills/main.tsx', "const m = await import('../../src/render-scene/realism');"],
   ] as const) {
     assert.match(auditHarnessReach([{ path, text }]).join('\n'), /reach:/, `${path}: ${text}`);
   }
@@ -1028,6 +1037,7 @@ test('the harness reach audit: a test may read its own directory, scripts the bu
     ['scripts/x.ts', "import { MAP_COUNT_BUDGET } from '/src/render-scene/realism/budgets.ts';"],
     ['src/render-scene/x.test.ts', "import x from 'realism';"],
     ['spikes/x/main.tsx', "import { x } from '../../src/render-scene/realism-status.ts';"],
+    ['spikes/realism-fills/main.tsx', "import { createFillLayer } from '../../src/render-scene/realism/index.ts';"],
   ] as const) {
     assert.deepEqual(auditHarnessReach([{ path, text }]), [], `${path}: ${text}`);
   }

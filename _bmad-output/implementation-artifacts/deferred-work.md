@@ -1314,16 +1314,19 @@ Still open after 3.5:
 - source_spec: spec-7-1-the-depth-spike.md
   summary: 7.6 needs to look at orbits and the Rail where they cross a fill, because flicker there was not measured.
   evidence: The ruling hid those lines from the comparator that decides a pass; they run through a Planet's centre, and lostAsWritten changes with the bias (depth-spike-7-1.md, Not shown).
+  status: Measured in 7.6, on this machine only, with no verdict, and still open (realism-fills-7-6.md). No threshold says how many flipping pixels are acceptable, and the Rail figure is not separated from the true crossing point.
 - source_spec: spec-7-1-the-depth-spike.md
   summary: The bias's depth margin has no check, so a re-solve could break it silently.
   evidence: At 1e-6 the gap reaches 10 units near distance 1,409, against 893 today, and closer Bodies shrink the 10; neither npm run gate nor the tests look at it. Candidate owners: 7.6 or 7.10.
+  status: Passed on to 7.10 by 7.6, whose scope adds no gate check. Still open.
 - source_spec: spec-7-1-the-depth-spike.md
   summary: No story owns repeating the depth spike on a target-profile laptop, or says what happens if it disagrees.
-  evidence: The result is from an RTX 4080 SUPER only; the record and memlog state it does not show the bias holds on integrated graphics, and spikes/depth-bias/README.md gives the rerun, which is only valid with both controls. Phones and tile-based GPUs, other browsers and backends, and depth buffers below 24 bits are likewise untested and unowned; no story in epics.md names this work.
+  evidence: The result is from an RTX 4080 SUPER only; the record and memlog state it does not show the bias holds on integrated graphics, and spikes/depth-bias/README.md gives the rerun, which is only valid with both controls. Phones and tile-based GPUs, other browsers and backends, and depth buffers below 24 bits are likewise untested and unowned; no story in epics.md names this work. 7.6's recheck ran on the same machine, so this stays open and unowned.
 - source_spec: spec-7-1-the-depth-spike.md
   summary: 7.6 should recheck its own marks against real fills in the focused and subject states, and with its final FILL_RADIUS_RATIO.
   ruling: On 2026-11-05 Thomas accepted that the own-marks test cannot fail at any Focus pose on 390×844 or at focus-deep on 1920×1080, and attributed no pixel to a Ring or Moon, with this recheck covering it. So it must include a Ring and a Moon at their closest, at both viewports.
   evidence: The spike draws resting strokes at every pose, and at focus-deep no outline overlaps a 0.96 fill, so a larger ratio or a heavier stroke puts marks at risk that the spike never tested. 7.6 must also keep the fill flattened to the Billboard's plane, because 1e-6 was measured only on that fill, and should check show-through on the Rail under real camera motion and the glow sprite's depth test.
+  resolution: Done in 7.6 for fills, with FILL_RADIUS_RATIO 0.995: 0 lost at both viewports, each pose with a control (realism-fills-7-6.md). A Ring never reaches its own fill at any pose sampled, and a Moon only with the Planet a few pixels across. The Rail offered no show-through with a testable pixel, since no Star has a fill yet, so 7.7 inherits that check, and the glow's depth test.
 
 ## Deferred from: code review of spec-7-2-the-realism-tokens-and-the-draw-order.md (2026-11-04)
 
@@ -1377,10 +1380,59 @@ Still open after 3.5:
 - source_spec: spec-7-5-realism-s-owner-and-failing-silently.md
   summary: `uploaded` stays true when the WebGL context is lost and restored under the same Canvas, so textures would be gone with the status saying otherwise.
   evidence: AD-25 resets `uploaded` only with a new Canvas, and nothing uploads until 7.6, so nothing can go wrong yet. 7.6 owns the upload, and should settle whether a context restore resets the flag or fails the document.
+  resolution: Settled in 7.6: it does neither, and three re-uploads from the kept images on its next draw. Confirmed in Chrome, 0 pixels differing after a restore with no request (realism-fills-7-6.md). 7.8 adds explicit uploads and must revisit it.
   location: src/render-scene/realism-status.ts
   severity: medium
 - source_spec: spec-7-5-realism-s-owner-and-failing-silently.md
   summary: `scripts/bundle-assertion.ts` still calls 3,033 the entry's figure of record, while the entry measured 3,271 at this story's baseline and 3,278 now.
   evidence: The figure was already out of date at 007106e; 7 of the bytes are this story's, one export binding for `BASE`. The budget of 4,000 still holds.
   location: scripts/bundle-assertion.ts:54
+  severity: low
+
+## Deferred from: code review of spec-7-6-planets-lit-by-their-own-star.md (2026-11-05)
+
+- source_spec: spec-7-6-planets-lit-by-their-own-star.md
+  summary: Show-through under real Rail motion has no evidence, because no Rail frame overlaps a farther Body's marks on a testable pixel while only Planets have fills. 7.7 should measure it once Stars draw.
+  evidence: realism-fills-7-6.md, 0 testable pixels at both viewports; the 7,400 and 3,264 pixels recorded come from a staged pose.
+  location: spikes/realism-fills/harness.ts
+  severity: low
+- source_spec: spec-7-6-planets-lit-by-their-own-star.md
+  summary: The context-loss AC's "no console line" is not met as written, since three logs its own Context Lost and Context Restored lines; Thomas decides whether the AC means the site's code.
+  evidence: realism-fills-7-6.md, Context loss. The lines appear with or without realism. Leaving after a restore also logs WebGL delete warnings, in the baseline too.
+  location: src/render-scene/realism/fill-layer.ts
+  severity: low
+- source_spec: spec-7-6-planets-lit-by-their-own-star.md
+  summary: A fill's tilt is about world x, while src/derive/appearance.ts documents it as about the Billboard's horizontal, and they differ with the camera's heading. The spec's Design Notes put the map through a world-space normal, which the implementation follows; settle the wording, or the axis, at Thomas's on-screen judgement in Epic 8.
+  evidence: mapFromWorld in src/render-scene/realism/fill-model.ts; src/derive/appearance.ts:18.
+  location: src/render-scene/realism/fill-model.ts
+  severity: low
+- source_spec: spec-7-6-planets-lit-by-their-own-star.md
+  summary: A shader failing to compile, or a map failing to upload, happens inside three's render and does not reach the owner, so it would not reach markFailed. Three would log a compile failure, so it would not be silent either. No shader here fails on the tested GPU, and an integrated part was not run. 7.8's compileAsync and initTexture own this.
+  evidence: three reports program errors through its own console.error during render, after the owner's frame has returned. Spec: any failure in building ends in markFailed, nothing logged.
+  location: src/render-scene/realism/fill-layer.ts
+  severity: medium
+- source_spec: spec-7-6-planets-lit-by-their-own-star.md
+  summary: The record's Focus frame holds no Mote over the disc, so what a Mote crossing a fill does, now that fills write depth, is unmeasured. Worth a look at full motion in 7.9's check or Epic 8.
+  evidence: realism-fills-7-6.md, Focus with Motes. 0 pixels differ from the baseline outside the disc, at one held clock.
+  location: src/render-scene/mote-field.tsx
+  severity: low
+- source_spec: spec-7-6-planets-lit-by-their-own-star.md
+  summary: The fill's seam and pole handling are unmeasured on screen.
+  evidence: realism-fills-7-6.md, The ceiling. Source audits hold the text only.
+  location: src/render-scene/realism/fill-shader.ts
+  severity: low
+- source_spec: spec-7-6-planets-lit-by-their-own-star.md
+  summary: Every Planet reads as a half-disc at every stop and Focus, since the light's in-plane share is 0.995 or 1 at all of them. For Thomas's on-screen judgement in Epic 8.
+  evidence: realism-fills-7-6.md, Lit by its own Star.
+  location: src/render-scene/realism/fill-model.ts
+  severity: low
+- source_spec: spec-7-6-planets-lit-by-their-own-star.md
+  summary: All compiles and uploads land on one frame, inside frame-time sampling, until 7.8 adds the resets.
+  evidence: resetFrameSampling is 7.8's by AD-22, and no framerate was measured. The branch does not merge before Epic 8.
+  location: src/render-scene/realism-mount.tsx
+  severity: low
+- source_spec: spec-7-6-planets-lit-by-their-own-star.md
+  summary: Firefox and Safari have not run the fills, and no story owns that run; a browser ignoring imageOrientation 'flipY' would turn every map upside down with nothing to detect it.
+  evidence: Every browser check ran in Chrome on the dev machine. No epic story names another browser.
+  location: src/render-scene/realism/decode-maps.ts
   severity: low

@@ -10,12 +10,18 @@
  * `realism-status.test.ts`.
  *
  * **Nothing here can suspend or throw into R3F.** No `lazy`, no `use`, and the
- * owner catches what the frame callback could raise. It draws nothing: 7.6
- * uploads and shades the decoded images, 7.8 fades them in.
+ * owner catches what the frame callback could raise. The owner builds the fills
+ * from the decoded images (7.6), which are added to this Canvas's scene without
+ * React; 7.8 fades them in.
+ *
+ * **The one read of the preference in realism** (AD-19's eighth allowance): once per
+ * frame, handed on as `reduced`, so nothing in the realism directory names it.
+ * The effect's cleanup leaves the Canvas, and the owner disposes the layer.
  */
 
 import { useFrame } from '@react-three/fiber';
 import { useEffect } from 'react';
+import { reducedMotion } from '../shell/motion-preference.ts';
 import { BASE } from '../shell/route.ts';
 import { createRealismOwner, type RealismArtifact } from './realism-status.ts';
 
@@ -28,6 +34,6 @@ export interface RealismMountProps {
 /** Hands each frame to the owner, and each new Canvas. Renders nothing. */
 export function RealismMount({ artifact }: RealismMountProps) {
   useEffect(() => owner.enterCanvas(), []);
-  useFrame(() => owner.frame(artifact, BASE));
+  useFrame(({ scene, camera }, delta) => owner.frame(artifact, BASE, { scene, camera, delta, reduced: reducedMotion() }));
   return null;
 }

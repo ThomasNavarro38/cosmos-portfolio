@@ -1,5 +1,5 @@
 /**
- * The URL rule (7.5), and the facade's shape: `decodeMaps` and nothing else.
+ * The URL rule (7.5), and the facade's shape: `decodeMaps` and `createFillLayer` (7.6), and nothing else.
  */
 
 import { strict as assert } from 'node:assert';
@@ -13,7 +13,14 @@ import type { RealismArtifact } from '../realism-status.ts';
 import { distinctMapIds, mapUrl } from './map-urls.ts';
 
 function artifactWearing(...perClient: readonly (readonly string[])[]): RealismArtifact {
-  return { clients: perClient.map((maps) => ({ projects: maps.map((map) => ({ appearance: { map } })) })) };
+  const position = { x: 0, y: 0, z: 0 };
+  return {
+    clients: perClient.map((maps, client) => ({
+      id: `client:${client}`,
+      position,
+      projects: maps.map((map, at) => ({ id: `project:${client}/${at}`, clientId: `client:${client}`, position, appearance: { map, meanLuminance: 0.3, tilt: 0, spinRate: 0.05, spinPhase: 0 } })),
+    })),
+  };
 }
 
 test('8 Projects wearing 3 maps name 3 maps, sorted', () => {
@@ -47,9 +54,9 @@ test('every map the committed artifact wears is a file the URL rule finds, under
   }
 });
 
-test('the facade is one re-export of decodeMaps, and never the budgets', () => {
+test('the facade is one re-export of decodeMaps and one of createFillLayer, and never the budgets', () => {
   const text = stripComments(readFileSync(new URL('./index.ts', import.meta.url), 'utf8'));
-  assert.equal(text.trim(), "export { decodeMaps } from './decode-maps.ts';");
+  assert.deepEqual(text.trim().split(/\r?\n/), ["export { decodeMaps } from './decode-maps.ts';", "export { createFillLayer } from './fill-layer.ts';"]);
 });
 
 interface Module {
@@ -102,7 +109,7 @@ function auditChunk(modules: readonly Module[]): string[] {
 
 test('the walk reads every module of the chunk, and none reaches src/derive/ but for types', () => {
   const modules = chunkModules();
-  for (const path of ['budgets.ts', 'decode-maps.ts', 'index.ts', 'map-urls.ts']) {
+  for (const path of ['budgets.ts', 'decode-maps.ts', 'fill-layer.ts', 'fill-model.ts', 'fill-shader.ts', 'index.ts', 'map-urls.ts']) {
     assert.ok(modules.some((module) => module.path === `src/render-scene/realism/${path}`), `the walk reads ${path}`);
   }
   assert.deepEqual(auditChunk(modules), []);

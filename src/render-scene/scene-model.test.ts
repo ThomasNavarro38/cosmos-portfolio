@@ -4123,6 +4123,8 @@ const PREFERENCE_ROLES: Readonly<Record<string, 'writer' | 'reader' | 'model'>> 
   'src/shell/focus-panel.tsx': 'reader',
   // 3.8: the corner slot moves with the panel's slide, on the same pace.
   'src/shell/corner-chrome.tsx': 'reader',
+  // 7.6: AD-19's eighth allowance, ratified by Thomas on 2026-11-05. Spin holds on it, read once per frame.
+  'src/render-scene/realism-mount.tsx': 'reader',
   'src/render-scene/rail-model.ts': 'model',
   'src/render-scene/flight-model.ts': 'model',
   'src/render-scene/focus-model.ts': 'model',

@@ -57,9 +57,12 @@
  *
  * **Realism has one owner** (`<RealismMount>`, 7.5), mounted last and once, with
  * no conditional. On the frame after the first it imports the `realism` chunk and
- * decodes the maps the artifact names, and nothing it does can suspend, throw or
- * change this surface: when it fails, this scene is what stays. It is the only
- * way from here to the realism directory, and draws nothing yet (7.6, 7.8).
+ * decodes the maps the artifact names, then adds one fill per Planet to this
+ * Canvas's scene without React (7.6). Nothing it does can suspend or throw: when a
+ * step of its own fails, the fills go and this scene is what stays. A shader that
+ * fails to compile or a map that fails to upload, inside three's render, does not
+ * reach it until 7.8. It is the only way from here to the realism directory; Stars
+ * are 7.7's, and the fade 7.8's.
  *
  * **Dust is drawn strictly behind every Body** (FR-15). The model in
  * `dust-model.ts` decides what Dust exists; this file only guarantees the Dust's
@@ -233,7 +236,7 @@ export function Scene({ artifact }: SceneProps) {
         <FrameSampler />
         {/* The First Paint mark (6.4): marks the first frame once per document, on the visitor's own timeline. Draws nothing, sends nothing. */}
         <FirstFrameMark />
-        {/* Realism's owner (7.5): decodes the maps after the first frame, draws nothing, and on any failure leaves this scene exactly as it was. */}
+        {/* Realism's owner (7.5, 7.6): decodes the maps after the first frame, adds the Planets' fills itself, and on a failure it can see leaves this scene exactly as it was. */}
         <RealismMount artifact={artifact} />
       </Canvas>
       {/* The vignette: the ground over the frame's edge, 0 inside 42% rising to 0.9. Inert, and not narrated. */}
