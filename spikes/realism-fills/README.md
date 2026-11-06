@@ -1,4 +1,4 @@
-# Fill recheck (stories 7.6 and 7.7)
+# Fill recheck (stories 7.6, 7.7 and 7.8)
 
 Throwaway. This measures the shipped fill layer, and since 7.7 the Stars' fills and glows, on a real GPU, over the shipped line-work, the real store and the shipped pose models. Nothing here ships: `spikes/` is outside `src/`, typecheck, the tests and the build. The results are in `_bmad-output/implementation-artifacts/realism-fills-7-6.md` and `realism-glow-7-7.md`. It measures no framerate.
 
@@ -74,8 +74,13 @@ Every pose of `walkPoses` holds the store at its own progress, so its true subje
 | --- | --- |
 | `run-harness.mjs` | The harness, a run and a shot, from one command. |
 | `summarize-stars.mjs` | The Star tables of the record, from a run's JSON. |
+| `prod-arrival.mjs` | Production, 7.8: realism's arrival read frame by frame from the canvas against the baseline build (the warm draw, the fade's luminance, line-work, the settled frame), the first frame and the order of the mark, the requests and the compile, a remount, a lost context, and the failure modes. `ONLY=<cases>` runs some. See its header. |
 | `prod-stars.mjs` | Production: the failure modes against a baseline, a remount, a lost context, and trusted clicks, one Chrome per case. |
 | `screen-positions.ts` | Where a Star's fill or glow overlaps a Planet on screen, at a Rail progress, by the shipped models. |
 | `wheel.js` | Six wheel events and a wait, for `evaluate_script`, on a production build. |
 | `trusted-focus.mjs` | A trusted click on a Planet in a production build, from its own Chrome, with the settled frame saved. |
 | `compare-outside.mjs` | Differing pixels inside and outside a disc, for two captures. |
+
+## The arrival (7.8)
+
+The harness builds the layer itself and calls `arrive(false)` right after attaching it, so it draws the layer whole, as a Canvas over a `shown` document does, and its 7.6 and 7.7 measures read the rest state; it never warms, so three compiles on the first draw as before. The layer's draws now sit in one group, so `scan` finds them under the scene. `node spikes/realism-fills/prod-arrival.mjs <out-dir> <baseline-dist>` drives production builds: this tree's `dist/` and a baseline worktree's, each served by `spikes/realism-failure/serve.mjs`. The record is `_bmad-output/implementation-artifacts/realism-arrival-7-8.md`.

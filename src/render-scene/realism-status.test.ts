@@ -1,10 +1,11 @@
 /**
- * Realism's owner (7.5): every row of the story's matrix over fake ports, then
- * the source audits that hold what the runner cannot load: the mount, its one
- * place in `scene.tsx`, the suspension scan and the gate words. Each audit is
- * driven over mutations. The reach of the realism directory is audited in
- * `scripts/bundle-assertion.test.ts`, outside the tree the budgets audit walks,
- * because its mutation rows name the budgets.
+ * Realism's owner (7.5, 7.8): every row of the stories' matrices over fake ports,
+ * the arrival under the real frame-time sampler, then the source audits that hold
+ * what the runner cannot load: the mount, its one place in `scene.tsx`, the
+ * suspension scan and the gate words. Each audit is driven over mutations. The
+ * reach of the realism directory is audited in `scripts/bundle-assertion.test.ts`,
+ * outside the tree the budgets audit walks, because its mutation rows name the
+ * budgets.
  */
 
 import { strict as assert } from 'node:assert';
@@ -13,25 +14,46 @@ import { dirname, join, relative, sep } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { filesUnder, isTestFile, SOURCE_MODULE, stripComments, stripCommentsAndStrings } from '../../scripts/source-scan.ts';
+import { chartOffered, resetChartOfferForTest, resetFrameSampling, sampleFrame } from '../shell/chart-offer.ts';
 import { createRealismOwner, moveStatus, type DocumentStatus, type RealismArtifact, type RealismChunk, type RealismDraw, type RealismLayer } from './realism-status.ts';
 
 const ORIGIN = { x: 0, y: 0, z: 0 };
 const ARTIFACT: RealismArtifact = {
   clients: [{ id: 'client:a', position: ORIGIN, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, appearance: { map: 'moon', meanLuminance: 0.3, tilt: 0, spinRate: 0.05, spinPhase: 0 } }] }],
 };
-const DRAW: RealismDraw = { scene: 'scene', camera: 'camera', delta: 0.5, reduced: false, pace: 1, subject: () => null };
+const DRAW: RealismDraw = { scene: 'scene', camera: 'camera', renderer: 'renderer', delta: 0.5, reduced: false, pace: 1, subject: () => null };
 const BASE = '/base/';
 const IMAGES: ReadonlyMap<string, string> = new Map([['moon', 'image']]);
+const NO_RESET = (): void => undefined;
 
 /** Lets every settled promise's reactions run. */
 const settled = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
-/** A layer recording what it was asked, with each method's failure chosen by the row. */
-function fakeLayer(calls: string[], fails: { attach?: boolean; frame?: boolean; dispose?: boolean } = {}): RealismLayer {
+interface Fails {
+  readonly attach?: boolean;
+  readonly frame?: boolean;
+  readonly dispose?: boolean;
+  /** How the warm-up ends: resolved at once by default. */
+  readonly warm?: 'throws' | 'rejects' | 'pending';
+}
+
+/** A layer recording what it was asked, with each method's failure chosen by the row. `settle` ends a pending warm-up. */
+function fakeLayer(calls: string[], fails: Fails = {}): RealismLayer & { settle(linked: boolean): void } {
+  let settle: (linked: boolean) => void = () => undefined;
   return {
+    warm(renderer, camera, scene) {
+      calls.push(`warm ${String(renderer)} ${String(camera)} ${String(scene)}`);
+      if (fails.warm === 'throws') throw new Error('initTexture');
+      if (fails.warm === 'rejects') return Promise.reject(new Error('a realism program did not link'));
+      if (fails.warm === 'pending') return new Promise<void>((resolve, reject) => { settle = (linked) => (linked ? resolve() : reject(new Error('a realism program did not link'))); });
+      return Promise.resolve();
+    },
     attach(scene) {
       calls.push(`attach ${String(scene)}`);
       if (fails.attach) throw new Error('attach');
+    },
+    arrive(fade) {
+      calls.push(`arrive ${fade}`);
     },
     frame(camera, delta, reduced) {
       calls.push(`frame ${String(camera)} ${delta} ${reduced}`);
@@ -41,34 +63,71 @@ function fakeLayer(calls: string[], fails: { attach?: boolean; frame?: boolean; 
       calls.push('dispose');
       if (fails.dispose) throw new Error('dispose');
     },
+    settle(linked) {
+      settle(linked);
+    },
   };
 }
 
-/** An owner over counted ports, whose decode result the row chooses. */
+/** An owner over counted ports, whose decode result and layer the row chooses. */
 function ownerOver(decode: () => Promise<ReadonlyMap<string, string>> = () => Promise.resolve(IMAGES), build: () => RealismLayer = () => fakeLayer([])) {
-  const counts = { imports: 0, decodes: 0, builds: 0, args: [] as unknown[][], builtWith: [] as unknown[][] };
-  const owner = createRealismOwner<string>(() => {
-    counts.imports += 1;
-    return Promise.resolve({
-      decodeMaps(...args) {
-        counts.decodes += 1;
-        counts.args.push(args);
-        return decode();
-      },
-      createFillLayer(...args) {
-        counts.builds += 1;
-        counts.builtWith.push(args);
-        return build();
-      },
-    } satisfies RealismChunk<string>);
-  });
+  const counts = { imports: 0, decodes: 0, builds: 0, resets: 0, args: [] as unknown[][], builtWith: [] as unknown[][] };
+  const owner = createRealismOwner<string>(
+    () => {
+      counts.imports += 1;
+      return Promise.resolve({
+        decodeMaps(...args) {
+          counts.decodes += 1;
+          counts.args.push(args);
+          return decode();
+        },
+        createFillLayer(...args) {
+          counts.builds += 1;
+          counts.builtWith.push(args);
+          return build();
+        },
+      } satisfies RealismChunk<string>);
+    },
+    () => {
+      counts.resets += 1;
+    },
+  );
   return { owner, counts };
 }
 
+type Owner = { frame(artifact: RealismArtifact, base: string, draw: RealismDraw): void };
+
 /** Runs `frames` frames, then lets everything settle. */
-async function frames(owner: { frame(artifact: RealismArtifact, base: string, draw: RealismDraw): void }, count: number): Promise<void> {
-  for (let at = 0; at < count; at += 1) owner.frame(ARTIFACT, BASE, DRAW);
+async function frames(owner: Owner, count: number, draw: RealismDraw = DRAW): Promise<void> {
+  for (let at = 0; at < count; at += 1) owner.frame(ARTIFACT, BASE, draw);
   await settled();
+}
+
+/** A whole arrival under one Canvas, from the images held: the build frame, the warm draw, and the first visible frame. */
+async function arrive(owner: Owner, draw: RealismDraw = DRAW): Promise<void> {
+  owner.frame(ARTIFACT, BASE, draw);
+  await settled();
+  owner.frame(ARTIFACT, BASE, draw);
+  owner.frame(ARTIFACT, BASE, draw);
+}
+
+/** Holds every console method and unhandled rejection a row raises, so it can say none was. */
+async function silently(run: () => Promise<void>): Promise<void> {
+  const consoleCalls: unknown[] = [];
+  const saved = { error: console.error, warn: console.warn, log: console.log, info: console.info, debug: console.debug };
+  for (const key of ['error', 'warn', 'log', 'info', 'debug'] as const) console[key] = (...args: unknown[]) => void consoleCalls.push(args);
+  const unhandled: unknown[] = [];
+  const onUnhandled = (reason: unknown): void => void unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    await run();
+    await settled();
+    assert.deepEqual(consoleCalls, [], 'nothing logged');
+    assert.deepEqual(unhandled, [], 'nothing rethrown');
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+    Object.assign(console, saved);
+  }
 }
 
 test('the first frame leaves the status idle, with no import', async () => {
@@ -97,6 +156,7 @@ test('later frames, while fetching and after, make no second import or decode', 
   const done = ownerOver();
   await frames(done.owner, 2);
   await frames(done.owner, 12);
+  await frames(done.owner, 12);
   assert.deepEqual([done.counts.imports, done.counts.decodes], [1, 1]);
   assert.equal(done.owner.status().document, 'shown');
 });
@@ -119,18 +179,13 @@ for (const [name, chunkPort] of [
   ['decodeMaps resolves nothing', () => Promise.resolve({ decodeMaps: () => Promise.resolve(undefined as never) })],
 ] as const) {
   test(`${name}: failed, silently, with nothing held, and no retry`, async () => {
-    const consoleCalls: unknown[] = [];
-    const saved = { error: console.error, warn: console.warn, log: console.log };
-    for (const key of ['error', 'warn', 'log'] as const) console[key] = (...args: unknown[]) => void consoleCalls.push(args);
-    const unhandled: unknown[] = [];
-    const onUnhandled = (reason: unknown): void => void unhandled.push(reason);
-    process.on('unhandledRejection', onUnhandled);
-    try {
+    await silently(async () => {
       let imports = 0;
+      let resets = 0;
       const owner = createRealismOwner<string>(() => {
         imports += 1;
         return (chunkPort as unknown as () => Promise<RealismChunk<string>>)();
-      });
+      }, () => { resets += 1; });
       assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, DRAW));
       assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, DRAW));
       await settled();
@@ -141,20 +196,15 @@ for (const [name, chunkPort] of [
       await frames(owner, 20);
       assert.equal(owner.status().document, 'failed', 'stays failed across frames and a new Canvas');
       assert.equal(imports, 1, 'no retry');
-      assert.deepEqual(consoleCalls, [], 'nothing logged');
-      await settled();
-      assert.deepEqual(unhandled, [], 'nothing rethrown');
-    } finally {
-      process.off('unhandledRejection', onUnhandled);
-      Object.assign(console, saved);
-    }
+      assert.equal(resets, 0, 'no sampling reset');
+    });
   });
 }
 
 test('a frame callback whose port throws does not propagate into R3F', () => {
   const owner = createRealismOwner<string>(() => {
     throw new TypeError('a port threw');
-  });
+  }, NO_RESET);
   owner.frame(ARTIFACT, BASE, DRAW);
   assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, DRAW));
   assert.equal(owner.status().document, 'failed');
@@ -282,8 +332,9 @@ test('a new Canvas resets uploaded and nothing else, with no network', async () 
     assert.deepEqual(owner.status(), { document, uploaded: false });
     assert.equal(owner.images(), IMAGES);
     await frames(owner, 5);
+    await frames(owner, 5);
     assert.deepEqual([counts.imports, counts.decodes], [1, 1]);
-    assert.deepEqual(owner.status(), { document: 'shown', uploaded: true }, 'the frames of the new Canvas build its layer, and request nothing');
+    assert.deepEqual(owner.status(), { document: 'shown', uploaded: true }, 'the frames of the new Canvas build, warm and draw its layer, and request nothing');
   }
 });
 
@@ -300,16 +351,17 @@ test('a Canvas gone mid-fetch: the status still advances when the promise settle
 test('nothing is closed: the owner holds the very images it was given', async () => {
   let closed = 0;
   const image = { close: () => { closed += 1; } };
-  const owner = createRealismOwner<typeof image>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(new Map([['moon', image]])), createFillLayer: () => fakeLayer([]) }));
+  const owner = createRealismOwner<typeof image>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(new Map([['moon', image]])), createFillLayer: () => fakeLayer([]) }), NO_RESET);
   await frames(owner, 2);
+  await arrive(owner);
   owner.enterCanvas();
-  await frames(owner, 2);
+  await arrive(owner);
   owner.enterCanvas()();
   assert.equal(owner.images()?.get('moon'), image);
   assert.equal(closed, 0);
 });
 
-// --- The layer (7.6) ------------------------------------------------------------------------------
+// --- The layer (7.6) and its arrival (7.8) --------------------------------------------------------
 
 /** An owner with the maps decoded, and the frame that follows not yet run. */
 async function decodedOwner(build: () => RealismLayer) {
@@ -319,29 +371,81 @@ async function decodedOwner(build: () => RealismLayer) {
   return made;
 }
 
+/** An owner whose first Canvas has arrived: built, warmed, warm-drawn and faded in, the fade begun. */
+async function arrivedOwner(build: () => RealismLayer) {
+  const made = await decodedOwner(build);
+  await arrive(made.owner);
+  assert.deepEqual(made.owner.status(), { document: 'shown', uploaded: true });
+  return made;
+}
+
+/** What one whole first arrival records, its three frames in turn. */
+const FIRST_ARRIVAL = ['warm renderer camera scene', 'attach scene', 'frame camera 0.5 false', 'arrive true', 'frame camera 0.5 false'] as const;
+
 test('before decode there is no layer, whatever the frames', async () => {
   const { owner, counts } = ownerOver(() => new Promise(() => undefined));
   await frames(owner, 10);
   assert.equal(owner.status().document, 'fetching');
   assert.equal(counts.builds, 0);
+  assert.equal(counts.resets, 0);
 });
 
-test('the first frame at decoded builds the layer from the held images, attaches it, draws it, and marks uploaded then shown, that same frame', async () => {
+test('first arrival: the first frame at decoded builds, resets sampling once and warms with the renderer, camera and scene, attaching nothing and calling no subject', async () => {
+  const calls: string[] = [];
+  const { owner, counts } = await decodedOwner(() => fakeLayer(calls, { warm: 'pending' }));
+  let subjects = 0;
+  owner.frame(ARTIFACT, BASE, { ...DRAW, subject: () => { subjects += 1; return null; } });
+  assert.deepEqual(calls, ['warm renderer camera scene']);
+  assert.deepEqual(counts.builtWith, [[ARTIFACT, IMAGES]]);
+  assert.equal(counts.resets, 1);
+  assert.equal(subjects, 0);
+  assert.deepEqual(owner.status(), { document: 'decoded', uploaded: false });
+});
+
+test('warming: frames while the promise is pending attach nothing, and make no second build, warm or reset', async () => {
+  const calls: string[] = [];
+  const { owner, counts } = await decodedOwner(() => fakeLayer(calls, { warm: 'pending' }));
+  await frames(owner, 12);
+  assert.deepEqual(calls, ['warm renderer camera scene']);
+  assert.equal(counts.builds, 1);
+  assert.equal(counts.resets, 1);
+  assert.deepEqual(owner.status(), { document: 'decoded', uploaded: false });
+});
+
+test('warmed: the first frame after the promise resolves attaches the layer at fade 0 and draws it, marking uploaded, with the document still decoded', async () => {
+  const calls: string[] = [];
+  let made: ReturnType<typeof fakeLayer> | null = null;
+  const { owner, counts } = await decodedOwner(() => (made = fakeLayer(calls, { warm: 'pending' })));
+  owner.frame(ARTIFACT, BASE, DRAW);
+  owner.frame(ARTIFACT, BASE, DRAW);
+  assert.deepEqual(calls, ['warm renderer camera scene'], 'not before it resolves');
+  made!.settle(true);
+  await settled();
+  assert.deepEqual(calls, ['warm renderer camera scene'], 'resolving draws nothing until a frame');
+  owner.frame(ARTIFACT, BASE, DRAW);
+  assert.deepEqual(calls, ['warm renderer camera scene', 'attach scene', 'frame camera 0.5 false'], 'no arrive yet: the layer is still at fade 0');
+  assert.deepEqual(owner.status(), { document: 'decoded', uploaded: true });
+  assert.equal(counts.resets, 1);
+});
+
+test('fade begins: the frame after the warm draw resets sampling again, arrives with the fade and marks shown', async () => {
   const calls: string[] = [];
   const { owner, counts } = await decodedOwner(() => fakeLayer(calls));
-  owner.frame(ARTIFACT, BASE, DRAW);
-  assert.deepEqual(calls, ['attach scene', 'frame camera 0.5 false']);
-  assert.deepEqual(counts.builtWith, [[ARTIFACT, IMAGES]]);
+  await arrive(owner);
+  assert.deepEqual(calls, FIRST_ARRIVAL);
+  assert.equal(counts.resets, 2);
   assert.deepEqual(owner.status(), { document: 'shown', uploaded: true });
 });
 
-test('later frames update the one layer, handing it the delta, the camera and reduced as given', async () => {
+test('fade runs: later frames update the one layer, handing it the delta, the camera and reduced as given, with no further reset', async () => {
   const calls: string[] = [];
-  const { owner, counts } = await decodedOwner(() => fakeLayer(calls));
-  owner.frame(ARTIFACT, BASE, DRAW);
+  const { owner, counts } = await arrivedOwner(() => fakeLayer(calls));
   owner.frame(ARTIFACT, BASE, { ...DRAW, camera: 'moved', delta: 0.25, reduced: true });
+  await frames(owner, 10);
   assert.equal(counts.builds, 1);
-  assert.deepEqual(calls, ['attach scene', 'frame camera 0.5 false', 'frame moved 0.25 true']);
+  assert.equal(counts.resets, 2, 'exactly two per arrival');
+  assert.deepEqual(calls.slice(0, FIRST_ARRIVAL.length + 1), [...FIRST_ARRIVAL, 'frame moved 0.25 true']);
+  assert.equal(calls.filter((call) => call.startsWith('arrive')).length, 1);
 });
 
 test('a decode that failed builds no layer', async () => {
@@ -350,25 +454,64 @@ test('a decode that failed builds no layer', async () => {
   await frames(owner, 5);
   assert.equal(owner.status().document, 'failed');
   assert.equal(counts.builds, 0);
+  assert.equal(counts.resets, 0);
 });
 
 for (const [name, fails, expected] of [
-  ['attaching throws', { attach: true }, ['attach scene', 'dispose']],
-  ['the first update throws', { frame: true }, ['attach scene', 'frame camera 0.5 false', 'dispose']],
+  ['attaching throws', { attach: true }, ['warm renderer camera scene', 'attach scene', 'dispose']],
+  ['the warm draw throws', { frame: true }, ['warm renderer camera scene', 'attach scene', 'frame camera 0.5 false', 'dispose']],
 ] as const) {
   test(`${name}: failed, silently, everything removed, and no second build`, async () => {
+    await silently(async () => {
+      const calls: string[] = [];
+      const { owner, counts } = await decodedOwner(() => fakeLayer(calls, fails));
+      owner.frame(ARTIFACT, BASE, DRAW);
+      await settled();
+      assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, DRAW));
+      assert.deepEqual(owner.status(), { document: 'failed', uploaded: false });
+      assert.deepEqual(calls, expected);
+      await frames(owner, 5);
+      owner.enterCanvas();
+      await frames(owner, 5);
+      assert.equal(counts.builds, 1);
+      assert.deepEqual(calls, expected);
+    });
+  });
+}
+
+test('warm throws: initTexture or warm throwing synchronously fails the document, silently, with nothing attached', async () => {
+  await silently(async () => {
     const calls: string[] = [];
-    const { owner, counts } = await decodedOwner(() => fakeLayer(calls, fails));
+    const { owner, counts } = await decodedOwner(() => fakeLayer(calls, { warm: 'throws' }));
     assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, DRAW));
     assert.deepEqual(owner.status(), { document: 'failed', uploaded: false });
-    assert.deepEqual(calls, expected);
+    assert.deepEqual(calls, ['warm renderer camera scene', 'dispose']);
+    await frames(owner, 5);
+    assert.equal(counts.builds, 1);
+    assert.ok(!calls.some((call) => call.startsWith('attach')));
+  });
+});
+
+test('warm rejects: a program that did not link fails the document, silently, and the layer is disposed, never attached', async () => {
+  await silently(async () => {
+    const calls: string[] = [];
+    const { owner, counts } = await decodedOwner(() => fakeLayer(calls, { warm: 'rejects' }));
+    owner.frame(ARTIFACT, BASE, DRAW);
+    await settled();
+    assert.deepEqual(owner.status(), { document: 'failed', uploaded: false });
+    assert.deepEqual(calls, ['warm renderer camera scene', 'dispose']);
     await frames(owner, 5);
     owner.enterCanvas();
     await frames(owner, 5);
-    assert.equal(counts.builds, 1);
-    assert.deepEqual(calls, expected);
+    assert.equal(counts.builds, 1, 'no retry');
   });
-}
+});
+
+test('a layer with no warm-up ends the same way', async () => {
+  const { owner } = await decodedOwner(() => ({ ...fakeLayer([]), warm: undefined }) as unknown as RealismLayer);
+  assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, DRAW));
+  assert.equal(owner.status().document, 'failed');
+});
 
 test('a build that throws synchronously, as the model does: failed, silently, nothing to remove', async () => {
   const { owner, counts } = await decodedOwner(() => {
@@ -381,83 +524,167 @@ test('a build that throws synchronously, as the model does: failed, silently, no
 });
 
 test('a chunk with no layer builder ends the same way', async () => {
-  const owner = createRealismOwner<string>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(IMAGES) } as unknown as RealismChunk<string>));
+  const owner = createRealismOwner<string>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(IMAGES) } as unknown as RealismChunk<string>), NO_RESET);
   await frames(owner, 2);
   assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, DRAW));
   assert.equal(owner.status().document, 'failed');
 });
 
-test('an update throwing on a later frame: failed, fills removed, and the loop goes on', async () => {
-  const calls: string[] = [];
-  let throwing = false;
-  const { owner } = await decodedOwner(() => ({
-    ...fakeLayer(calls),
-    frame() {
-      if (throwing) throw new Error('later');
-    },
-  }));
-  owner.frame(ARTIFACT, BASE, DRAW);
-  assert.equal(owner.status().document, 'shown');
-  throwing = true;
-  assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, DRAW));
-  assert.deepEqual(owner.status(), { document: 'failed', uploaded: false });
-  assert.deepEqual(calls, ['attach scene', 'dispose']);
-  assert.equal(owner.images(), null);
-  assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, DRAW));
+test('frame throws: an update throwing mid-fade fails the document, removes the layer, and the loop goes on', async () => {
+  await silently(async () => {
+    const calls: string[] = [];
+    let throwing = false;
+    const { owner } = await arrivedOwner(() => ({
+      ...fakeLayer(calls),
+      frame() {
+        if (throwing) throw new Error('later');
+      },
+    }));
+    throwing = true;
+    assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, DRAW));
+    assert.deepEqual(owner.status(), { document: 'failed', uploaded: false });
+    assert.deepEqual(calls, ['warm renderer camera scene', 'attach scene', 'arrive true', 'dispose']);
+    assert.equal(owner.images(), null);
+    assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, DRAW));
+  });
 });
 
 test('markFailed removes a built layer, and a dispose that throws stays silent', async () => {
   const calls: string[] = [];
-  const { owner } = await decodedOwner(() => fakeLayer(calls, { dispose: true }));
-  owner.frame(ARTIFACT, BASE, DRAW);
+  const { owner } = await arrivedOwner(() => fakeLayer(calls, { dispose: true }));
   assert.doesNotThrow(() => owner.markFailed());
-  assert.deepEqual(calls, ['attach scene', 'frame camera 0.5 false', 'dispose']);
+  assert.deepEqual(calls, [...FIRST_ARRIVAL, 'dispose']);
   assert.equal(owner.status().document, 'failed');
 });
 
-test('a new Canvas over shown builds a new layer from the held images, with no request; leaving disposes it and keeps the images', async () => {
+test('return over shown: a new Canvas builds, resets and warms again from the held images, with no request, warm-draws, then arrives whole', async () => {
   const calls: string[] = [];
   const { owner, counts } = await decodedOwner(() => fakeLayer(calls));
   const leaveFirst = owner.enterCanvas();
-  owner.frame(ARTIFACT, BASE, DRAW);
+  await arrive(owner);
   leaveFirst();
-  assert.deepEqual(calls, ['attach scene', 'frame camera 0.5 false', 'dispose']);
+  assert.deepEqual(calls, [...FIRST_ARRIVAL, 'dispose']);
   assert.deepEqual(owner.status(), { document: 'shown', uploaded: false });
   assert.equal(owner.images(), IMAGES);
   const leaveSecond = owner.enterCanvas();
-  owner.frame(ARTIFACT, BASE, { ...DRAW, scene: 'second' });
+  calls.length = 0;
+  await arrive(owner, { ...DRAW, scene: 'second' });
+  assert.deepEqual(calls, ['warm renderer camera second', 'attach second', 'frame camera 0.5 false', 'arrive false', 'frame camera 0.5 false']);
   assert.deepEqual(owner.status(), { document: 'shown', uploaded: true });
-  assert.equal(calls.at(-2), 'attach second');
   assert.deepEqual(counts.builtWith, [[ARTIFACT, IMAGES], [ARTIFACT, IMAGES]]);
   assert.deepEqual([counts.imports, counts.decodes], [1, 1]);
+  assert.equal(counts.resets, 4, 'two for each arrival');
   leaveSecond();
   assert.equal(calls.at(-1), 'dispose');
+});
+
+test('return mid-fade: a Canvas leaving with its fade begun leaves the document shown, and the next Canvas draws whole', async () => {
+  const calls: string[] = [];
+  const { owner } = await decodedOwner(() => fakeLayer(calls));
+  const leave = owner.enterCanvas();
+  await arrive(owner);
+  await frames(owner, 3);
+  leave();
+  assert.deepEqual(owner.status(), { document: 'shown', uploaded: false });
+  owner.enterCanvas();
+  calls.length = 0;
+  await arrive(owner, { ...DRAW, scene: 'next' });
+  assert.ok(calls.includes('arrive false'));
+  assert.ok(!calls.includes('arrive true'));
+});
+
+test('return while warming: the stale promise is ignored, resolved or rejected, and the next Canvas warms afresh and fades', async () => {
+  for (const linked of [true, false]) {
+    const calls: string[] = [];
+    const made: ReturnType<typeof fakeLayer>[] = [];
+    const { owner, counts } = await decodedOwner(() => {
+      const layer = fakeLayer(calls, { warm: 'pending' });
+      made.push(layer);
+      return layer;
+    });
+    const leave = owner.enterCanvas();
+    owner.frame(ARTIFACT, BASE, DRAW);
+    leave();
+    assert.deepEqual(calls, ['warm renderer camera scene', 'dispose']);
+    made[0]!.settle(linked);
+    await settled();
+    assert.deepEqual(owner.status(), { document: 'decoded', uploaded: false }, `a stale ${linked ? 'resolve' : 'reject'} does nothing`);
+    owner.enterCanvas();
+    owner.frame(ARTIFACT, BASE, { ...DRAW, scene: 'next' });
+    made[1]!.settle(true);
+    await settled();
+    owner.frame(ARTIFACT, BASE, { ...DRAW, scene: 'next' });
+    owner.frame(ARTIFACT, BASE, { ...DRAW, scene: 'next' });
+    assert.deepEqual(calls.slice(2), ['warm renderer camera next', 'attach next', 'frame camera 0.5 false', 'arrive true', 'frame camera 0.5 false']);
+    assert.deepEqual(owner.status(), { document: 'shown', uploaded: true });
+    assert.equal(counts.builds, 2);
+    assert.equal(counts.resets, 3, 'one for the arrival cut short, two for the one that ran');
+  }
+});
+
+test('return while fetching: a new Canvas whose decode arrives later gets the first arrival, with a fade', async () => {
+  let settle: (images: ReadonlyMap<string, string>) => void = () => undefined;
+  const calls: string[] = [];
+  const { owner, counts } = ownerOver(() => new Promise((resolve) => { settle = resolve; }), () => fakeLayer(calls));
+  const leave = owner.enterCanvas();
+  await frames(owner, 4);
+  leave();
+  owner.enterCanvas();
+  await frames(owner, 2);
+  settle(IMAGES);
+  await settled();
+  await arrive(owner);
+  assert.deepEqual(calls, FIRST_ARRIVAL);
+  assert.equal(counts.resets, 2);
+  assert.equal(counts.imports, 1);
+});
+
+test('return after failed: a new Canvas builds nothing, warms nothing and resets nothing', async () => {
+  const calls: string[] = [];
+  const { owner, counts } = await decodedOwner(() => fakeLayer(calls, { warm: 'rejects' }));
+  owner.frame(ARTIFACT, BASE, DRAW);
+  await settled();
+  assert.equal(owner.status().document, 'failed');
+  const before = { builds: counts.builds, resets: counts.resets, calls: calls.length };
+  owner.enterCanvas();
+  await frames(owner, 10, { ...DRAW, scene: 'next' });
+  assert.deepEqual({ builds: counts.builds, resets: counts.resets, calls: calls.length }, before);
 });
 
 test('a Canvas leaving late, after the next has entered, leaves the new layer alone', async () => {
   const calls: string[] = [];
   const { owner } = await decodedOwner(() => fakeLayer(calls));
   const leaveOld = owner.enterCanvas();
-  owner.frame(ARTIFACT, BASE, DRAW);
+  await arrive(owner);
   owner.enterCanvas();
-  owner.frame(ARTIFACT, BASE, { ...DRAW, scene: 'new' });
+  await arrive(owner, { ...DRAW, scene: 'new' });
   const before = [...calls];
   leaveOld();
   assert.deepEqual(calls, before);
   assert.deepEqual(owner.status(), { document: 'shown', uploaded: true });
 });
 
-test('a frame that runs before the passive effect builds exactly once: entering keeps the layer, and resets uploaded until the next frame', async () => {
+test('a frame that runs before the passive effect: entering starts the arrival afresh, so the next frame disposes that layer and builds again, with its stale warm-up ignored', async () => {
   const calls: string[] = [];
-  const { owner, counts } = await decodedOwner(() => fakeLayer(calls));
+  const made: ReturnType<typeof fakeLayer>[] = [];
+  const { owner, counts } = await decodedOwner(() => {
+    const layer = fakeLayer(calls, { warm: 'pending' });
+    made.push(layer);
+    return layer;
+  });
   owner.frame(ARTIFACT, BASE, DRAW);
-  assert.deepEqual(owner.status(), { document: 'shown', uploaded: true });
   const leave = owner.enterCanvas();
-  assert.deepEqual(owner.status(), { document: 'shown', uploaded: false });
+  assert.deepEqual(owner.status(), { document: 'decoded', uploaded: false });
   assert.ok(!calls.includes('dispose'), 'entering disposes nothing');
   owner.frame(ARTIFACT, BASE, DRAW);
-  assert.equal(counts.builds, 1);
-  assert.deepEqual(calls, ['attach scene', 'frame camera 0.5 false', 'frame camera 0.5 false']);
+  assert.deepEqual(calls, ['warm renderer camera scene', 'dispose', 'warm renderer camera scene']);
+  made[0]!.settle(true);
+  made[1]!.settle(true);
+  await settled();
+  owner.frame(ARTIFACT, BASE, DRAW);
+  owner.frame(ARTIFACT, BASE, DRAW);
+  assert.equal(counts.builds, 2);
+  assert.deepEqual(calls.slice(3), ['attach scene', 'frame camera 0.5 false', 'arrive true', 'frame camera 0.5 false']);
   assert.deepEqual(owner.status(), { document: 'shown', uploaded: true });
   leave();
   assert.equal(calls.at(-1), 'dispose', 'this Canvas left, and nothing has entered since');
@@ -467,24 +694,36 @@ test('entering a new Canvas with the old layer still attached: its first frame m
   const calls: string[] = [];
   const { owner, counts } = await decodedOwner(() => fakeLayer(calls));
   const leaveOld = owner.enterCanvas();
-  owner.frame(ARTIFACT, BASE, DRAW);
+  await arrive(owner);
   owner.enterCanvas();
   assert.deepEqual(owner.status(), { document: 'shown', uploaded: false });
   assert.ok(!calls.includes('dispose'), 'not until a frame from the new scene');
   owner.frame(ARTIFACT, BASE, { ...DRAW, scene: 'new' });
   assert.equal(counts.builds, 2);
-  assert.deepEqual(calls, ['attach scene', 'frame camera 0.5 false', 'dispose', 'attach new', 'frame camera 0.5 false']);
+  assert.deepEqual(calls, [...FIRST_ARRIVAL, 'dispose', 'warm renderer camera new']);
   leaveOld();
   assert.equal(calls.filter((call) => call === 'dispose').length, 1, 'a stale leave disposes nothing');
 });
 
-test('a frame from another scene moves the layer there: the old is disposed, a new one attached', async () => {
+test('a frame from another scene moves the layer there: the old is disposed, a new one built and warmed, and its stale warm-up ignored', async () => {
   const calls: string[] = [];
-  const { owner, counts } = await decodedOwner(() => fakeLayer(calls));
+  const made: ReturnType<typeof fakeLayer>[] = [];
+  const { owner, counts } = await decodedOwner(() => {
+    const layer = fakeLayer(calls, { warm: 'pending' });
+    made.push(layer);
+    return layer;
+  });
   owner.frame(ARTIFACT, BASE, DRAW);
   owner.frame(ARTIFACT, BASE, { ...DRAW, scene: 'other' });
   assert.equal(counts.builds, 2);
-  assert.deepEqual(calls, ['attach scene', 'frame camera 0.5 false', 'dispose', 'attach other', 'frame camera 0.5 false']);
+  assert.deepEqual(calls, ['warm renderer camera scene', 'dispose', 'warm renderer camera other']);
+  made[0]!.settle(false);
+  await settled();
+  assert.equal(owner.status().document, 'decoded', 'the released layer\'s rejection does nothing');
+  made[1]!.settle(true);
+  await settled();
+  owner.frame(ARTIFACT, BASE, { ...DRAW, scene: 'other' });
+  assert.equal(calls.at(-2), 'attach other');
 });
 
 test('leaving a Canvas mid-fetch, then the maps arriving, draws nothing until a Canvas has a frame', async () => {
@@ -497,14 +736,82 @@ test('leaving a Canvas mid-fetch, then the maps arriving, draws nothing until a 
   await settled();
   assert.deepEqual(owner.status(), { document: 'decoded', uploaded: false });
   assert.equal(counts.builds, 0);
+  assert.equal(counts.resets, 0);
 });
 
-test('under one Canvas the owner sees no context event: same layer, uploaded stays true', async () => {
-  const { owner, counts } = await decodedOwner(() => fakeLayer([]));
+test('under one Canvas the owner sees no context event: same layer, uploaded stays true, no second warm-up', async () => {
+  const calls: string[] = [];
+  const { owner, counts } = await arrivedOwner(() => fakeLayer(calls));
   await frames(owner, 3);
   assert.deepEqual(owner.status(), { document: 'shown', uploaded: true });
   await frames(owner, 3);
   assert.equal(counts.builds, 1);
+  assert.equal(calls.filter((call) => call.startsWith('warm')).length, 1);
+  assert.equal(counts.resets, 2);
+});
+
+// --- The arrival under the real frame-time sampler (7.8) ------------------------------------------
+
+/**
+ * One Canvas's life as the sampler and the owner see it, frame by frame, with the
+ * sampler first in each frame as `frame-sampler.tsx` is mounted first. The maps take
+ * three seconds to arrive, so the host's own warm-up is long spent. `stall` is the frames
+ * that follow the build frame, where upload and compile land.
+ */
+async function sampledArrival(resets: boolean, steady: number, stall: readonly number[]): Promise<{ offered: boolean; resets: number }> {
+  resetChartOfferForTest();
+  try {
+    let decode: (images: ReadonlyMap<string, string>) => void = () => undefined;
+    let warmed: () => void = () => undefined;
+    let count = 0;
+    const owner = createRealismOwner<string>(
+      () => Promise.resolve({
+        decodeMaps: () => new Promise<ReadonlyMap<string, string>>((resolve) => { decode = resolve; }),
+        createFillLayer: () => ({ ...fakeLayer([]), warm: () => new Promise<void>((resolve) => { warmed = resolve; }) }),
+      }),
+      () => {
+        count += 1;
+        if (resets) resetFrameSampling();
+      },
+    );
+    const tick = (delta: number): void => {
+      sampleFrame(delta);
+      owner.frame(ARTIFACT, BASE, { ...DRAW, delta });
+    };
+    let seconds = 0;
+    const run = (until: number): void => {
+      while (seconds < until) {
+        tick(steady);
+        seconds += steady;
+      }
+    };
+    run(3);
+    await settled();
+    decode(IMAGES);
+    await settled();
+    tick(steady);
+    for (const delta of stall) tick(delta);
+    warmed();
+    await settled();
+    seconds = 0;
+    run(15);
+    return { offered: chartOffered(), resets: count };
+  } finally {
+    resetChartOfferForTest();
+  }
+}
+
+const UPLOAD_STALL = [0.8, ...Array<number>(10).fill(0.1)];
+
+test('the upload stall: a 0.8 s frame and slow frames just after the upload reset, on a 30 fps machine, do not latch the offer; without the resets they would', async () => {
+  assert.deepEqual(await sampledArrival(true, 1 / 30, UPLOAD_STALL), { offered: false, resets: 2 });
+  assert.deepEqual(await sampledArrival(false, 1 / 30, UPLOAD_STALL), { offered: true, resets: 2 }, 'the control: the same frames, the resets not passed on, latch');
+  assert.deepEqual(await sampledArrival(true, 1 / 30, []), { offered: false, resets: 2 }, 'and a 30 fps machine with no stall never latches');
+});
+
+test('a slow machine at 20 fps sustained through the arrival still latches the offer', async () => {
+  assert.deepEqual(await sampledArrival(true, 1 / 20, []), { offered: true, resets: 2 });
+  assert.deepEqual(await sampledArrival(true, 1 / 20, UPLOAD_STALL), { offered: true, resets: 2 });
 });
 
 // --- The subject and the pace (7.7) ---------------------------------------------------------------
@@ -512,7 +819,9 @@ test('under one Canvas the owner sees no context event: same layer, uploaded sta
 /** A layer recording only what the owner resolved for it. */
 function recordingLayer(seen: unknown[][]): RealismLayer {
   return {
+    warm: () => Promise.resolve(),
     attach() {},
+    arrive() {},
     frame(_camera, _delta, _reduced, pace, subject) {
       seen.push([pace, subject]);
     },
@@ -538,7 +847,8 @@ test('before decode, and after a failed decode, the subject is not called', asyn
 
 test('with a layer, the subject is resolved once a frame, inside the owner, and handed on with the pace', async () => {
   const seen: unknown[][] = [];
-  const { owner } = await decodedOwner(() => recordingLayer(seen));
+  const { owner } = await arrivedOwner(() => recordingLayer(seen));
+  seen.length = 0;
   let calls = 0;
   owner.frame(ARTIFACT, BASE, { ...DRAW, pace: 0.25, subject: () => { calls += 1; return 'client:a'; } });
   owner.frame(ARTIFACT, BASE, { ...DRAW, pace: 1, subject: () => { calls += 1; return null; } });
@@ -549,20 +859,21 @@ test('with a layer, the subject is resolved once a frame, inside the owner, and 
 
 test('a subject that throws: failed, silently, everything removed, and the loop goes on', async () => {
   const calls: string[] = [];
-  const { owner } = await decodedOwner(() => fakeLayer(calls));
-  owner.frame(ARTIFACT, BASE, DRAW);
+  const { owner } = await arrivedOwner(() => fakeLayer(calls));
   assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, { ...DRAW, subject: () => { throw new Error('the store threw'); } }));
   assert.deepEqual(owner.status(), { document: 'failed', uploaded: false });
   assert.equal(calls.at(-1), 'dispose');
   assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, DRAW));
 });
 
-test('a subject that throws on the very first frame at decoded: failed, and the built layer is removed', async () => {
+test('a subject that throws on the warm draw: failed, and the attached layer is removed', async () => {
   const calls: string[] = [];
   const { owner } = await decodedOwner(() => fakeLayer(calls));
+  owner.frame(ARTIFACT, BASE, DRAW);
+  await settled();
   assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, { ...DRAW, subject: () => { throw new Error('the store threw'); } }));
   assert.equal(owner.status().document, 'failed');
-  assert.deepEqual(calls, ['attach scene', 'dispose']);
+  assert.deepEqual(calls, ['warm renderer camera scene', 'attach scene', 'dispose']);
 });
 
 // --- The source audits ----------------------------------------------------------------------------
@@ -612,22 +923,23 @@ test('realism-status.ts imports nothing, reads no store, logs nothing, throws no
 const MOUNT_LINES: readonly string[] = [
   "import { useFrame } from '@react-three/fiber';",
   "import { useEffect } from 'react';",
+  "import { resetFrameSampling } from '../shell/chart-offer.ts';",
   "import { motionPace, reducedMotion } from '../shell/motion-preference.ts';",
   "import { BASE } from '../shell/route.ts';",
   "import { navigationStore } from '../shell/state.ts';",
   "import type { Rail } from './rail-model.ts';",
   "import { createRealismOwner, type RealismArtifact } from './realism-status.ts';",
   "import { sceneSubject } from './stroke-model.ts';",
-  `const owner = createRealismOwner(() => ${THE_IMPORT});`,
+  `const owner = createRealismOwner(() => ${THE_IMPORT}, () => resetFrameSampling());`,
   'export interface RealismMountProps {',
   '  readonly artifact: RealismArtifact;',
   '  readonly rail: Rail;',
   '}',
   'export function RealismMount({ artifact, rail }: RealismMountProps) {',
   '  useEffect(() => owner.enterCanvas(), []);',
-  '  useFrame(({ scene, camera }, delta) => {',
+  '  useFrame(({ scene, camera, gl }, delta) => {',
   '    const reduced = reducedMotion();',
-  '    owner.frame(artifact, BASE, { scene, camera, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });',
+  '    owner.frame(artifact, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });',
   '  });',
   '  return null;',
   '}',
@@ -650,10 +962,19 @@ test('the mount is one owner at module scope, one effect, one frame callback and
 test('the mount audit rejects each departure, and a comment is not one', () => {
   const real = read(MOUNT_PATH).replaceAll('\r\n', '\n');
   const READ = '    const reduced = reducedMotion();\n';
-  const FRAME = '    owner.frame(artifact, BASE, { scene, camera, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });\n';
-  const USE = `  useFrame(({ scene, camera }, delta) => {\n${READ}${FRAME}  });\n`;
+  const FRAME = '    owner.frame(artifact, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });\n';
+  const USE = `  useFrame(({ scene, camera, gl }, delta) => {\n${READ}${FRAME}  });\n`;
+  const BINDING = `const owner = createRealismOwner(() => ${THE_IMPORT}, () => resetFrameSampling());`;
   for (const [name, mutate] of [
-    ['an owner per mount', (s: string) => s.replace(USE, `  const owner = createRealismOwner(() => ${THE_IMPORT});\n${USE}`)],
+    ['an owner per mount', (s: string) => s.replace(USE, `  ${BINDING}\n${USE}`)],
+    ['no sampling reset', (s: string) => s.replace(BINDING, `const owner = createRealismOwner(() => ${THE_IMPORT}, () => undefined);`)],
+    ['no reset port at all', (s: string) => s.replace(BINDING, `const owner = createRealismOwner(() => ${THE_IMPORT});`)],
+    ['a second reset call', (s: string) => s.replace(READ, `${READ}    resetFrameSampling();\n`)],
+    ['a second reset, in the binding', (s: string) => s.replace('() => resetFrameSampling());', '() => { resetFrameSampling(); resetFrameSampling(); });')],
+    ['the reset bound bare, so the port is the import itself', (s: string) => s.replace('() => resetFrameSampling());', 'resetFrameSampling);')],
+    ['another name from the monitor', (s: string) => s.replace("import { resetFrameSampling } from '../shell/chart-offer.ts';", "import { resetFrameSampling, sampleFrame } from '../shell/chart-offer.ts';")],
+    ['a fixed renderer', (s: string) => s.replace('renderer: gl,', 'renderer: null,')],
+    ['no renderer', (s: string) => s.replace('renderer: gl, ', '')],
     ['a resource read', (s: string) => s.replace(USE, `  use(${THE_IMPORT});\n${USE}`)],
     ['a guarded frame', (s: string) => s.replace(FRAME, `    if (artifact) ${FRAME.trimStart()}`)],
     ['reduced held at a fixed value', (s: string) => s.replace('const reduced = reducedMotion();', 'const reduced = false;')],

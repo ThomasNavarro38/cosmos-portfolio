@@ -11,8 +11,13 @@
  *
  * **Nothing here can suspend or throw into R3F.** No `lazy`, no `use`, and the
  * owner catches what the frame callback could raise. The owner builds the fills
- * and glows from the decoded images (7.6, 7.7), which are added to this Canvas's
- * scene without React; 7.8 fades them in.
+ * and glows from the decoded images (7.6, 7.7), warms them off-screen with R3F's
+ * renderer, and fades them in (7.8), adding them to this Canvas's scene without React.
+ *
+ * **The one added caller of `resetFrameSampling`** (7.8, AD-19's `chart-offer.ts`
+ * importer row): bound once, here, as the owner's sampling port, which calls it when
+ * upload begins and when the first visible frame begins. Nothing in the realism
+ * directory names it.
  *
  * **The one read of the preference in realism** (AD-19's eighth allowance): once per
  * frame, handed on as `reduced` and as `motionPace`'s number, as `focus-panel.tsx` and
@@ -25,6 +30,7 @@
 
 import { useFrame } from '@react-three/fiber';
 import { useEffect } from 'react';
+import { resetFrameSampling } from '../shell/chart-offer.ts';
 import { motionPace, reducedMotion } from '../shell/motion-preference.ts';
 import { BASE } from '../shell/route.ts';
 import { navigationStore } from '../shell/state.ts';
@@ -32,7 +38,7 @@ import type { Rail } from './rail-model.ts';
 import { createRealismOwner, type RealismArtifact } from './realism-status.ts';
 import { sceneSubject } from './stroke-model.ts';
 
-const owner = createRealismOwner(() => import('./realism/index.ts'));
+const owner = createRealismOwner(() => import('./realism/index.ts'), () => resetFrameSampling());
 
 export interface RealismMountProps {
   readonly artifact: RealismArtifact;
@@ -42,9 +48,9 @@ export interface RealismMountProps {
 /** Hands each frame to the owner, and each new Canvas. Renders nothing. */
 export function RealismMount({ artifact, rail }: RealismMountProps) {
   useEffect(() => owner.enterCanvas(), []);
-  useFrame(({ scene, camera }, delta) => {
+  useFrame(({ scene, camera, gl }, delta) => {
     const reduced = reducedMotion();
-    owner.frame(artifact, BASE, { scene, camera, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });
+    owner.frame(artifact, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });
   });
   return null;
 }

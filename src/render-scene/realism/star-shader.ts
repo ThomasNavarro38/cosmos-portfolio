@@ -14,6 +14,9 @@
  * values in the framebuffer, and a shader cannot read the destination, so a test bounds
  * only this draw's own peak: what overlapping glows and Dust add up to is on real pixels.
  *
+ * **The fade (7.8)** is the layer's one shared `uFade`: a fill's alpha, and a factor on the
+ * glow's colour, so at 0 a fill blends to the destination unchanged and a glow adds 0.
+ *
  * Nothing is tone-mapped. `<colorspace_fragment>` is the output's sRGB.
  */
 
@@ -37,6 +40,7 @@ export const STAR_FILL_VERTEX_SHADER = FILL_VERTEX_SHADER;
 export const STAR_FILL_FRAGMENT_SHADER = /* glsl */ `
   uniform vec3 uColor;
   uniform float uRise;
+  uniform float uFade;
   varying vec2 vDisc;
   const float REST_TARGET = ${glslFloat(STAR_FILL_REST_LUMINANCE)};
   const float SUBJECT_TARGET = ${glslFloat(STAR_FILL_SUBJECT_LUMINANCE)};
@@ -51,7 +55,7 @@ export const STAR_FILL_FRAGMENT_SHADER = /* glsl */ `
     vec3 lit = uColor * (target / dot(uColor, WEIGHTS));
     float y = dot(lit, WEIGHTS);
     float limit = mix(REST_CEILING, SUBJECT_CEILING, uRise);
-    gl_FragColor = vec4(y > limit ? lit * (limit / y) : lit, 1.0);
+    gl_FragColor = vec4(y > limit ? lit * (limit / y) : lit, uFade);
     #include <colorspace_fragment>
     if (y > limit * NEAR_CEILING) gl_FragColor.rgb = floor(gl_FragColor.rgb * 255.0) / 255.0;
   }
@@ -68,13 +72,14 @@ export const GLOW_VERTEX_SHADER = /* glsl */ `
 export const GLOW_FRAGMENT_SHADER = /* glsl */ `
   uniform vec3 uColor;
   uniform float uRise;
+  uniform float uFade;
   varying vec2 vDisc;
   const float REST_PEAK = ${glslFloat(GLOW_REST_PEAK)};
   const float SUBJECT_PEAK = ${glslFloat(GLOW_SUBJECT_PEAK)};
   void main() {
     float edge = max(1.0 - dot(vDisc, vDisc), 0.0);
     float falloff = edge * edge;
-    gl_FragColor = vec4(uColor * mix(REST_PEAK, SUBJECT_PEAK, uRise) * falloff, 1.0);
+    gl_FragColor = vec4(uColor * mix(REST_PEAK, SUBJECT_PEAK, uRise) * falloff * uFade, 1.0);
     #include <colorspace_fragment>
   }
 `;

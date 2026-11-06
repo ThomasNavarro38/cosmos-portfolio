@@ -31,6 +31,10 @@
  *
  * **Resets** are `scene-host.tsx`'s: when the host mounts, and when the document
  * becomes visible again (`visibilitychange`), so a background tab never counts.
+ * And the realism mount's two (7.8), `render-scene/realism-mount.tsx` binding this
+ * reset as its owner's sampling port: when the realism layer's upload begins, and when
+ * its first visible frame begins, so the one-off upload and compile, and the fade's
+ * first frames, land in a warm-up and never in the window.
  *
  * **A module-level value, in `motion-preference.ts`'s shape** — not a store
  * field: it is not where the visitor is, so it has no place in

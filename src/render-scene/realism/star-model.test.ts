@@ -9,7 +9,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { AdditiveBlending, Color, FrontSide, type Mesh, NormalBlending, PerspectiveCamera, Quaternion, Scene, type ShaderMaterial, SphereGeometry } from 'three';
+import { AdditiveBlending, Color, FrontSide, Group, type Mesh, NormalBlending, type Object3D, PerspectiveCamera, Quaternion, Scene, type ShaderMaterial, SphereGeometry, type WebGLRenderer } from 'three';
 import { filesUnder, isTestFile, SOURCE_MODULE, stripComments, stripCommentsAndStrings } from '../../../scripts/source-scan.ts';
 import { REDUCED_MOTION_PACE } from '../../shell/motion-preference.ts';
 import { tokens } from '../../tokens/tokens.ts';
@@ -235,6 +235,7 @@ function auditStarFill(vertex: string, fragment: string): string[] {
   if (!fragment.includes('mix(REST_CEILING, SUBJECT_CEILING, uRise)')) failures.push('the ceiling does not follow the rise');
   if (!fragment.includes('y > limit ? lit * (limit / y) : lit')) failures.push('the ceiling does not hold the luminance');
   if (!fragment.includes('mix(REST_TARGET, SUBJECT_TARGET, uRise)')) failures.push('the brightness does not follow the rise');
+  if (!fragment.includes('uniform float uFade;') || !fragment.includes('gl_FragColor = vec4(y > limit ? lit * (limit / y) : lit, uFade);')) failures.push('the alpha is not the fade');
   if (!/#include <colorspace_fragment>\s*if \(y > limit \* NEAR_CEILING\) gl_FragColor\.rgb = floor\(gl_FragColor\.rgb \* 255\.0\) \/ 255\.0;/.test(fragment)) failures.push('rounding can pass the ceiling');
   return failures;
 }
@@ -262,6 +263,8 @@ test('the Star fill audit rejects a map, a light, a removed colorspace_fragment 
     ['no ceiling', V, F.replace('y > limit ? lit * (limit / y) : lit', 'lit'), /hold the luminance/],
     ['a brightness with no rise', V, F.replace('mix(REST_TARGET, SUBJECT_TARGET, uRise)', 'REST_TARGET'), /brightness/],
     ['rounding left to the output', V, F.replace('floor(gl_FragColor.rgb * 255.0) / 255.0', 'gl_FragColor.rgb'), /rounding/],
+    ['an opaque alpha, so no fade', V, F.replace('lit * (limit / y) : lit, uFade);', 'lit * (limit / y) : lit, 1.0);'), /alpha is not the fade/],
+    ['no fade uniform', V, F.replace('uniform float uFade;', ''), /alpha is not the fade/],
   ] as const) {
     assert.notEqual(`${vertex}${fragment}`, `${V}${F}`, `"${name}" must apply`);
     assert.match(auditStarFill(vertex, fragment).join('\n'), message, name);
@@ -277,7 +280,8 @@ function auditGlow(vertex: string, fragment: string): string[] {
   if (/\bposition\.z\b|position\.xyz|vec4\(\s*position\s*,/.test(vertex)) failures.push('the sphere keeps its relief');
   if (!fragment.includes('float edge = max(1.0 - dot(vDisc, vDisc), 0.0);')) failures.push('the falloff does not reach 0 at the edge');
   if (!fragment.includes('float falloff = edge * edge;')) failures.push('the falloff has a slope at the edge');
-  if (!fragment.includes('vec4(uColor * mix(REST_PEAK, SUBJECT_PEAK, uRise) * falloff, 1.0)')) failures.push('the colour is not the token, by the rise and the falloff');
+  if (!fragment.includes('vec4(uColor * mix(REST_PEAK, SUBJECT_PEAK, uRise) * falloff * uFade, 1.0)')) failures.push('the colour is not the token, by the rise, the falloff and the fade');
+  if (!fragment.includes('uniform float uFade;')) failures.push('no fade uniform');
   if (!fragment.includes('#include <colorspace_fragment>')) failures.push('no colorspace_fragment');
   if (fragment.includes('#include <colorspace_fragment>') && !encodesAfterAssigning(fragment)) failures.push('the colour is encoded before it is assigned');
   if (/\bsampler\w*\b|\btexture\w*\s*\(/.test(fragment)) failures.push('a glow has a map');
@@ -297,16 +301,19 @@ test('the glow shader audit rejects each departure', () => {
   const V = GLOW_VERTEX_SHADER;
   const F = GLOW_FRAGMENT_SHADER;
   const FLAT = 'vec4(position.xy, 0, 1)';
-  const MAIN = 'vec4(uColor * mix(REST_PEAK, SUBJECT_PEAK, uRise) * falloff, 1.0)';
+  const MAIN = 'vec4(uColor * mix(REST_PEAK, SUBJECT_PEAK, uRise) * falloff * uFade, 1.0)';
   for (const [name, vertex, fragment, message] of [
     ['relief', V.replace(FLAT, 'vec4(position, 1)'), F, /flattened/],
     ['a bias', V.replace(/\}\s*$/, 'gl_Position.z += 1e-6 * gl_Position.w; }'), F, /has a bias/],
     ['a renamed varying', V.replaceAll('vDisc', 'vDisk'), F, /different varyings/],
     ['a floor at the edge', V, F.replace('max(1.0 - dot(vDisc, vDisc), 0.0)', 'max(1.0 - dot(vDisc, vDisc), 0.1)'), /reach 0/],
     ['a linear falloff, with a slope at the edge', V, F.replace('edge * edge', 'edge'), /slope/],
-    ['no falloff', V, F.replace(MAIN, 'vec4(uColor * mix(REST_PEAK, SUBJECT_PEAK, uRise), 1.0)'), /by the rise and the falloff/],
-    ['another colour', V, F.replace(MAIN, MAIN.replace('uColor', 'vec3(1.0)')), /by the rise and the falloff/],
-    ['no rise', V, F.replace(MAIN, MAIN.replace('mix(REST_PEAK, SUBJECT_PEAK, uRise)', 'REST_PEAK')), /by the rise and the falloff/],
+    ['no falloff', V, F.replace(MAIN, 'vec4(uColor * mix(REST_PEAK, SUBJECT_PEAK, uRise) * uFade, 1.0)'), /by the rise, the falloff/],
+    ['another colour', V, F.replace(MAIN, MAIN.replace('uColor', 'vec3(1.0)')), /by the rise, the falloff/],
+    ['no rise', V, F.replace(MAIN, MAIN.replace('mix(REST_PEAK, SUBJECT_PEAK, uRise)', 'REST_PEAK')), /by the rise, the falloff/],
+    ['no fade, so a glow pops in', V, F.replace(MAIN, MAIN.replace(' * uFade', '')), /the falloff and the fade/],
+    ['the fade as the alpha, which additive blending would ignore at 1', V, F.replace(MAIN, 'vec4(uColor * mix(REST_PEAK, SUBJECT_PEAK, uRise) * falloff, uFade)'), /the falloff and the fade/],
+    ['no fade uniform', V, F.replace('uniform float uFade;', ''), /no fade uniform/],
     ['a removed colorspace_fragment', V, F.replace('#include <colorspace_fragment>', ''), /no colorspace_fragment/],
     ['encoding before assigning', V, F.replace('    #include <colorspace_fragment>\n', '').replace('void main() {', 'void main() {\n    #include <colorspace_fragment>'), /encoded before/],
     ['a map', V, F.replace('void main() {', 'uniform sampler2D uSprite;\nvoid main() {'), /has a map/],
@@ -337,12 +344,20 @@ const materialOf = (mesh: Mesh): ShaderMaterial => mesh.material as ShaderMateri
 const isGlow = (mesh: Mesh): boolean => mesh.renderOrder === GLOW_RENDER_ORDER;
 
 function rowsOver(plans = planOf()) {
-  const scene = new Scene();
+  const scene = new Group();
   const geometry = new SphereGeometry(1, 64, 32);
-  const rows = createStarRows(plans, geometry);
-  rows.attach(scene);
-  const meshes = scene.children as Mesh[];
-  return { scene, geometry, rows, meshes, fills: meshes.filter((mesh) => !isGlow(mesh)), glows: meshes.filter(isGlow) };
+  const fade = { value: 0 };
+  const rows = createStarRows(plans, geometry, fade, scene);
+  const meshes = [...scene.children] as Mesh[];
+  return { scene, geometry, fade, rows, meshes, fills: meshes.filter((mesh) => !isGlow(mesh)), glows: meshes.filter(isGlow) };
+}
+/** Every Mesh under an object: the layer's draws all sit in its one group (7.8). */
+function drawsOf(root: Object3D): Mesh[] {
+  const found: Mesh[] = [];
+  root.traverse((object) => {
+    if ((object as Mesh).isMesh) found.push(object as Mesh);
+  });
+  return found;
 }
 const FACING = new Quaternion();
 
@@ -359,11 +374,25 @@ test('two draws per Star over the geometry it is given, and no new geometry', ()
   assert.equal(scene.children.length, 4);
 });
 
-test('nothing is added before attach, and no Clients adds nothing', () => {
+test('the rows go into the group they are handed and nowhere else, and no Clients adds nothing', () => {
   const scene = new Scene();
-  createStarRows(planOf(), new SphereGeometry(1, 64, 32));
+  const group = new Group();
+  createStarRows(planOf(), new SphereGeometry(1, 64, 32), { value: 0 }, group);
   assert.equal(scene.children.length, 0);
+  assert.equal(group.children.length, 4);
   assert.equal(rowsOver([]).meshes.length, 0);
+});
+
+test('every draw reads the fade object it is handed, and a Star fill follows the depth switch while a glow never writes depth', () => {
+  const { fade, rows, fills, glows } = rowsOver();
+  for (const mesh of [...fills, ...glows]) assert.equal(materialOf(mesh).uniforms.uFade, fade);
+  assert.equal(rows.materials.length, 4);
+  assert.ok(fills.every((mesh) => !materialOf(mesh).depthWrite), 'off at build');
+  rows.writeDepth(true);
+  assert.ok(fills.every((mesh) => materialOf(mesh).depthWrite), 'on, every one at once');
+  assert.ok(glows.every((mesh) => !materialOf(mesh).depthWrite), 'a glow never');
+  rows.writeDepth(false);
+  assert.ok(fills.every((mesh) => !materialOf(mesh).depthWrite));
 });
 
 test("a Star's fill is the 7.6 mechanism, at the ratio of its own radius, with no map", () => {
@@ -371,10 +400,10 @@ test("a Star's fill is the 7.6 mechanism, at the ratio of its own radius, with n
   for (const mesh of fills) {
     const material = materialOf(mesh);
     assert.equal(mesh.renderOrder, FILL_RENDER_ORDER);
-    assert.deepEqual([material.transparent, material.opacity, material.depthWrite, material.depthTest, material.side, material.blending], [true, 1, true, true, FrontSide, NormalBlending]);
+    assert.deepEqual([material.transparent, material.opacity, material.depthWrite, material.depthTest, material.side, material.blending], [true, 1, false, true, FrontSide, NormalBlending], 'no depth write until the fade has arrived (7.8)');
     assert.equal(material.uniforms.radius!.value, FILL_RADIUS_RATIO * STAR_RADIUS);
     assert.equal(material.vertexShader, FILL_VERTEX_SHADER);
-    assert.deepEqual(Object.keys(material.uniforms).sort(), ['radius', 'uColor', 'uRise'], 'no texture uniform');
+    assert.deepEqual(Object.keys(material.uniforms).sort(), ['radius', 'uColor', 'uFade', 'uRise'], 'no texture uniform');
     assert.equal(mesh.scale.x, 1, 'it fits the unit sphere three culls by');
   }
   // Unscaled, the fill culls by the shared sphere's own bound, so its radius must fit inside it.
@@ -388,7 +417,7 @@ test('a glow is additive, tests depth, writes none, draws at its own step, and i
     assert.equal(mesh.renderOrder, GLOW_RENDER_ORDER);
     assert.deepEqual([material.transparent, material.blending, material.depthTest, material.depthWrite, material.side], [true, AdditiveBlending, true, false, FrontSide]);
     assert.ok((material.uniforms.uColor!.value as Color).equals(new Color(tokens.colors[GLOW_TOKEN])));
-    assert.deepEqual(Object.keys(material.uniforms).sort(), ['uColor', 'uRise']);
+    assert.deepEqual(Object.keys(material.uniforms).sort(), ['uColor', 'uFade', 'uRise']);
   }
   assert.ok(GLOW_RENDER_ORDER < FILL_RENDER_ORDER, 'a glow is beneath every fill');
 });
@@ -511,7 +540,7 @@ test('the layer draws the Stars over its one geometry, and on going disposes Sta
   let closed = 0;
   const layer = createFillLayer(ARTIFACT, new Map([['moon', { close() { closed += 1; } } as unknown as ImageBitmap]]));
   layer.attach(scene);
-  const meshes = [...scene.children] as Mesh[];
+  const meshes = drawsOf(scene);
   assert.equal(meshes.length, addedDraws(fillPlans(ARTIFACT).length, starPlans(ARTIFACT).length));
   assert.equal(new Set(meshes.map((mesh) => mesh.geometry)).size, 1);
   layer.frame(new PerspectiveCamera(), DELTA, false, 1, 'client:a');
@@ -532,7 +561,7 @@ test('the layer hands the Stars the camera, the subject and the pace, and the sp
   const camera = new PerspectiveCamera();
   camera.rotation.set(0.2, 0.1, 0);
   layer.frame(camera, DELTA, false, 1, 'client:a');
-  const stars = (scene.children as Mesh[]).filter((mesh) => materialOf(mesh).uniforms.uRise !== undefined);
+  const stars = drawsOf(scene).filter((mesh) => materialOf(mesh).uniforms.uRise !== undefined);
   const expected = camera.getWorldQuaternion(new Quaternion());
   for (const mesh of stars) assert.ok(mesh.quaternion.angleTo(expected) < 1e-7);
   const fills = stars.filter((mesh) => !isGlow(mesh));
@@ -544,23 +573,34 @@ test('the layer hands the Stars the camera, the subject and the pace, and the sp
   full.attach(fullScene);
   full.frame(camera, DELTA, false, 1, 'client:a');
   full.frame(camera, DELTA, false, 1, 'client:b');
-  const fullFills = (fullScene.children as Mesh[]).filter((mesh) => materialOf(mesh).uniforms.uRise !== undefined && !isGlow(mesh));
+  const fullFills = drawsOf(fullScene).filter((mesh) => materialOf(mesh).uniforms.uRise !== undefined && !isGlow(mesh));
   assert.ok(reduced > riseOf(fullFills[1]!), 'a pace below 1 moves it further per frame');
-  const planets = (scene.children as Mesh[]).filter((mesh) => materialOf(mesh).uniforms.uMapFromWorld !== undefined);
-  const fullPlanets = (fullScene.children as Mesh[]).filter((mesh) => materialOf(mesh).uniforms.uMapFromWorld !== undefined);
+  const planets = drawsOf(scene).filter((mesh) => materialOf(mesh).uniforms.uMapFromWorld !== undefined);
+  const fullPlanets = drawsOf(fullScene).filter((mesh) => materialOf(mesh).uniforms.uMapFromWorld !== undefined);
   assert.deepEqual([...(materialOf(planets[0]!).uniforms.uMapFromWorld!.value as { elements: number[] }).elements], [...(materialOf(fullPlanets[0]!).uniforms.uMapFromWorld!.value as { elements: number[] }).elements], 'the pace does not reach the spin');
   const code = stripCommentsAndStrings(readFileSync(new URL('./fill-layer.ts', import.meta.url), 'utf8'));
   assert.match(code, /nextSpinSeconds\(seconds, delta, reduced\)/);
   assert.doesNotMatch(code, /nextSpinSeconds\([^)]*pace/);
 });
 
+/** A renderer whose every program links, for the owner rows: the warm-up itself is in `arrival-model.test.ts`. */
+function linkingRenderer(): WebGLRenderer {
+  const LINK_STATUS = 0x8b82;
+  return {
+    initTexture() {},
+    compileAsync: (root: Object3D) => Promise.resolve(root),
+    properties: { get: () => ({ currentProgram: { program: {} } }) },
+    getContext: () => ({ LINK_STATUS, isContextLost: () => false, getProgramParameter: () => true }),
+  } as unknown as WebGLRenderer;
+}
+
 for (const [name, artifact] of [
   ['a Star with a non-finite position', { clients: [{ id: 'client:bad', position: { x: Number.NaN, y: 0, z: 0 }, projects: [] }, ...ARTIFACT.clients] }],
 ] as const) {
   test(`under the real owner, ${name} fails the document with nothing added`, async () => {
     const scene = new Scene();
-    const owner = createRealismOwner<ImageBitmap, Scene, PerspectiveCamera>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(IMAGES), createFillLayer }));
-    const draw = { scene, camera: new PerspectiveCamera(), delta: DELTA, reduced: false, pace: 1, subject: () => null };
+    const owner = createRealismOwner<ImageBitmap, Scene, PerspectiveCamera, WebGLRenderer>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(IMAGES), createFillLayer }), () => undefined);
+    const draw = { scene, camera: new PerspectiveCamera(), renderer: linkingRenderer(), delta: DELTA, reduced: false, pace: 1, subject: () => null };
     owner.frame(artifact as RealismArtifact, '/', draw);
     owner.frame(artifact as RealismArtifact, '/', draw);
     await new Promise((resolve) => setImmediate(resolve));
@@ -572,13 +612,16 @@ for (const [name, artifact] of [
 
 test('under the real owner, a subject that throws removes every fill and glow, with the loop alive', async () => {
   const scene = new Scene();
-  const owner = createRealismOwner<ImageBitmap, Scene, PerspectiveCamera>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(IMAGES), createFillLayer }));
-  const draw = { scene, camera: new PerspectiveCamera(), delta: DELTA, reduced: false, pace: 1, subject: (): string | null => 'client:a' };
+  const owner = createRealismOwner<ImageBitmap, Scene, PerspectiveCamera, WebGLRenderer>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(IMAGES), createFillLayer }), () => undefined);
+  const draw = { scene, camera: new PerspectiveCamera(), renderer: linkingRenderer(), delta: DELTA, reduced: false, pace: 1, subject: (): string | null => 'client:a' };
   owner.frame(ARTIFACT, '/', draw);
   owner.frame(ARTIFACT, '/', draw);
   await new Promise((resolve) => setImmediate(resolve));
   owner.frame(ARTIFACT, '/', draw);
-  assert.equal(scene.children.length, addedDraws(1, 2));
+  await new Promise((resolve) => setImmediate(resolve));
+  owner.frame(ARTIFACT, '/', draw);
+  owner.frame(ARTIFACT, '/', draw);
+  assert.equal(drawsOf(scene).length, addedDraws(1, 2));
   assert.doesNotThrow(() => owner.frame(ARTIFACT, '/', { ...draw, subject: () => { throw new Error('the store threw'); } }));
   assert.equal(owner.status().document, 'failed');
   assert.deepEqual(scene.children, []);
@@ -595,7 +638,7 @@ test('a new layer from the held images seeds the rise again, with no ramp', () =
   const again = createFillLayer(ARTIFACT, IMAGES);
   again.attach(second);
   again.frame(new PerspectiveCamera(), DELTA, false, 1, 'client:b');
-  const fills = (second.children as Mesh[]).filter((mesh) => materialOf(mesh).uniforms.uRise !== undefined && !isGlow(mesh));
+  const fills = drawsOf(second).filter((mesh) => materialOf(mesh).uniforms.uRise !== undefined && !isGlow(mesh));
   assert.deepEqual(fills.map(riseOf), [0, 1]);
 });
 
@@ -625,6 +668,12 @@ function auditStarLayer(source: string): string[] {
   if (glowMaterial === '') failures.push('no glow material found');
   if (!/\bdepthTest:\s*true\b/.test(glowMaterial)) failures.push('the glow does not test depth');
   if (!/\bdepthWrite:\s*false\b/.test(glowMaterial)) failures.push('the glow writes depth');
+  const fillMaterial = /new\s+Mesh\(geometry,\s*new\s+ShaderMaterial\(\{[^}]*?fragmentShader:\s*STAR_FILL_FRAGMENT_SHADER[\s\S]*?\}\)\)/.exec(code)?.[0] ?? '';
+  if (fillMaterial === '') failures.push('no Star fill material found');
+  if (!/\bdepthWrite:\s*false\b/.test(fillMaterial)) failures.push('a Star fill writes depth at build');
+  if (/\bdepthWrite\s*=\s*(?:true|false)\b/.test(code) || !/\bfill\.material\.depthWrite = on;/.test(code)) failures.push('the fill does not follow the layer\'s one switch');
+  if ((code.match(/\buFade:\s*fade\b/g) ?? []).length !== 2 || /\buFade:\s*\{/.test(code)) failures.push('not every draw reads the fade it is handed');
+  if (/\bscene\b|\bScene\b/.test(code)) failures.push('the rows reach a scene, not the group they are handed');
   const names = [...kept.matchAll(/\btokens\.colors\[\s*'([^']+)'\s*\]/g)].map((match) => match[1]);
   if (names.join() !== GLOW_TOKEN) failures.push(`the colour is not ${GLOW_TOKEN} alone: ${names.join() || 'none'}`);
   if (/\bappearance\b|\bTexture\b|\buMap\b/.test(code)) failures.push("a Star reads a Planet's surface");
@@ -648,7 +697,12 @@ test('the Star layer audit rejects a third draw, a new geometry, a map and each 
     ['a clone', real.replace(STEP, `const s = fill.clone();\n    ${STEP}`), /a clone/],
     ['normal blending', real.replace('blending: AdditiveBlending', 'blending: NormalBlending'), /not additive/],
     ['no depth test', real.replace(/depthTest: true,(\s*depthWrite: false)/, 'depthTest: false,$1'), /does not test depth/],
-    ['writing depth', real.replace('depthWrite: false', 'depthWrite: true'), /writes depth/],
+    ['the glow writing depth', real.replace(/(blending: AdditiveBlending,\s*depthTest: true,\s*)depthWrite: false/, '$1depthWrite: true'), /the glow writes depth/],
+    ['a Star fill writing depth at build', real.replace('depthWrite: false,\n      depthTest: true,\n      side: FrontSide,\n    }));\n    const glow', 'depthWrite: true,\n      depthTest: true,\n      side: FrontSide,\n    }));\n    const glow'), /Star fill writes depth at build/],
+    ['a fill pinned on by itself', real.replace('fill.material.depthWrite = on;', 'fill.material.depthWrite = true;'), /one switch/],
+    ['a second fade object', real.replace('uColor: { value: color }, uFade: fade },\n      transparent: true,\n      blending', 'uColor: { value: color }, uFade: { value: 1 } },\n      transparent: true,\n      blending'), /reads the fade it is handed/],
+    ['a draw with no fade', real.replace('uColor: { value: color }, uFade: fade },\n      transparent: true,\n      opacity', 'uColor: { value: color } },\n      transparent: true,\n      opacity'), /reads the fade it is handed/],
+    ['the rows added to a scene', real.replace('group.add(fill, glow);', 'scene.add(fill, glow);'), /reach a scene/],
     ['the wrong step', real.replace(STEP, 'glow.renderOrder = FILL_RENDER_ORDER;'), /not at its own step/],
     ['another token', real.replace(`tokens.colors['${GLOW_TOKEN}']`, "tokens.colors['realism-ambient-floor-dark']"), /alone/],
     ['a second token', real.replace(STEP, `const other = new Color(tokens.colors['stroke-focus-dark']);\n    ${STEP}`), /alone/],

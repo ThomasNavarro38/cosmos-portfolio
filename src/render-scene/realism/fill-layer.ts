@@ -11,6 +11,19 @@
  * mount is mounted last, so the rig has already moved the camera. The light is
  * written once, here at the build.
  *
+ * **The arrival (7.8).** Every mesh is built into one `Group`, which is in no scene
+ * until `attach`. `warm` uploads each texture by `initTexture` and compiles every
+ * material by `compileAsync` over that detached group against the scene it will join,
+ * so the programs are the ones that scene's draw looks up. Then it reads each program's
+ * `LINK_STATUS` straight from the context, which logs nothing, and rejects if any did
+ * not link: three's own check would run on first use, and log. `warm` attaches nothing.
+ * The owner attaches the group at fade 0 for one hidden warm draw, then calls `arrive`.
+ *
+ * **One fade, shared.** One uniform object is created here and handed to every Planet
+ * fill, Star fill and glow. It sits at 0 from the build, until `arrive(true)` starts it
+ * stepping each frame over `FADE_SECONDS × pace`, or `arrive(false)` sets it whole. No
+ * fill writes depth until it reaches 1; on that frame every fill does.
+ *
  * **The images stay.** `dispose` frees the GPU's copies and never closes a bitmap:
  * a later Canvas builds again from them, and after a lost context three uploads
  * them again on its next draw. A map arrives flipped by `imageOrientation`, which
@@ -21,6 +34,7 @@ import {
   type Camera,
   Color,
   FrontSide,
+  Group,
   Matrix3,
   Mesh,
   Quaternion,
@@ -31,11 +45,13 @@ import {
   SRGBColorSpace,
   Texture,
   Vector3,
+  type WebGLRenderer,
 } from 'three';
 import { tokens } from '../../tokens/tokens.ts';
 import type { RealismArtifact } from '../realism-status.ts';
 import { FILL_RENDER_ORDER } from '../scene-model.ts';
 import { PLANET_RADIUS } from '../stroke-model.ts';
+import { depthWrites, nextFade } from './arrival-model.ts';
 import {
   FILL_RADIUS_RATIO,
   FILL_SPHERE_HEIGHT_SEGMENTS,
@@ -51,9 +67,16 @@ import { createStarRows } from './star-layer.ts';
 import { starPlans } from './star-model.ts';
 
 export interface FillLayer {
-  /** Adds every fill and glow to this scene. */
+  /**
+   * Uploads every texture and compiles every material against `scene`, attaching nothing.
+   * Rejects if any program did not link. A synchronous throw from an upload is thrown here.
+   */
+  warm(renderer: WebGLRenderer, camera: Camera, scene: Scene): Promise<void>;
+  /** Adds the one group holding every fill and glow to this scene. */
   attach(scene: Scene): void;
-  /** One frame: each disc to the camera, each map to its turn, each Star's rise toward the subject. The spin takes `reduced` and the rise takes `pace`. */
+  /** Begins the arrival: with `fade`, every later `frame` steps the fade up from 0, the first of them in the same tick as this call, so the first visible frame is already one clamped step in; without, the layer is whole at once and every fill writes depth. */
+  arrive(fade: boolean): void;
+  /** One frame: the fade's step, each disc to the camera, each map to its turn, each Star's rise toward the subject. The spin takes `reduced`, and the rise and the fade take `pace`. */
   frame(camera: Camera, delta: number, reduced: boolean, pace: number, subject: string | null): void;
   /** Removes the fills and glows and frees the GPU's copies. Safe twice. The images are kept. */
   dispose(): void;
@@ -80,6 +103,8 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
   const geometry = new SphereGeometry(1, FILL_SPHERE_WIDTH_SEGMENTS, FILL_SPHERE_HEIGHT_SEGMENTS);
   const textures = new Map([...maps].map(([id, image]) => [id, mapTexture(image)]));
   const ambient = new Color(tokens.colors['realism-ambient-floor-dark']);
+  const group = new Group();
+  const fade = { value: 0 };
   const rows = plans.map((plan) => {
     const turn = new Matrix3();
     const material = new ShaderMaterial({
@@ -92,31 +117,71 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
         uLight: { value: new Vector3(...plan.light) },
         uAmbient: { value: ambient },
         uMapFromWorld: { value: turn },
+        uFade: fade,
       },
       transparent: true,
       opacity: 1,
-      depthWrite: true,
+      depthWrite: false,
       depthTest: true,
       side: FrontSide,
     });
     const mesh = new Mesh(geometry, material);
     mesh.position.set(plan.position.x, plan.position.y, plan.position.z);
     mesh.renderOrder = FILL_RENDER_ORDER;
+    group.add(mesh);
     return { mesh, plan, turn };
   });
-  const starRows = createStarRows(stars, geometry);
+  const starRows = createStarRows(stars, geometry, fade, group);
+  const materials = [...rows.map(({ mesh }) => mesh.material as ShaderMaterial), ...starRows.materials];
   const facing = new Quaternion();
   let seconds = 0;
+  let fading = false;
+  let depth = false;
   let parent: Scene | null = null;
   let disposed = false;
+  let compiling: Promise<unknown> | null = null;
+
+  /** The one depth switch, for every fill at once. */
+  const writeDepth = (on: boolean): void => {
+    if (on === depth) return;
+    depth = on;
+    for (const { mesh } of rows) (mesh.material as ShaderMaterial).depthWrite = on;
+    starRows.writeDepth(on);
+  };
 
   return {
+    warm(renderer, camera, scene) {
+      for (const texture of textures.values()) renderer.initTexture(texture);
+      const compiled = renderer.compileAsync(group, camera, scene);
+      compiling = compiled;
+      return compiled.then(() => {
+        const gl = renderer.getContext();
+        // A lost context answers null to every query: that is not a failed link, and three
+        // uploads and compiles again on its own once the context is restored.
+        if (gl.isContextLost()) return;
+        for (const material of materials) {
+          const program = (renderer.properties.get(material) as { currentProgram?: { program?: WebGLProgram } }).currentProgram?.program;
+          if (!program || gl.getProgramParameter(program, gl.LINK_STATUS) !== true) throw new Error('a realism program did not link');
+        }
+      });
+    },
     attach(scene) {
       parent = scene;
-      for (const { mesh } of rows) scene.add(mesh);
-      starRows.attach(scene);
+      scene.add(group);
+    },
+    arrive(withFade) {
+      if (withFade) {
+        fading = true;
+        return;
+      }
+      fade.value = 1;
+      writeDepth(depthWrites(fade.value));
     },
     frame(camera, delta, reduced, pace, subject) {
+      if (fading) {
+        fade.value = nextFade(fade.value, delta, pace);
+        writeDepth(depthWrites(fade.value));
+      }
       seconds = nextSpinSeconds(seconds, delta, reduced);
       camera.updateMatrixWorld();
       camera.getWorldQuaternion(facing);
@@ -129,13 +194,28 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
     dispose() {
       if (disposed) return;
       disposed = true;
-      for (const { mesh } of rows) {
-        parent?.remove(mesh);
-        (mesh.material as ShaderMaterial).dispose();
+      parent?.remove(group);
+      for (const { mesh } of rows) group.remove(mesh);
+      const free = (): void => {
+        for (const { mesh } of rows) (mesh.material as ShaderMaterial).dispose();
+        starRows.dispose();
+        for (const texture of textures.values()) texture.dispose();
+        geometry.dispose();
+      };
+      // Three's compileAsync polls each material's program on a timer until it is ready, and
+      // a freed material has none, so freeing one mid-compile throws inside that timer, where
+      // nothing can catch it. Its promise never rejects, so freeing waits for it to settle.
+      if (compiling === null) free();
+      else {
+        const later = (): void => {
+          try {
+            free();
+          } catch {
+            // Freeing after the layer is gone has no one left to tell, and must stay silent.
+          }
+        };
+        void compiling.then(later, later);
       }
-      starRows.dispose();
-      for (const texture of textures.values()) texture.dispose();
-      geometry.dispose();
     },
   };
 }

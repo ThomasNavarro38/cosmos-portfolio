@@ -15,6 +15,10 @@
  * `atan` is undefined, so longitude is taken as 0 there. Neither the seam nor the
  * pole has been measured on screen.
  *
+ * **The fade (7.8) is the alpha.** `uFade` is the layer's one shared fade, so at 0
+ * a fill blends to the destination unchanged and at 1 it is opaque. Fading only
+ * mixes toward what is already drawn, so it can never raise a pixel past the ceiling.
+ *
  * **Nothing is tone-mapped.** `<colorspace_fragment>` is the output's sRGB, and
  * `flat` on the Canvas stays.
  *
@@ -43,6 +47,7 @@ export const FILL_FRAGMENT_SHADER = /* glsl */ `
   uniform vec3 uLight;
   uniform vec3 uAmbient;
   uniform mat3 uMapFromWorld;
+  uniform float uFade;
   varying vec2 vDisc;
   varying mat3 vWorld;
   const float FILL_TARGET_LUMINANCE = ${FILL_TARGET_LUMINANCE};
@@ -61,7 +66,7 @@ export const FILL_FRAGMENT_SHADER = /* glsl */ `
     vec3 albedo = texture2D(uMap, vec2(u, v)).rgb * (FILL_TARGET_LUMINANCE / uMeanLuminance);
     vec3 lit = albedo * max(dot(N, uLight), 0.0) + uAmbient;
     float y = dot(lit, vec3(0.2126, 0.7152, 0.0722));
-    gl_FragColor = vec4(y > CEILING ? lit * (CEILING / y) : lit, 1.0);
+    gl_FragColor = vec4(y > CEILING ? lit * (CEILING / y) : lit, uFade);
     #include <colorspace_fragment>
     if (y > CEILING * NEAR_CEILING) gl_FragColor.rgb = floor(gl_FragColor.rgb * 255.0) / 255.0;
   }

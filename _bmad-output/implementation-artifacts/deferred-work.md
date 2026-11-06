@@ -1382,7 +1382,7 @@ Still open after 3.5:
 - source_spec: spec-7-5-realism-s-owner-and-failing-silently.md
   summary: `uploaded` stays true when the WebGL context is lost and restored under the same Canvas, so textures would be gone with the status saying otherwise.
   evidence: AD-25 resets `uploaded` only with a new Canvas, and nothing uploads until 7.6, so nothing can go wrong yet. 7.6 owns the upload, and should settle whether a context restore resets the flag or fails the document.
-  resolution: Settled in 7.6: it does neither, and three re-uploads from the kept images on its next draw. Confirmed in Chrome, 0 pixels differing after a restore with no request (realism-fills-7-6.md). 7.8 adds explicit uploads and must revisit it.
+  resolution: Settled in 7.6: it does neither, and three re-uploads from the kept images on its next draw. Confirmed in Chrome, 0 pixels differing after a restore with no request (realism-fills-7-6.md). Revisited and closed by 7.8, which leaves it so: the explicit warm-up (initTexture, compileAsync) is a new Canvas's, and a restore under one Canvas is three's own re-upload and re-compile on its next draw, with no request and no fade, `uploaded` staying true. Written in realism-status.ts's header and in realism-arrival-7-8.md, Lost context.
   location: src/render-scene/realism-status.ts
   severity: medium
 - source_spec: spec-7-5-realism-s-owner-and-failing-silently.md
@@ -1412,6 +1412,7 @@ Still open after 3.5:
 - source_spec: spec-7-6-planets-lit-by-their-own-star.md
   summary: A shader failing to compile, or a map failing to upload, happens inside three's render and does not reach the owner, so it would not reach markFailed. Three would log a compile failure, so it would not be silent either. No shader here fails on the tested GPU, and an integrated part was not run. 7.8's compileAsync and initTexture own this.
   evidence: three reports program errors through its own console.error during render, after the owner's frame has returned. Spec: any failure in building ends in markFailed, nothing logged.
+  resolution: Closed by 7.8 for the compile and for a synchronous upload throw: the layer's warm-up calls initTexture per texture and compileAsync over its detached group, then reads each program's LINK_STATUS from the context, before anything is attached, so three's logging first-use check never runs on a program that failed; a program not linked rejects warm, which ends in markFailed with nothing logged (arrival-model.test.ts, over a fake renderer: "under the real owner, a program that did not link ends in markFailed, with nothing attached and nothing logged"). Not closed: a GPU upload that fails without throwing (a WebGL error, not an exception) is not read, and no real GPU was made to fail; an integrated part was still not run.
   location: src/render-scene/realism/fill-layer.ts
   severity: medium
 - source_spec: spec-7-6-planets-lit-by-their-own-star.md
@@ -1432,6 +1433,7 @@ Still open after 3.5:
 - source_spec: spec-7-6-planets-lit-by-their-own-star.md
   summary: All compiles and uploads land on one frame, inside frame-time sampling, until 7.8 adds the resets.
   evidence: resetFrameSampling is 7.8's by AD-22, and no framerate was measured. The branch does not merge before Epic 8.
+  resolution: Closed by 7.8 in the model: the owner resets sampling when upload begins and when the first visible frame begins, through a port realism-mount.tsx binds to resetFrameSampling. Driven through the real sampleFrame and resetFrameSampling, a 0.8 s frame and ten 0.1 s frames after the upload reset on a 30 fps machine do not latch the offer and, without the resets, do; 20 fps sustained still latches (realism-status.test.ts). Passed on: no framerate was measured on any machine, so whether real uploads stay inside the 2 s warm-up on the target profile is Epic 8's framerate record.
   location: src/render-scene/realism-mount.tsx
   severity: low
 - source_spec: spec-7-6-planets-lit-by-their-own-star.md
@@ -1504,4 +1506,36 @@ Still open after 3.5:
   summary: Free flight to a Client or to the overview, a Mote crossing a Star's fill or glow, and a label over a glow were not run. sceneSubject returns the flight target, so a Star should rise in free flight, and nothing on screen shows it. Labels are 7.9's; free flight and Motes go with 7.9's check or Epic 8.
   evidence: realism-glow-7-7.md, Not run.
   location: spikes/realism-fills/harness.ts
+  severity: low
+
+## Deferred from: implementation of spec-7-8-arriving-after-the-first-frame.md (2026-11-06)
+
+- source_spec: spec-7-8-arriving-after-the-first-frame.md
+  summary: At Rail progress 2.8, 8 of 27 line pixels inside realism's reach do not read their token value on the fade's first visible frame; they move from stroke-rest toward the fill's colour over the fade instead of holding and being hidden when it ends. The other 19, and 2 of 2 at the opening frame, hold.
+  evidence: realism-arrival-7-8.md, Line-work during the fade. No glow reaches them, every body-field line draws after every fill, and no fill writes depth during the fade, so the cause is not traced. The settled frame is identical to 7.7's.
+  resolution: At review (2026-11-06), most likely Dust and not line-work. The medium billboard is coloured stroke-rest-dark (44, 44, 51) and draws at DUST_RENDER_ORDER, before every fill, so a fill fading over it and hiding it once settled is AD-19's order. Concluded from colour and draw order, not rerun with the Dust hidden (realism-arrival-7-8.md).
+  location: spikes/realism-fills/prod-arrival.mjs
+  severity: low
+- source_spec: spec-7-8-arriving-after-the-first-frame.md
+  summary: A program that fails to link was tested only over a fake renderer, and an upload that fails without throwing (a WebGL error rather than an exception) is not read by the warm-up at all.
+  evidence: arrival-model.test.ts drives LINK_STATUS false through the real owner; no real GPU was made to fail, and warm checks link status only.
+  location: src/render-scene/realism/fill-layer.ts
+  severity: low
+- source_spec: spec-7-8-arriving-after-the-first-frame.md
+  summary: The arrival was read on a 165 Hz display, so the fade took about 164 frames rather than the AC's "about FADE_SECONDS × 60"; the duration (1.0 s, and 0.25 s reduced) is what matched. No 60 Hz display, other viewport, other GPU, Firefox or Safari was run, and no framerate was measured.
+  evidence: realism-arrival-7-8.md, The arrival.
+  location: spikes/realism-fills/prod-arrival.mjs
+  severity: low
+
+## Deferred from: code review of spec-7-8-arriving-after-the-first-frame.md (2026-11-06)
+
+- source_spec: spec-7-8-arriving-after-the-first-frame.md
+  summary: A warm-up that never settles leaves the Canvas's arrival in warming for good, with the document decoded and no failure. Three's compileAsync polls COMPLETION_STATUS until each program reports ready, and a context lost mid-poll answers null, so it may poll on and never resolve.
+  evidence: node_modules/three/src/renderers/WebGLRenderer.js, compileAsync's checkMaterialsReady; the owner sets no timer by design, so nothing ends the wait. Only a context lost inside the compile's own window triggers it; not seen in any run.
+  location: src/render-scene/realism-status.ts
+  severity: medium
+- source_spec: spec-7-8-arriving-after-the-first-frame.md
+  summary: Nothing tests what the fade meets while it runs. A subject change during the fade starts a Star's rise under a part-faded layer, and a click into Focus during the fade picks against hit spheres while fills write no depth.
+  evidence: arrival-model.test.ts and realism-status.test.ts drive the fade with a fixed subject and no navigation. Hit spheres are unchanged by realism, so picking should not differ, but it is not shown.
+  location: src/render-scene/realism/fill-layer.ts
   severity: low

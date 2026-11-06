@@ -9,7 +9,7 @@
  * Planet's in Focus and `null` in the overview all read the same. It steps by the
  * frame's delta over `RISE_SECONDS × pace`, so reduced motion shortens it and never
  * cuts it. A stall is clamped, a delta that is not a positive finite number holds
- * it, and a pace that is not one steps at full motion. The first frame seeds it with no ramp: arrival is 7.8's.
+ * it, and a pace that is not a positive finite number steps at full motion. The first frame seeds it with no ramp: the arrival's fade is the layer's (7.8).
  *
  * **Colour encodes nothing.** A Star reads its ID and its position, and nothing else
  * from the artifact. It has no `appearance`.
@@ -78,7 +78,7 @@ export function starPlans(artifact: RealismArtifact): StarPlan[] {
   });
 }
 
-/** The rise on a layer's first frame: at once, with no ramp, since arrival is 7.8's. */
+/** The rise on a layer's first frame: at once, with no ramp, since the arrival's fade is the layer's (7.8). */
 export function seedRise(isSubject: boolean): number {
   return isSubject ? 1 : 0;
 }

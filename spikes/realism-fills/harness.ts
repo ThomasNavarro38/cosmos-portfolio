@@ -22,6 +22,8 @@ export interface Viewport {
 }
 interface Layer {
   attach(scene: RootState['scene']): void;
+  /** 7.8: the harness draws the layer whole, as a Canvas over a shown document does, so its 7.6 and 7.7 figures read the rest state. */
+  arrive(fade: boolean): void;
   frame(camera: RootState['camera'], delta: number, reduced: boolean, pace: number, subject: string | null): void;
   dispose(): void;
 }
@@ -132,7 +134,12 @@ export function install(world: FillsWorld): void {
       if (body === undefined) throw new Error('a MoonField group matches no Body');
       parts.moon.set(body.id, child);
     }
-    for (const child of state.scene.children) {
+    // 7.8: the layer's draws sit in its one group, so they are found under the scene, not as its children.
+    const layerDraws: Object3D[] = [];
+    state.scene.traverse((o) => {
+      if ((o as Mesh).isMesh) layerDraws.push(o);
+    });
+    for (const child of layerDraws) {
       const uniforms = ((child as Mesh).material as ShaderMaterial | undefined)?.uniforms;
       if (uniforms?.uRise !== undefined) {
         const star = stars.find((candidate) => samePosition(child, candidate));
@@ -170,6 +177,7 @@ export function install(world: FillsWorld): void {
     C = new Uint32Array(W * H);
     layer = world.buildLayer();
     layer.attach(state.scene);
+    layer.arrive(false);
     live = true;
     await tick();
     scan();

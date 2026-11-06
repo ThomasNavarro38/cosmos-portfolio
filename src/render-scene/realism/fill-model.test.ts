@@ -1,7 +1,8 @@
 /**
  * A Planet's fill (7.6): the pure model, the shader's pinned source, the layer over
  * real three objects with no GL, and the source audits that hold what no test can
- * see move, each driven over mutations. The real pixels are in
+ * see move, each driven over mutations. The arrival's fade, depth switch and warm-up
+ * (7.8) are in `arrival-model.test.ts`. The real pixels are in
  * `_bmad-output/implementation-artifacts/realism-fills-7-6.md`.
  */
 
@@ -15,6 +16,7 @@ import {
   FrontSide,
   Matrix3,
   type Mesh,
+  type Object3D,
   PerspectiveCamera,
   Quaternion,
   RepeatWrapping,
@@ -24,6 +26,7 @@ import {
   SRGBColorSpace,
   type Texture,
   Vector3,
+  type WebGLRenderer,
 } from 'three';
 import { filesUnder, isTestFile, SOURCE_MODULE, stripComments, stripCommentsAndStrings } from '../../../scripts/source-scan.ts';
 import { tokens } from '../../tokens/tokens.ts';
@@ -266,8 +269,16 @@ test('added draws are Planets × 1 and Stars × 2', () => {
 // --- The layer, over real three objects ----------------------------------------------------------
 
 const materialOf = (mesh: Mesh): ShaderMaterial => mesh.material as ShaderMaterial;
+/** Every Mesh under an object: the layer's draws all sit in its one group (7.8). */
+function drawsOf(root: Object3D): Mesh[] {
+  const found: Mesh[] = [];
+  root.traverse((object) => {
+    if ((object as Mesh).isMesh) found.push(object as Mesh);
+  });
+  return found;
+}
 /** The Planets' fills alone: a Star's two draws are in `star-model.test.ts`. */
-const meshesOf = (scene: Scene): Mesh[] => (scene.children as Mesh[]).filter((mesh) => materialOf(mesh)?.uniforms?.uMapFromWorld !== undefined);
+const meshesOf = (scene: Object3D): Mesh[] => drawsOf(scene).filter((mesh) => materialOf(mesh)?.uniforms?.uMapFromWorld !== undefined);
 
 test('the layer is one Mesh per plan over one geometry and one texture per map, on the 7.1 mechanism', () => {
   const scene = new Scene();
@@ -276,8 +287,9 @@ test('the layer is one Mesh per plan over one geometry and one texture per map, 
   layer.attach(scene);
   const meshes = meshesOf(scene);
   assert.equal(meshes.length, addedDraws(3, 0));
-  assert.equal(scene.children.length, addedDraws(3, 2), 'with the two Stars');
-  assert.equal(new Set((scene.children as Mesh[]).map((mesh) => mesh.geometry)).size, 1, 'the Stars wear the same one');
+  assert.equal(drawsOf(scene).length, addedDraws(3, 2), 'with the two Stars');
+  assert.equal(scene.children.length, 1, 'all in one group, which is not a draw');
+  assert.equal(new Set(drawsOf(scene).map((mesh) => mesh.geometry)).size, 1, 'the Stars wear the same one');
   const geometry = meshes[0]!.geometry as SphereGeometry;
   assert.ok(geometry instanceof SphereGeometry);
   assert.deepEqual([geometry.parameters.radius, geometry.parameters.widthSegments, geometry.parameters.heightSegments], [1, 64, 32]);
@@ -285,7 +297,7 @@ test('the layer is one Mesh per plan over one geometry and one texture per map, 
   meshes.forEach((mesh, at) => {
     const material = materialOf(mesh);
     assert.equal(mesh.renderOrder, FILL_RENDER_ORDER);
-    assert.deepEqual([material.transparent, material.opacity, material.depthWrite, material.depthTest, material.side], [true, 1, true, true, FrontSide]);
+    assert.deepEqual([material.transparent, material.opacity, material.depthWrite, material.depthTest, material.side], [true, 1, false, true, FrontSide], 'no depth write until the fade has arrived (7.8)');
     assert.equal(material.uniforms.radius!.value, FILL_RADIUS_RATIO * bodyRadius(PLANET));
     assert.equal(material.uniforms.uMeanLuminance!.value, APPEARANCE.meanLuminance);
     assert.deepEqual(mesh.position.toArray(), [[10, 0, 0], [-10, 0, 0], [110, 0, 0]][at]);
@@ -406,7 +418,7 @@ test('dispose removes the fills and disposes materials, textures and geometry, k
   const layer = createFillLayer(ARTIFACT, new Map([['moon', image()], ['mars', image()]]));
   layer.attach(scene);
   const meshes = meshesOf(scene);
-  const stars = (scene.children as Mesh[]).filter((child) => (child as unknown) !== bystander && !meshes.includes(child));
+  const stars = drawsOf(scene).filter((child) => !meshes.includes(child));
   assert.equal(stars.length, 4, 'two draws for each of two Stars');
   const disposed = { material: 0, texture: 0, geometry: 0 };
   meshes[0]!.geometry.addEventListener('dispose', () => { disposed.geometry += 1; });
@@ -420,14 +432,25 @@ test('dispose removes the fills and disposes materials, textures and geometry, k
   assert.deepEqual(disposed, { material: 7, texture: 2, geometry: 1 });
 });
 
+/** A renderer whose every program links, for the owner rows: the warm-up itself is in `arrival-model.test.ts`. */
+function linkingRenderer(): WebGLRenderer {
+  const LINK_STATUS = 0x8b82;
+  return {
+    initTexture() {},
+    compileAsync: (root: Object3D) => Promise.resolve(root),
+    properties: { get: () => ({ currentProgram: { program: {} } }) },
+    getContext: () => ({ LINK_STATUS, isContextLost: () => false, getProgramParameter: () => true }),
+  } as unknown as WebGLRenderer;
+}
+
 test('a build that cannot finish throws, and under the real owner the document fails with nothing added to the scene', async () => {
   assert.throws(() => createFillLayer(ARTIFACT, new Map([['moon', {} as ImageBitmap]])), /mars/);
   const orphan: RealismArtifact = { clients: [{ ...ARTIFACT.clients[0]!, projects: [planet('project:x', 'client:gone', 5)] }] };
   assert.throws(() => createFillLayer(orphan, IMAGES), /client:gone/);
   for (const [artifact, images] of [[ARTIFACT, new Map([['moon', {} as ImageBitmap]])], [orphan, IMAGES]] as const) {
-    const owner = createRealismOwner<ImageBitmap, Scene, PerspectiveCamera>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(images), createFillLayer }));
+    const owner = createRealismOwner<ImageBitmap, Scene, PerspectiveCamera, WebGLRenderer>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(images), createFillLayer }), () => undefined);
     const scene = new Scene();
-    const draw = { scene, camera: new PerspectiveCamera(), delta: 0, reduced: false, pace: 1, subject: () => null };
+    const draw = { scene, camera: new PerspectiveCamera(), renderer: linkingRenderer(), delta: 0, reduced: false, pace: 1, subject: () => null };
     owner.frame(artifact, '/', draw);
     owner.frame(artifact, '/', draw);
     await new Promise((resolve) => setImmediate(resolve));
@@ -440,14 +463,17 @@ test('a build that cannot finish throws, and under the real owner the document f
 
 test('under the real owner, a fill layer whose update throws leaves the scene with no fill', async () => {
   const scene = new Scene();
-  const owner = createRealismOwner<ImageBitmap, Scene, PerspectiveCamera>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(IMAGES), createFillLayer }));
+  const owner = createRealismOwner<ImageBitmap, Scene, PerspectiveCamera, WebGLRenderer>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(IMAGES), createFillLayer }), () => undefined);
   const camera = new PerspectiveCamera();
-  const draw = { scene, camera, delta: 0, reduced: false, pace: 1, subject: () => null };
+  const draw = { scene, camera, renderer: linkingRenderer(), delta: 0, reduced: false, pace: 1, subject: () => null };
   owner.frame(ARTIFACT, '/', draw);
   owner.frame(ARTIFACT, '/', draw);
   await new Promise((resolve) => setImmediate(resolve));
   owner.frame(ARTIFACT, '/', draw);
-  assert.equal(scene.children.length, addedDraws(3, 2), 'one fill per Planet and two draws per Star that same frame');
+  await new Promise((resolve) => setImmediate(resolve));
+  owner.frame(ARTIFACT, '/', draw);
+  owner.frame(ARTIFACT, '/', draw);
+  assert.equal(drawsOf(scene).length, addedDraws(3, 2), 'one fill per Planet and two draws per Star, once warmed');
   assert.deepEqual(owner.status(), { document: 'shown', uploaded: true });
   owner.frame(ARTIFACT, '/', { ...draw, camera: { updateMatrixWorld() { throw new Error('a port threw'); } } as unknown as PerspectiveCamera });
   assert.equal(owner.status().document, 'failed');
@@ -501,10 +527,14 @@ const NO_PIPELINE: readonly (readonly [string, RegExp])[] = [
   ['a render target', /\bWebGL\w*RenderTarget\b|\brenderTarget\b|\bRenderTarget\b|\bsetRenderTarget\b/],
   ['a shadow map', /\bshadowMap\b|\bcastShadow\b|\breceiveShadow\b/],
   ['a scene light', /\b(?:Ambient|Directional|Point|Spot|Hemisphere|RectArea)Light\b/],
-  ['the fade or warm-up of 7.8', /\binitTexture\b|\bcompileAsync\b|\bresetFrameSampling\b/],
 ];
-/** 7.7: the mount is a reader, and computes the pace as a reader does (`focus-panel.tsx`), so `motionPace` is banned under `realism/` alone. */
-const CHUNK_ONLY: readonly (readonly [string, RegExp])[] = [['the preference', /\breducedMotion\b|\bmotion-preference\b/], ['motionPace', /\bmotionPace\b/]];
+/** 7.8: the warm-up is the layer's, and nowhere else's, the mount included. */
+const WARM_UP: readonly (readonly [string, RegExp])[] = [['the warm-up, outside fill-layer.ts', /\binitTexture\b|\bcompileAsync\b/]];
+/**
+ * 7.7: the mount is a reader, and computes the pace as a reader does (`focus-panel.tsx`), so `motionPace` is banned under `realism/` alone.
+ * 7.8: the mount is the one added caller of `resetFrameSampling`, so it is banned under `realism/` alone too.
+ */
+const CHUNK_ONLY: readonly (readonly [string, RegExp])[] = [['the preference', /\breducedMotion\b|\bmotion-preference\b/], ['motionPace', /\bmotionPace\b/], ['the sampling reset', /\bresetFrameSampling\b|\bchart-offer\b/]];
 
 /** What the chunk and the mount may not hold. Strings count, since a shader is a string. */
 function auditRealismSource(modules: readonly Module[]): string[] {
@@ -514,7 +544,8 @@ function auditRealismSource(modules: readonly Module[]): string[] {
     for (const [name, pattern] of NO_DATA_SHADING) {
       if (pattern.test(code)) failures.push(`${path} reads ${name}`);
     }
-    for (const [name, pattern] of path === MOUNT_PATH ? NO_PIPELINE : [...NO_PIPELINE, ...CHUNK_ONLY]) {
+    const banned = [...NO_PIPELINE, ...(path === LAYER_PATH ? [] : WARM_UP), ...(path === MOUNT_PATH ? [] : CHUNK_ONLY)];
+    for (const [name, pattern] of banned) {
       if (pattern.test(code)) failures.push(`${path} holds ${name}`);
     }
   }
@@ -549,9 +580,8 @@ test('the realism source audit rejects each form, in any module, and a comment i
     ['const l = new DirectionalLight();', /a scene light/],
     ['const l = new AmbientLight();', /a scene light/],
     ['const pace = motionPace(reduced);', /motionPace/],
-    ['gl.initTexture(texture);', /7\.8/],
-    ['gl.compileAsync(scene, camera);', /7\.8/],
-    ['resetFrameSampling();', /7\.8/],
+    ['resetFrameSampling();', /holds the sampling reset/],
+    ["import { resetFrameSampling } from '../../shell/chart-offer.ts';", /holds the sampling reset/],
     ["import { reducedMotion } from '../../shell/motion-preference.ts';", /the preference/],
   ] as const) {
     assert.match(auditRealismSource(adding(line)).join('\n'), message, line);
@@ -559,6 +589,14 @@ test('the realism source audit rejects each form, in any module, and a comment i
   assert.match(auditRealismSource(adding('const a = artifact.isDeep;', MOUNT_PATH)).join('\n'), /realism-mount\.tsx reads isDeep/);
   assert.deepEqual(auditRealismSource(adding('const pace = motionPace(reduced);', MOUNT_PATH)), [], 'the mount alone may name the pace');
   assert.match(auditRealismSource(adding('const pace = motionPace(reduced);', 'src/render-scene/realism/star-layer.ts')).join('\n'), /star-layer\.ts holds motionPace/);
+  assert.deepEqual(auditRealismSource(adding('resetFrameSampling();', MOUNT_PATH)), [], 'the mount alone may name the reset');
+  assert.match(auditRealismSource(adding('resetFrameSampling();', 'src/render-scene/realism/star-layer.ts')).join('\n'), /star-layer\.ts holds the sampling reset/);
+  assert.deepEqual(auditRealismSource(adding('renderer.compileAsync(group, camera, scene);')), [], 'fill-layer.ts alone may warm');
+  for (const path of ['src/render-scene/realism/star-layer.ts', 'src/render-scene/realism/fill-model.ts', MOUNT_PATH]) {
+    for (const line of ['gl.initTexture(texture);', 'gl.compileAsync(scene, camera);']) {
+      assert.match(auditRealismSource(adding(line, path)).join('\n'), /the warm-up, outside fill-layer\.ts/, `${line} in ${path}`);
+    }
+  }
   const removed = real.map((module) => (module.path === MODEL_PATH ? { ...module, text: module.text.replaceAll('appearance.meanLuminance', 'appearance["meanLuminance"]') } : module));
   assert.match(auditRealismSource(removed).join('\n'), /read by name/);
   assert.deepEqual(auditRealismSource(adding('// luminanceBand, mass, isDeep, a composer, motionPace and a DirectionalLight are banned')), []);
@@ -578,14 +616,22 @@ function auditLayer(source: string): string[] {
   if (frame === '') failures.push('no frame method found');
   if (/\.light\b|\buLight\b|\blightDirection\b/.test(frame)) failures.push('a per-frame write reaches the light');
   if (/\blightDirection\s*\(/.test(code)) failures.push('the layer computes a light of its own');
+  if ((code.match(/\.compileAsync\s*\(/g) ?? []).length !== 1) failures.push('compileAsync is called other than once per layer');
+  if (!/\.compileAsync\(group,\s*camera,\s*scene\)/.test(code)) failures.push('the compile is not over the detached group, against the scene');
+  if ((code.match(/\.initTexture\s*\(/g) ?? []).length !== 1 || !/for\s*\(const texture of textures\.values\(\)\)\s*renderer\.initTexture\(texture\);/.test(code)) failures.push('initTexture is not called once per texture');
+  if (!/\bLINK_STATUS\b/.test(code)) failures.push('the warm-up reads no LINK_STATUS');
+  if (/\bdepthWrite:\s*true\b/.test(code)) failures.push('a fill writes depth at build');
+  if ((code.match(/\{\s*value:\s*0\s*\}/g) ?? []).length !== 1 || !/const fade = \{ value: 0 \};/.test(code)) failures.push('not one fade uniform object');
+  if (/\buFade:\s*\{/.test(code)) failures.push('a second fade uniform object');
+  if (/\bscene\.add\((?!group\))/.test(code)) failures.push('a mesh is added to the scene, not to the group');
   return failures;
 }
 
-test('fill-layer.ts is one Mesh per plan over one SphereGeometry, with no per-frame write to the light', () => {
+test('fill-layer.ts is one Mesh per plan over one SphereGeometry, with no per-frame write to the light, one fade, and one warm-up', () => {
   assert.deepEqual(auditLayer(readFileSync(new URL('./fill-layer.ts', import.meta.url), 'utf8')), []);
 });
 
-test('the layer audit rejects a second draw, a second sphere and a moving light', () => {
+test('the layer audit rejects a second draw, a second sphere, a moving light, a second fade, a fill writing depth at build and a second compile', () => {
   const real = readFileSync(new URL('./fill-layer.ts', import.meta.url), 'utf8');
   const FRAME = /(\bframe\s*\([^)]*\)\s*\{\r?\n)/;
   assert.match(real, FRAME);
@@ -599,6 +645,14 @@ test('the layer audit rejects a second draw, a second sphere and a moving light'
     ['a light written each frame', real.replace(FRAME, '$1      rows[0].mesh.material.uniforms.uLight.value.set(0, 0, 0);\n'), /reaches the light/],
     ['a second light', real.replace(FRAME, '$1      const again = lightDirection(a, b);\n'), /reaches the light/],
     ['another render order', real.replace('mesh.renderOrder = FILL_RENDER_ORDER;', 'mesh.renderOrder = 1.5;'), /fill step/],
+    ['a second compile', real.replace('const compiled = renderer.compileAsync(', 'void renderer.compileAsync(group, camera, scene);\n      const compiled = renderer.compileAsync('), /other than once/],
+    ['a compile over the scene, so its meshes would be drawn first', real.replace('compileAsync(group, camera, scene)', 'compileAsync(scene, camera)'), /detached group/],
+    ['an upload of one texture only', real.replace('for (const texture of textures.values()) renderer.initTexture(texture);', 'renderer.initTexture(textures.values().next().value!);'), /once per texture/],
+    ['no link check', real.replace('gl.LINK_STATUS', 'gl.COMPILE_STATUS'), /LINK_STATUS/],
+    ['a fill writing depth at build', real.replace('depthWrite: false,', 'depthWrite: true,'), /writes depth at build/],
+    ['a second fade uniform object', real.replace('uFade: fade,', 'uFade: { value: 0 },'), /fade uniform object/],
+    ['a second fade, declared', real.replace('const fade = { value: 0 };', 'const fade = { value: 0 };\n  const other = { value: 0 };'), /not one fade uniform/],
+    ['a mesh added to the scene', real.replace('scene.add(group);', 'scene.add(group);\n      scene.add(rows[0]!.mesh);'), /not to the group/],
   ] as const) {
     assert.notEqual(mutated, real, `"${name}" must apply`);
     assert.match(auditLayer(mutated).join('\n'), message, name);

@@ -265,6 +265,8 @@ const IMPORTERS: Readonly<Record<string, readonly string[]>> = {
   'src/shell/corner-chrome.tsx': ['chartOffered', 'subscribeChartOffer'],
   'src/shell/scene-host.tsx': ['resetFrameSampling'],
   'src/render-scene/frame-sampler.tsx': ['sampleFrame'],
+  // 7.8, AD-19's importer-table allowance: realism's owner resets sampling when upload begins and when its first visible frame begins.
+  'src/render-scene/realism-mount.tsx': ['resetFrameSampling'],
 };
 
 /** Every specifier a source names in an import, export-from, dynamic import or require. */
@@ -275,7 +277,7 @@ function specifiers(code: string): string[] {
 const OFFER_SPECIFIER = /(?:^|\/)chart-offer(?:\.tsx?)?$/;
 
 /**
- * Who imports the monitor: exactly the three in `IMPORTERS`, each by one static
+ * Who imports the monitor: exactly the four in `IMPORTERS`, each by one static
  * named import of exactly its names — no namespace, no re-export, no dynamic edge.
  */
 function offerImporters(files: readonly SourceFile[]): string[] {
@@ -288,7 +290,7 @@ function offerImporters(files: readonly SourceFile[]): string[] {
     if (edges.length === 0) continue;
     const names = IMPORTERS[file.path];
     if (names === undefined) {
-      failures.push(`${file.path} imports chart-offer.ts — only the chrome, the scene host and the sampler may`);
+      failures.push(`${file.path} imports chart-offer.ts — only the chrome, the scene host, the sampler and the realism mount may`);
       continue;
     }
     seen.add(file.path);
@@ -312,7 +314,7 @@ function offerImporters(files: readonly SourceFile[]): string[] {
   return failures;
 }
 
-test('chart-offer.ts is imported by the chrome, the scene host and the sampler alone, each for its own names', () => {
+test('chart-offer.ts is imported by the chrome, the scene host, the sampler and the realism mount alone, each for its own names', () => {
   assert.deepEqual(offerImporters(shipped()), []);
 });
 
@@ -330,6 +332,10 @@ test('the importer audit rejects each bad edge', () => {
     ['the sampler resets', swap('src/render-scene/frame-sampler.tsx', (s) => s.replace("import { sampleFrame } from '../shell/chart-offer.ts';", "import { resetFrameSampling, sampleFrame } from '../shell/chart-offer.ts';"))],
     ['the host by namespace', swap('src/shell/scene-host.tsx', (s) => s.replace("import { resetFrameSampling } from './chart-offer.ts';", "import * as offer from './chart-offer.ts';"))],
     ['the host unwired', swap('src/shell/scene-host.tsx', (s) => s.replace("import { resetFrameSampling } from './chart-offer.ts';", ''))],
+    ['the realism mount takes another name', swap('src/render-scene/realism-mount.tsx', (s) => s.replace("import { resetFrameSampling } from '../shell/chart-offer.ts';", "import { sampleFrame } from '../shell/chart-offer.ts';"))],
+    ['the realism mount takes a second name', swap('src/render-scene/realism-mount.tsx', (s) => s.replace("import { resetFrameSampling } from '../shell/chart-offer.ts';", "import { chartOffered, resetFrameSampling } from '../shell/chart-offer.ts';"))],
+    ['the realism mount unwired', swap('src/render-scene/realism-mount.tsx', (s) => s.replace("import { resetFrameSampling } from '../shell/chart-offer.ts';", ''))],
+    ['the realism chunk imports it', add('src/render-scene/realism/fill-layer.ts', "import { resetFrameSampling } from '../../shell/chart-offer.ts';")],
   ];
   for (const [name, files] of mutations) {
     assert.notDeepEqual(files, real, `the mutation "${name}" must apply`);
