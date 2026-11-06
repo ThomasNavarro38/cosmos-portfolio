@@ -1,15 +1,17 @@
 /**
- * The fill recheck's scene (story 7.6): the shipped BodyField and MoonField from the
- * committed artifact, the shipped fill layer from the shipped decode, and the Canvas
- * props `scene.tsx` uses. The real navigation store drives the strokes; the harness
- * drives the camera with the shipped pose models. Dust, Motes and the rig are not
- * mounted. This file ships nowhere.
+ * The fill recheck's scene (story 7.6, and 7.7): the shipped BodyField and MoonField
+ * from the committed artifact, the shipped layer from the shipped decode, the Dust as
+ * `scene.tsx` draws it (hidden unless a measure asks), and the Canvas props `scene.tsx`
+ * uses. The real navigation store drives the strokes; the harness drives the camera
+ * with the shipped pose models. Motes and the rig are not mounted. This file ships nowhere.
  */
 import { Canvas, type RootState } from '@react-three/fiber';
 import { flushSync } from 'react-dom';
+import { DataTexture, LinearFilter } from 'three';
 import { createRoot } from 'react-dom/client';
 import artifact from '../../generated/layout.generated.json';
 import { BodyField } from '../../src/render-scene/body-field.tsx';
+import { buildDust, DUST_MEDIUM_COLOR, DUST_MEDIUM_TEXTURE_SIZE, DUST_PARTICLE_COLOR, DUST_PARTICLE_OPACITY, DUST_PARTICLE_RADIUS, DUST_RENDER_ORDER, mediumFalloff, mediumSpriteScale } from '../../src/render-scene/dust-model.ts';
 import { MoonField } from '../../src/render-scene/moon-field.tsx';
 import { buildRail, railFarPlane } from '../../src/render-scene/rail-model.ts';
 import type { RealismArtifact } from '../../src/render-scene/realism-status.ts';
@@ -22,6 +24,11 @@ const { bodies } = buildScene(artifact as unknown as SceneArtifact);
 const rail = buildRail(artifact as unknown as SceneArtifact, bodies);
 const framing = frameBodies(bodies);
 const far = Math.max(framing.far, railFarPlane(rail, bodies));
+const { media, particles } = buildDust(bodies);
+const MEDIUM_TEXTURE = new DataTexture(mediumFalloff(DUST_MEDIUM_TEXTURE_SIZE), DUST_MEDIUM_TEXTURE_SIZE, DUST_MEDIUM_TEXTURE_SIZE);
+MEDIUM_TEXTURE.magFilter = LinearFilter;
+MEDIUM_TEXTURE.minFilter = LinearFilter;
+MEDIUM_TEXTURE.needsUpdate = true;
 const images = await decodeMaps(artifact as unknown as RealismArtifact, '/');
 const root = createRoot(document.getElementById('root') as HTMLElement);
 let mounts = 0;
@@ -53,6 +60,19 @@ function mount(viewport: Viewport): Promise<RootState> {
             }}
           >
             <color attach="background" args={[tokens.colors['surface-base-dark']]} />
+            <group name="dust" visible={false}>
+              {media.map((medium) => (
+                <sprite key={medium.id} position={[medium.position.x, medium.position.y, medium.position.z]} scale={mediumSpriteScale(medium)} renderOrder={DUST_RENDER_ORDER}>
+                  <spriteMaterial map={MEDIUM_TEXTURE} color={DUST_MEDIUM_COLOR} opacity={medium.opacity} transparent depthWrite={false} />
+                </sprite>
+              ))}
+              {particles.map((particle) => (
+                <mesh key={particle.id} position={[particle.position.x, particle.position.y, particle.position.z]} renderOrder={DUST_RENDER_ORDER}>
+                  <sphereGeometry args={[DUST_PARTICLE_RADIUS, 8, 6]} />
+                  <meshBasicMaterial color={DUST_PARTICLE_COLOR} opacity={DUST_PARTICLE_OPACITY} transparent depthWrite={false} />
+                </mesh>
+              ))}
+            </group>
             <group name="lines-and-bodies">
               <BodyField bodies={bodies} rail={rail} />
             </group>
@@ -73,4 +93,5 @@ install({
   buildLayer: () => createFillLayer(artifact as unknown as RealismArtifact, images),
   background: tokens.colors['surface-base-dark'],
   ceiling: tokens.colors['stroke-active-dark'],
+  focusCeiling: tokens.colors['stroke-focus-dark'],
 });

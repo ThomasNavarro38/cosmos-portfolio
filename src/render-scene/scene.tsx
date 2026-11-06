@@ -236,8 +236,8 @@ export function Scene({ artifact }: SceneProps) {
         <FrameSampler />
         {/* The First Paint mark (6.4): marks the first frame once per document, on the visitor's own timeline. Draws nothing, sends nothing. */}
         <FirstFrameMark />
-        {/* Realism's owner (7.5, 7.6): decodes the maps after the first frame, adds the Planets' fills itself, and on a failure it can see leaves this scene exactly as it was. */}
-        <RealismMount artifact={artifact} />
+        {/* Realism's owner (7.5, 7.6, 7.7): decodes the maps after the first frame, adds the fills and glows itself, and on a failure it can see leaves this scene exactly as it was. It takes the Rail to read the subject, and writes no store field. */}
+        <RealismMount artifact={artifact} rail={rail} />
       </Canvas>
       {/* The vignette: the ground over the frame's edge, 0 inside 42% rising to 0.9. Inert, and not narrated. */}
       <div aria-hidden="true" style={vignetteStyle()} />

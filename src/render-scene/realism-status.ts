@@ -25,7 +25,7 @@
  * then `markShown`. A later Canvas over a `shown` document stays `shown`, with
  * `uploaded` false until its first frame builds again from the held images, with no
  * request. A synchronous throw from building, attaching or updating the layer ends
- * in `markFailed`, which removes the fills. **A shader that fails to compile, or a
+ * in `markFailed`, which removes the fills and glows (7.7). **A shader that fails to compile, or a
  * texture that fails to upload, does neither here:** both happen inside three's
  * render, after this frame has returned, so today they do not reach this owner, and
  * `uploaded` means the layer was built and updated, not that the GPU took it. 7.8's
@@ -75,18 +75,24 @@ export interface RealismArtifact {
   }[];
 }
 
-/** What a frame hands the layer: this Canvas's scene and camera, and the frame's facts. */
+/**
+ * What a frame hands the layer: this Canvas's scene and camera, and the frame's facts.
+ * `subject` is a thunk, so the store is read inside this owner's `try`, and only when a
+ * layer exists (7.7). `pace` is `motionPace`'s number, from the mount's one read.
+ */
 export interface RealismDraw<Scene = unknown, Camera = unknown> {
   readonly scene: Scene;
   readonly camera: Camera;
   readonly delta: number;
   readonly reduced: boolean;
+  readonly pace: number;
+  readonly subject: () => string | null;
 }
 
 /** The drawn layer, as the owner holds it. */
 export interface RealismLayer<Scene = unknown, Camera = unknown> {
   attach(scene: Scene): void;
-  frame(camera: Camera, delta: number, reduced: boolean): void;
+  frame(camera: Camera, delta: number, reduced: boolean, pace: number, subject: string | null): void;
   dispose(): void;
 }
 
@@ -198,7 +204,7 @@ export function createRealismOwner<Image, Scene = unknown, Camera = unknown>(imp
       layerScene = draw.scene;
       layer.attach(draw.scene);
     }
-    layer.frame(draw.camera, draw.delta, draw.reduced);
+    layer.frame(draw.camera, draw.delta, draw.reduced, draw.pace, draw.subject());
     markUploaded();
     markShown();
   };

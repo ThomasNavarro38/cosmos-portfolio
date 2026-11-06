@@ -109,7 +109,7 @@ function auditChunk(modules: readonly Module[]): string[] {
 
 test('the walk reads every module of the chunk, and none reaches src/derive/ but for types', () => {
   const modules = chunkModules();
-  for (const path of ['budgets.ts', 'decode-maps.ts', 'fill-layer.ts', 'fill-model.ts', 'fill-shader.ts', 'index.ts', 'map-urls.ts']) {
+  for (const path of ['budgets.ts', 'decode-maps.ts', 'fill-layer.ts', 'fill-model.ts', 'fill-shader.ts', 'index.ts', 'map-urls.ts', 'star-layer.ts', 'star-model.ts', 'star-shader.ts']) {
     assert.ok(modules.some((module) => module.path === `src/render-scene/realism/${path}`), `the walk reads ${path}`);
   }
   assert.deepEqual(auditChunk(modules), []);

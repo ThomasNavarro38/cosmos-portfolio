@@ -1466,16 +1466,23 @@ const EFFECTS =
 
 /**
  * Every effect in code, each reported as `file:line` — comments blanked (line count
- * kept), strings kept, since a CSS value is a string. The one allowance (AD-19):
- * the identifier `GLOW_RENDER_ORDER`, whole, in `scene-model.ts`, the file that
- * declares the draw order. It is blanked only there, so any other `glow` in that
- * file, and that identifier in any other file, still fails.
+ * kept), strings kept, since a CSS value is a string. The one allowance (AD-19), in
+ * two parts: the identifier `GLOW_RENDER_ORDER`, whole, in `scene-model.ts`, the
+ * file that declares the draw order, and the word `glow` under `render-scene/realism/`
+ * (7.7), as a word of its own (`GLOW_` and `-glow-` delimit it, a letter does not),
+ * and nothing else there. Each is blanked only there, so any other `glow` in
+ * `scene-model.ts`, a `glow` in any other file, and a bloom, a shadow or a light under
+ * `realism/`, still fail.
  */
 function effectsIn(files: readonly { readonly path: string; readonly source: string }[]): string[] {
   const every = new RegExp(EFFECTS.source, `${EFFECTS.flags.replace('g', '')}g`);
   return files.flatMap((file) => {
     const stripped = stripComments(file.source);
-    const code = file.path === 'src/render-scene/scene-model.ts' ? stripped.replace(/(?<![\w$-])GLOW_RENDER_ORDER(?![\w$-])/g, '') : stripped;
+    const code = file.path === 'src/render-scene/scene-model.ts'
+      ? stripped.replace(/(?<![\w$-])GLOW_RENDER_ORDER(?![\w$-])/g, '')
+      : file.path.startsWith('src/render-scene/realism/')
+        ? stripped.replace(/(?<![a-z])glows?(?![a-z])/gi, ' ')
+        : stripped;
     return [...code.matchAll(every)].map((match) => {
       const line = code.slice(0, match.index).split('\n').length;
       return `${file.path}:${line} holds ${match[0]}`;
@@ -1527,14 +1534,34 @@ test('the effects audit rejects each form, in code, and ignores comments', () =>
   );
 });
 
-test('the glow allowance is the one identifier in the one file, and it is in use', () => {
+test('the glow allowance is the one identifier in the one file and the word under realism/, and it is in use', () => {
   const MODEL = 'src/render-scene/scene-model.ts';
+  const CHUNK = 'src/render-scene/realism/x.ts';
   assert.match(stripComments(readFileSync(MODEL_TS, 'utf8')), /\bGLOW_RENDER_ORDER = 1\.25\b/, 'the allowance has something to admit');
   assert.deepEqual(effectsIn([{ path: MODEL, source: 'export const GLOW_RENDER_ORDER = 1.25;' }]), []);
+  assert.match(stripComments(sourceFiles().find((file) => file.path === 'src/render-scene/realism/star-layer.ts')?.source ?? ''), /\bGLOW_RENDER_ORDER\b/, 'the chunk has a glow for it to admit');
+  for (const source of ['const a = GLOW_RENDER_ORDER;', 'const glow = 1;', "const color = tokens.colors['realism-star-glow-dark'];", 'const GLOW_SUBJECT_PEAK = 0.6;', 'const glows = 2;']) {
+    assert.deepEqual(effectsIn([{ path: CHUNK, source }]), [], `${source} is admitted under realism/`);
+  }
+  assert.deepEqual(effectsIn([{ path: 'src/render-scene/realism/scene-model.ts', source: 'const a = GLOW_RENDER_ORDER;' }]), [], 'the row that moved to the admitted side');
   const rejected: readonly (readonly [string, string])[] = [
     ['src/shell/x.tsx', 'const a = GLOW_RENDER_ORDER;'],
+    ['src/shell/x.tsx', 'const glow = 1;'],
+    ['src/render-scene/x.ts', 'const glow = 1;'],
+    ['src/render-scene/realism-mount.tsx', 'const glow = 1;'],
+    ['src/render-scene/realismx/x.ts', 'const glow = 1;'],
     ['src/render-scene/dust-model.ts', 'export { GLOW_RENDER_ORDER } from "./scene-model.ts";'],
-    ['src/render-scene/realism/scene-model.ts', 'const a = GLOW_RENDER_ORDER;'],
+    [CHUNK, 'const bloom = 1;'],
+    [CHUNK, '<Bloom />'],
+    [CHUNK, '<Canvas shadows>'],
+    [CHUNK, '<pointLight />'],
+    [CHUNK, 'const l = new AmbientLight();'],
+    [CHUNK, '<mesh castShadow />'],
+    [CHUNK, 'const glowing = new DirectionalLight();'],
+    [CHUNK, 'const GLOWING = true;'],
+    [CHUNK, 'const outerGlow = 1;'],
+    [CHUNK, 'new SelectiveGlowPass();'],
+    [CHUNK, 'const afterglow = 1;'],
     ['src/render-scene/scene-model.tsx', 'const a = GLOW_RENDER_ORDER;'],
     [MODEL, 'export const GLOW_RENDER_ORDER_2 = 1.25;'],
     [MODEL, 'export const MY_GLOW_RENDER_ORDER = 1.25;'],
@@ -1604,6 +1631,9 @@ test('every renderOrder is exactly one of the five names scene-model.ts declares
     '<mesh renderOrder={FILL_RENDER_ORDER} />\n// renderOrder={3}',
     '<mesh renderOrder={ GLOW_RENDER_ORDER } />',
     'mesh.renderOrder = MOON_RENDER_ORDER;',
+    // 7.6 and 7.7: the realism chunk's two steps, as its layers set them.
+    'mesh.renderOrder = FILL_RENDER_ORDER;',
+    'mesh.renderOrder = GLOW_RENDER_ORDER;',
     'const a = { renderOrder: DUST_RENDER_ORDER, b: 1 };',
     'const a = { renderOrder: BODY_RENDER_ORDER };',
     'mesh.renderOrder === 1;',

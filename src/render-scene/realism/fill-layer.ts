@@ -3,7 +3,8 @@
  * added to R3F's scene imperatively, so nothing under the Canvas can suspend. R3F
  * raycasts only what has a handler, so a fill cannot take a click from a hit
  * sphere. Everything is decided in `fill-model.ts`; this file builds it, and writes
- * the camera's quaternion and the map's turn each frame.
+ * the camera's quaternion and the map's turn each frame. It owns the one geometry,
+ * so a Star's two draws (7.7, `star-layer.ts`) are built here over it.
  *
  * **Each frame** the mesh takes the camera's world quaternion, which is what drei's
  * `Billboard` computes, so the disc lies in the marks' plane at every pose. The
@@ -46,13 +47,15 @@ import {
   spinAngle,
 } from './fill-model.ts';
 import { FILL_FRAGMENT_SHADER, FILL_VERTEX_SHADER } from './fill-shader.ts';
+import { createStarRows } from './star-layer.ts';
+import { starPlans } from './star-model.ts';
 
 export interface FillLayer {
-  /** Adds every fill to this scene. */
+  /** Adds every fill and glow to this scene. */
   attach(scene: Scene): void;
-  /** One frame: each disc to the camera, each map to its turn. */
-  frame(camera: Camera, delta: number, reduced: boolean): void;
-  /** Removes the fills and frees the GPU's copies. Safe twice. The images are kept. */
+  /** One frame: each disc to the camera, each map to its turn, each Star's rise toward the subject. The spin takes `reduced` and the rise takes `pace`. */
+  frame(camera: Camera, delta: number, reduced: boolean, pace: number, subject: string | null): void;
+  /** Removes the fills and glows and frees the GPU's copies. Safe twice. The images are kept. */
   dispose(): void;
 }
 
@@ -68,11 +71,12 @@ function mapTexture(image: ImageBitmap): Texture<ImageBitmap> {
 /**
  * The layer for this artifact, from the decoded images, with nothing added yet.
  *
- * @throws as `fillPlans` and `fillMaps` do, before anything is built.
+ * @throws as `fillPlans`, `fillMaps` and `starPlans` do, before anything is built.
  */
 export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<string, ImageBitmap>): FillLayer {
   const plans = fillPlans(artifact);
   const maps = fillMaps(plans, images);
+  const stars = starPlans(artifact);
   const geometry = new SphereGeometry(1, FILL_SPHERE_WIDTH_SEGMENTS, FILL_SPHERE_HEIGHT_SEGMENTS);
   const textures = new Map([...maps].map(([id, image]) => [id, mapTexture(image)]));
   const ambient = new Color(tokens.colors['realism-ambient-floor-dark']);
@@ -100,6 +104,7 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
     mesh.renderOrder = FILL_RENDER_ORDER;
     return { mesh, plan, turn };
   });
+  const starRows = createStarRows(stars, geometry);
   const facing = new Quaternion();
   let seconds = 0;
   let parent: Scene | null = null;
@@ -109,8 +114,9 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
     attach(scene) {
       parent = scene;
       for (const { mesh } of rows) scene.add(mesh);
+      starRows.attach(scene);
     },
-    frame(camera, delta, reduced) {
+    frame(camera, delta, reduced, pace, subject) {
       seconds = nextSpinSeconds(seconds, delta, reduced);
       camera.updateMatrixWorld();
       camera.getWorldQuaternion(facing);
@@ -118,6 +124,7 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
         mesh.quaternion.copy(facing);
         turn.fromArray(mapFromWorld(plan.tilt, spinAngle(plan.spinPhase, plan.spinRate, seconds)));
       }
+      starRows.frame(facing, subject, delta, pace);
     },
     dispose() {
       if (disposed) return;
@@ -126,6 +133,7 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
         parent?.remove(mesh);
         (mesh.material as ShaderMaterial).dispose();
       }
+      starRows.dispose();
       for (const texture of textures.values()) texture.dispose();
       geometry.dispose();
     },

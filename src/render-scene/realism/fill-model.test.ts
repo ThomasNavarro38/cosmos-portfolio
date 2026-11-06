@@ -30,7 +30,7 @@ import { tokens } from '../../tokens/tokens.ts';
 import { createRealismOwner, type RealismArtifact } from '../realism-status.ts';
 import { buildScene, FILL_RENDER_ORDER, type Body, type SceneArtifact } from '../scene-model.ts';
 import { bodyRadius, CIRCLE_SEGMENTS } from '../stroke-model.ts';
-import { PLANET_DRAWS_BUDGET, SPHERE_HEIGHT_SEGMENTS_BUDGET, SPHERE_WIDTH_SEGMENTS_BUDGET } from './budgets.ts';
+import { PLANET_DRAWS_BUDGET, SPHERE_HEIGHT_SEGMENTS_BUDGET, SPHERE_WIDTH_SEGMENTS_BUDGET, STAR_DRAWS_BUDGET } from './budgets.ts';
 import { createFillLayer } from './fill-layer.ts';
 import {
   addedDraws,
@@ -256,16 +256,18 @@ test('mapFromWorld inverts the tilt and the spin: the identity at rest, orthonor
 
 // --- The draws -----------------------------------------------------------------------------------
 
-test('added draws are Planets × 1, and no Star adds one', () => {
-  assert.equal(addedDraws(8), 8 * PLANET_DRAWS_BUDGET);
-  assert.equal(addedDraws(0), 0);
-  assert.equal(addedDraws(fillPlans(ARTIFACT).length), 3, 'three Planets under two Stars');
+test('added draws are Planets × 1 and Stars × 2', () => {
+  assert.equal(addedDraws(8, 0), 8 * PLANET_DRAWS_BUDGET);
+  assert.equal(addedDraws(0, 0), 0);
+  assert.equal(addedDraws(0, 3), 3 * STAR_DRAWS_BUDGET);
+  assert.equal(addedDraws(fillPlans(ARTIFACT).length, ARTIFACT.clients.length), 7, 'three Planets under two Stars');
 });
 
 // --- The layer, over real three objects ----------------------------------------------------------
 
-const meshesOf = (scene: Scene): Mesh[] => scene.children as Mesh[];
 const materialOf = (mesh: Mesh): ShaderMaterial => mesh.material as ShaderMaterial;
+/** The Planets' fills alone: a Star's two draws are in `star-model.test.ts`. */
+const meshesOf = (scene: Scene): Mesh[] => (scene.children as Mesh[]).filter((mesh) => materialOf(mesh)?.uniforms?.uMapFromWorld !== undefined);
 
 test('the layer is one Mesh per plan over one geometry and one texture per map, on the 7.1 mechanism', () => {
   const scene = new Scene();
@@ -273,8 +275,9 @@ test('the layer is one Mesh per plan over one geometry and one texture per map, 
   assert.equal(scene.children.length, 0, 'nothing added before attach');
   layer.attach(scene);
   const meshes = meshesOf(scene);
-  assert.equal(meshes.length, addedDraws(3));
-  assert.equal(new Set(meshes.map((mesh) => mesh.geometry)).size, 1);
+  assert.equal(meshes.length, addedDraws(3, 0));
+  assert.equal(scene.children.length, addedDraws(3, 2), 'with the two Stars');
+  assert.equal(new Set((scene.children as Mesh[]).map((mesh) => mesh.geometry)).size, 1, 'the Stars wear the same one');
   const geometry = meshes[0]!.geometry as SphereGeometry;
   assert.ok(geometry instanceof SphereGeometry);
   assert.deepEqual([geometry.parameters.radius, geometry.parameters.widthSegments, geometry.parameters.heightSegments], [1, 64, 32]);
@@ -308,7 +311,7 @@ test('each mesh wears its own plan: mean luminance, map and turn are that Planet
   const images = new Map([['moon', { name: 'moon' } as unknown as ImageBitmap], ['mars', { name: 'mars' } as unknown as ImageBitmap]]);
   const layer = createFillLayer(DIFFERING, images);
   layer.attach(scene);
-  layer.frame(new PerspectiveCamera(), 3, false);
+  layer.frame(new PerspectiveCamera(), 3, false, 1, null);
   const appearances = DIFFERING.clients[0]!.projects.map((project) => project.appearance);
   const meshes = meshesOf(scene);
   assert.equal(meshes.length, appearances.length);
@@ -363,13 +366,13 @@ test("a frame turns each mesh to the camera's world quaternion, even under a par
   rig.add(camera);
   rig.rotation.set(0, 0.7, 0);
   camera.rotation.set(0.2, 0.1, 0);
-  layer.frame(camera, 0.5, false);
+  layer.frame(camera, 0.5, false, 1, null);
   const expected = camera.getWorldQuaternion(new Quaternion());
   const lights = meshesOf(scene).map((mesh) => (materialOf(mesh).uniforms.uLight!.value as Vector3).toArray());
   const firstMaps = meshesOf(scene).map((mesh) => [...(materialOf(mesh).uniforms.uMapFromWorld!.value as Matrix3).elements]);
   for (const mesh of meshesOf(scene)) assert.ok(mesh.quaternion.angleTo(expected) < 1e-7);
   camera.rotation.set(1, 1, 0);
-  layer.frame(camera, 0.5, false);
+  layer.frame(camera, 0.5, false, 1, null);
   assert.deepEqual(meshesOf(scene).map((mesh) => (materialOf(mesh).uniforms.uLight!.value as Vector3).toArray()), lights, 'time, spin and camera leave the light');
   assert.notDeepEqual(meshesOf(scene).map((mesh) => [...(materialOf(mesh).uniforms.uMapFromWorld!.value as Matrix3).elements]), firstMaps, 'the map turned');
 });
@@ -382,15 +385,15 @@ test('at full motion the map follows phase + rate × seconds; reduced, it holds,
   const uniform = () => [...(materialOf(meshesOf(scene)[0]!).uniforms.uMapFromWorld!.value as Matrix3).elements];
   const light = () => (materialOf(meshesOf(scene)[0]!).uniforms.uLight!.value as Vector3).toArray();
   const expected = (seconds: number) => [...new Matrix3().fromArray(mapFromWorld(APPEARANCE.tilt, spinAngle(APPEARANCE.spinPhase, APPEARANCE.spinRate, seconds))).elements];
-  layer.frame(camera, 2, false);
+  layer.frame(camera, 2, false, 1, null);
   assert.deepEqual(uniform(), expected(2));
   const held = uniform();
   const heldLight = light();
-  layer.frame(camera, 2, true);
-  layer.frame(camera, 2, true);
+  layer.frame(camera, 2, true, 0.25, null);
+  layer.frame(camera, 2, true, 0.25, null);
   assert.deepEqual(uniform(), held, 'held');
   assert.deepEqual(light(), heldLight);
-  layer.frame(camera, 1, false);
+  layer.frame(camera, 1, false, 1, null);
   assert.deepEqual(uniform(), expected(3), 'resumes from where it held');
 });
 
@@ -402,17 +405,19 @@ test('dispose removes the fills and disposes materials, textures and geometry, k
   const image = () => ({ close: () => { closed += 1; } }) as unknown as ImageBitmap;
   const layer = createFillLayer(ARTIFACT, new Map([['moon', image()], ['mars', image()]]));
   layer.attach(scene);
-  const meshes = meshesOf(scene).filter((child) => (child as unknown) !== bystander);
+  const meshes = meshesOf(scene);
+  const stars = (scene.children as Mesh[]).filter((child) => (child as unknown) !== bystander && !meshes.includes(child));
+  assert.equal(stars.length, 4, 'two draws for each of two Stars');
   const disposed = { material: 0, texture: 0, geometry: 0 };
   meshes[0]!.geometry.addEventListener('dispose', () => { disposed.geometry += 1; });
-  for (const mesh of meshes) materialOf(mesh).addEventListener('dispose', () => { disposed.material += 1; });
+  for (const mesh of [...meshes, ...stars]) materialOf(mesh).addEventListener('dispose', () => { disposed.material += 1; });
   for (const texture of new Set(meshes.map((mesh) => materialOf(mesh).uniforms.uMap!.value as Texture))) texture.addEventListener('dispose', () => { disposed.texture += 1; });
   layer.dispose();
   assert.deepEqual(scene.children, [bystander]);
-  assert.deepEqual(disposed, { material: 3, texture: 2, geometry: 1 });
+  assert.deepEqual(disposed, { material: 7, texture: 2, geometry: 1 });
   assert.equal(closed, 0);
   assert.doesNotThrow(() => layer.dispose());
-  assert.deepEqual(disposed, { material: 3, texture: 2, geometry: 1 });
+  assert.deepEqual(disposed, { material: 7, texture: 2, geometry: 1 });
 });
 
 test('a build that cannot finish throws, and under the real owner the document fails with nothing added to the scene', async () => {
@@ -422,7 +427,7 @@ test('a build that cannot finish throws, and under the real owner the document f
   for (const [artifact, images] of [[ARTIFACT, new Map([['moon', {} as ImageBitmap]])], [orphan, IMAGES]] as const) {
     const owner = createRealismOwner<ImageBitmap, Scene, PerspectiveCamera>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(images), createFillLayer }));
     const scene = new Scene();
-    const draw = { scene, camera: new PerspectiveCamera(), delta: 0, reduced: false };
+    const draw = { scene, camera: new PerspectiveCamera(), delta: 0, reduced: false, pace: 1, subject: () => null };
     owner.frame(artifact, '/', draw);
     owner.frame(artifact, '/', draw);
     await new Promise((resolve) => setImmediate(resolve));
@@ -437,12 +442,12 @@ test('under the real owner, a fill layer whose update throws leaves the scene wi
   const scene = new Scene();
   const owner = createRealismOwner<ImageBitmap, Scene, PerspectiveCamera>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(IMAGES), createFillLayer }));
   const camera = new PerspectiveCamera();
-  const draw = { scene, camera, delta: 0, reduced: false };
+  const draw = { scene, camera, delta: 0, reduced: false, pace: 1, subject: () => null };
   owner.frame(ARTIFACT, '/', draw);
   owner.frame(ARTIFACT, '/', draw);
   await new Promise((resolve) => setImmediate(resolve));
   owner.frame(ARTIFACT, '/', draw);
-  assert.equal(scene.children.length, 3, 'one fill per Planet that same frame');
+  assert.equal(scene.children.length, addedDraws(3, 2), 'one fill per Planet and two draws per Star that same frame');
   assert.deepEqual(owner.status(), { document: 'shown', uploaded: true });
   owner.frame(ARTIFACT, '/', { ...draw, camera: { updateMatrixWorld() { throw new Error('a port threw'); } } as unknown as PerspectiveCamera });
   assert.equal(owner.status().document, 'failed');
@@ -492,13 +497,14 @@ const NO_DATA_SHADING: readonly (readonly [string, RegExp])[] = [
 ];
 const NO_PIPELINE: readonly (readonly [string, RegExp])[] = [
   ['a composer', /\bEffectComposer\b|\bcomposer\b/i],
+  ['a lens flare', /flare/i],
   ['a render target', /\bWebGL\w*RenderTarget\b|\brenderTarget\b|\bRenderTarget\b|\bsetRenderTarget\b/],
   ['a shadow map', /\bshadowMap\b|\bcastShadow\b|\breceiveShadow\b/],
   ['a scene light', /\b(?:Ambient|Directional|Point|Spot|Hemisphere|RectArea)Light\b/],
-  ['motionPace', /\bmotionPace\b/],
   ['the fade or warm-up of 7.8', /\binitTexture\b|\bcompileAsync\b|\bresetFrameSampling\b/],
 ];
-const CHUNK_ONLY: readonly (readonly [string, RegExp])[] = [['the preference', /\breducedMotion\b|\bmotion-preference\b/]];
+/** 7.7: the mount is a reader, and computes the pace as a reader does (`focus-panel.tsx`), so `motionPace` is banned under `realism/` alone. */
+const CHUNK_ONLY: readonly (readonly [string, RegExp])[] = [['the preference', /\breducedMotion\b|\bmotion-preference\b/], ['motionPace', /\bmotionPace\b/]];
 
 /** What the chunk and the mount may not hold. Strings count, since a shader is a string. */
 function auditRealismSource(modules: readonly Module[]): string[] {
@@ -534,6 +540,8 @@ test('the realism source audit rejects each form, in any module, and a comment i
     ['const a = project.isDeep ? 1 : 0;', /reads isDeep/],
     ['const a = project.moteTier;', /reads moteTier/],
     ['const c = new EffectComposer(gl);', /a composer/],
+    ['const f = new Lensflare();', /a lens flare/],
+    ["const name = 'star-flare';", /a lens flare/],
     ['const t = new WebGLRenderTarget(1, 1);', /a render target/],
     ['gl.setRenderTarget(null);', /a render target/],
     ['gl.shadowMap.enabled = true;', /a shadow map/],
@@ -549,6 +557,8 @@ test('the realism source audit rejects each form, in any module, and a comment i
     assert.match(auditRealismSource(adding(line)).join('\n'), message, line);
   }
   assert.match(auditRealismSource(adding('const a = artifact.isDeep;', MOUNT_PATH)).join('\n'), /realism-mount\.tsx reads isDeep/);
+  assert.deepEqual(auditRealismSource(adding('const pace = motionPace(reduced);', MOUNT_PATH)), [], 'the mount alone may name the pace');
+  assert.match(auditRealismSource(adding('const pace = motionPace(reduced);', 'src/render-scene/realism/star-layer.ts')).join('\n'), /star-layer\.ts holds motionPace/);
   const removed = real.map((module) => (module.path === MODEL_PATH ? { ...module, text: module.text.replaceAll('appearance.meanLuminance', 'appearance["meanLuminance"]') } : module));
   assert.match(auditRealismSource(removed).join('\n'), /read by name/);
   assert.deepEqual(auditRealismSource(adding('// luminanceBand, mass, isDeep, a composer, motionPace and a DirectionalLight are banned')), []);

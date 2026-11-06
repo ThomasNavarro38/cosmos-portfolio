@@ -1327,6 +1327,7 @@ Still open after 3.5:
   ruling: On 2026-11-05 Thomas accepted that the own-marks test cannot fail at any Focus pose on 390×844 or at focus-deep on 1920×1080, and attributed no pixel to a Ring or Moon, with this recheck covering it. So it must include a Ring and a Moon at their closest, at both viewports.
   evidence: The spike draws resting strokes at every pose, and at focus-deep no outline overlaps a 0.96 fill, so a larger ratio or a heavier stroke puts marks at risk that the spike never tested. 7.6 must also keep the fill flattened to the Billboard's plane, because 1e-6 was measured only on that fill, and should check show-through on the Rail under real camera motion and the glow sprite's depth test.
   resolution: Done in 7.6 for fills, with FILL_RADIUS_RATIO 0.995: 0 lost at both viewports, each pose with a control (realism-fills-7-6.md). A Ring never reaches its own fill at any pose sampled, and a Moon only with the Planet a few pixels across. The Rail offered no show-through with a testable pixel, since no Star has a fill yet, so 7.7 inherits that check, and the glow's depth test.
+  status: 7.7 measured both. The glow's depth test rejects 0 / 7 pixels across 16 whole frames, the 7 untraced, and an audit holds it on. Show-through on the Rail had 412 testable pixels at 1920×1080 with 0 showing, and 0 testable at 390×844, which stays open (realism-glow-7-7.md).
 
 ## Deferred from: code review of spec-7-2-the-realism-tokens-and-the-draw-order.md (2026-11-04)
 
@@ -1351,6 +1352,7 @@ Still open after 3.5:
 - source_spec: spec-7-2-the-realism-tokens-and-the-draw-order.md
   summary: 7.7 should settle how a Star's glow and a farther Planet's fill overlap, because drawing the glow first lets that fill paint over a nearer Star's glow.
   evidence: GLOW_RENDER_ORDER is 1.25, before FILL 1.5 and BODY 2, and the glow writes no depth. A fill or outline farther than the Star therefore passes its depth test and draws over the glow. At 1.25 only Dust has drawn in the transparent pass, and Dust writes no depth, so the glow's depth test has nothing to reject unless the opaque list wrote some. Nothing draws a glow yet, so this cannot be seen today.
+  resolution: Settled in 7.7: the draw order stands by AD-19, so a farther fill paints over a nearer Star's glow. Measured at 0 pixels at every stop and Focus, and 842 / 0 on the Rail, at worst 549 at rail(p=2.8333). The look is for Thomas's judgement in Epic 8, with the screenshot beside realism-glow-7-7.md; reversing the order needs a ruling.
   location: src/render-scene/scene-model.ts:380
   severity: medium
 
@@ -1394,6 +1396,7 @@ Still open after 3.5:
 - source_spec: spec-7-6-planets-lit-by-their-own-star.md
   summary: Show-through under real Rail motion has no evidence, because no Rail frame overlaps a farther Body's marks on a testable pixel while only Planets have fills. 7.7 should measure it once Stars draw.
   evidence: realism-fills-7-6.md, 0 testable pixels at both viewports; the 7,400 and 3,264 pixels recorded come from a staged pose.
+  resolution: In part, by 7.7: with Star fills, 412 testable pixels at 1920×1080, 0 showing through, against a control of 412. At 390×844 there were still 0 testable pixels, so that viewport passes on, tracked by one entry only: "Show-through under Rail motion is untested at 390×844", under spec-7-7 below. Rail flicker reads 1,819 / 2,184 against a control of 2,755 / 2,459, not separated from the true crossing, with no threshold and no verdict; held on a Star it reads 0 to 4 against about 100 / 55 (realism-glow-7-7.md).
   location: spikes/realism-fills/harness.ts
   severity: low
 - source_spec: spec-7-6-planets-lit-by-their-own-star.md
@@ -1435,4 +1438,70 @@ Still open after 3.5:
   summary: Firefox and Safari have not run the fills, and no story owns that run; a browser ignoring imageOrientation 'flipY' would turn every map upside down with nothing to detect it.
   evidence: Every browser check ran in Chrome on the dev machine. No epic story names another browser.
   location: src/render-scene/realism/decode-maps.ts
+  severity: low
+
+## Deferred from: implementation of spec-7-7-stars-that-glow.md (2026-11-05)
+
+- source_spec: spec-7-7-stars-that-glow.md
+  summary: A trusted click on a Planet behind a Star's fill flies to that Client rather than entering Focus, in this build and in the baseline; Thomas decides whether the AC means this case.
+  evidence: The Star's M2 hit sphere is nearer and takes the click, and a fill has no handler. A Planet in a Star's glow does enter Focus. The Rail scan found no Planet in front of a Star's fill. Changing it means changing hit spheres, which the story forbids (realism-glow-7-7.md, The click).
+  location: src/render-scene/body-field.tsx
+  severity: low
+- source_spec: spec-7-7-stars-that-glow.md
+  summary: At rest a Star's stroke-rest outline and core dot read as a dark ring and a dark spot on a fill near the ceiling. For Thomas's on-screen judgement in Epic 8, and 7.9 may lower the value.
+  evidence: realism-glow-7-7-overlap-worst.png. The tokens and body-field.tsx stay, by the spec's Design Notes.
+  location: src/render-scene/realism/star-model.ts
+  severity: low
+- source_spec: spec-7-7-stars-that-glow.md
+  summary: In production the rise was read frame by frame at one stop change only, where the rising Star is confounded by the camera's move; the second Canvas's first frame, and so the seed with no ramp, was not captured.
+  evidence: realism-glow-7-7.md, The mount's wiring and Remount. The model and layer tests hold the seed and the step.
+  location: spikes/realism-fills/harness.ts
+  severity: low
+- source_spec: spec-7-7-stars-that-glow.md
+  summary: Harness and click scan restate RISE_SECONDS, RISE_MAX_FRAME_SECONDS and GLOW_RADIUS_RATIO, because the reach audit admits that directory the facade alone, so changing those constants will not move what they state.
+  evidence: spikes/realism-fills/harness.ts and screen-positions.ts. The rise run's frame count would show a disagreement; the click scan would not.
+  location: spikes/realism-fills/harness.ts
+  severity: low
+- source_spec: spec-7-7-stars-that-glow.md
+  summary: Show-through under Rail motion is untested at 390×844: no overlap there had a testable pixel, even with Star fills. This is the one open entry for it; the 7.6 entry's resolution points here.
+  evidence: realism-glow-7-7.md, Flicker: 0 testable pixels at 390×844 against 412 at 1920×1080. Owner: 7.10, or the target-profile run if 7.10 adds no gate check.
+  location: spikes/realism-fills/harness.ts
+  severity: low
+- source_spec: spec-7-7-stars-that-glow.md
+  summary: Flicker where a line crosses a fill on the Rail has no verdict and no threshold.
+  evidence: realism-glow-7-7.md, Flicker: 1,819 / 2,184 pixels flip against a control of 2,755 / 2,459, not separated from the true crossing moving with the camera. Held on a Star it reads 0 to 4 against about 100 / 55.
+  location: spikes/realism-fills/harness.ts
+  severity: low
+- source_spec: spec-7-7-stars-that-glow.md
+  summary: The Star edge check has no Focus row at 390×844, since no Star's centre is in frame at any Focus pose there.
+  evidence: realism-glow-7-7.md, The edge: the cell is empty, not passing.
+  location: spikes/realism-fills/harness.ts
+  severity: low
+- source_spec: spec-7-7-stars-that-glow.md
+  summary: Three anomalies were left untraced: one of the overdriven-glow ceiling controls did not catch, at one pose with a glow on screen at 1920×1080 (and one risen control likewise); the glow depth test rejected 7 pixels at keyframe 0 at 390×844; and a first draw after a camera move differed from the next by one level at 3 pixels.
+  evidence: realism-glow-7-7.md, The ceilings, The glow and its depth test.
+  location: spikes/realism-fills/harness.ts
+  severity: low
+
+## Deferred from: code review of spec-7-7-stars-that-glow.md (2026-11-06)
+
+- source_spec: spec-7-7-stars-that-glow.md
+  summary: A Star that stops being the subject stays above stroke-active's luminance for the length of its fall, 0.35 s at full motion and 0.083 s under reduced motion, because the fill's ceiling follows the rise. The implementation reads the intent's "at rest" as settled, since the intent also forbids a cut. Thomas decides whether that reading stands.
+  evidence: STAR_FILL_FRAGMENT_SHADER's limit is mix(REST_CEILING, SUBJECT_CEILING, uRise); realism-glow-7-7.md, The ceilings, says "at rest" means settled. Any other reading needs either a cut or a fall that never passes the rest ceiling, which a rise from 0.7 to 0.36 cannot do.
+  location: src/render-scene/realism/star-shader.ts
+  severity: medium
+- source_spec: spec-7-7-stars-that-glow.md
+  summary: Three rest glows summed on encoded values decode above the rest ceiling by arithmetic, and nothing in the code limits how many glows overlap. The ceiling holds only at the sampled poses of the committed layout (at most two glows overlapped there, 0.4536 against 0.47119), so a re-solved layout or an unsampled pose can break it. Candidate fixes are a lower GLOW_REST_PEAK, for Thomas's look in Epic 8, or a layout check in scripts/ that counts on-screen glow overlaps.
+  evidence: realism-glow-7-7.md, The ceilings; star-model.test.ts bounds one and two rest peaks only.
+  location: src/render-scene/realism/star-model.ts
+  severity: medium
+- source_spec: spec-7-7-stars-that-glow.md
+  summary: The mount's per-frame wiring (pace from motionPace over the one preference read, and the subject thunk over sceneSubject and the rail prop) is held only by MOUNT_LINES' exact-text audit and one production stop change. No test runs the frame callback. Moving the draw's construction into a pure function would let node --test drive it, but realism-status.ts naming motionPace would need a PREFERENCE_ROLES row, which AD-19's allowances do not grant.
+  evidence: realism-status.test.ts MOUNT_LINES and its mutation rows read text; owner and layer tests feed hand-built pace and subject values.
+  location: src/render-scene/realism-mount.tsx
+  severity: low
+- source_spec: spec-7-7-stars-that-glow.md
+  summary: Free flight to a Client or to the overview, a Mote crossing a Star's fill or glow, and a label over a glow were not run. sceneSubject returns the flight target, so a Star should rise in free flight, and nothing on screen shows it. Labels are 7.9's; free flight and Motes go with 7.9's check or Epic 8.
+  evidence: realism-glow-7-7.md, Not run.
+  location: spikes/realism-fills/harness.ts
   severity: low

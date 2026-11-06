@@ -46,8 +46,9 @@ export const FILL_NEAR_CEILING = 0.98;
 /** What a map's mean is normalised to, fully lit. A starting value for Epic 8. */
 export const FILL_TARGET_LUMINANCE = 0.18;
 
-/** One draw per Planet. A Star adds none in this story, and Dust none at all. */
+/** One draw per Planet, two per Star (7.7), and none for Dust. */
 const DRAWS_PER_PLANET = 1;
+const DRAWS_PER_STAR = 2;
 
 interface Point {
   readonly x: number;
@@ -155,7 +156,7 @@ export function mapFromWorld(tilt: number, angle: number): readonly [number, num
   return [cosSpin, 0, sinSpin, sinTilt * sinSpin, cosTilt, -sinTilt * cosSpin, -cosTilt * sinSpin, sinTilt, cosTilt * cosSpin];
 }
 
-/** The draws realism adds to a scene of this many Planets. */
-export function addedDraws(planets: number): number {
-  return planets * DRAWS_PER_PLANET;
+/** The draws realism adds to a scene of this many Planets and Stars. */
+export function addedDraws(planets: number, stars: number): number {
+  return planets * DRAWS_PER_PLANET + stars * DRAWS_PER_STAR;
 }

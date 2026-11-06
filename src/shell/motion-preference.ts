@@ -24,8 +24,8 @@
  * **One writer:** a `matchMedia(REDUCED_MOTION_QUERY)` listener in `mount.tsx`,
  * run before the first render on both surfaces. **The readers** are
  * the camera rig, the Mote field, the Focus panel, the corner chrome (3.8,
- * whose slot moves with the panel) and the realism mount (7.6, whose fills hold
- * their spin, with no pace); the models take `reduced`
+ * whose slot moves with the panel) and the realism mount (7.6, 7.7, whose fills hold
+ * their spin with no pace, and whose Stars rise on the pace it hands them); the models take `reduced`
  * as an argument and map it through `motionPace`. A source audit in
  * `scene-model.test.ts` pins that set, so no capability judgement reads it.
  *

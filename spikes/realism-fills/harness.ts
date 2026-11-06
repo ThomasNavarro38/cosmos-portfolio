@@ -1,6 +1,6 @@
 /**
- * The fill recheck's instrument (story 7.6). It reads pixels back from the real GPU
- * over the shipped fill layer, and reports what it saw. No framerate is measured.
+ * The fill recheck's instrument (story 7.6), extended for Stars (7.7). It reads pixels
+ * back from the real GPU over the shipped layer, and reports what it saw. No framerate is measured.
  * `window.runFills(options)` starts a run and `window.fillsResult` holds it. Every
  * measure is defined in README.md.
  */
@@ -12,7 +12,7 @@ import { railPose, railStopCount, type Rail } from '../../src/render-scene/rail-
 import type { Body, ScenePosition } from '../../src/render-scene/scene-model.ts';
 import { bodyRadius, sceneSubject } from '../../src/render-scene/stroke-model.ts';
 import { PANEL_FRACTION } from '../../src/shell/panel-model.ts';
-import { focusProject, hoverProject, navigationStore, resetNavigation, advanceScroll, enterRail } from '../../src/shell/state.ts';
+import { focusProject, hoverProject, navigationStore, releaseFocus, resetNavigation, advanceScroll, enterRail } from '../../src/shell/state.ts';
 
 export interface Viewport {
   readonly name: string;
@@ -22,7 +22,7 @@ export interface Viewport {
 }
 interface Layer {
   attach(scene: RootState['scene']): void;
-  frame(camera: RootState['camera'], delta: number, reduced: boolean): void;
+  frame(camera: RootState['camera'], delta: number, reduced: boolean, pace: number, subject: string | null): void;
   dispose(): void;
 }
 export interface FillsWorld {
@@ -30,6 +30,7 @@ export interface FillsWorld {
   readonly rail: Rail;
   readonly background: string;
   readonly ceiling: string;
+  readonly focusCeiling: string;
   mount(viewport: Viewport): Promise<RootState>;
   buildLayer(): Layer;
 }
@@ -49,6 +50,13 @@ const SOFTWARE = /SwiftShader|llvmpipe|Software|Basic Render Driver/i;
 const TOLERANCE = 2;
 /** Past the Ring (2.2) and the Moon's far edge (2 + 0.27). */
 const ENLARGED = 3;
+/**
+ * star-model.ts's own values, restated: the reach audit in scripts/bundle-assertion.test.ts admits this
+ * directory the facade alone. Only the stated step and the frames to wait are drawn from them, and the rise
+ * run's frame count shows the shipped model agrees. The glow's reach is read from its mesh.
+ */
+const RISE_SECONDS = 0.6;
+const RISE_MAX_FRAME_SECONDS = 0.05;
 /** Below this share of the light in the image's plane, a disc has no half toward its Star. */
 const IN_PLANE_MINIMUM = 0.05;
 
@@ -95,12 +103,15 @@ export function install(world: FillsWorld): void {
     core: Map<string, Object3D>;
     moon: Map<string, Object3D>;
     fill: Map<string, Mesh>;
+    starFill: Map<string, Mesh>;
+    glow: Map<string, Mesh>;
+    dust: Object3D | null;
   }
   let parts: Parts;
   const samePosition = (o: Object3D, body: Body) => o.position.x === body.position.x && o.position.y === body.position.y && o.position.z === body.position.z;
 
   function scan(): void {
-    parts = { lines: [], outline: new Map(), ring: new Map(), core: new Map(), moon: new Map(), fill: new Map() };
+    parts = { lines: [], outline: new Map(), ring: new Map(), core: new Map(), moon: new Map(), fill: new Map(), starFill: new Map(), glow: new Map(), dust: state.scene.getObjectByName('dust') ?? null };
     for (const child of state.scene.getObjectByName('lines-and-bodies')!.children) {
       if ((child as unknown as { isLine2?: boolean }).isLine2) {
         parts.lines.push(child);
@@ -123,12 +134,19 @@ export function install(world: FillsWorld): void {
     }
     for (const child of state.scene.children) {
       const uniforms = ((child as Mesh).material as ShaderMaterial | undefined)?.uniforms;
+      if (uniforms?.uRise !== undefined) {
+        const star = stars.find((candidate) => samePosition(child, candidate));
+        if (star === undefined) throw new Error('a Star draw matches no Star');
+        (uniforms.radius !== undefined ? parts.starFill : parts.glow).set(star.id, child as Mesh);
+        continue;
+      }
       if (uniforms?.uMapFromWorld === undefined) continue;
       const body = planets.find((candidate) => samePosition(child, candidate));
       if (body === undefined) throw new Error('a fill matches no Planet');
       parts.fill.set(body.id, child as Mesh);
     }
     if (parts.fill.size !== planets.length) throw new Error(`${parts.fill.size} fills for ${planets.length} Planets`);
+    if (parts.starFill.size !== stars.length || parts.glow.size !== stars.length) throw new Error(`${parts.starFill.size} fills and ${parts.glow.size} glows for ${stars.length} Stars`);
     if (parts.ring.size !== 1 || parts.moon.size !== 1) throw new Error(`${parts.ring.size} Rings and ${parts.moon.size} Moons`);
   }
 
@@ -166,6 +184,9 @@ export function install(world: FillsWorld): void {
     core?: Which;
     moon?: Which;
     fill?: Which;
+    starFill?: Which;
+    glow?: Which;
+    dust?: boolean;
   }
   const on = (id: string, which: Which | undefined) => which === 'all' || (Array.isArray(which) && which.includes(id));
   function show(spec: Show): void {
@@ -175,16 +196,26 @@ export function install(world: FillsWorld): void {
     for (const [id, o] of parts.core) o.visible = on(id, spec.core);
     for (const [id, o] of parts.moon) o.visible = on(id, spec.moon);
     for (const [id, o] of parts.fill) o.visible = on(id, spec.fill);
+    for (const [id, o] of parts.starFill) o.visible = on(id, spec.starFill);
+    for (const [id, o] of parts.glow) o.visible = on(id, spec.glow);
+    if (parts.dust !== null) parts.dust.visible = spec.dust === true;
   }
   const MARKS: Show = { outline: 'all', ring: 'all', core: 'all', moon: 'all' };
   const materials = () => [...parts.fill.values()].map((mesh) => mesh.material as ShaderMaterial);
+  const starFillMaterials = () => [...parts.starFill.values()].map((mesh) => mesh.material as ShaderMaterial);
+  const glowMaterials = () => [...parts.glow.values()].map((mesh) => mesh.material as ShaderMaterial);
+  /** Every fill: both kinds share the one vertex stage, so the depth controls move both. */
+  const everyFill = () => [...materials(), ...starFillMaterials()];
 
-  const shipped = { vertex: '', fragment: '', mean: new Map<ShaderMaterial, number>(), ambient: null as unknown };
+  const shipped = { vertex: '', fragment: '', starFragment: '', glowFragment: '', starColor: null as unknown, mean: new Map<ShaderMaterial, number>(), ambient: null as unknown };
   function remember(): void {
     const first = materials()[0]!;
     shipped.vertex = first.vertexShader;
     shipped.fragment = first.fragmentShader;
     shipped.ambient = first.uniforms.uAmbient!.value;
+    shipped.starFragment = starFillMaterials()[0]!.fragmentShader;
+    shipped.starColor = starFillMaterials()[0]!.uniforms.uColor!.value;
+    shipped.glowFragment = glowMaterials()[0]!.fragmentShader;
     for (const m of materials()) shipped.mean.set(m, m.uniforms.uMeanLuminance!.value);
   }
   /** The shipped shader and every uniform as built, except that its light adds nothing and its floor is the ground: so any changed pixel is a lost mark. */
@@ -198,7 +229,7 @@ export function install(world: FillsWorld): void {
   function offsetSign(negative: boolean): void {
     const source = negative ? shipped.vertex.replace('+= 1e-6 *', '+= -1e-6 *') : shipped.vertex;
     if (negative && source === shipped.vertex) throw new Error('the control did not apply');
-    for (const m of materials()) {
+    for (const m of everyFill()) {
       m.vertexShader = source;
       m.needsUpdate = true;
     }
@@ -207,7 +238,7 @@ export function install(world: FillsWorld): void {
   function pushBehind(on: boolean): void {
     const source = on ? shipped.vertex.replace('+= 1e-6 *', '+= 0.5 *') : shipped.vertex;
     if (on && source === shipped.vertex) throw new Error('the push-behind control did not apply');
-    for (const m of materials()) {
+    for (const m of everyFill()) {
       m.vertexShader = source;
       m.needsUpdate = true;
     }
@@ -226,8 +257,18 @@ export function install(world: FillsWorld): void {
     state.camera.lookAt(pose.target.x, pose.target.y, pose.target.z);
     state.camera.updateMatrixWorld();
   }
-  function draw(spin = 0): void {
-    layer.frame(state.camera, spin, spin === 0);
+  /** What this frame's subject is: the store's by the shipped model, unless a run forces it. */
+  let forcedSubject: string | null | undefined;
+  /** A control writing the rise directly, as a cut would. */
+  let forcedRise: number | null = null;
+  const currentSubject = (): string | null => (forcedSubject !== undefined ? forcedSubject : sceneSubject(navigationStore.getState() as never, world.rail));
+  /** The rise run to where the subject puts it, by the shipped model, drawing nothing. */
+  function settle(): void {
+    for (let i = 0; i < Math.ceil(RISE_SECONDS / RISE_MAX_FRAME_SECONDS) + 2; i += 1) layer.frame(state.camera, RISE_MAX_FRAME_SECONDS, true, 1, currentSubject());
+  }
+  function draw(spin = 0, pace = 1, riseDelta?: number): void {
+    layer.frame(state.camera, riseDelta ?? spin, riseDelta !== undefined ? true : spin === 0, pace, currentSubject());
+    if (forcedRise !== null) for (const m of starFillMaterials()) m.uniforms.uRise!.value = forcedRise;
     clock += 1 / 60;
     advance(clock, false, state);
   }
@@ -252,7 +293,13 @@ export function install(world: FillsWorld): void {
     depth: number;
     radius: number;
     fill: number;
+    /** A Body's disc, whatever its kind. */
+    disc: number;
+    /** A Star's glow's reach. */
+    glow: number;
   }
+  /** True during the runs that draw Star fills, so a Star's disc counts as a fill. */
+  let withStars = false;
   function project(body: Body): Projected | null {
     const camera = state.camera as PerspectiveCamera;
     const v = new Vector3(body.position.x, body.position.y, body.position.z).applyMatrix4(camera.matrixWorldInverse);
@@ -261,11 +308,12 @@ export function install(world: FillsWorld): void {
     const clip = v.applyMatrix4(camera.projectionMatrix);
     const px = H / 2 / (Math.tan((camera.fov * Math.PI) / 360) * depth);
     const radius = bodyRadius(body) * px;
-    return { id: body.id, body, x: ((clip.x + 1) / 2) * W, y: ((clip.y + 1) / 2) * H, depth, radius, fill: body.kind === 'planet' ? ratioNow() * radius : 0 };
+    return { id: body.id, body, x: ((clip.x + 1) / 2) * W, y: ((clip.y + 1) / 2) * H, depth, radius, fill: body.kind === 'planet' || withStars ? ratioNow() * radius : 0, disc: ratioNow() * radius, glow: body.kind === 'star' ? (parts.glow.get(body.id) as Mesh).scale.x * px : 0 };
   }
   const ratioNow = (): number => (materials()[0]!.uniforms.radius!.value as number) / bodyRadius(planets[0]!);
   function setRatio(ratio: number): void {
     for (const m of materials()) m.uniforms.radius!.value = ratio * bodyRadius(planets[0]!);
+    for (const m of starFillMaterials()) m.uniforms.radius!.value = ratio * bodyRadius(stars[0]!);
   }
   /** A pixel is excused when a mark of a Body lying under a nearer Planet's fill can reach it: 7.1's exclusion, by Thomas's ruling. */
   function excluder(): (x: number, y: number) => boolean {
@@ -408,6 +456,8 @@ export function install(world: FillsWorld): void {
     await tick();
     await tick();
     setCamera(pose);
+    forcedSubject = undefined;
+    settle();
     return sceneSubject(navigationStore.getState() as never, world.rail);
   }
 
@@ -572,8 +622,10 @@ export function install(world: FillsWorld): void {
   /** One frame of lines over a ground-coloured fill against lines alone, inside each disc, against the frame before. */
   function flickerFrame(projected: readonly Projected[], previous: Uint8Array | null, previousAlone: Uint8Array | null) {
     neutral(true);
-    grab({ lines: true, fill: 'all' }, A);
+    if (withStars) starNeutral(true);
+    grab({ lines: true, fill: 'all', starFill: withStars ? 'all' : 'none' }, A);
     neutral(false);
+    if (withStars) starNeutral(false);
     grab({ lines: true }, B);
     const current = new Uint8Array(W * H);
     const currentAlone = new Uint8Array(W * H);
@@ -643,11 +695,12 @@ export function install(world: FillsWorld): void {
           out.overlaps += 1;
           const marks: Show = { outline: [rear.id], ring: [rear.id], core: [rear.id], moon: [rear.id] };
           grab(marks, M);
-          grab({ fill: [near.id] }, A);
-          grab({ ...marks, fill: [near.id] }, B);
+          const nearFill: Show = { fill: [near.id], starFill: [near.id] };
+          grab(nearFill, A);
+          grab({ ...marks, ...nearFill }, B);
           // The control pushes the fill far behind the rear marks, so they must show.
           pushBehind(true);
-          grab({ ...marks, fill: [near.id] }, C);
+          grab({ ...marks, ...nearFill }, C);
           pushBehind(false);
           const inset = near.fill - 2 * viewport.dpr;
           for (let p = 0; p < M.length; p += 1) {
@@ -855,6 +908,869 @@ export function install(world: FillsWorld): void {
     return rows;
   }
 
+  // --- Stars (7.7) -----------------------------------------------------------------------
+  const STAR_NEUTRAL = `uniform vec3 uColor;\nvoid main() {\n  gl_FragColor = vec4(uColor, 1.0);\n  #include <colorspace_fragment>\n}\n`;
+  /** A Star's fill drawn as the ground: any mark pixel it changes is a lost mark. */
+  function starNeutral(isNeutral: boolean): void {
+    const ground = new Color(world.background);
+    for (const m of starFillMaterials()) {
+      m.fragmentShader = isNeutral ? STAR_NEUTRAL : shipped.starFragment;
+      m.uniforms.uColor!.value = isNeutral ? ground : shipped.starColor;
+      m.needsUpdate = true;
+    }
+  }
+  function setGlowFragment(source: string): void {
+    for (const m of glowMaterials()) {
+      m.fragmentShader = source;
+      m.needsUpdate = true;
+    }
+  }
+  function setStarFragment(source: string): void {
+    for (const m of starFillMaterials()) {
+      m.fragmentShader = source;
+      m.needsUpdate = true;
+    }
+  }
+  const replaced = (source: string, from: RegExp | string, to: string): string => {
+    const out = source.replace(from, to);
+    if (out === source) throw new Error(`the control did not apply: ${String(from)}`);
+    return out;
+  };
+  const lumAt = (v: number): number => luminance(v & 255, (v >> 8) & 255, (v >> 16) & 255);
+  const onScreen = (p: Projected, reach: number): boolean => p.x + reach >= 0 && p.x - reach <= W && p.y + reach >= 0 && p.y - reach <= H;
+  /** Every read-back pixel within `r` of a point. */
+  function eachIn(p: { x: number; y: number }, r: number, visit: (index: number, distance: number) => void): void {
+    for (let y = Math.max(0, Math.floor(p.y - r)); y <= Math.min(H - 1, Math.ceil(p.y + r)); y += 1) {
+      for (let x = Math.max(0, Math.floor(p.x - r)); x <= Math.min(W - 1, Math.ceil(p.x + r)); x += 1) {
+        const d = Math.hypot(x + 0.5 - p.x, y + 0.5 - p.y);
+        if (d <= r) visit(y * W + x, d);
+      }
+    }
+  }
+  const projectedAll = (): Projected[] => world.bodies.map(project).filter((p): p is Projected => p !== null);
+
+  /** Every Client stop, Focus at both panel fractions, and the Rail walked at `perStop` samples, named. Each holds the store at its own progress, so its true subject is the one that has risen. */
+  function walkPoses(perStop: number): Pose[] {
+    const aspect = viewport.width / viewport.height;
+    const n = railStopCount(world.rail);
+    const walk: Pose[] = [];
+    for (let i = 1; i < n * perStop; i += 1) {
+      const p = i / perStop;
+      if (Number.isInteger(p)) continue;
+      walk.push({ name: `rail(p=${+p.toFixed(4)})`, ...railPose(world.rail, p, aspect), state: atStop(p) });
+    }
+    return [...stopPoses(), ...focusPoses(), ...walk];
+  }
+
+  /**
+   * A Star's outline and core dot on its real fill and glow, at rest and as the subject. `lost`: any
+   * mark pixel changed by a ground-coloured fill. `lostOnReal`: a pixel at a stroke token's exact value
+   * that no longer reads it, over the real fill and glow. `reach` and `reachOnReal` are the same with the
+   * fill biased in front: above 0, this pose can fail.
+   */
+  async function runStarOwn(): Promise<unknown[]> {
+    const rows: unknown[] = [];
+    for (const pose of [...stopPoses(), ...focusPoses()]) {
+      const subject = await at(pose);
+      for (const star of stars) {
+        const p = project(star);
+        if (p === null || !onScreen(p, p.radius)) continue;
+        const one = [star.id];
+        for (const [mark, show_] of [['outline', { outline: one }], ['core', { core: one }]] as const) {
+          grab(show_, M);
+          starNeutral(true);
+          grab({ ...show_, starFill: one }, A);
+          offsetSign(true);
+          grab({ ...show_, starFill: one }, C);
+          const neutralFront = C.slice();
+          starNeutral(false);
+          grab({ ...show_, starFill: one, glow: one }, C);
+          const realFront = C.slice();
+          // Comparator control: a fill enlarged to 1.5 × the outline, in front, ground-coloured: whatever the shipped fill reaches, this pose's comparator can fail.
+          const radius = parts.starFill.get(star.id)!.material as ShaderMaterial;
+          const shippedRadius = radius.uniforms.radius!.value as number;
+          starNeutral(true);
+          radius.uniforms.radius!.value = 1.5;
+          grab({ ...show_, starFill: one }, C);
+          const enlarged = C.slice();
+          radius.uniforms.radius!.value = shippedRadius;
+          starNeutral(false);
+          offsetSign(false);
+          grab({ ...show_, starFill: one, glow: one }, B);
+          let markPixels = 0;
+          let fullPixels = 0;
+          let lost = 0;
+          let lostOnReal = 0;
+          let reach = 0;
+          let reachOnReal = 0;
+          let comparatorControl = 0;
+          for (let i = 0; i < M.length; i += 1) {
+            const m = M[i]!;
+            if (diff(m, background) <= TOLERANCE) continue;
+            markPixels += 1;
+            if (diff(m, A[i]!) > TOLERANCE) lost += 1;
+            if (diff(m, neutralFront[i]!) > TOLERANCE) reach += 1;
+            if (diff(m, enlarged[i]!) > TOLERANCE) comparatorControl += 1;
+            if (!FULL.has(m & 0xffffff)) continue;
+            fullPixels += 1;
+            if (diff(m, B[i]!) > 0) lostOnReal += 1;
+            if (diff(m, realFront[i]!) > 0) reachOnReal += 1;
+          }
+          rows.push({ pose: pose.name, star: star.id, isSubject: subject === star.id, mark, radiusPx: +p.radius.toFixed(2), markPixels, fullPixels, lost, lostOnReal, reach, reachOnReal, comparatorControl });
+        }
+      }
+      await tick();
+    }
+    return rows;
+  }
+
+  /** A Star's fill's edge against its own outline's, by the Planet's measure. */
+  function starEdge(star: Body): unknown {
+    const p = project(star);
+    if (p === null || p.x < 0 || p.x > W || p.y < 0 || p.y > H) return { id: star.id, onScreen: false };
+    const box = Math.ceil(p.radius * 1.2 + 6);
+    const measure = (image: Uint32Array) => {
+      const seen: number[][] = [];
+      for (let y = Math.max(0, Math.floor(p.y - box)); y < Math.min(H, p.y + box); y += 1) {
+        for (let x = Math.max(0, Math.floor(p.x - box)); x < Math.min(W, p.x + box); x += 1) {
+          if (diff(image[y * W + x]!, background) > 0) seen.push([x + 0.5, y + 0.5]);
+        }
+      }
+      return seen;
+    };
+    grab({ starFill: [star.id] }, A);
+    grab({ outline: [star.id] }, B);
+    const fill = measure(A);
+    const stroke = measure(B);
+    if (fill.length === 0 || stroke.length === 0) return { id: star.id, fillPixels: fill.length };
+    const centre = (points: number[][]) => {
+      const xs = points.map((q) => q[0]!);
+      const ys = points.map((q) => q[1]!);
+      return { cx: (Math.min(...xs) + Math.max(...xs)) / 2, cy: (Math.min(...ys) + Math.max(...ys)) / 2 };
+    };
+    const f = centre(fill);
+    const s = centre(stroke);
+    const count = Math.max(12, Math.min(180, Math.floor((2 * Math.PI * p.disc) / 3)));
+    const bins = new Array<number>(count).fill(0);
+    for (const q of fill) {
+      const a = Math.atan2(q[1]! - s.cy, q[0]! - s.cx);
+      const bin = Math.floor(((a + Math.PI) / (2 * Math.PI)) * count) % count;
+      bins[bin] = Math.max(bins[bin]!, Math.hypot(q[0]! - s.cx, q[1]! - s.cy));
+    }
+    const lit = bins.filter((value) => value > 0);
+    return { id: star.id, radiusPx: +p.radius.toFixed(2), predictedFillPx: +p.disc.toFixed(2), centreOffsetPx: +Math.hypot(f.cx - s.cx, f.cy - s.cy).toFixed(2), edgeMin: +Math.min(...lit).toFixed(2), edgeMax: +Math.max(...lit).toFixed(2), binsWithEdge: `${lit.length} of ${count}`, fillPixels: fill.length };
+  }
+  async function runStarEdges(): Promise<unknown[]> {
+    const aspect = viewport.width / viewport.height;
+    const n = railStopCount(world.rail);
+    const between: Pose[] = [0.5, 1.5, 2.5].filter((p) => p < n).map((p) => ({ name: `rail(p=${p})`, ...railPose(world.rail, p, aspect), state: rest }));
+    const rows: unknown[] = [];
+    for (const pose of [...stopPoses().slice(1), ...between, ...focusPoses().filter((f) => f.name.endsWith(',f=0)'))]) {
+      await at(pose);
+      rows.push({ pose: pose.name, stars: stars.map(starEdge).filter((row) => (row as { onScreen?: boolean }).onScreen !== false) });
+    }
+    return rows;
+  }
+
+  /**
+   * The glow by real frames. Outside its reach, with and without, nothing differs. Inside, a fully covered
+   * line pixel still reads its value. At its edge it arrives at the ground with no step. Each has a control.
+   */
+  async function runGlow(): Promise<unknown[]> {
+    const rows: unknown[] = [];
+    const whole: Show = { ...MARKS, lines: true, fill: 'all', starFill: 'all', dust: true };
+    const lineworkOnly: Show = { ...MARKS, lines: true };
+    const noFalloff = replaced(shipped.glowFragment, 'float falloff = edge * edge;', 'float falloff = 1.0;');
+    for (const pose of [...stopPoses(), ...focusPoses().filter((f) => f.name.endsWith(',f=0)')), { name: 'rail(p=1.5)', ...railPose(world.rail, 1.5, viewport.width / viewport.height), state: rest }]) {
+      await at(pose);
+      const all = projectedAll();
+      const glows = all.filter((p) => p.glow > 0 && onScreen(p, p.glow));
+      const outsideAll = (index: number, margin: number): boolean => {
+        const x = (index % W) + 0.5;
+        const y = Math.floor(index / W) + 0.5;
+        return glows.every((p) => Math.hypot(x - p.x, y - p.y) > p.glow + margin);
+      };
+      const row = { pose: pose.name, glowsOnScreen: glows.length, largestGlowPx: +Math.max(0, ...glows.map((p) => p.glow)).toFixed(1), differingWithin: 0, differingOutside: 0, outsideSample: [] as number[][], glowCentres: glows.map((p) => [+p.x.toFixed(1), +p.y.toFixed(1), +p.glow.toFixed(1)]), controlOutsideEnlarged: 0, depthTestRejected: 0, firstDrawDiffered: 0, sameFrameTwiceDiffered: 0, linePixelsInReach: 0, lineChanged: 0, controlLineChanged: 0, beyondEdge: 0, edgeBandMax: 0, edgeLargestStep: 0, cornersOff: 0, controlBandMax: 0, controlLargestStep: 0, edgesMeasured: 0, largestMeasuredPx: 0 };
+      // Whole frame, with and without. The first draw at a pose is discarded: a frame after the camera moved may differ from the next by a level.
+      grab(whole, M);
+      grab(whole, A);
+      for (let i = 0; i < A.length; i += 1) {
+        if (A[i] !== M[i]) row.firstDrawDiffered += 1;
+      }
+      grab(whole, M);
+      for (let i = 0; i < A.length; i += 1) {
+        if (A[i] !== M[i]) row.sameFrameTwiceDiffered += 1;
+      }
+      grab({ ...whole, glow: 'all' }, B);
+      for (let i = 0; i < A.length; i += 1) {
+        if (A[i] === B[i]) continue;
+        if (outsideAll(i, 1.5)) {
+          row.differingOutside += 1;
+          if (row.outsideSample.length < 6) row.outsideSample.push([i % W, Math.floor(i / W), A[i]! & 0xffffff, B[i]! & 0xffffff]);
+        } else row.differingWithin += 1;
+      }
+      // The glow's depth test: what it rejects in a whole frame, with its test off on the same frame.
+      for (const m of glowMaterials()) m.depthTest = false;
+      grab({ ...whole, glow: 'all' }, C);
+      for (const m of glowMaterials()) m.depthTest = true;
+      for (let i = 0; i < B.length; i += 1) if (B[i] !== C[i]) row.depthTestRejected += 1;
+      // Control: a glow half as wide again must reach past the line drawn above.
+      const scales = [...parts.glow.values()].map((mesh) => mesh.scale.clone());
+      for (const mesh of parts.glow.values()) mesh.scale.multiplyScalar(1.5);
+      grab({ ...whole, glow: 'all' }, C);
+      [...parts.glow.values()].forEach((mesh, at_) => mesh.scale.copy(scales[at_]!));
+      for (let i = 0; i < A.length; i += 1) if (A[i] !== C[i] && outsideAll(i, 1.5)) row.controlOutsideEnlarged += 1;
+      // A fully covered line pixel in reach.
+      grab(lineworkOnly, M);
+      grab({ ...lineworkOnly, glow: 'all' }, A);
+      const orders = [...parts.glow.values()].map((mesh) => mesh.renderOrder);
+      for (const mesh of parts.glow.values()) mesh.renderOrder = 5;
+      grab({ ...lineworkOnly, glow: 'all' }, B);
+      [...parts.glow.values()].forEach((mesh, at_) => {
+        mesh.renderOrder = orders[at_]!;
+      });
+      for (let i = 0; i < M.length; i += 1) {
+        if (!FULL.has(M[i]! & 0xffffff) || outsideAll(i, 0)) continue;
+        row.linePixelsInReach += 1;
+        if (A[i] !== M[i]) row.lineChanged += 1;
+        if (B[i] !== M[i]) row.controlLineChanged += 1;
+      }
+      // The edge: each large enough glow alone on the ground.
+      const edge = (image: Uint32Array, p: Projected) => {
+        let band = 0;
+        let beyond = 0;
+        let largestStep = 0;
+        let corners = 0;
+        const R = p.glow;
+        eachIn(p, R + 3, (i, d) => {
+          if (d < R - 1) return;
+          const v = image[i]!;
+          if (d > R + 1) {
+            if (diff(v, background) > 0) beyond += 1;
+            return;
+          }
+          band = Math.max(band, diff(v, background));
+          largestStep = Math.max(largestStep, diff(v, image[i + 1]!), diff(v, image[i + W]!));
+        });
+        // The bounding square's corners, where a square sprite would show.
+        const c = 0.72 * R * Math.SQRT2;
+        for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+          eachIn({ x: p.x + sx * c, y: p.y + sy * c }, Math.max(1, 0.1 * R), (i) => {
+            if (diff(image[i]!, background) > 0) corners += 1;
+          });
+        }
+        return { band, beyond, largestStep, corners };
+      };
+      for (const p of glows.filter((q) => q.glow >= 8 && q.x - q.glow > 4 && q.x + q.glow < W - 4 && q.y - q.glow > 4 && q.y + q.glow < H - 4)) {
+        const others = glows.filter((q) => q !== p).some((q) => Math.hypot(q.x - p.x, q.y - p.y) < q.glow + p.glow + 6);
+        if (others) continue;
+        grab({ glow: [p.id] }, A);
+        const shippedEdge = edge(A, p);
+        setGlowFragment(noFalloff);
+        grab({ glow: [p.id] }, C);
+        setGlowFragment(shipped.glowFragment);
+        const control = edge(C, p);
+        row.edgesMeasured += 1;
+        row.largestMeasuredPx = Math.max(row.largestMeasuredPx, +p.glow.toFixed(1));
+        row.beyondEdge += shippedEdge.beyond;
+        row.edgeBandMax = Math.max(row.edgeBandMax, shippedEdge.band);
+        row.edgeLargestStep = Math.max(row.edgeLargestStep, shippedEdge.largestStep);
+        row.cornersOff += shippedEdge.corners;
+        row.controlBandMax = Math.max(row.controlBandMax, control.band);
+        row.controlLargestStep = Math.max(row.controlLargestStep, control.largestStep);
+      }
+      rows.push(row);
+      await tick();
+    }
+    return rows;
+  }
+
+  /**
+   * Real pixels against both ceilings: at rest, the subject forced to none, against stroke-active; with
+   * the subject fully risen, against stroke-focus. Fills, glows and Dust together. A pixel over the limit
+   * with the marks drawn is excluded and counted when the marks alone put a value there.
+   */
+  async function runStarCeiling(perStop = 6): Promise<unknown> {
+    const rest_ = luminance(...hexRgb(world.ceiling));
+    const risen = luminance(...hexRgb(world.focusCeiling));
+    const body: Show = { fill: 'all', starFill: 'all', glow: 'all', dust: true };
+    const overdriven = replaced(replaced(shipped.glowFragment, /const float REST_PEAK = [^;]+;/, 'const float REST_PEAK = 40.0;'), /const float SUBJECT_PEAK = [^;]+;/, 'const float SUBJECT_PEAK = 40.0;');
+    const starOverdriven = replaced(replaced(shipped.starFragment, /const float REST_CEILING = [^;]+;/, 'const float REST_CEILING = 100.0;'), /const float REST_TARGET = [^;]+;/, 'const float REST_TARGET = 0.95;');
+    // The risen control: only what the subject's rise reaches, so it is inert unless a Star has truly risen.
+    const risenGlow = replaced(shipped.glowFragment, /const float SUBJECT_PEAK = [^;]+;/, 'const float SUBJECT_PEAK = 40.0;');
+    const risenFill = replaced(replaced(shipped.starFragment, /const float SUBJECT_CEILING = [^;]+;/, 'const float SUBJECT_CEILING = 100.0;'), /const float SUBJECT_TARGET = [^;]+;/, 'const float SUBJECT_TARGET = 5.0;');
+    const totals = { poses: 0, rest: { pixels: 0, over: 0, peak: 0, peakPose: '', overWithMarks: 0, markPixelsExcluded: 0 }, risen: { pixels: 0, over: 0, peak: 0, peakPose: '', overWithMarks: 0, markPixelsExcluded: 0 }, control: { poses: 0, posesWithGlow: 0, posesThatCaught: 0, glowOverdrivenOver: 0, fillOverdrivenOver: 0 }, risenControl: { posesWithSubjectOnScreen: 0, posesThatCaught: 0, glowOverdrivenOver: 0, fillOverdrivenOver: 0, largestRead: 0 } };
+    const measure = (limit: number, into: typeof totals.rest, pose: string) => {
+      grab(body, A);
+      for (let i = 0; i < A.length; i += 1) {
+        const v = A[i]!;
+        if (diff(v, background) === 0) continue;
+        into.pixels += 1;
+        const y = lumAt(v);
+        if (y > limit) into.over += 1;
+        if (y > into.peak) {
+          into.peak = y;
+          into.peakPose = pose;
+        }
+      }
+      grab(MARKS, M);
+      grab({ ...body, ...MARKS, lines: true }, B);
+      grab({ ...MARKS, lines: true }, C);
+      for (let i = 0; i < B.length; i += 1) {
+        if (lumAt(B[i]!) <= limit) continue;
+        if (diff(C[i]!, background) > 0) into.markPixelsExcluded += 1;
+        else into.overWithMarks += 1;
+      }
+    };
+    for (const pose of walkPoses(perStop)) {
+      await at(pose);
+      totals.poses += 1;
+      forcedSubject = null;
+      settle();
+      measure(rest_, totals.rest, pose.name);
+      // A control per pose: an overdriven glow and fill, which must read over the same limit.
+      setGlowFragment(overdriven);
+      grab(body, C);
+      setGlowFragment(shipped.glowFragment);
+      setStarFragment(starOverdriven);
+      grab({ starFill: 'all' }, A);
+      setStarFragment(shipped.starFragment);
+      let glowOver = 0;
+      let fillOver = 0;
+      for (let i = 0; i < C.length; i += 1) {
+        if (lumAt(C[i]!) > rest_) glowOver += 1;
+        if (lumAt(A[i]!) > rest_) fillOver += 1;
+      }
+      totals.control.poses += 1;
+      if (projectedAll().some((p) => p.glow > 0 && onScreen(p, p.glow))) totals.control.posesWithGlow += 1;
+      totals.control.glowOverdrivenOver += glowOver;
+      totals.control.fillOverdrivenOver += fillOver;
+      if (glowOver > 0) totals.control.posesThatCaught += 1;
+      forcedSubject = undefined;
+      settle();
+      measure(risen, totals.risen, pose.name);
+      {
+        const subjectStar = stars.find((star) => star.id === currentSubject());
+        const placed = subjectStar === undefined ? null : project(subjectStar);
+        const shown = placed !== null && onScreen(placed, placed.glow);
+        setGlowFragment(risenGlow);
+        grab(body, C);
+        setGlowFragment(shipped.glowFragment);
+        setStarFragment(risenFill);
+        grab({ starFill: 'all' }, A);
+        setStarFragment(shipped.starFragment);
+        let overGlow = 0;
+        let overFill = 0;
+        for (let i = 0; i < C.length; i += 1) {
+          const y = lumAt(C[i]!);
+          if (y > risen) overGlow += 1;
+          if (y > totals.risenControl.largestRead) totals.risenControl.largestRead = y;
+          if (lumAt(A[i]!) > risen) overFill += 1;
+        }
+        totals.risenControl.glowOverdrivenOver += overGlow;
+        totals.risenControl.fillOverdrivenOver += overFill;
+        if (shown) totals.risenControl.posesWithSubjectOnScreen += 1;
+        if (shown && overGlow > 0) totals.risenControl.posesThatCaught += 1;
+      }
+      await tick();
+    }
+    const round = (t: typeof totals.rest) => ({ ...t, peak: +t.peak.toFixed(5) });
+    return { limitRest: +rest_.toFixed(5), limitRisen: +risen.toFixed(5), poses: totals.poses, rest: round(totals.rest), risen: round(totals.risen), control: totals.control, risenControl: { ...totals.risenControl, largestRead: +totals.risenControl.largestRead.toFixed(5) } };
+  }
+
+  /**
+   * The rise on the real store: from one stop to the next, camera held at the opening frame so both
+   * Stars stay in view. Read-back luminance at each Star's centre, frame to frame, against a stated step.
+   * The control writes the rise directly, as a cut would. Then Focus: every Star falls, and only the
+   * Focused Planet is white.
+   */
+  async function runRise(): Promise<unknown> {
+    const aspect = viewport.width / viewport.height;
+    const n = railStopCount(world.rail);
+    const opening = railPose(world.rail, 0, aspect);
+    const clientAt = (k: number) => world.rail.keyframes[k]?.subject as string;
+    const rises = () => stars.map((star) => (parts.starFill.get(star.id)!.material as ShaderMaterial).uniforms.uRise!.value as number);
+    /** The largest frame-to-frame change of fill luminance a smooth rise can make at this pace: slope 1.5 of the shape, at 1/60 s. */
+    const statedStep = (pace: number) => 1.15 * 1.5 * ((1 / 60) / (RISE_SECONDS * pace)) * (0.7 - 0.36) + 0.004;
+    const walk = async (from: number, pace: number, cutAt: number | null) => {
+      const a = stars.find((star) => star.id === clientAt(from)) as Body;
+      const b = stars.find((star) => star.id === clientAt(from + 1)) as Body;
+      await at({ name: 'rise', ...opening, state: atStop(from) });
+      await tick();
+      if (cutAt !== null) forcedRise = 0;
+      const seenSubject: (string | null)[] = [];
+      advanceScroll(from + 1);
+      await tick();
+      setCamera(opening);
+      const pa = project(a) as Projected;
+      const pb = project(b) as Projected;
+      const read = (p: Projected) => {
+        let sum = 0;
+        let count = 0;
+        eachIn(p, Math.max(0.8, 0.35 * p.disc), (i) => {
+          sum += lumAt(A[i]!);
+          count += 1;
+        });
+        if (count === 0) throw new Error('the rise read no pixel, so a step of 0 would mean nothing');
+        return sum / count;
+      };
+      let previous: [number, number] | null = null;
+      let largest = 0;
+      const stepsToBothEnds = { frames: 0, done: false };
+      const trace: number[][] = [];
+      const others = new Set<number>();
+      const frames = Math.ceil((RISE_SECONDS * pace) * 60) + 10;
+      for (let i = 0; i < frames; i += 1) {
+        if (cutAt !== null) forcedRise = i >= cutAt ? 1 : 0;
+        show({ starFill: [a.id, b.id] });
+        draw(0, pace, 1 / 60);
+        read_(A);
+        seenSubject.push(currentSubject());
+        const now: [number, number] = [read(pa), read(pb)];
+        if (previous !== null) largest = Math.max(largest, Math.abs(now[0] - previous[0]), Math.abs(now[1] - previous[1]));
+        previous = now;
+        const rs = rises();
+        rs.forEach((value, at_) => {
+          const id = stars[at_]!.id;
+          if (id !== a.id && id !== b.id) others.add(value);
+        });
+        const ra = rs[stars.indexOf(a)]!;
+        const rb = rs[stars.indexOf(b)]!;
+        if (!stepsToBothEnds.done) stepsToBothEnds.frames = i + 1;
+        if (ra === 0 && rb === 1) stepsToBothEnds.done = true;
+        if (i < 3 || i % 8 === 0) trace.push([i, +now[0].toFixed(4), +now[1].toFixed(4)]);
+      }
+      forcedRise = null;
+      return { from: a.id, to: b.id, pace, radiusPx: [+pa.disc.toFixed(2), +pb.disc.toFixed(2)], subjectAfter: seenSubject.at(-1), largestFrameStep: +largest.toFixed(5), statedStep: +statedStep(pace).toFixed(5), framesUntilBothArrive: stepsToBothEnds.frames, arrived: stepsToBothEnds.done, otherStarsRise: [...others], last: previous, trace };
+    };
+    const moves: unknown[] = [];
+    for (let k = 1; k < n; k += 1) {
+      moves.push(await walk(k, 1, null));
+      moves.push(await walk(k, 0.25, null));
+    }
+    const control = await walk(1, 1, 5);
+    // Focus: the camera at Focus, every Star falling.
+    const planet = planets[0]!;
+    const f = focusPose(world.rail, world.bodies, planet.id, aspect, 0);
+    await at({ name: 'before', ...railPose(world.rail, 1, aspect), state: atStop(1) });
+    const before = rises();
+    focusProject(planet.id as never);
+    await tick();
+    await tick();
+    setCamera(f);
+    const falling: number[] = [];
+    let framesToRest = 0;
+    for (let i = 0; i < 80; i += 1) {
+      layer.frame(state.camera, 1 / 60, true, 1, currentSubject());
+      const largest_ = Math.max(...rises());
+      falling.push(largest_);
+      if (largest_ > 0) framesToRest = i + 1;
+    }
+    const whitePixels: Record<string, number> = {};
+    const [wr, wg, wb] = hexRgb(world.focusCeiling);
+    const white = (wb << 16) | (wg << 8) | wr;
+    for (const body of world.bodies) {
+      grab({ outline: [body.id], ring: [body.id], core: [body.id], moon: [body.id] }, A);
+      let count = 0;
+      for (let i = 0; i < A.length; i += 1) if ((A[i]! & 0xffffff) === white) count += 1;
+      if (count > 0) whitePixels[body.id] = count;
+    }
+    return { moves, control, focus: { planet: planet.id, subject: currentSubject(), risesBefore: before, largestAfter: Math.max(...rises()), framesToRest, stepped: new Set(falling).size > 2, whitePixels } };
+  }
+  const read_ = (into: Uint32Array) => read(into);
+
+  const rise_ = (star: Body): number => (parts.starFill.get(star.id)!.material as ShaderMaterial).uniforms.uRise!.value as number;
+  /** Mean read-back luminance in a Star's disc's centre, or null if it has no pixel to read. */
+  function centreLuminance(image: Uint32Array, p: Projected): number | null {
+    let sum = 0;
+    let count = 0;
+    eachIn(p, Math.max(0.8, 0.35 * p.disc), (i) => {
+      sum += lumAt(image[i]!);
+      count += 1;
+    });
+    return count === 0 ? null : sum / count;
+  }
+
+  /**
+   * A falling Star above the rest ceiling: it left the subject at the subject's brightness, and the AC
+   * forbids a cut, so it passes through. Each stop's Star, large, from the moment the store moves on.
+   */
+  async function runFall(): Promise<unknown[]> {
+    const aspect = viewport.width / viewport.height;
+    const n = railStopCount(world.rail);
+    const limit = luminance(...hexRgb(world.ceiling));
+    const rows: unknown[] = [];
+    for (let k = 1; k <= n; k += 1) {
+      const star = stars.find((body) => body.id === world.rail.keyframes[k]?.subject) as Body;
+      for (const pace of [1, 0.25]) {
+        await at({ name: 'fall', ...railPose(world.rail, k, aspect), state: atStop(k) });
+        const before = rise_(star);
+        advanceScroll(k < n ? k + 1 : k - 1);
+        const p = project(star) as Projected;
+        let framesAbove = 0;
+        let framesToRest = 0;
+        let first = 0;
+        for (let i = 0; i < 80; i += 1) {
+          show({ starFill: [star.id] });
+          draw(0, pace, 1 / 60);
+          read(A);
+          const y = centreLuminance(A, p);
+          if (y === null) throw new Error(`${star.id} has no disc to read at stop ${k}`);
+          if (i === 0) first = y;
+          if (y > limit) framesAbove += 1;
+          if (rise_(star) > 0) framesToRest = i + 2;
+        }
+        rows.push({ star: star.id, pace, riseBefore: before, firstFrame: +first.toFixed(4), limit: +limit.toFixed(5), framesAbove, secondsAbove: +(framesAbove / 60).toFixed(3), framesToRest, radiusPx: +p.radius.toFixed(1) });
+      }
+    }
+    return rows;
+  }
+
+  /**
+   * Mid-rise: from each stop to the next, on real frames, with two Stars crossing near 0.5, read against
+   * both limits, from the opening frame and from each stop's camera. Fills, glows and Dust, no marks. Each
+   * move's crossing frame also draws an overdriven glow on the same rise, to show the read can pass.
+   */
+  async function runCrossing(): Promise<unknown> {
+    const aspect = viewport.width / viewport.height;
+    const n = railStopCount(world.rail);
+    const restLimit = luminance(...hexRgb(world.ceiling));
+    const risenLimit = luminance(...hexRgb(world.focusCeiling));
+    const body: Show = { fill: 'all', starFill: 'all', glow: 'all', dust: true };
+    const overdriven = replaced(replaced(shipped.glowFragment, /const float REST_PEAK = [^;]+;/, 'const float REST_PEAK = 40.0;'), /const float SUBJECT_PEAK = [^;]+;/, 'const float SUBJECT_PEAK = 40.0;');
+    const rows: unknown[] = [];
+    for (let k = 1; k < n; k += 1) {
+      const a = stars.find((star) => star.id === world.rail.keyframes[k]?.subject) as Body;
+      const b = stars.find((star) => star.id === world.rail.keyframes[k + 1]?.subject) as Body;
+      for (const [camera, pose] of [['opening', railPose(world.rail, 0, aspect)], [`stop-${k}`, railPose(world.rail, k, aspect)], [`stop-${k + 1}`, railPose(world.rail, k + 1, aspect)]] as const) {
+        await at({ name: 'crossing', ...pose, state: atStop(k) });
+        advanceScroll(k + 1);
+        const row = { from: a.id, to: b.id, camera, frames: 0, framesOverRest: 0, pixelFramesOverRest: 0, overRisen: 0, peak: 0, crossingRise: [0, 0], crossingPeak: 0, crossingOverRest: 0, crossingOverRisen: 0, controlOverRisen: 0 };
+        for (let i = 0; i < 40; i += 1) {
+          show(body);
+          draw(0, 1, 1 / 60);
+          read(A);
+          let over = 0;
+          let peak = 0;
+          let overHigh = 0;
+          for (let q = 0; q < A.length; q += 1) {
+            const y = lumAt(A[q]!);
+            if (y > peak) peak = y;
+            if (y > restLimit) over += 1;
+            if (y > risenLimit) overHigh += 1;
+          }
+          row.frames += 1;
+          if (over > 0) row.framesOverRest += 1;
+          row.pixelFramesOverRest += over;
+          row.overRisen += overHigh;
+          row.peak = Math.max(row.peak, peak);
+          const ra = rise_(a);
+          const rb = rise_(b);
+          if (ra >= 0.5 - 1e-9 && rb <= 0.5 + 1e-9 && row.crossingPeak === 0 && Math.abs(ra - 0.5) < 0.1) {
+            row.crossingRise = [+ra.toFixed(3), +rb.toFixed(3)];
+            row.crossingPeak = +peak.toFixed(5);
+            row.crossingOverRest = over;
+            row.crossingOverRisen = overHigh;
+            setGlowFragment(overdriven);
+            show(body);
+            draw(0, 1, 0);
+            read(C);
+            setGlowFragment(shipped.glowFragment);
+            for (let q = 0; q < C.length; q += 1) if (lumAt(C[q]!) > risenLimit) row.controlOverRisen += 1;
+          }
+        }
+        rows.push({ ...row, peak: +row.peak.toFixed(5) });
+        await tick();
+      }
+    }
+    return { restLimit: +restLimit.toFixed(5), risenLimit: +risenLimit.toFixed(5), rows };
+  }
+
+  /**
+   * How many glows ever overlap, on real pixels: each glow alone marks where it leaves the ground, and the
+   * count per pixel is the stack. Then the read-back at that pose, against both limits: glows and Dust alone,
+   * and with the fills over them, at rest and at the true subject. Sampled poses only: this bounds nothing between them.
+   */
+  async function runGlowStack(perStop = 60): Promise<unknown> {
+    const restLimit = luminance(...hexRgb(world.ceiling));
+    const risenLimit = luminance(...hexRgb(world.focusCeiling));
+    const count = new Uint8Array(W * H);
+    const byStack: Record<string, { pixels: number; peakRest: number; peakSubject: number }> = {};
+    const out = { perStop, poses: 0, posesWithTwoOrMore: 0, largestStack: 0, largestStackPose: '', largestStackPixels: 0, rest: { glowsOnlyOver: 0, glowsOnlyPeak: 0, glowsOnlyPeakPose: '', wholeOver: 0, wholePeak: 0, wholePeakPose: '' }, subject: { glowsOnlyOver: 0, glowsOnlyOverRest: 0, glowsOnlyPeak: 0, glowsOnlyPeakPose: '', wholeOver: 0, wholePeak: 0, wholePeakPose: '' } };
+    const glowsOnly: Show = { glow: 'all', dust: true };
+    const whole: Show = { fill: 'all', starFill: 'all', glow: 'all', dust: true };
+    for (const pose of walkPoses(perStop)) {
+      await at(pose);
+      out.poses += 1;
+      const glows = projectedAll().filter((p) => p.glow > 0 && onScreen(p, p.glow));
+      const overlapping = glows.filter((p) => glows.some((q) => q !== p && Math.hypot(q.x - p.x, q.y - p.y) < q.glow + p.glow));
+      let stacked = false;
+      if (overlapping.length >= 2) {
+        count.fill(0);
+        for (const p of overlapping) {
+          grab({ glow: [p.id] }, A);
+          eachIn(p, p.glow + 2, (i) => {
+            if (diff(A[i]!, background) > 0) count[i]! += 1;
+          });
+        }
+        let largest = 0;
+        let pixels = 0;
+        for (let i = 0; i < count.length; i += 1) {
+          if (count[i]! > largest) {
+            largest = count[i]!;
+            pixels = 0;
+          }
+          if (count[i] === largest) pixels += 1;
+        }
+        if (largest >= 2) {
+          stacked = true;
+          out.posesWithTwoOrMore += 1;
+        }
+        if (largest > out.largestStack) {
+          out.largestStack = largest;
+          out.largestStackPose = pose.name;
+          out.largestStackPixels = pixels;
+        }
+      }
+      for (const [state_, into, limit] of [['subject', out.subject, risenLimit], ['rest', out.rest, restLimit]] as const) {
+        forcedSubject = state_ === 'rest' ? null : undefined;
+        settle();
+        grab(glowsOnly, A);
+        for (let i = 0; i < A.length; i += 1) {
+          const v = A[i]!;
+          if (diff(v, background) === 0) continue;
+          const y = lumAt(v);
+          if (y > limit) into.glowsOnlyOver += 1;
+          if (state_ === 'subject' && y > restLimit) (into as typeof out.subject).glowsOnlyOverRest += 1;
+          if (y > into.glowsOnlyPeak) {
+            into.glowsOnlyPeak = y;
+            into.glowsOnlyPeakPose = pose.name;
+          }
+          if (stacked) {
+            const n_ = count[i]!;
+            if (n_ >= 2) {
+              const row = (byStack[n_] ??= { pixels: 0, peakRest: 0, peakSubject: 0 });
+              if (state_ === 'rest') {
+                row.pixels += 1;
+                row.peakRest = Math.max(row.peakRest, y);
+              } else row.peakSubject = Math.max(row.peakSubject, y);
+            }
+          }
+        }
+        grab(whole, A);
+        for (let i = 0; i < A.length; i += 1) {
+          const y = lumAt(A[i]!);
+          if (y > limit) into.wholeOver += 1;
+          if (y > into.wholePeak) {
+            into.wholePeak = y;
+            into.wholePeakPose = pose.name;
+          }
+        }
+      }
+      forcedSubject = undefined;
+      if (out.poses % 4 === 0) await tick();
+    }
+    return { ...out, restLimit: +restLimit.toFixed(5), risenLimit: +risenLimit.toFixed(5), byStack };
+  }
+
+  /**
+   * The rise while the camera moves: along railPose with the store at the same progress, 60 × pace frames a stop on
+   * 1/60 s frames, for every stop-to-stop move, and leaving Focus. A disc that moves changes under the reader,
+   * so `still` runs the same walk with the rise pinned, which is the confound alone, and `cut` writes the rise
+   * directly, which is the control.
+   */
+  async function runRiseMoving(): Promise<unknown> {
+    const aspect = viewport.width / viewport.height;
+    const n = railStopCount(world.rail);
+    type Mode = 'real' | 'still' | 'cut';
+    const blank = () => ({ largestStep: 0, largestAt: '', largestRiseStep: 0, readings: 0 });
+    const step = (into: ReturnType<typeof blank>, previous: Map<string, number>, previousRise: Map<string, number>, label: string) => {
+      const placed = stars.map(project).filter((p): p is Projected => p !== null && p.disc >= 2 && p.x > 0 && p.x < W && p.y > 0 && p.y < H);
+      const seen = new Set<string>();
+      for (const p of placed) {
+        const hidden = placed.some((q) => q !== p && q.depth < p.depth && Math.hypot(q.x - p.x, q.y - p.y) < q.disc + p.disc);
+        if (hidden) continue;
+        const y = centreLuminance(A, p);
+        if (y === null) continue;
+        seen.add(p.id);
+        into.readings += 1;
+        const before = previous.get(p.id);
+        if (before !== undefined && Math.abs(y - before) > into.largestStep) {
+          into.largestStep = Math.abs(y - before);
+          into.largestAt = `${label} ${p.id} r=${p.disc.toFixed(1)}`;
+        }
+        previous.set(p.id, y);
+        const r = rise_(p.body);
+        const rb = previousRise.get(p.id);
+        if (rb !== undefined) into.largestRiseStep = Math.max(into.largestRiseStep, Math.abs(r - rb));
+        previousRise.set(p.id, r);
+      }
+      for (const id of [...previous.keys()]) {
+        if (!seen.has(id)) {
+          previous.delete(id);
+          previousRise.delete(id);
+        }
+      }
+    };
+    const framesFor = (pace: number) => Math.ceil(60 * pace);
+    const moves = async (mode: Mode, pace: number) => {
+      const out = blank();
+      const FRAMES = framesFor(pace);
+      for (let k = 1; k < n; k += 1) {
+        await at({ name: 'moving', ...railPose(world.rail, k, aspect), state: atStop(k) });
+        const previous = new Map<string, number>();
+        const previousRise = new Map<string, number>();
+        for (let i = 1; i <= FRAMES; i += 1) {
+          const p = k + i / FRAMES;
+          advanceScroll(p);
+          setCamera(railPose(world.rail, p, aspect));
+          forcedRise = mode === 'still' ? 0.5 : mode === 'cut' ? (i < FRAMES / 2 ? 0 : 1) : null;
+          show({ starFill: 'all' });
+          draw(0, pace, 1 / 60);
+          read(A);
+          step(out, previous, previousRise, `stop ${k} frame ${i}`);
+        }
+        forcedRise = null;
+        await tick();
+      }
+      return { mode, pace, ...out, largestStep: +out.largestStep.toFixed(5), largestRiseStep: +out.largestRiseStep.toFixed(5) };
+    };
+    const leaving = async (mode: Mode, pace: number) => {
+      const out = blank();
+      const FRAMES = framesFor(pace);
+      for (const planet of planets) {
+        const k = world.rail.keyframes.findIndex((keyframe, at_) => at_ > 0 && at_ <= n && keyframe.subject === planet.clientId);
+        if (k < 1) throw new Error(`${planet.id} has no stop of its Client`);
+        const f = focusPose(world.rail, world.bodies, planet.id, aspect, 0);
+        const goal = railPose(world.rail, k, aspect);
+        await at({ name: 'leaving', ...f, state: () => { atStop(k)(); focusProject(planet.id as never); } });
+        releaseFocus();
+        const previous = new Map<string, number>();
+        const previousRise = new Map<string, number>();
+        const mix = (a: ScenePosition, b: ScenePosition, t: number) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t });
+        for (let i = 1; i <= FRAMES; i += 1) {
+          const t = i / FRAMES;
+          setCamera({ position: mix(f.position, goal.position, t), target: mix(f.target, goal.target, t) });
+          forcedRise = mode === 'still' ? 0.5 : mode === 'cut' ? (i < FRAMES / 2 ? 0 : 1) : null;
+          show({ starFill: 'all' });
+          draw(0, pace, 1 / 60);
+          read(A);
+          step(out, previous, previousRise, `leaving ${planet.id} frame ${i}`);
+        }
+        forcedRise = null;
+        await tick();
+      }
+      return { mode, pace, ...out, largestStep: +out.largestStep.toFixed(5), largestRiseStep: +out.largestRiseStep.toFixed(5) };
+    };
+    return {
+      framesPerStop: '60 × pace, so the camera keeps its pace with the rise',
+      moves: [await moves('real', 1), await moves('real', 0.25), await moves('still', 1), await moves('cut', 1)],
+      leavingFocus: [await leaving('real', 1), await leaving('real', 0.25), await leaving('still', 1), await leaving('cut', 1)],
+    };
+  }
+
+  /**
+   * A farther fill over a nearer Star's glow: pixels where the glow alone leaves the ground and the fill
+   * alone covers it, and the two together read the fill. Recorded at every stop, Focus and across the Rail.
+   */
+  async function runOverlap(perStop = 12): Promise<unknown> {
+    const rows: { pose: string; pixels: number; pairs: string[] }[] = [];
+    for (const pose of walkPoses(perStop)) {
+      await at(pose);
+      withStars = true;
+      const all = projectedAll();
+      const row = { pose: pose.name, pixels: 0, pairs: [] as string[] };
+      for (const near of all) {
+        if (near.glow === 0 || !onScreen(near, near.glow)) continue;
+        for (const far of all) {
+          if (far === near || far.depth <= near.depth || far.disc < 0.5 || !onScreen(far, far.disc)) continue;
+          if (Math.hypot(far.x - near.x, far.y - near.y) > far.disc + near.glow) continue;
+          grab({ glow: [near.id] }, M);
+          const farFill: Show = { fill: [far.id], starFill: [far.id] };
+          grab(farFill, A);
+          grab({ ...farFill, glow: [near.id] }, B);
+          let pixels = 0;
+          eachIn(far, far.disc + 1, (i) => {
+            if (diff(M[i]!, background) > 0 && diff(A[i]!, background) > 0 && B[i] === A[i]) pixels += 1;
+          });
+          if (pixels > 0) {
+            row.pixels += pixels;
+            row.pairs.push(`${near.id} glow under ${far.id}: ${pixels}`);
+          }
+        }
+      }
+      withStars = false;
+      rows.push(row);
+      if (rows.length % 6 === 0) await tick();
+    }
+    const stops = rows.filter((row) => row.pose.startsWith('stop') || row.pose === 'keyframe-0');
+    const focus = rows.filter((row) => row.pose.startsWith('focus'));
+    const railRows = rows.filter((row) => row.pose.startsWith('rail'));
+    const worst = rows.reduce((best, row) => (row.pixels > best.pixels ? row : best), rows[0]!);
+    const sum = (list: typeof rows) => list.reduce((total, row) => total + row.pixels, 0);
+    return { perStop, stops: stops.map((row) => ({ pose: row.pose, pixels: row.pixels, pairs: row.pairs })), focus: { poses: focus.length, posesWithOverlap: focus.filter((row) => row.pixels > 0).length, pixels: sum(focus), largest: Math.max(...focus.map((row) => row.pixels)) }, rail: { poses: railRows.length, posesWithOverlap: railRows.filter((row) => row.pixels > 0).length, pixels: sum(railRows), largest: Math.max(...railRows.map((row) => row.pixels)) }, worst };
+  }
+
+  /**
+   * Held flicker on a Star: each stop's Star on a tiny closed camera path, with its orbits and the Rail. As runHeldFlicker:
+   * a z-fight turns line pixels on and off with the path; the control alternates the bias frame to frame.
+   */
+  async function runStarHeld(): Promise<unknown[]> {
+    const rows: unknown[] = [];
+    for (const pose of stopPoses().slice(1)) {
+      await at(pose);
+      const star = stars.find((body) => body.id === currentSubject()) as Body;
+      const base = pose.position;
+      const frames = 60;
+      const walk = async (alternate: boolean) => {
+        const seen = new Int32Array(W * H);
+        const seenAlone = new Int32Array(W * H);
+        for (let i = 0; i < frames; i += 1) {
+          const a = (2 * Math.PI * i) / frames;
+          const r = 0.002 * dist3(base, star.position);
+          setCamera({ position: { x: base.x + r * Math.cos(a), y: base.y + r * Math.sin(a), z: base.z }, target: pose.target });
+          if (alternate) pushBehind(i % 2 === 1);
+          starNeutral(true);
+          grab({ lines: true, starFill: [star.id] }, A);
+          starNeutral(false);
+          grab({ lines: true }, B);
+          for (let q = 0; q < A.length; q += 1) {
+            if (diff(A[q]!, background) > TOLERANCE) seen[q]! += 1;
+            if (diff(B[q]!, background) > TOLERANCE) seenAlone[q]! += 1;
+          }
+          if (i % 16 === 0) await tick();
+        }
+        if (alternate) pushBehind(false);
+        setCamera(pose);
+        const p = project(star) as Projected;
+        let linePixels = 0;
+        let hiddenAlways = 0;
+        let partial = 0;
+        eachIn(p, p.disc - 3, (q) => {
+          if (seenAlone[q] === 0) return;
+          linePixels += 1;
+          if (seen[q] === 0) hiddenAlways += 1;
+          else if (seen[q]! !== seenAlone[q]!) partial += 1;
+        });
+        return { linePixels, hiddenAlways, partial };
+      };
+      const asBuilt = await walk(false);
+      const control = await walk(true);
+      rows.push({ pose: pose.name, id: star.id, frames, radiusPx: +(project(star) as Projected).radius.toFixed(1), linePixels: asBuilt.linePixels, hiddenAlways: asBuilt.hiddenAlways, shownSometimesHiddenSometimes: asBuilt.partial, controlAlternatingBias: control.partial });
+    }
+    return rows;
+  }
+
+  /** The Rail run again, with Star fills among the discs: the show-through and flicker 7.6 could not test. */
+  async function runStarRail(stepsPerStop?: number): Promise<unknown> {
+    withStars = true;
+    try {
+      return await runRail(stepsPerStop);
+    } finally {
+      withStars = false;
+    }
+  }
+
   function environment(): unknown {
     const info = gl.getExtension('WEBGL_debug_renderer_info');
     const renderer = info === null ? 'unknown' : String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL));
@@ -879,6 +1795,7 @@ export function install(world: FillsWorld): void {
     ratio?: number;
     only?: readonly string[];
     stepsPerStop?: number;
+    stackPerStop?: number;
     strokes: readonly string[];
   }
   async function run(options: Options): Promise<unknown> {
@@ -903,6 +1820,18 @@ export function install(world: FillsWorld): void {
         ['rail', () => runRail(options.stepsPerStop)],
         ['pair', runPair],
         ['held', runHeldFlicker],
+        ['starOwn', runStarOwn],
+        ['starEdges', runStarEdges],
+        ['glow', runGlow],
+        ['starCeiling', runStarCeiling],
+        ['rise', runRise],
+        ['overlap', () => runOverlap(options.stepsPerStop)],
+        ['starRail', () => runStarRail(options.stepsPerStop)],
+        ['starHeld', runStarHeld],
+        ['fall', runFall],
+        ['crossing', runCrossing],
+        ['glowStack', () => runGlowStack(options.stackPerStop)],
+        ['riseMoving', runRiseMoving],
       ] as const) {
         if (!wants(name)) continue;
         w.fillsProgress = `${v.name}: ${name}`;
@@ -946,9 +1875,23 @@ export function install(world: FillsWorld): void {
     } else {
       await at({ name: 'shot', ...railPose(world.rail, a as number, aspect), state: kind === 'stop' ? atStop(a as number) : rest });
     }
-    show({ ...MARKS, lines: true, fill: 'all' });
+    show({ ...MARKS, lines: true, fill: 'all', starFill: 'all', glow: 'all', dust: true });
     draw();
     return ratioNow();
+  };
+  /** A named pose from a run's rows, drawn whole with the glow, and handed back as a PNG data URL before the buffer clears. */
+  w.fillsShot = async (viewportName: string, poseName: string) => {
+    const v = VIEWPORTS.find((candidate) => candidate.name === viewportName) as Viewport;
+    if (!live || viewport !== v) {
+      await mountViewport(v);
+      remember();
+    }
+    const pose = walkPoses(12).find((candidate) => candidate.name === poseName);
+    if (pose === undefined) throw new Error(`no pose named ${poseName}`);
+    await at(pose);
+    show({ ...MARKS, lines: true, fill: 'all', starFill: 'all', glow: 'all', dust: true });
+    draw();
+    return state.gl.domElement.toDataURL('image/png');
   };
   w.fillsReady = true;
 }

@@ -19,7 +19,7 @@ const ORIGIN = { x: 0, y: 0, z: 0 };
 const ARTIFACT: RealismArtifact = {
   clients: [{ id: 'client:a', position: ORIGIN, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, appearance: { map: 'moon', meanLuminance: 0.3, tilt: 0, spinRate: 0.05, spinPhase: 0 } }] }],
 };
-const DRAW: RealismDraw = { scene: 'scene', camera: 'camera', delta: 0.5, reduced: false };
+const DRAW: RealismDraw = { scene: 'scene', camera: 'camera', delta: 0.5, reduced: false, pace: 1, subject: () => null };
 const BASE = '/base/';
 const IMAGES: ReadonlyMap<string, string> = new Map([['moon', 'image']]);
 
@@ -507,6 +507,64 @@ test('under one Canvas the owner sees no context event: same layer, uploaded sta
   assert.equal(counts.builds, 1);
 });
 
+// --- The subject and the pace (7.7) ---------------------------------------------------------------
+
+/** A layer recording only what the owner resolved for it. */
+function recordingLayer(seen: unknown[][]): RealismLayer {
+  return {
+    attach() {},
+    frame(_camera, _delta, _reduced, pace, subject) {
+      seen.push([pace, subject]);
+    },
+    dispose() {},
+  };
+}
+
+test('before decode, and after a failed decode, the subject is not called', async () => {
+  let calls = 0;
+  const draw: RealismDraw = { ...DRAW, subject: () => { calls += 1; return 'client:a'; } };
+  const fetching = ownerOver(() => new Promise(() => undefined));
+  for (let at = 0; at < 6; at += 1) fetching.owner.frame(ARTIFACT, BASE, draw);
+  await settled();
+  assert.equal(fetching.owner.status().document, 'fetching');
+  assert.equal(calls, 0, 'idle and fetching');
+  const failed = ownerOver(() => Promise.reject(new Error('x')));
+  for (let at = 0; at < 6; at += 1) failed.owner.frame(ARTIFACT, BASE, draw);
+  await settled();
+  for (let at = 0; at < 6; at += 1) failed.owner.frame(ARTIFACT, BASE, draw);
+  assert.equal(failed.owner.status().document, 'failed');
+  assert.equal(calls, 0, 'failed');
+});
+
+test('with a layer, the subject is resolved once a frame, inside the owner, and handed on with the pace', async () => {
+  const seen: unknown[][] = [];
+  const { owner } = await decodedOwner(() => recordingLayer(seen));
+  let calls = 0;
+  owner.frame(ARTIFACT, BASE, { ...DRAW, pace: 0.25, subject: () => { calls += 1; return 'client:a'; } });
+  owner.frame(ARTIFACT, BASE, { ...DRAW, pace: 1, subject: () => { calls += 1; return null; } });
+  owner.frame(ARTIFACT, BASE, { ...DRAW, pace: 1, subject: () => { calls += 1; return 'client:gone'; } });
+  assert.equal(calls, 3);
+  assert.deepEqual(seen, [[0.25, 'client:a'], [1, null], [1, 'client:gone']]);
+});
+
+test('a subject that throws: failed, silently, everything removed, and the loop goes on', async () => {
+  const calls: string[] = [];
+  const { owner } = await decodedOwner(() => fakeLayer(calls));
+  owner.frame(ARTIFACT, BASE, DRAW);
+  assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, { ...DRAW, subject: () => { throw new Error('the store threw'); } }));
+  assert.deepEqual(owner.status(), { document: 'failed', uploaded: false });
+  assert.equal(calls.at(-1), 'dispose');
+  assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, DRAW));
+});
+
+test('a subject that throws on the very first frame at decoded: failed, and the built layer is removed', async () => {
+  const calls: string[] = [];
+  const { owner } = await decodedOwner(() => fakeLayer(calls));
+  assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, { ...DRAW, subject: () => { throw new Error('the store threw'); } }));
+  assert.equal(owner.status().document, 'failed');
+  assert.deepEqual(calls, ['attach scene', 'dispose']);
+});
+
 // --- The source audits ----------------------------------------------------------------------------
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -554,16 +612,23 @@ test('realism-status.ts imports nothing, reads no store, logs nothing, throws no
 const MOUNT_LINES: readonly string[] = [
   "import { useFrame } from '@react-three/fiber';",
   "import { useEffect } from 'react';",
-  "import { reducedMotion } from '../shell/motion-preference.ts';",
+  "import { motionPace, reducedMotion } from '../shell/motion-preference.ts';",
   "import { BASE } from '../shell/route.ts';",
+  "import { navigationStore } from '../shell/state.ts';",
+  "import type { Rail } from './rail-model.ts';",
   "import { createRealismOwner, type RealismArtifact } from './realism-status.ts';",
+  "import { sceneSubject } from './stroke-model.ts';",
   `const owner = createRealismOwner(() => ${THE_IMPORT});`,
   'export interface RealismMountProps {',
   '  readonly artifact: RealismArtifact;',
+  '  readonly rail: Rail;',
   '}',
-  'export function RealismMount({ artifact }: RealismMountProps) {',
+  'export function RealismMount({ artifact, rail }: RealismMountProps) {',
   '  useEffect(() => owner.enterCanvas(), []);',
-  '  useFrame(({ scene, camera }, delta) => owner.frame(artifact, BASE, { scene, camera, delta, reduced: reducedMotion() }));',
+  '  useFrame(({ scene, camera }, delta) => {',
+  '    const reduced = reducedMotion();',
+  '    owner.frame(artifact, BASE, { scene, camera, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });',
+  '  });',
   '  return null;',
   '}',
 ];
@@ -583,18 +648,25 @@ test('the mount is one owner at module scope, one effect, one frame callback and
 });
 
 test('the mount audit rejects each departure, and a comment is not one', () => {
-  const real = read(MOUNT_PATH);
-  const USE = '  useFrame(({ scene, camera }, delta) => owner.frame(artifact, BASE, { scene, camera, delta, reduced: reducedMotion() }));\n';
+  const real = read(MOUNT_PATH).replaceAll('\r\n', '\n');
+  const READ = '    const reduced = reducedMotion();\n';
+  const FRAME = '    owner.frame(artifact, BASE, { scene, camera, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });\n';
+  const USE = `  useFrame(({ scene, camera }, delta) => {\n${READ}${FRAME}  });\n`;
   for (const [name, mutate] of [
     ['an owner per mount', (s: string) => s.replace(USE, `  const owner = createRealismOwner(() => ${THE_IMPORT});\n${USE}`)],
     ['a resource read', (s: string) => s.replace(USE, `  use(${THE_IMPORT});\n${USE}`)],
-    ['a guarded frame', (s: string) => s.replace(USE, '  useFrame(({ scene, camera }, delta) => { if (artifact) owner.frame(artifact, BASE, { scene, camera, delta, reduced: reducedMotion() }); });\n')],
-    ['reduced held at a fixed value', (s: string) => s.replace('reduced: reducedMotion()', 'reduced: false')],
+    ['a guarded frame', (s: string) => s.replace(FRAME, `    if (artifact) ${FRAME.trimStart()}`)],
+    ['reduced held at a fixed value', (s: string) => s.replace('const reduced = reducedMotion();', 'const reduced = false;')],
     ['a second read of the preference', (s: string) => s.replace(USE, `  const held = reducedMotion();\n${USE}`)],
+    ['a second read, as the pace', (s: string) => s.replace('motionPace(reduced)', 'motionPace(reducedMotion())')],
+    ['the pace held at a fixed value', (s: string) => s.replace('pace: motionPace(reduced)', 'pace: 1')],
+    ['the subject resolved outside the owner', (s: string) => s.replace('subject: () => sceneSubject(navigationStore.getState(), rail)', 'subject: ((value) => () => value)(sceneSubject(navigationStore.getState(), rail))')],
+    ['the subject fixed', (s: string) => s.replace('sceneSubject(navigationStore.getState(), rail)', 'null')],
+    ['writing the store', (s: string) => s.replace(READ, `${READ}    navigationStore.setState({ focusedProjectId: null });\n`)],
+    ['no rail prop', (s: string) => s.replace('  readonly rail: Rail;\n', '')],
     ['no cleanup: the effect drops what entering returns', (s: string) => s.replace('useEffect(() => owner.enterCanvas(), [])', 'useEffect(() => { owner.enterCanvas(); }, [])')],
     ['no effect', (s: string) => s.replace('  useEffect(() => owner.enterCanvas(), []);\n', '')],
     ['something rendered', (s: string) => s.replace('return null;', 'return <group />;')],
-    ['the store', (s: string) => s.replace("import { useEffect } from 'react';", "import { useEffect } from 'react';\nimport { navigationStore } from '../shell/state.ts';")],
     ['a built import', (s: string) => s.replace(THE_IMPORT, "import('./real' + 'ism/index.ts')")],
     ['a second chunk', (s: string) => s.replace(THE_IMPORT, "import('./realism/other.ts')")],
     ['the owner exported', (s: string) => `${s}\nexport { owner };\n`],
@@ -619,13 +691,13 @@ function auditRealismInScene(source: string): string[] {
   const code = stripCommentsAndStrings(source);
   const failures: string[] = [];
   const inside = /<Canvas\b[\s\S]*<\/Canvas>/.exec(code)?.[0] ?? '';
-  if (!/<RealismMount artifact=\{artifact\} \/>/.test(inside)) failures.push('the mount is not inside the Canvas as <RealismMount artifact={artifact} />');
+  if (!/<RealismMount artifact=\{artifact\} rail=\{rail\} \/>/.test(inside)) failures.push('the mount is not inside the Canvas as <RealismMount artifact={artifact} rail={rail} />');
   if ((code.match(/<RealismMount\b/g) ?? []).length !== 1) failures.push('the mount appears other than once');
   if (/(?:&&|\|\||\?|:|\{|\[|=>|,)\s*(?:\(\s*)*<RealismMount\b/.test(code)) failures.push('the mount is conditional');
   const mark = inside.search(/<FirstFrameMark\b/);
   const mount = inside.search(/<RealismMount\b/);
   if (mark === -1 || mount === -1 || mount < mark) failures.push('the mount is not after <FirstFrameMark />');
-  if (!/<FirstFrameMark\s*\/>\s*(?:\{\s*\}\s*)*<RealismMount artifact=\{artifact\} \/>\s*(?:\{\s*\}\s*)*<\/Canvas>/.test(code)) failures.push('the mount is not the direct last child of the Canvas, immediately after <FirstFrameMark />');
+  if (!/<FirstFrameMark\s*\/>\s*(?:\{\s*\}\s*)*<RealismMount artifact=\{artifact\} rail=\{rail\} \/>\s*(?:\{\s*\}\s*)*<\/Canvas>/.test(code)) failures.push('the mount is not the direct last child of the Canvas, immediately after <FirstFrameMark />');
   return failures;
 }
 
@@ -635,7 +707,7 @@ test('scene.tsx mounts the owner once, inside the Canvas, after the mark, with n
 
 test('the scene mount audit rejects each departure', () => {
   const real = read('src/render-scene/scene.tsx');
-  const MOUNT = '<RealismMount artifact={artifact} />';
+  const MOUNT = '<RealismMount artifact={artifact} rail={rail} />';
   const MARK = '<FirstFrameMark />';
   for (const [name, mutate, message] of [
     ['missing', (s: string) => s.replace(MOUNT, ''), /not inside/],
@@ -645,6 +717,7 @@ test('the scene mount audit rejects each departure', () => {
     ['before the mark', (s: string) => s.replace(MOUNT, '').replace(MARK, `${MOUNT}\n${MARK}`), /not after/],
     ['outside the Canvas', (s: string) => s.replace(MOUNT, '').replace('</Canvas>', `</Canvas>\n${MOUNT}`), /not inside/],
     ['no prop', (s: string) => s.replace(MOUNT, '<RealismMount />'), /not inside/],
+    ['no rail', (s: string) => s.replace(MOUNT, '<RealismMount artifact={artifact} />'), /not inside/],
     ['wrapped in a group', (s: string) => s.replace(MOUNT, `<group>${MOUNT}</group>`), /direct last child/],
     ['wrapped in a Suspense', (s: string) => s.replace(MOUNT, `<Suspense fallback={null}>${MOUNT}</Suspense>`), /direct last child/],
     ['wrapped in a group, on its own lines', (s: string) => s.replace(MOUNT, `<group>\n          ${MOUNT}\n        </group>`), /direct last child/],
