@@ -600,12 +600,25 @@ export function affordanceLeaderStyle() {
  * The label block: placed at the canvas's top-left and moved by its transform,
  * one line per row, hidden until placed. Its outline offset is the keyboard
  * square's; the outline itself is written per frame (`affordanceOutline`).
+ *
+ * Its plate is the page ground, opaque: a lit Star's fill or glow under the
+ * label put both lines near 1:1, and the label's contrast is rated on
+ * `surface-base`. It reaches `PLATE_PAD_PX` past the text's box on every side,
+ * because a box at a fractional transform rasterises its background edge up to
+ * a pixel short of the glyphs' box. No edge, radius or shadow, so it reads as
+ * the void restored behind the words, not as a card. The outline sits at its
+ * offset from the plate.
  */
+/** How far the plate reaches past the text's box, in CSS pixels. */
+export const PLATE_PAD_PX = 1;
+
 export function affordanceBlockStyle() {
   return {
     position: 'absolute',
     left: 0,
     top: 0,
+    background: tokens.colors['surface-base-dark'],
+    padding: `${PLATE_PAD_PX}px`,
     whiteSpace: 'nowrap',
     pointerEvents: 'none',
     visibility: 'hidden',

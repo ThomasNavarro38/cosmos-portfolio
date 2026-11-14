@@ -1418,6 +1418,7 @@ Still open after 3.5:
 - source_spec: spec-7-6-planets-lit-by-their-own-star.md
   summary: The record's Focus frame holds no Mote over the disc, so what a Mote crossing a fill does, now that fills write depth, is unmeasured. Worth a look at full motion in 7.9's check or Epic 8.
   evidence: realism-fills-7-6.md, Focus with Motes. 0 pixels differ from the baseline outside the disc, at one held clock.
+  resolution: Passed on by 7.9 in part. No Mote label met a realism pixel at any measured Focus at either viewport (realism-labels-7-9.md); Mote dots crossing a fill in motion were not separated.
   location: src/render-scene/mote-field.tsx
   severity: low
 - source_spec: spec-7-6-planets-lit-by-their-own-star.md
@@ -1452,6 +1453,7 @@ Still open after 3.5:
 - source_spec: spec-7-7-stars-that-glow.md
   summary: At rest a Star's stroke-rest outline and core dot read as a dark ring and a dark spot on a fill near the ceiling. For Thomas's on-screen judgement in Epic 8, and 7.9 may lower the value.
   evidence: realism-glow-7-7-overlap-worst.png. The tokens and body-field.tsx stay, by the spec's Design Notes.
+  resolution: Passed on by 7.9 unchanged. Its labels are held by the affordance's plate (Thomas's ruling), so no Star value was lowered and the dark ring is as 7.7 left it, still for Epic 8's look (realism-labels-7-9.md, Deferred entries).
   location: src/render-scene/realism/star-model.ts
   severity: low
 - source_spec: spec-7-7-stars-that-glow.md
@@ -1495,6 +1497,7 @@ Still open after 3.5:
 - source_spec: spec-7-7-stars-that-glow.md
   summary: Three rest glows summed on encoded values decode above the rest ceiling by arithmetic, and nothing in the code limits how many glows overlap. The ceiling holds only at the sampled poses of the committed layout (at most two glows overlapped there, 0.4536 against 0.47119), so a re-solved layout or an unsampled pose can break it. Candidate fixes are a lower GLOW_REST_PEAK, for Thomas's look in Epic 8, or a layout check in scripts/ that counts on-screen glow overlaps.
   evidence: realism-glow-7-7.md, The ceilings; star-model.test.ts bounds one and two rest peaks only.
+  resolution: Passed on by 7.9 unchanged: no peak was lowered, since the labels are held by the affordance's plate (realism-labels-7-9.md, Deferred entries). Still open for Epic 8.
   location: src/render-scene/realism/star-model.ts
   severity: medium
 - source_spec: spec-7-7-stars-that-glow.md
@@ -1505,6 +1508,7 @@ Still open after 3.5:
 - source_spec: spec-7-7-stars-that-glow.md
   summary: Free flight to a Client or to the overview, a Mote crossing a Star's fill or glow, and a label over a glow were not run. sceneSubject returns the flight target, so a Star should rise in free flight, and nothing on screen shows it. Labels are 7.9's; free flight and Motes go with 7.9's check or Epic 8.
   evidence: realism-glow-7-7.md, Not run.
+  resolution: The label over a glow was measured by 7.9 and missed the floor. After Thomas's ruling the affordance stands on a surface-base plate, and it holds (realism-labels-7-9.md, After the ruling). Free flight was still not run.
   location: spikes/realism-fills/harness.ts
   severity: low
 
@@ -1539,3 +1543,30 @@ Still open after 3.5:
   evidence: arrival-model.test.ts and realism-status.test.ts drive the fade with a fixed subject and no navigation. Hit spheres are unchanged by realism, so picking should not differ, but it is not shown.
   location: src/render-scene/realism/fill-layer.ts
   severity: low
+
+## Deferred from: implementation of spec-7-9-labels-and-the-signal-survive-realism.md (2026-11-14)
+
+- source_spec: spec-7-9-labels-and-the-signal-survive-realism.md
+  summary: Resolved. The implementation halted `label floor needs a ruling`: the affordance's title and secondary line fell to about 1:1 over Star fills and glows at both viewports, and only Stars at about the ground could clear it from realism's side.
+  evidence: realism-labels-7-9.md, Results per label and Why no value came down (partly superseded, as marked there), and After the ruling; spikes/realism-fills/results/prod-labels-plate.txt and prod-labels-plate-390.txt.
+  resolution: Ruled 2026-11-14, option (b): the affordance's label block stands on an opaque surface-base plate reaching 1px past the text (affordance-model.ts, DESIGN.md §7.3). Rerun at both viewports: no realism pixel under any label, 0 misses, every control failing. No realism value changed.
+  location: src/render-scene/affordance-model.ts
+  severity: high (closed)
+
+## Deferred from: code review of spec-7-9-labels-and-the-signal-survive-realism.md (2026-11-14)
+
+- source_spec: spec-7-9-labels-and-the-signal-survive-realism.md
+  summary: The label driver waits fixed times (9 s after load, 4.5 s per stop, 6 s per Focus) and never reads the fade, the subject's rise or the camera's arrival it says it waits for.
+  evidence: spikes/realism-fills/prod-labels.mjs, drive(); Blind Hunter.
+  location: spikes/realism-fills/prod-labels.mjs
+  severity: low
+- source_spec: spec-7-9-labels-and-the-signal-survive-realism.md
+  summary: No capture shows the affordance under keyboard focus. With the plate, a band of scene (possibly a lit Star) shows between the plate and the 3px-offset stroke-focus outline; unjudged.
+  evidence: realism-labels-7-9.md, After the ruling; Blind Hunter.
+  location: src/render-scene/affordance-model.ts
+  severity: low
+- source_spec: spec-7-9-labels-and-the-signal-survive-realism.md
+  summary: The label driver's realism mask is the pose models' static projection of each fill and glow. A pixel that differs from the baseline outside every projected disc is classed M2 ground and never failed, though an orbiting fill out of its projected place would land there. One such pixel was seen: Mote label PostgreSQL at focus-decathlon, 390×844, (60, 753), #65656d against #3d3d43, 1.69.
+  evidence: realism-labels-7-9.md, After the ruling; spikes/realism-fills/prod-labels.mjs placed(); Blind Hunter.
+  location: spikes/realism-fills/prod-labels.mjs
+  severity: medium

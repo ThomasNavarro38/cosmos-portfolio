@@ -245,6 +245,8 @@ components:
     labelColor: "{colors.ink-lift-dark}"
     subLabel: "{typography.scene-label-secondary}"
     subLabelColor: "{colors.ink-label-dark}"
+    labelPlate: "{colors.surface-base-dark}"
+    labelPlatePad: "1px"
     bodyStroke: "{colors.stroke-active-dark}"
 
   affordance-focus-ring:
@@ -825,6 +827,18 @@ On hover, a Project renders:
   team size, and class;
 - the Body's own stroke steps from `stroke-rest` to `stroke-active` — **a
   luminance step, not a new shape.**
+
+The two label lines stand on a plate of `surface-base`, opaque, reaching 1px
+past the text's box on every side so its rasterised edge never falls short of
+the glyphs; no edge, radius or shadow (Thomas's ruling, story 7.9,
+2026-11-14). Over a lit Star's M3 fill or glow both lines fell to about 1:1
+(`ink-label` and `ink-lift` alike), and no realism value could clear that
+without putting the Stars out; positioning the label clear of Star discs and
+judging against M2's ground were the alternatives set aside. The plate
+restores the void the label's contrast is rated on. It is the ground, not a
+card, and it is not `surface-raised`. The keyboard outline sits at its 3px
+offset from the plate. The plate shows in every session, realism or not, and
+may cover other Bodies' line-work while a Project is approached.
 
 No new geometry is added around the Body. The Ring stays exclusively the
 Notable's mark and its meaning never becomes ambiguous. As a bonus, hover

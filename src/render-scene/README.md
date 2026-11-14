@@ -140,6 +140,8 @@ Each Canvas's arrival is a phase the owner holds, reset by `enterCanvas` and by 
 
 The rules are in `realism/README.md`, and the browser records are `_bmad-output/implementation-artifacts/realism-fills-7-6.md`, `realism-glow-7-7.md` and `realism-arrival-7-8.md`.
 
+**The signal and the labels (7.9).** `realism/signal.test.ts` fails `npm test` if a fill hides a Ring or a Moon at an integer Rail stop, framed at 16:9, or if there is no Ring and no Moon to test. Hiding between stops is accepted. Labels are DOM above the canvas and are measured on real pixels by `spikes/realism-fills/prod-labels.mjs`; the affordance stands on a plate of `surface-base` reaching 1px past its text (Thomas's ruling), because a lit Star under it put `ink-label` near 1:1 (`_bmad-output/implementation-artifacts/realism-labels-7-9.md`).
+
 ## The draw order (7.2)
 
 `scene-model.ts` declares it, once, as five named constants: `DUST_RENDER_ORDER` 1 < `GLOW_RENDER_ORDER` 1.25 < `FILL_RENDER_ORDER` 1.5 < `BODY_RENDER_ORDER` 2 < `MOON_RENDER_ORDER` 3. `dust-model.ts` and `notable-model.ts` re-export the Dust and Moon steps, with no value of their own, so their importers do not change. `scene-model.test.ts` pins the values, the strict order and the single declaration. The glow and fill steps are for the realism layer. The effects audit admits the identifier `GLOW_RENDER_ORDER` in `scene-model.ts`, and the word `glow` under `realism/` (7.7), and no other glow, bloom, shadow or light.

@@ -20,6 +20,7 @@ import {
   OUTLINE_PX,
   affordanceBlockRect,
   affordanceBlockStyle,
+  PLATE_PAD_PX,
   affordanceFrame,
   affordanceObstacles,
   affordanceLayout,
@@ -498,6 +499,17 @@ test('the label takes the type roles and the ink ladder; the leader the stroke l
   assert.equal(leader.fill, 'none');
   assert.equal(affordanceOverlayStyle().pointerEvents, 'none');
   assert.equal(affordanceBlockStyle().pointerEvents, 'none');
+});
+
+test('the label block stands on a plate of the page ground, opaque, 1px past the text, and bare: no edge, radius, shadow or fade', () => {
+  const block: Record<string, unknown> = affordanceBlockStyle();
+  assert.equal(block['background'], tokens.colors['surface-base-dark'], 'the plate is surface-base, the ground the label is rated on');
+  assert.match(String(block['background']), /^#[0-9a-f]{6}$/i, 'six hex digits: opaque, no alpha');
+  assert.equal(PLATE_PAD_PX, 1);
+  assert.equal(block['padding'], '1px', 'the plate reaches past the rasterised edge of the text box');
+  for (const property of ['border', 'borderRadius', 'boxShadow', 'opacity', 'filter', 'backdropFilter', 'backgroundColor', 'margin']) {
+    assert.equal(block[property], undefined, `the plate takes no ${property}: it is the void behind the words, not a card`);
+  }
 });
 
 test('the overlay is pinned to the canvas’s centre and never hidden by drei', () => {
