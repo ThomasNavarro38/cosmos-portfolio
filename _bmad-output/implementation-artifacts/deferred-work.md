@@ -1570,3 +1570,39 @@ Still open after 3.5:
   evidence: realism-labels-7-9.md, After the ruling; spikes/realism-fills/prod-labels.mjs placed(); Blind Hunter.
   location: spikes/realism-fills/prod-labels.mjs
   severity: medium
+
+## Deferred from: implementation of spec-7-10-the-realism-definition-of-done.md (2026-11-14)
+
+- source_spec: spec-7-10-the-realism-definition-of-done.md
+  summary: The definition of done closed three instrument gaps additively (check-pins's closed list of runtime dependencies, an added-draws check that fails on nothing to draw, and checkRoutes with a Chrome driver for the Fallback and the Colophon), and ran M2's tests against this tree: 9 failures, each admitted by an AD-19 allowance or 7.4's mandate, none missing. Left open: the routes run saw this machine's antivirus inject a script and poll its own origin on every page; the driver tells those requests apart by the document Chrome received, and a run on a machine without web protection has not been made.
+  evidence: realism-done-7-10.md, The routes run and Limits; spikes/realism-failure/results/routes.txt and m2-tests-at-head.txt.
+  location: spikes/realism-failure/routes.mjs
+  severity: low
+- source_spec: spec-7-10-the-realism-definition-of-done.md
+  summary: checkRoutes finds a map request only by the textures/ fragment map-urls.ts builds URLs from, and does not follow the shell's dynamic imports (the router's choice of surface). The pipeline scan reads names, not behaviour, so a pass reached through an alias would evade it; a new package would still fail check-pins.
+  evidence: realism-done-7-10.md, Limits; scripts/bundle-assertion.ts routeClosure; src/render-scene/realism/done.test.ts PIPELINE.
+  location: scripts/bundle-assertion.ts
+  severity: low
+
+## Deferred from: code review of spec-7-10-the-realism-definition-of-done.md (2026-11-15)
+
+- source_spec: spec-7-10-the-realism-definition-of-done.md
+  summary: The routes driver picks random server and debugging ports with no collision retry, hard-codes the Chrome path, and waits a fixed 9 s per load instead of reading page state. (Deferred at implementation in the spec's frontmatter; registered here by the review.)
+  evidence: spikes/realism-failure/routes.mjs repeats the fixed-wait pattern 7.9's review deferred for prod-labels.mjs; a port collision could attach to a foreign server or browser.
+  location: spikes/realism-failure/routes.mjs
+  severity: low
+- source_spec: spec-7-10-the-realism-definition-of-done.md
+  summary: checkRoutes reads chunk code only, so a textures/ URL in a surface's stylesheet or in its emitted index.html (a preload link) passes the static half.
+  evidence: routeClosure walks ChunkView chunks; the plugin builds the view from output.type === 'chunk' alone. The Chrome run would still see such a request. Edge Case Hunter, Blind Hunter.
+  location: scripts/bundle-assertion.ts:317
+  severity: low
+- source_spec: spec-7-10-the-realism-definition-of-done.md
+  summary: CI's default shallow checkout leaves out the M2 revision, so the unchanged-sets test and the M2-manifest-from-git test skip there; AC4 and the git half of AC3 hold only on a full clone.
+  evidence: .github/workflows/ci.yml checks out with no fetch-depth; both tests skip when the M2 commit is absent. Blind Hunter.
+  location: .github/workflows/ci.yml:13
+  severity: low
+- source_spec: spec-7-10-the-realism-definition-of-done.md
+  summary: The routes driver ignores Runtime.exceptionThrown, has no timeout on CDP replies, and kills Chrome without its process tree on Windows.
+  evidence: A surface that throws after its title is set still reports PASS; a missing CDP reply hangs the run with no output. Edge Case Hunter, Blind Hunter.
+  location: spikes/realism-failure/routes.mjs
+  severity: low

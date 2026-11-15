@@ -24,7 +24,7 @@ On a capable machine the visitor still gets the schematic first frame as fast as
 - **Delivery:** build on `m3-realism`; every push to `main` deploys. Epic 7 never deploys alone, since maps would go live uncredited and unjudged. Live-site fixes may still land on `main`.
 - **First Paint:** the first frame stays the M2 schematic frame, `schematic-first-frame` is marked before any realism request, and entry and mount chunks gain no realism module.
 - **Framerate:** the gate cannot run without a target-profile machine and no other hardware counts. A budget is never a pass. Quality never adapts: no `PerformanceMonitor`, adaptive DPR or quality tier; `dpr` stays `[1, 2]`; the 24fps floor and chart offer are unchanged.
-- **Legibility wins:** every label keeps its contrast floor over fill or glow, checked on real rendered pixels (`ink-label` is only 1.7:1 on `stroke-active`, so the ceiling alone does not protect it). On a miss, glow reach or fill brightness comes down; label ink, position, plates and the panel change only by Thomas's ruling.
+- **Legibility wins:** every label keeps its contrast floor over fill or glow, checked on real rendered pixels (`ink-label-dark` is only 1.7:1 on `stroke-active-dark` but 5.85:1 on `surface-base-dark`, so the ceiling alone does not protect it). On a miss, glow reach or fill brightness comes down; label ink, position, plates and the panel change only by Thomas's ruling. One such ruling exists: the hover/focus affordance's label plate (below).
 - **Signal:** `npm test` fails if a fill hides a Ring or Moon at an integer Rail stop, and fails with nothing to test. Hiding between stops is accepted.
 - **Maintenance:** a new Project stays one JSON entry and one `weight`; `career.json` gains no field and no per-Body override.
 - **Budgets**, in import-free `src/render-scene/realism/budgets.ts`, read only by `realism/` and `scripts/`, changed only by a memlog ruling. Each lands with the first code that can break it, and a check with nothing to measure fails:
@@ -65,6 +65,7 @@ On a capable machine the visitor still gets the schematic first frame as fast as
 - Failure is silent: the schematic scene stays, Rail input still works, and there is no error, retry or message in that document.
 - A Planet may be mostly dark in Focus; that is accepted. The subject Star's rise and fall follow `sceneSubject` with no cut.
 - Realism is dark-only. Line-work, Dust and DOM surfaces stay achromatic.
+- **Affordance label plate (ruled):** a Project's two hover/focus label lines stand on an opaque `surface-base` plate reaching 1px past the text box on every side, with no edge, radius, shadow or fade. It exists because both lines fell to about 1:1 over a lit Star's fill or glow and no realism value could fix that without putting the Stars out. It is the ground, not a card (not `surface-raised`), shows in every session with or without realism, may cover other Bodies' line-work while a Project is approached, and the keyboard outline keeps its 3px offset from the plate. No capture was taken with that outline showing (deferred in 7.9's review), so the band of scene between plate and outline is unjudged.
 
 ## Cross-Story Dependencies
 

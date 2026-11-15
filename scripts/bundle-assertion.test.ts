@@ -4,7 +4,8 @@
  * two fixture entries, one statically importing `three` and one not, and the
  * shipped app itself. Nothing here edits a shipped source or writes `dist/`:
  * every build runs with `write: false`. Since 7.5 also `checkRealism`, and the
- * source half of the same split: who reaches the realism directory.
+ * source half of the same split: who reaches the realism directory. Since 7.10
+ * also `checkRoutes`: the Fallback and the Colophon reach no realism.
  */
 
 import { strict as assert } from 'node:assert';
@@ -12,9 +13,9 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { build, createBuilder, createLogger, type Logger, type Rolldown } from 'vite';
+import { build, createBuilder, createLogger, type Logger, type Plugin, type Rolldown } from 'vite';
 import { REALISM_CHUNK_BYTES_BUDGET, SCENE_CHUNK_BYTES_BUDGET } from '../src/render-scene/realism/budgets.ts';
-import { ENTRY_BUDGET_BYTES, bundleAssertion, checkBundle, checkRealism, entryBytes, passLine, realismBytes, realismLine, type BundleView, type ChunkView } from './bundle-assertion.ts';
+import { ENTRY_BUDGET_BYTES, bundleAssertion, checkBundle, checkRealism, checkRoutes, entryBytes, passLine, realismBytes, realismLine, type BundleView, type ChunkView } from './bundle-assertion.ts';
 import { EXHIBITS } from './exhibits.ts';
 import { PAGE_COPIES } from './pages.ts';
 import { BASE } from './site.ts';
@@ -783,6 +784,156 @@ test('a single SSR build is not asserted on', async () => {
 test('`npm run build` ends in `vite build`, so CI\'s Build step runs the assertion', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { scripts: Record<string, string> };
   assert.match(pkg.scripts['build'] ?? '', /&& vite build$/);
+});
+
+// --- checkRoutes (7.10): the Fallback and the Colophon request no realism -----------------------
+
+const CHART_TSX = `${ROOT}/src/render-fallback/chart.tsx`;
+const COLOPHON_TSX = `${ROOT}/src/colophon/colophon.tsx`;
+
+/**
+ * The realism graph with both surfaces beside it, as built today: the entry loads
+ * the mount lazily, and the mount each surface; each surface imports `ui`; the
+ * Colophon imports the entry statically and loads the solver lazily; and the
+ * scene loads realism lazily.
+ */
+function routeGraph(): ChunkView[] {
+  const shell = changed(changed(realismGraph(), 'assets/index.js', { dynamicImports: ['assets/mount.js'] }), 'assets/mount.js', { dynamicImports: ['assets/scene.js', 'assets/chart.js', 'assets/colophon.js'] });
+  return [
+    ...changed(changed(shell, 'assets/scene.js', { dynamicImports: ['assets/realism.js'] }), 'assets/realism.js', { code: 'const u=`${b}textures/${i}.webp`;' }),
+    chunk('assets/chart.js', [CHART_TSX, `${ROOT}/src/render-fallback/chart-model.ts`], { imports: ['assets/ui.js'] }),
+    chunk('assets/colophon.js', [COLOPHON_TSX], { imports: ['assets/index.js', 'assets/ui.js'], dynamicImports: ['assets/solver.js'] }),
+    chunk('assets/solver.js', [`${ROOT}/src/derive/live.ts`, `${ROOT}/src/derive/map-library.ts`], { code: 'const m=[{id:"moon"}];' }),
+  ];
+}
+
+test('checkRoutes: neither surface reaching realism passes, though the scene reaches it and its maps, and the shell loads the scene', () => {
+  assert.deepEqual(checkRoutes(viewOf(routeGraph()), ROOT), []);
+  assert.deepEqual(checkRoutes(viewOf(routeGraph()), 'e:\\repo'), [], 'the root is matched as Windows spells it');
+});
+
+test('checkRoutes fails naming each way a surface reaches realism, and a missing surface', () => {
+  const base = routeGraph();
+  const adding = (fileName: string, change: (out: ChunkView) => Partial<ChunkView>): ChunkView[] => changed(base, fileName, change(fileOf(base, fileName)));
+  for (const [name, chunks, message] of [
+    ['no chart chunk', base.filter((out) => out.fileName !== 'assets/chart.js'), /no chunk holds src\/render-fallback\/chart\.tsx, so the chart route \(Fallback\) has nothing to measure/],
+    ['no Colophon chunk', base.filter((out) => out.fileName !== 'assets/colophon.js'), /no chunk holds src\/colophon\/colophon\.tsx, so the Colophon route has nothing to measure/],
+    ['a realism module in the chart chunk', adding('assets/chart.js', (out) => ({ moduleIds: [...out.moduleIds, REALISM_DECODE] })), /the chart route \(Fallback\) reaches src\/render-scene\/realism\/decode-maps\.ts \(in assets\/chart\.js\)/],
+    ['a realism module in a chunk the Colophon imports statically', adding('assets/ui.js', (out) => ({ moduleIds: [...out.moduleIds, REALISM_DECODE] })), /the Colophon route reaches src\/render-scene\/realism\/decode-maps\.ts \(in assets\/ui\.js\)/],
+    ['the realism chunk imported statically by the chart', adding('assets/chart.js', (out) => ({ imports: [...out.imports, 'assets/realism.js'] })), /the chart route \(Fallback\) reaches the realism chunk, assets\/realism\.js/],
+    ['the realism chunk imported dynamically by the Colophon', adding('assets/colophon.js', (out) => ({ dynamicImports: [...(out.dynamicImports ?? []), 'assets/realism.js'] })), /the Colophon route reaches the realism chunk, assets\/realism\.js/],
+    ['the realism chunk behind the solver the Colophon loads lazily', adding('assets/solver.js', (out) => ({ imports: [...out.imports, 'assets/realism.js'] })), /the Colophon route reaches the realism chunk/],
+    ['the scene loaded lazily by the chart, and realism behind it', adding('assets/chart.js', () => ({ dynamicImports: ['assets/scene.js'] })), /the chart route \(Fallback\) reaches the realism chunk/],
+    ['a map reference in the solver', adding('assets/solver.js', () => ({ code: 'fetch(`${b}textures/moon.webp`)' })), /the Colophon route reaches a textures\/ reference, a map request, in assets\/solver\.js/],
+    ['a map reference in the chart chunk', adding('assets/chart.js', () => ({ code: '"textures/"' })), /the chart route \(Fallback\) reaches a textures\/ reference/],
+    ['a realism module in the shell chunk the Colophon imports', adding('assets/index.js', (out) => ({ moduleIds: [...out.moduleIds, REALISM_DECODE] })), /the Colophon route reaches src\/render-scene\/realism\/decode-maps\.ts \(in assets\/index\.js\)/],
+    ['the realism chunk imported statically by the shell chunk the Colophon imports', adding('assets/index.js', (out) => ({ imports: [...out.imports, 'assets/realism.js'] })), /the Colophon route reaches the realism chunk/],
+    ['the scene behind a lazy chunk of the surface’s own', adding('assets/solver.js', () => ({ dynamicImports: ['assets/scene.js'] })), /the Colophon route reaches the realism chunk/],
+    ['no realism chunk to measure', base.filter((out) => out.fileName !== 'assets/realism.js'), /no chunk has src\/render-scene\/realism\/index\.ts as its facade, so whether a route reaches the realism chunk has nothing to measure/],
+    ['the realism facade lost', adding('assets/realism.js', () => ({ facadeModuleId: null })), /whether a route reaches the realism chunk has nothing to measure/],
+    ['no mount to tell the shell by', adding('assets/mount.js', () => ({ moduleIds: [] })), /no chunk holds src\/shell\/mount\.tsx, so the shell a route shares cannot be told apart/],
+    ['the mount loading realism lazily', adding('assets/mount.js', (out) => ({ dynamicImports: [...(out.dynamicImports ?? []), 'assets/realism.js'] })), /the Colophon route reaches the realism chunk, assets\/realism\.js/],
+    ['the entry loading realism lazily', adding('assets/index.js', (out) => ({ dynamicImports: [...(out.dynamicImports ?? []), 'assets/realism.js'] })), /the Colophon route reaches the realism chunk/],
+    ['the mount lazily loading a chunk that imports realism', [...adding('assets/mount.js', (out) => ({ dynamicImports: [...(out.dynamicImports ?? []), 'assets/lazy.js'] })), chunk('assets/lazy.js', [`${ROOT}/src/shell/lazy.ts`], { imports: ['assets/realism.js'] })], /the Colophon route reaches the realism chunk/],
+  ] as const) {
+    assert.match(checkRoutes(viewOf(chunks), ROOT).join('\n'), message, name);
+  }
+  assert.deepEqual(checkRoutes(viewOf(adding('assets/scene.js', () => ({ code: '"textures/"' }))), ROOT), [], "a map reference the scene alone reaches is the scene route's, not a surface's");
+  assert.deepEqual(checkRoutes(viewOf(adding('assets/chart.js', () => ({ code: 'const t="texture";' }))), ROOT), [], 'a near word is not a map reference');
+});
+
+test('checkRoutes: a surface emitted inside a shell chunk has its own dynamic imports followed, and each line is reported once', () => {
+  const base = routeGraph();
+  // The chart inside the mount's chunk: its own lazy chunk is followed, and so are the router's edges from that chunk (a false failure, never a false pass).
+  const inside = [
+    ...changed(base.filter((out) => out.fileName !== 'assets/chart.js'), 'assets/mount.js', {
+      moduleIds: [MOUNT_TSX, CHART_TSX],
+      dynamicImports: ['assets/colophon.js', 'assets/own-lazy.js'],
+    }),
+    chunk('assets/own-lazy.js', [`${ROOT}/src/render-fallback/x.ts`, REALISM_DECODE]),
+  ];
+  assert.match(checkRoutes(viewOf(inside), ROOT).join('\n'), /the chart route \(Fallback\) reaches src\/render-scene\/realism\/decode-maps\.ts \(in assets\/own-lazy\.js\)/);
+  const twice = changed(base, 'assets/chart.js', { moduleIds: [CHART_TSX, REALISM_DECODE, REALISM_DECODE], code: '"textures/" "textures/"' });
+  const lines = checkRoutes(viewOf(twice), ROOT);
+  assert.equal(lines.filter((line) => line.includes('decode-maps.ts (in assets/chart.js)')).length, 1, lines.join('\n'));
+  assert.equal(lines.filter((line) => line.includes('textures/ reference, a map request, in assets/chart.js')).length, 1, lines.join('\n'));
+  assert.equal(new Set(lines).size, lines.length, 'no line twice');
+});
+
+test('checkRoutes over the shipped build: the chart and the Colophon reach no realism, the scene does, and the plugin runs it', async () => {
+  const chunks = chunksOf(await build({ configFile: CONFIG, root: REPO, logLevel: 'silent', build: { write: false } }));
+  const real: ChunkView[] = chunks.map((out) => ({
+    fileName: out.fileName,
+    isEntry: out.isEntry,
+    facadeModuleId: out.facadeModuleId,
+    imports: out.imports,
+    dynamicImports: out.dynamicImports,
+    moduleIds: Object.keys(out.modules),
+    bytes: Buffer.byteLength(out.code),
+    code: out.code,
+  }));
+  const view: BundleView = { chunks: real, importedIds: () => [] };
+  assert.deepEqual(checkRoutes(view, REPO), []);
+  const holding = (module: string): ChunkView => {
+    const found = real.find((out) => out.moduleIds.some((id) => local(id) === module));
+    assert.ok(found !== undefined, `${module} was emitted`);
+    return found;
+  };
+  const chart = holding('src/render-fallback/chart.tsx');
+  const colophon = holding('src/colophon/colophon.tsx');
+  const scene = holding('src/render-scene/scene.tsx');
+  const mount = holding('src/shell/mount.tsx');
+  const realism = real.find((out) => out.facadeModuleId !== null && local(out.facadeModuleId) === 'src/render-scene/realism/index.ts');
+  assert.ok(realism !== undefined, 'the realism chunk was emitted');
+  // Not vacuous: the scene loads realism, and realism's code builds a map's URL from the fragment the check reads.
+  assert.ok(scene.dynamicImports?.includes(realism.fileName), 'the scene chunk imports realism dynamically');
+  assert.ok(realism.code?.includes('textures/'), 'the realism chunk names textures/, so the reference check can see one');
+  assert.ok((colophon.dynamicImports ?? []).length > 0, 'the Colophon has a lazy edge, so the dynamic walk is exercised');
+  const swap = (target: ChunkView, change: Partial<ChunkView>): ChunkView[] => real.map((out) => (out === target ? { ...out, ...change } : out));
+  for (const [name, mutated, message] of [
+    ['the chart chunk gone', real.filter((out) => out !== chart), /chart route \(Fallback\) has nothing to measure/],
+    ['the Colophon chunk gone', real.filter((out) => out !== colophon), /Colophon route has nothing to measure/],
+    ['the chart importing realism', swap(chart, { imports: [...chart.imports, realism.fileName] }), /the chart route \(Fallback\) reaches the realism chunk/],
+    ['the Colophon loading the scene lazily', swap(colophon, { dynamicImports: [...(colophon.dynamicImports ?? []), scene.fileName] }), /the Colophon route reaches the realism chunk/],
+    ['a realism module in the chart chunk', swap(chart, { moduleIds: [...chart.moduleIds, ...realism.moduleIds] }), /the chart route \(Fallback\) reaches src\/render-scene\/realism\//],
+    ['a map reference in the Colophon chunk', swap(colophon, { code: `${colophon.code ?? ''}\n"textures/moon.webp"` }), /the Colophon route reaches a textures\/ reference/],
+    ['the mount loading realism lazily', swap(mount, { dynamicImports: [...(mount.dynamicImports ?? []), realism.fileName] }), /the Colophon route reaches the realism chunk/],
+    ['the mount chunk gone', real.filter((out) => out !== mount), /no chunk holds src\/shell\/mount\.tsx/],
+    ['the realism facade lost', swap(realism, { facadeModuleId: null }), /whether a route reaches the realism chunk has nothing to measure/],
+  ] as const) {
+    assert.match(checkRoutes({ chunks: mutated, importedIds: () => [] }, REPO).join('\n'), message, name);
+  }
+  // The plugin's half: a map reference written into the chart's chunk before the assertion runs fails the build.
+  const plant: Plugin = {
+    name: 'plant-a-map-reference',
+    generateBundle(_options, bundle) {
+      for (const output of Object.values(bundle)) {
+        if (output.type === 'chunk' && Object.keys(output.modules).some((id) => local(id) === 'src/render-fallback/chart.tsx')) output.code += '\n;"textures/moon.webp";';
+      }
+    },
+  };
+  await assert.rejects(
+    build({ configFile: CONFIG, root: REPO, logLevel: 'silent', plugins: [plant], build: { write: false } }),
+    /the chart route \(Fallback\) reaches a textures\/ reference/,
+  );
+  // And the plugin follows a surface's lazy edges: realism reachable from the chart only by an `import()` fails the build too.
+  const lazy: Plugin = {
+    name: 'plant-a-lazy-realism-edge',
+    generateBundle(_options, bundle) {
+      const chunks = Object.values(bundle).filter((output) => output.type === 'chunk');
+      const target = chunks.find((output) => output.facadeModuleId !== null && local(output.facadeModuleId) === 'src/render-scene/realism/index.ts');
+      for (const output of chunks) {
+        if (target !== undefined && Object.keys(output.modules).some((id) => local(id) === 'src/render-fallback/chart.tsx')) {
+          // Assigned, not pushed: the bundler's output hands out a fresh array on each read.
+          output.dynamicImports = [...output.dynamicImports, target.fileName];
+        }
+      }
+    },
+  };
+  await assert.rejects(
+    build({ configFile: CONFIG, root: REPO, logLevel: 'silent', plugins: [lazy], build: { write: false } }),
+    /the chart route \(Fallback\) reaches the realism chunk/,
+  );
 });
 
 // --- Who reaches the realism directory ------------------------------------------------------------

@@ -16,6 +16,18 @@
  * Every check runs whatever the others found, and an unreadable file is one
  * failure line, never a crash. Run as `node scripts/check-pins.ts [--root=<dir>]`.
  *
+ * **The runtime dependencies, a closed list (7.10).** AD-23's "0 new runtime
+ * dependencies" row names this script as its instrument, so the CLI also runs
+ * `checkRuntimeDependencies(root)`: every name in `dependencies` must be one of
+ * M2's (`RUNTIME_DEPENDENCIES`), and a `dependencies` that is missing, empty or not
+ * an object fails, since there is then nothing to measure. A name in
+ * `optionalDependencies`, `peerDependencies` or `bundleDependencies` outside the
+ * list fails too. And `checkShippedImports(root)`: every package a shipped module
+ * under `src/` imports at run time must be on the list or in
+ * `M2_SHIPPED_DEV_IMPORTS` (`zod`), since Vite bundles a `devDependencies` package
+ * a shipped module imports. Separate functions, so `checkPins` and its messages
+ * are as they were; only the CLI runs all three, the last when `src/` exists.
+ *
  * **Known blind spots** — what the line scan does not see or does not verify,
  * accepted because the workflows here are short and hand-written, and each
  * would need a YAML parser, not a pattern, to close:
@@ -32,12 +44,20 @@
  */
 
 import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isTestFile, sourceFilesUnder, stripComments, stripCommentsAndStrings } from './source-scan.ts';
 
 export const CHECK_PASSED = 'every dependency, the package manager and every workflow action are pinned exactly, and engine-strict is on.';
 
 const DEFAULT_ROOT = fileURLToPath(new URL('..', import.meta.url));
+
+/**
+ * M2's runtime dependencies (`package.json` at 4669784), a closed list. A name
+ * added to `dependencies` fails; one removed does not, since that adds nothing to
+ * the page. Changed only by a ruling: realism adds none (AD-23).
+ */
+export const RUNTIME_DEPENDENCIES = ['@react-three/drei', '@react-three/fiber', 'd3-force-3d', 'react', 'react-dom', 'three', 'zustand'] as const;
 
 const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'overrides'] as const;
 
@@ -197,6 +217,110 @@ export function checkPins(root: string): string[] {
   return failures;
 }
 
+/**
+ * Every way the manifest under `root` breaks the closed list: a name in
+ * `dependencies`, `optionalDependencies`, `peerDependencies` or
+ * `bundleDependencies` (`bundledDependencies`) that is not in
+ * `RUNTIME_DEPENDENCIES`, or nothing to count (no readable manifest, no
+ * `dependencies`, an empty one, or one that is not an object). A
+ * `devDependencies` name is not counted here: a shipped import of one is
+ * `checkShippedImports`'s. Empty when it holds.
+ */
+export function checkRuntimeDependencies(root: string): string[] {
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  } catch (error) {
+    return [`package.json could not be read, so its runtime dependencies cannot be counted: ${messageOf(error)}`];
+  }
+  if (!isRecord(manifest)) return ['package.json is not a JSON object, so its runtime dependencies cannot be counted.'];
+  const dependencies = manifest['dependencies'];
+  if (!isRecord(dependencies) || Object.keys(dependencies).length === 0) {
+    const found = dependencies === undefined ? 'missing' : isRecord(dependencies) ? 'empty' : 'not an object of name → version';
+    return [`package.json dependencies is ${found}, so there is nothing to measure against M2's runtime dependencies.`];
+  }
+  const allowed: readonly string[] = RUNTIME_DEPENDENCIES;
+  const failures: string[] = [];
+  const outside = (field: string, names: readonly string[]): void => {
+    for (const name of names) {
+      if (!allowed.includes(name)) failures.push(`package.json ${field}.${name} is not one of M2's runtime dependencies (${allowed.join(', ')}) — realism adds none (AD-23).`);
+    }
+  };
+  outside('dependencies', Object.keys(dependencies));
+  for (const field of ['optionalDependencies', 'peerDependencies'] as const) {
+    const value = manifest[field];
+    if (isRecord(value)) outside(field, Object.keys(value));
+    else if (value !== undefined) failures.push(`package.json ${field} is ${JSON.stringify(value)}, not an object of name → version.`);
+  }
+  for (const field of ['bundleDependencies', 'bundledDependencies'] as const) {
+    const value = manifest[field];
+    // `true` bundles `dependencies`, which the list above already holds.
+    if (Array.isArray(value)) outside(field, value.map(String));
+    else if (value !== undefined && typeof value !== 'boolean') failures.push(`package.json ${field} is ${JSON.stringify(value)}, neither a list of names nor a boolean.`);
+  }
+  return failures;
+}
+
+/**
+ * Packages a shipped module already imported at M2 (4669784) from
+ * `devDependencies`, which Vite bundles all the same: `zod`, the schema
+ * (`src/data/schema.ts`, `src/derive/artifact-schema.ts`), carried by the
+ * Colophon's lazy solver chunk. A closed list, so realism can add none.
+ */
+export const M2_SHIPPED_DEV_IMPORTS = ['zod'] as const;
+
+/** A bare specifier's package: `@scope/name` whole, anything else its first segment. */
+export function packageOfSpecifier(specifier: string): string {
+  const [first = '', second] = specifier.split('/');
+  return first.startsWith('@') && second !== undefined ? `${first}/${second}` : first;
+}
+
+/** Every bare specifier a module's source imports at run time, type-only imports and `node:` builtins left out. */
+export function runtimeSpecifiers(source: string): string[] {
+  const code = stripCommentsAndStrings(source);
+  const kept = stripComments(source);
+  const found: string[] = [];
+  for (const match of code.matchAll(/\b(?:(?:import|export)\s+(type\s+)?[^'"`;]*?\bfrom\s*|import\s*\(\s*|import\s+|require\s*\(\s*)(['"`])/g)) {
+    if (match[1] !== undefined) continue;
+    const quote = match[2] as string;
+    const open = (match.index ?? 0) + match[0].length;
+    const close = kept.indexOf(quote, open);
+    if (close === -1) continue;
+    const specifier = kept.slice(open, close);
+    if (specifier === '' || specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('node:')) continue;
+    found.push(specifier);
+  }
+  return found;
+}
+
+/**
+ * Every shipped module under `root/src/` (not a test) importing at run time a
+ * package outside `RUNTIME_DEPENDENCIES` and `M2_SHIPPED_DEV_IMPORTS`, as
+ * `file: package`: a package bundled into the page however `package.json`
+ * declares it. Fails when there is no `src/`, no shipped module, or no bare
+ * import at all, since then there is nothing to measure.
+ */
+export function checkShippedImports(root: string): string[] {
+  const src = join(root, 'src');
+  if (!existsSync(src)) return ['src/ is missing, so there is nothing to measure against M2\'s runtime dependencies.'];
+  const allowed: readonly string[] = [...RUNTIME_DEPENDENCIES, ...M2_SHIPPED_DEV_IMPORTS];
+  const failures: string[] = [];
+  let modules = 0;
+  let bare = 0;
+  for (const path of sourceFilesUnder(src)) {
+    if (isTestFile(path)) continue;
+    modules += 1;
+    const display = relative(root, path).split(sep).join('/');
+    for (const specifier of runtimeSpecifiers(readFileSync(path, 'utf8'))) {
+      bare += 1;
+      const name = packageOfSpecifier(specifier);
+      if (!allowed.includes(name)) failures.push(`${display} imports ${JSON.stringify(specifier)}, so the page bundles ${name}, which is not one of M2's runtime dependencies (${allowed.join(', ')}) — realism adds none (AD-23).`);
+    }
+  }
+  if (modules === 0 || bare === 0) failures.push(`src/ holds ${modules} shipped modules and ${bare} package imports, so there is nothing to measure against M2's runtime dependencies.`);
+  return failures;
+}
+
 /** The command line: one test seam, `--root=<dir>`. Anything else is rejected. */
 export function parseArgs(argv: readonly string[]): { root: string } | string[] {
   const failures: string[] = [];
@@ -222,7 +346,9 @@ function main(): void {
     for (const line of parsed) console.error(line);
     process.exit(1);
   }
-  const failures = checkPins(parsed.root);
+  // The shipped-import half reads `src/` when the root has one; a fixture root without it is a manifest check alone.
+  const shipped = existsSync(join(parsed.root, 'src')) ? checkShippedImports(parsed.root) : [];
+  const failures = [...checkPins(parsed.root), ...checkRuntimeDependencies(parsed.root), ...shipped];
   if (failures.length > 0) {
     for (const line of failures) console.error(line);
     process.exit(1);

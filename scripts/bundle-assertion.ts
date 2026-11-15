@@ -37,6 +37,17 @@
  * alone fails however little it weighs. It always fails on a missing chunk when
  * called, and the plugin calls it only when an entry's facade is `index.html`,
  * so fixture builds pass through untouched.
+ *
+ * `checkRoutes(view, root)` (7.10, FR-22's static half) holds that the Fallback
+ * and the Colophon request no realism: neither the chunk holding
+ * `src/render-fallback/chart.tsx` nor the one holding `src/colophon/colophon.tsx`
+ * reaches, through static imports and its own dynamic ones however deep, a
+ * `realism/` module, the `realism` chunk, or a chunk whose code names `textures/`.
+ * The shell's dynamic imports of the lazy surfaces (the router's choice of route)
+ * are not the surface's and are not followed; any other dynamic import of the
+ * shell is. A missing surface chunk, a missing realism chunk or a missing mount
+ * fails, since the routes would have nothing to measure. Each line is reported
+ * once. The plugin runs it beside `checkRealism`, on the app alone.
  */
 
 import type { Plugin } from 'vite';
@@ -79,6 +90,10 @@ export interface ChunkView {
   readonly imports: readonly string[];
   readonly moduleIds: readonly string[];
   readonly bytes: number;
+  /** Dynamic chunk imports, by file name. Read by `checkRoutes` alone; absent is none. */
+  readonly dynamicImports?: readonly string[];
+  /** The code as emitted. Read by `checkRoutes` alone, for a `textures/` reference; absent is none. */
+  readonly code?: string;
 }
 
 export interface BundleView {
@@ -279,6 +294,79 @@ export function checkRealism(view: BundleView, root: string, limits: RealismBudg
   return failures;
 }
 
+/** The two surfaces whose routes may request no realism (AD-24, FR-22): the Fallback's chart and the Colophon. */
+const ROUTE_SURFACES = [
+  ['the chart route (Fallback)', 'src/render-fallback/chart.tsx'],
+  ['the Colophon route', 'src/colophon/colophon.tsx'],
+] as const;
+
+/** What a map's URL is built from (`realism/map-urls.ts`): the one fragment of a map request a chunk's code can hold. */
+const TEXTURES_REFERENCE = 'textures/';
+
+/**
+ * What a surface's route loads: its chunk and every chunk reached from it through
+ * static imports, however deep, and through dynamic imports. One kind of edge is
+ * not followed: a shell chunk's dynamic import of a lazy surface's chunk (the
+ * scene's, the chart's, the Colophon's). The shell is the entry graph and the
+ * mount's static closure, which every route loads, and those edges are the
+ * router's choice of surface, not this one's. Any other dynamic import of a shell
+ * chunk is followed, so an `import()` of realism added to the entry or the mount
+ * fails every route. A surface emitted inside a shell chunk has that chunk walked
+ * whole, router edges included: a false failure, never a false pass.
+ */
+function routeClosure(view: BundleView, from: ChunkView, shell: ReadonlySet<ChunkView>, surfaces: ReadonlySet<ChunkView>): ChunkView[] {
+  const byName = new Map(view.chunks.map((chunk) => [chunk.fileName, chunk]));
+  const seen = new Set<string>();
+  const graph: ChunkView[] = [];
+  const queue = [from];
+  for (let i = 0; i < queue.length; i += 1) {
+    const chunk = queue[i] as ChunkView;
+    if (seen.has(chunk.fileName)) continue;
+    seen.add(chunk.fileName);
+    graph.push(chunk);
+    const routerEdges = shell.has(chunk) && chunk !== from;
+    for (const name of chunk.imports) {
+      const next = byName.get(name);
+      if (next !== undefined) queue.push(next);
+    }
+    for (const name of chunk.dynamicImports ?? []) {
+      const next = byName.get(name);
+      if (next !== undefined && !(routerEdges && surfaces.has(next))) queue.push(next);
+    }
+  }
+  return graph;
+}
+
+/** Every way the Fallback's or the Colophon's closure reaches realism, one line each; empty when neither does. */
+export function checkRoutes(view: BundleView, root: string): string[] {
+  const base = normalise(root).replace(/\/?$/, '/');
+  const isModule = (id: string, module: string): boolean => normalise(id).toLowerCase() === `${base}${module}`.toLowerCase();
+  const isRealism = (id: string): boolean => normalise(id).toLowerCase().startsWith(`${base}${REALISM_DIR}`.toLowerCase());
+  const holding = (module: string): ChunkView | undefined => view.chunks.find((chunk) => chunk.moduleIds.some((id) => isModule(id, module)));
+  const realism = view.chunks.find((chunk) => chunk.facadeModuleId !== null && isModule(chunk.facadeModuleId, REALISM_FACADE));
+  const mount = holding(MOUNT_MODULE);
+  const failures = new Set<string>();
+  if (realism === undefined) failures.add(`no chunk has ${REALISM_FACADE} as its facade, so whether a route reaches the realism chunk has nothing to measure.`);
+  if (mount === undefined) failures.add(`no chunk holds ${MOUNT_MODULE}, so the shell a route shares cannot be told apart, and the routes have nothing to measure against.`);
+  const shell = new Set([...entryGraph(view), ...(mount === undefined ? [] : staticClosure(view, [mount]))]);
+  const surfaces = new Set([SCENE_MODULE, ...ROUTE_SURFACES.map(([, module]) => module)].flatMap((module) => holding(module) ?? []));
+  for (const [name, module] of ROUTE_SURFACES) {
+    const surface = holding(module);
+    if (surface === undefined) {
+      failures.add(`no chunk holds ${module}, so ${name} has nothing to measure.`);
+      continue;
+    }
+    for (const chunk of routeClosure(view, surface, shell, surfaces)) {
+      if (chunk === realism) failures.add(`${name} reaches the realism chunk, ${chunk.fileName}.`);
+      for (const id of chunk.moduleIds) {
+        if (isRealism(id)) failures.add(`${name} reaches ${display(id, base)} (in ${chunk.fileName}).`);
+      }
+      if ((chunk.code ?? '').includes(TEXTURES_REFERENCE)) failures.add(`${name} reaches a ${TEXTURES_REFERENCE} reference, a map request, in ${chunk.fileName}.`);
+    }
+  }
+  return [...failures];
+}
+
 /** The two measured figures. Read after `checkRealism` passes; a missing chunk reads as 0. */
 export function realismBytes(view: BundleView, root: string): { readonly realism: number; readonly scene: number } {
   const { realismMeasured, sceneMeasured } = realismChunks(view, root);
@@ -325,6 +413,8 @@ export function bundleAssertion({ budget = ENTRY_BUDGET_BYTES, realismBudgets = 
                 imports: output.imports,
                 moduleIds: Object.keys(output.modules),
                 bytes: Buffer.byteLength(output.code),
+                dynamicImports: output.dynamicImports,
+                code: output.code,
               }]
             : [],
         );
@@ -332,7 +422,7 @@ export function bundleAssertion({ budget = ENTRY_BUDGET_BYTES, realismBudgets = 
         // The app, not a fixture: fixture builds pass through this plugin too.
         const page = `${normalise(root).replace(/\/?$/, '/')}index.html`.toLowerCase();
         const isApp = chunks.some((chunk) => chunk.isEntry && chunk.facadeModuleId !== null && normalise(chunk.facadeModuleId).toLowerCase() === page);
-        const failures = [...checkBundle(view, root, budget), ...(isApp ? checkRealism(view, root, limits) : [])];
+        const failures = [...checkBundle(view, root, budget), ...(isApp ? [...checkRealism(view, root, limits), ...checkRoutes(view, root)] : [])];
         if (failures.length > 0) this.error(failures.join('\n'));
         info(passLine(entryBytes(view), budget));
         if (isApp) {

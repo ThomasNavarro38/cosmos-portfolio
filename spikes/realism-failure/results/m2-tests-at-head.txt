@@ -1,0 +1,301 @@
+M2's tests at HEAD (story 7.10): AD-19's listing, as evidence.
+Generated 2026-11-14 on the dev machine (Windows 11, Node 24.13.0).
+
+What was run
+- A temporary `git worktree` of HEAD (3b48f29, m3-realism), detached, outside the repository. `node_modules` copied
+  in whole (robocopy), not linked: a junction made Vite resolve three to the main checkout's path, which the bundle
+  assertion's messages then printed absolute, failing two fixture tests for that reason alone.
+- This story's two edited scripts copied over HEAD's, so the run is against the source as this story leaves it:
+  `scripts/check-pins.ts` (the closed list) and `scripts/bundle-assertion.ts` (`checkRoutes`). Both are additive.
+- Each M2 test file the epic changed overwritten by its 4669784 version (`git show 4669784:<file> > <file>`), and
+  `scripts/check-pins.test.ts` run beside them, unchanged since M2, against the new `check-pins.ts`.
+- No M2 test is missing at HEAD: every one of the 73 `*.test.ts` files in 4669784's tree exists at HEAD, and
+  `git diff --name-status 4669784 HEAD` lists no D or R for a test file.
+- The worktree was removed afterwards (`git worktree remove --force`).
+
+The epic's test files against 4669784 (A = added at HEAD, M = changed):
+M	scripts/bundle-assertion.test.ts
+A	scripts/check-maps.test.ts
+M	scripts/tokens.test.ts
+A	src/derive/appearance.test.ts
+M	src/derive/artifact-schema.test.ts
+M	src/derive/artifact.test.ts
+M	src/derive/boundaries.test.ts
+M	src/derive/maintenance.test.ts
+A	src/derive/map-library.test.ts
+M	src/first-paint.test.ts
+M	src/identity-audit.test.ts
+M	src/render-scene/affordance-model.test.ts
+A	src/render-scene/realism-status.test.ts
+A	src/render-scene/realism/arrival-model.test.ts
+A	src/render-scene/realism/decode-maps.test.ts
+A	src/render-scene/realism/fill-model.test.ts
+A	src/render-scene/realism/map-urls.test.ts
+A	src/render-scene/realism/signal.test.ts
+A	src/render-scene/realism/star-model.test.ts
+M	src/render-scene/scene-model.test.ts
+M	src/shell/chart-offer.test.ts
+
+Command
+  node --test scripts/bundle-assertion.test.ts scripts/tokens.test.ts src/derive/artifact-schema.test.ts src/derive/artifact.test.ts src/derive/boundaries.test.ts src/derive/maintenance.test.ts src/first-paint.test.ts src/identity-audit.test.ts src/render-scene/affordance-model.test.ts src/render-scene/scene-model.test.ts src/shell/chart-offer.test.ts scripts/check-pins.test.ts
+
+Pass 1: M2's files as written
+ℹ tests 543
+ℹ suites 0
+ℹ pass 534
+ℹ fail 9
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+Failures, each with its assertion (stack frames and object dumps trimmed):
+
+test at scripts\bundle-assertion.test.ts:382:1
+✖ the shipped app builds under the assertion, measured within its budget (268.2984ms)
+  AssertionError [ERR_ASSERTION]: and holds the solver alone (5.5)
+  + actual - expected
+
+    [
+      'src/data/schema.ts',
+  +   'src/derive/appearance.ts',
+      'src/derive/artifact-schema.ts',
+      'src/derive/artifact.ts',
+      'src/derive/destinations.ts',
+      'src/derive/dwell.ts',
+      'src/derive/entities.ts',
+      'src/derive/live.ts',
+  +   'src/derive/map-library.ts',
+      'src/derive/pipeline.ts',
+      'src/derive/rail.ts',
+      'src/derive/rules.ts',
+      'src/derive/shots.ts',
+      'src/derive/skills.ts',
+
+test at src\derive\artifact-schema.test.ts:99:1
+✖ the version is 9 now that each Client carries its span, and changing the shape means changing it (0.6271ms)
+  AssertionError [ERR_ASSERTION]: Story 4.5 added each Client’s `span`, so the shape version is 9
+
+  10 !== 9
+
+test at src\first-paint.test.ts:133:1
+✖ the site collects nothing: no storage, no request and no off-site URL in shipped source (64.9399ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + [
+  +   'src/derive/map-library.ts:41 reaches off-site: an http(s) URL',
+  +   'src/derive/map-library.ts:49 reaches off-site: an http(s) URL',
+  +   'src/derive/map-library.ts:57 reaches off-site: an http(s) URL',
+  +   'src/derive/map-library.ts:65 reaches off-site: an http(s) URL'
+  + ]
+  - []
+
+test at src\identity-audit.test.ts:107:1
+✖ achromatic: every -dark colour token has OKLCH chroma < 0.02 (1.8763ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + [
+  +   'achromatic: realism-star-glow-dark (#B09468) carries a hue — OKLCH chroma 0.0685 ≥ 0.02',
+  +   'achromatic: realism-ambient-floor-dark (#0E1626) carries a hue — OKLCH chroma 0.0345 ≥ 0.02'
+  + ]
+  - []
+
+test at src\identity-audit.test.ts:128:1
+✖ achromatic: the cool cast is a deliberate neutral — hue near 286°, chroma at most 0.016 (0.505ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + [
+  +   'cast: realism-star-glow-dark (#B09468) has chroma 0.0685 > 0.016 — beyond the recorded neutral',
+  +   'cast: realism-ambient-floor-dark (#0E1626) has chroma 0.0345 > 0.016 — beyond the recorded neutral'
+  + ]
+  - []
+
+test at src\identity-audit.test.ts:132:1
+✖ achromatic: a token drifting toward the threshold, or warming, fails the cast with its own line (0.465ms)
+  AssertionError [ERR_ASSERTION]: the drift is still under the achromatic threshold
+  + actual - expected
+
+  + [
+  +   'achromatic: realism-star-glow-dark (#B09468) carries a hue — OKLCH chroma 0.0685 ≥ 0.02',
+  +   'achromatic: realism-ambient-floor-dark (#0E1626) carries a hue — OKLCH chroma 0.0345 ≥ 0.02'
+  + ]
+  - []
+
+test at src\render-scene\scene-model.test.ts:1475:1
+✖ no shadow, blur, glow, bloom, radius or light in the scene or the shell (31.3901ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + [
+  +   'src/render-scene/realism/star-layer.ts:22 holds GLOW',
+  +   'src/render-scene/realism/star-layer.ts:25 holds GLOW',
+  +   'src/render-scene/realism/star-layer.ts:26 holds GLOW',
+  +   'src/render-scene/realism/star-layer.ts:26 holds GLOW',
+  +   'src/render-scene/realism/star-layer.ts:46 holds glow',
+  +   'src/render-scene/realism/star-layer.ts:59 holds glow',
+  +   'src/render-scene/realism/star-layer.ts:60 holds GLOW',
+  +   'src/render-scene/realism/star-layer.ts:61 holds GLOW',
+  +   'src/render-scene/realism/star-layer.ts:70 holds glow',
+  +   'src/render-scene/realism/star-layer.ts:71 holds glow',
+  +   'src/render-scene/realism/star-layer.ts:71 holds GLOW',
+  +   'src/render-scene/realism/star-layer.ts:73 holds glow',
+  +   'src/render-scene/realism/star-layer.ts:73 holds GLOW',
+  +   'src/render-scene/realism/star-layer.ts:74 holds glow',
+  +   'src/render-scene/realism/star-layer.ts:75 holds glow',
+  +   'src/render-scene/realism/star-layer.ts:81 holds glow',
+  +   'src/render-scene/realism/star-layer.ts:81 holds glow',
+  +   'src/render-scene/realism/star-layer.ts:88 holds glow',
+  +   'src/render-scene/realism/star-layer.ts:98 holds glow',
+  +   'src/render-scene/realism/star-layer.ts:99 holds glow',
+  +   'src/render-scene/realism/star-layer.ts:101 holds glow',
+  +   'src/render-scene/realism/star-model.ts:23 holds GLOW',
+  +   'src/render-scene/realism/star-model.ts:54 holds GLOW',
+  +   'src/render-scene/realism/star-model.ts:55 holds GLOW',
+  +   'src/render-scene/realism/star-shader.ts:25 holds GLOW',
+  +   'src/render-scene/realism/star-shader.ts:25 holds GLOW',
+  +   'src/render-scene/realism/star-shader.ts:64 holds GLOW',
+  +   'src/render-scene/realism/star-shader.ts:72 holds GLOW',
+  +   'src/render-scene/realism/star-shader.ts:77 holds GLOW',
+  +   'src/render-scene/realism/star-shader.ts:78 holds GLOW',
+  +   'src/render-scene/scene-model.ts:380 holds GLOW'
+  + ]
+  - []
+
+test at src\render-scene\scene-model.test.ts:4020:1
+✖ only the pacing surfaces reference the reduced-motion preference, each in its own role (33.3549ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + [
+  +   'src/render-scene/realism-mount.tsx references the reduced-motion preference — only the pacing surfaces may'
+  + ]
+  - []
+
+test at src\shell\chart-offer.test.ts:315:1
+✖ chart-offer.ts is imported by the chrome, the scene host and the sampler alone, each for its own names (51.7668ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + [
+  +   'src/render-scene/realism-mount.tsx imports chart-offer.ts — only the chrome, the scene host and the sampler may'
+  + ]
+  - []
+
+
+Pass 2: the same files with only the edit each named allowance admits (the patch below), so the rest of every test
+that aborted at its first assertion also runs. Every edit is the allowance's own text as HEAD writes it.
+ℹ tests 543
+ℹ suites 0
+ℹ pass 543
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+Failures: none
+
+The allowance patch (4669784's file -> allowance-applied):
+--- 4669784:scripts/bundle-assertion.test.ts
++++ allowance-applied:scripts/bundle-assertion.test.ts
+@@ -437,12 +437,14 @@
+     Object.keys(solver.modules).map(local).filter((id) => id.startsWith('src/') || id.startsWith('generated/')).sort(),
+     [
+       'src/data/schema.ts',
++      'src/derive/appearance.ts',
+       'src/derive/artifact-schema.ts',
+       'src/derive/artifact.ts',
+       'src/derive/destinations.ts',
+       'src/derive/dwell.ts',
+       'src/derive/entities.ts',
+       'src/derive/live.ts',
++      'src/derive/map-library.ts',
+       'src/derive/pipeline.ts',
+       'src/derive/rail.ts',
+       'src/derive/rules.ts',
+--- 4669784:src/derive/artifact-schema.test.ts
++++ allowance-applied:src/derive/artifact-schema.test.ts
+@@ -97,7 +97,7 @@
+ });
+ 
+ test('the version is 9 now that each Client carries its span, and changing the shape means changing it', () => {
+-  assert.equal(SCHEMA_VERSION, 9, 'Story 4.5 added each Client’s `span`, so the shape version is 9');
++  assert.equal(SCHEMA_VERSION, 10, 'Story 4.5 added each Client’s `span`, so the shape version is 9');
+   assert.equal(valid().schemaVersion, SCHEMA_VERSION, 'the emitter declares it');
+ 
+   // Read off the source: the literal must be in the schema, not merely compared
+--- 4669784:src/first-paint.test.ts
++++ allowance-applied:src/first-paint.test.ts
+@@ -126,8 +126,13 @@
+   return { ...file, text: file.text.replace(own, (_match, open: string, close: string) => `${open}${close}`) };
+ }
+ 
++function withoutLibrarySourceUrls(file: Shipped): Shipped {
++  if (file.path !== 'src/derive/map-library.ts') return file;
++  return { ...file, text: file.text.replace(/https:\/\/(?:[a-z0-9-]+\.)*(?:nasa|usgs)\.gov(?:\/[\w./%-]*)?(?=['"])/g, '') };
++}
++
+ function auditCollection(files: readonly Shipped[]): string[] {
+-  return scan(files.map(withoutOwnMetaUrls), COLLECTION);
++  return scan(files.map(withoutOwnMetaUrls).map(withoutLibrarySourceUrls), COLLECTION);
+ }
+ 
+ test('the site collects nothing: no storage, no request and no off-site URL in shipped source', () => {
+--- 4669784:src/identity-audit.test.ts
++++ allowance-applied:src/identity-audit.test.ts
+@@ -85,9 +85,11 @@
+ /** The achromatic threshold: OKLCH chroma below this reads as no hue (ruling 1b). */
+ const ACHROMATIC_CHROMA = 0.02;
+ 
++const REALISM_DARK_KEY = /^realism-[a-z0-9]+(?:-[a-z0-9]+)*-dark$/;
++
+ function auditAchromatic(colors: Readonly<Record<string, string>>): string[] {
+   const failures: string[] = [];
+-  const dark = Object.entries(colors).filter(([key]) => key.endsWith('-dark'));
++  const dark = Object.entries(colors).filter(([key]) => key.endsWith('-dark') && !REALISM_DARK_KEY.test(key));
+   if (dark.length === 0) return ['achromatic: no -dark colour token to inspect'];
+   for (const [key, value] of dark) {
+     let chroma: number;
+@@ -117,7 +119,7 @@
+  */
+ function auditCast(colors: Readonly<Record<string, string>>): string[] {
+   const failures: string[] = [];
+-  for (const [key, value] of Object.entries(colors).filter(([name]) => name.endsWith('-dark'))) {
++  for (const [key, value] of Object.entries(colors).filter(([name]) => name.endsWith('-dark') && !REALISM_DARK_KEY.test(name))) {
+     const { chroma, hue } = oklch(value);
+     if (chroma > 0.016) failures.push(`cast: ${key} (${value}) has chroma ${chroma.toFixed(4)} > 0.016 — beyond the recorded neutral`);
+     else if (chroma > 0.004 && Math.abs(hue - 286) >= 20) failures.push(`cast: ${key} (${value}) leans to hue ${hue.toFixed(1)}° — the cast is one cool neutral, near 286°`);
+--- 4669784:src/render-scene/scene-model.test.ts
++++ allowance-applied:src/render-scene/scene-model.test.ts
+@@ -1464,7 +1464,12 @@
+ function effectsIn(files: readonly { readonly path: string; readonly source: string }[]): string[] {
+   const every = new RegExp(EFFECTS.source, `${EFFECTS.flags.replace('g', '')}g`);
+   return files.flatMap((file) => {
+-    const code = stripComments(file.source);
++    const stripped = stripComments(file.source);
++    const code = file.path === 'src/render-scene/scene-model.ts'
++      ? stripped.replace(/(?<![\w$-])GLOW_RENDER_ORDER(?![\w$-])/g, '')
++      : file.path.startsWith('src/render-scene/realism/')
++        ? stripped.replace(/(?<![a-z])glows?(?![a-z])/gi, ' ')
++        : stripped;
+     return [...code.matchAll(every)].map((match) => {
+       const line = code.slice(0, match.index).split('\n').length;
+       return `${file.path}:${line} holds ${match[0]}`;
+@@ -3967,6 +3972,7 @@
+   // 4.1: the writer moved from the scene host to the mount, page-wide.
+   'src/shell/mount.tsx': 'writer',
+   'src/render-scene/rail-camera.tsx': 'reader',
++  'src/render-scene/realism-mount.tsx': 'reader',
+   'src/render-scene/mote-field.tsx': 'reader',
+   'src/shell/focus-panel.tsx': 'reader',
+   // 3.8: the corner slot moves with the panel's slide, on the same pace.
+--- 4669784:src/shell/chart-offer.test.ts
++++ allowance-applied:src/shell/chart-offer.test.ts
+@@ -265,6 +265,7 @@
+   'src/shell/corner-chrome.tsx': ['chartOffered', 'subscribeChartOffer'],
+   'src/shell/scene-host.tsx': ['resetFrameSampling'],
+   'src/render-scene/frame-sampler.tsx': ['sampleFrame'],
++  'src/render-scene/realism-mount.tsx': ['resetFrameSampling'],
+ };
+ 
+ /** Every specifier a source names in an import, export-from, dynamic import or require. */

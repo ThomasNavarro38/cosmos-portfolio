@@ -2,7 +2,8 @@
  * The packaging ratchet over `mkdtemp` fixture trees: ranges and non-registry
  * specs in every dependency field, the packageManager shape, the .npmrc
  * engine-strict setting, workflow action refs, and unreadable manifests — plus
- * one read-only check that the repo as shipped passes.
+ * one read-only check that the repo as shipped passes. Since 7.10 also the
+ * closed list of runtime dependencies, AD-23's "0 new runtime dependencies" row.
  */
 
 import { strict as assert } from 'node:assert';
@@ -12,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { CHECK_PASSED, checkPins, parseArgs } from './check-pins.ts';
+import { CHECK_PASSED, checkPins, checkRuntimeDependencies, checkShippedImports, M2_SHIPPED_DEV_IMPORTS, parseArgs, RUNTIME_DEPENDENCIES, runtimeSpecifiers } from './check-pins.ts';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SCRIPT = fileURLToPath(new URL('./check-pins.ts', import.meta.url));
@@ -276,4 +277,158 @@ test('the CLI prints the pass line on a clean tree and exits 1 on a dirty one', 
   const typo = spawnSync(process.execPath, [SCRIPT, '--chek'], { encoding: 'utf8' });
   assert.equal(typo.status, 1);
   assert.match(typo.stderr, /unknown argument/);
+});
+
+// --- The runtime dependencies, a closed list (7.10, AD-23) ----------------------------------------
+
+/** M2's `dependencies` names, read at its revision (4669784) when the list was written. */
+const M2_DEPENDENCIES = ['@react-three/drei', '@react-three/fiber', 'd3-force-3d', 'react', 'react-dom', 'three', 'zustand'];
+
+test('the closed list is M2\'s dependencies, and the shipped package.json declares exactly those', () => {
+  assert.deepEqual([...RUNTIME_DEPENDENCIES], M2_DEPENDENCIES);
+  const pkg = JSON.parse(readFileSync(PACKAGE_JSON, 'utf8')) as { dependencies: Record<string, string> };
+  assert.deepEqual(Object.keys(pkg.dependencies).sort(), M2_DEPENDENCIES, 'dependencies equals M2\'s, no name added and none gone');
+  assert.deepEqual(checkRuntimeDependencies(REPO_ROOT), []);
+});
+
+test('a runtime dependency added beyond the closed list fails, naming it', () => {
+  const failures = checkRuntimeDependencies(treeOf({ 'package.json': packageWith({ dependencies: { react: '19.2.8', postprocessing: '6.36.0' } }) }));
+  assert.equal(failures.length, 1, failures.join('\n'));
+  assert.match(failures[0] as string, /dependencies\.postprocessing/);
+  assert.match(failures[0] as string, /not one of M2's runtime dependencies/);
+  const two = checkRuntimeDependencies(treeOf({ 'package.json': packageWith({ dependencies: { react: '19.2.8', a: '1.0.0', b: '1.0.0' } }) }));
+  assert.equal(two.length, 2, 'each added name is its own line');
+  // A devDependency is not counted by the manifest half; a shipped import of one fails `checkShippedImports` (below).
+  assert.deepEqual(checkRuntimeDependencies(treeOf({ 'package.json': packageWith({ devDependencies: { postprocessing: '6.36.0' } }) })), [], 'a devDependency is not a runtime dependency');
+  assert.deepEqual(checkRuntimeDependencies(treeOf()), [], 'a subset of the list passes');
+});
+
+test('no dependencies to count fails: missing, empty, not an object, or no readable manifest', () => {
+  const { dependencies: _omit, ...withoutDependencies } = GOOD_PACKAGE;
+  for (const [name, contents] of [
+    ['missing', JSON.stringify(withoutDependencies)],
+    ['empty', packageWith({ dependencies: {} })],
+    ['not an object', packageWith({ dependencies: ['react'] })],
+    ['not JSON', '{ not json'],
+    ['not an object at all', '[]'],
+  ] as const) {
+    const failures = checkRuntimeDependencies(treeOf({ 'package.json': contents }));
+    assert.equal(failures.length, 1, `${name}: ${failures.join('\n')}`);
+    assert.match(failures[0] as string, /nothing to measure|could not be read|not a JSON object/, name);
+  }
+  const unread = checkRuntimeDependencies(treeOf({ 'package.json': null }));
+  assert.equal(unread.length, 1, unread.join('\n'));
+  assert.match(unread[0] as string, /package\.json could not be read/);
+});
+
+test('the CLI runs the closed list too: an added runtime dependency exits 1, naming it', () => {
+  const added = spawnSync(process.execPath, [SCRIPT, `--root=${treeOf({ 'package.json': packageWith({ dependencies: { react: '19.2.8', postprocessing: '6.36.0' } }) })}`], { encoding: 'utf8' });
+  assert.equal(added.status, 1);
+  assert.match(added.stderr, /dependencies\.postprocessing/);
+  assert.equal(added.stdout, '');
+  const none = spawnSync(process.execPath, [SCRIPT, `--root=${treeOf({ 'package.json': packageWith({ dependencies: {} }) })}`], { encoding: 'utf8' });
+  assert.equal(none.status, 1);
+  assert.match(none.stderr, /nothing to measure/);
+});
+
+test('a name outside the closed list fails in optionalDependencies, peerDependencies and bundleDependencies too', () => {
+  for (const [field, value] of [
+    ['optionalDependencies', { postprocessing: '6.36.0' }],
+    ['peerDependencies', { postprocessing: '6.36.0' }],
+    ['bundleDependencies', ['postprocessing']],
+    ['bundledDependencies', ['postprocessing']],
+  ] as const) {
+    const failures = checkRuntimeDependencies(treeOf({ 'package.json': packageWith({ [field]: value }) }));
+    assert.equal(failures.length, 1, `${field}: ${failures.join('\n')}`);
+    assert.match(failures[0] as string, new RegExp(`${field}\\.postprocessing is not one of M2's runtime dependencies`));
+  }
+  for (const [field, value] of [
+    ['optionalDependencies', { react: '19.2.8' }],
+    ['peerDependencies', { three: '0.185.1' }],
+    ['bundleDependencies', ['react']],
+    ['bundleDependencies', true],
+  ] as const) {
+    assert.deepEqual(checkRuntimeDependencies(treeOf({ 'package.json': packageWith({ [field]: value }) })), [], `${field} on the list`);
+  }
+  assert.match(checkRuntimeDependencies(treeOf({ 'package.json': packageWith({ bundleDependencies: 'postprocessing' }) })).join('\n'), /neither a list of names nor a boolean/);
+  for (const field of ['optionalDependencies', 'peerDependencies'] as const) {
+    for (const value of [['postprocessing'], 'postprocessing'] as const) {
+      assert.match(checkRuntimeDependencies(treeOf({ 'package.json': packageWith({ [field]: value }) })).join('\n'), new RegExp(`${field} is .*, not an object of name → version`), `${field}: ${JSON.stringify(value)}`);
+    }
+  }
+});
+
+// --- Shipped imports: a package the page bundles, however package.json declares it (7.10) --------
+
+/** A real shipped module, as text, to copy into a fixture's `src/`. */
+const SHIPPED = readFileSync(join(REPO_ROOT, 'src', 'render-scene', 'realism', 'fill-layer.ts'), 'utf8');
+
+test('every package a shipped module imports is a runtime dependency, or zod, which M2 already bundled from devDependencies', () => {
+  assert.deepEqual(checkShippedImports(REPO_ROOT), []);
+  const pkg = JSON.parse(readFileSync(PACKAGE_JSON, 'utf8')) as { dependencies: Record<string, string>; devDependencies: Record<string, string> };
+  assert.deepEqual([...M2_SHIPPED_DEV_IMPORTS], ['zod']);
+  for (const name of M2_SHIPPED_DEV_IMPORTS) {
+    assert.ok(name in pkg.devDependencies && !(name in pkg.dependencies), `${name} is a devDependency`);
+    assert.ok(runtimeSpecifiers(readFileSync(join(REPO_ROOT, 'src', 'data', 'schema.ts'), 'utf8')).includes(name), `${name} is imported by shipped code, so the allowance is in use`);
+  }
+});
+
+test('a shipped module importing a devDependency, or any package off the list, fails naming the file and the package', () => {
+  // Spelled through a variable, so this file holds no happy-dom import of its own (`render.test.ts`'s scan).
+  const HAPPY = ['happy', 'dom'].join('-');
+  for (const [line, name] of [
+    ["import { EffectComposer } from 'postprocessing';", 'postprocessing'],
+    ["import { defineConfig } from 'vite';", 'vite'],
+    [`import { Window } from '${HAPPY}';`, HAPPY],
+    ["const m = await import('postprocessing');", 'postprocessing'],
+    ["import 'postprocessing';", 'postprocessing'],
+    ["export { Pass } from 'postprocessing/passes';", 'postprocessing'],
+    ["import { x } from '@evil/pkg/sub';", '@evil/pkg'],
+  ] as const) {
+    const failures = checkShippedImports(treeOf({ 'src/render-scene/realism/fill-layer.ts': `${SHIPPED}\n${line}\n` }));
+    assert.equal(failures.length, 1, `${line}: ${failures.join('\n')}`);
+    assert.match(failures[0] as string, /^src\/render-scene\/realism\/fill-layer\.ts imports /);
+    assert.ok((failures[0] as string).includes(`the page bundles ${name}, which is not one of M2's runtime dependencies`), failures[0]);
+  }
+  for (const line of [
+    "import type { Pass } from 'postprocessing';",
+    "export type { Pass } from 'postprocessing';",
+    "// import { EffectComposer } from 'postprocessing';",
+    "const note = \"import x from 'postprocessing'\";",
+    "import { readFileSync } from 'node:fs';",
+    "import { useFrame } from '@react-three/fiber/native';",
+    "import { create } from 'zustand/vanilla';",
+  ]) {
+    assert.deepEqual(checkShippedImports(treeOf({ 'src/render-scene/realism/fill-layer.ts': `${SHIPPED}\n${line}\n` })), [], line);
+  }
+  assert.deepEqual(checkShippedImports(treeOf({ 'src/x.test.ts': `import { Window } from '${HAPPY}';\nimport 'three';\n`, 'src/y.ts': "import 'three';\n" })), [], 'a test module is not shipped');
+});
+
+test('no shipped import to measure fails: no src/, no shipped module, or no package import', () => {
+  for (const [name, files] of [
+    ['no src/', {}],
+    ['tests only', { 'src/x.test.ts': "import 'three';\n" }],
+    ['no package import', { 'src/x.ts': "import { y } from './y.ts';\nexport const x = y;\n", 'src/y.ts': 'export const y = 1;\n' }],
+  ] as const) {
+    assert.match(checkShippedImports(treeOf(files)).join('\n'), /nothing to measure/, name);
+  }
+});
+
+test('the CLI runs the shipped-import half when the root has src/', () => {
+  const run = spawnSync(process.execPath, [SCRIPT, `--root=${treeOf({ 'src/x.ts': "import { EffectComposer } from 'postprocessing';\n" })}`], { encoding: 'utf8' });
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /src\/x\.ts imports "postprocessing"/);
+});
+
+// --- The closed list against M2's own manifest, read from git ------------------------------------
+
+const M2_REVISION = '4669784b7e3832be40a25e4b00fd508034d89f9f';
+const HAS_M2 = spawnSync('git', ['cat-file', '-e', `${M2_REVISION}^{commit}`], { cwd: REPO_ROOT, encoding: 'utf8' }).status === 0;
+const needsM2 = { skip: HAS_M2 ? false : `git, or revision ${M2_REVISION} (absent from a shallow clone), is not available` };
+
+test('the closed list is the dependencies of package.json at M2, as git holds it', needsM2, () => {
+  const show = spawnSync('git', ['show', `${M2_REVISION}:package.json`], { cwd: REPO_ROOT, encoding: 'utf8' });
+  assert.equal(show.status, 0, show.stderr);
+  const m2 = JSON.parse(show.stdout) as { dependencies: Record<string, string> };
+  assert.deepEqual(Object.keys(m2.dependencies).sort(), [...RUNTIME_DEPENDENCIES]);
 });
