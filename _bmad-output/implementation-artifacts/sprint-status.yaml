@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 11-15-2026 21:48
+last_updated: 11-16-2026 08:54
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -121,7 +121,7 @@ development_status:
   7-8-arriving-after-the-first-frame: done
   7-9-labels-and-the-signal-survive-realism: done
   7-10-the-realism-definition-of-done: done
-  epic-7-retrospective: optional
+  epic-7-retrospective: done
 
   epic-8: backlog
   8-1-the-worst-window-on-the-visitor-s-own-timeline: backlog
@@ -641,7 +641,7 @@ action_items:
       promote the four todos, then close pre-launch checklist items 6-8 against the
       chosen host"
     owner: "Thomas"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-6-retro-10-23-2026.md"
   - id: "epic-6-retro-item-46-schedule-the-open-epic-5-retro-items-38"
     epic: 6
@@ -680,3 +680,48 @@ action_items:
     owner: "Thomas"
     status: done
     ref: "_bmad-output/implementation-artifacts/epic-6-retro-10-23-2026.md"
+  - id: "epic-7-retro-item-50-record-the-2026-11-16-rulings-7-6-consol"
+    epic: 7
+    action: "Record the 2026-11-16 rulings (7.6 console lines, 7.7 click, 7.7 at rest
+      = settled) in deferred-work.md and add dated notes to epics.md AC 7.6, AC 7.7
+      and AC 7.9 (the affordance plate, ruled 2026-11-14)"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-7-retro-11-16-2026.md"
+  - id: "epic-7-retro-item-51-run-the-follow-up-bmad-code-review-7-4-7"
+    epic: 7
+    action: "Run the follow-up bmad-code-review 7.4-7.8 recommended over 007106e^..a36eef7
+      before 8.5, folding in R1, R3 and R5; then clear followup_review_recommended
+      on spec-7-4..7-8 and spec-7-10"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-7-retro-11-16-2026.md"
+  - id: "epic-7-retro-item-52-settle-the-depth-margin-check-7-6-passed"
+    epic: 7
+    action: "Settle the depth-margin check 7.6 passed to 7.10 and 7.10 dropped: a
+      scripts/ check on the 1e-6 bias's depth gap, or a ruling accepting it unchecked"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-7-retro-11-16-2026.md"
+  - id: "epic-7-retro-item-53-on-creating-8-4-s-spec-list-the-epic-7-l"
+    epic: 7
+    action: "On creating 8.4's spec, list the Epic 7 looks routed to it as a checklist
+      and add a Rail pose at p=2.8333"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-7-retro-11-16-2026.md"
+  - id: "epic-7-retro-item-54-8-3-s-record-lists-beside-nfr-2-what-was"
+    epic: 7
+    action: "8.3's record lists, beside NFR-2, what was never run: depth bias on integrated
+      GPUs and phones, Firefox and Safari (flipY), 60 Hz, three's program-info-log
+      warning"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-7-retro-11-16-2026.md"
+  - id: "epic-7-retro-item-55-in-8-1-decide-whether-realism-s-frame-pa"
+    epic: 7
+    action: "In 8.1, decide whether realism's frame path (realism-mount.tsx:53, fill-layer.ts:190)
+      is held to allocates nothing per frame, and hoist if so"
+    owner: "Thomas"
+    status: open
+    ref: "_bmad-output/implementation-artifacts/epic-7-retro-11-16-2026.md"
