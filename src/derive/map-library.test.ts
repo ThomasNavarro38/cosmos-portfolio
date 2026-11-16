@@ -100,13 +100,21 @@ test('the library audit rejects each reach, and a comment is prose', () => {
 
 /**
  * The modules that may read the library, and the shipped files that may name a
- * map's path. The readers are the assignment (7.4) and the gate that re-derives
- * through it. `MAP_REQUESTERS` is the one requester (7.5), the realism chunk's
- * URL rule; another needs a change to this table. Maps are now requested, and
- * their credits are Epic 8's, so this branch does not merge before them.
+ * map's path. The readers are the assignment (7.4), the gate that re-derives
+ * through it, and (8.2, ruling Q4) the solver chunk's entry, which re-exports
+ * the library for the Colophon's credits, through the dynamic edge the chunk
+ * already has. `MAP_REQUESTERS` is the one requester (7.5), the realism chunk's
+ * URL rule; another needs a change to this table. `MAP_NAMERS` (8.2) are the
+ * files that may write a map's file name without requesting it: the Colophon's
+ * credit line, `<id>.webp: …`, which names the served file a credit is for and
+ * never builds a URL from it (`src/colophon/credits.test.ts` holds that no
+ * file shipped from `src/colophon/` writes a URL, and `checkRoutes` that the
+ * Colophon's chunks hold no `textures/` reference). A namer may not write
+ * `textures/`.
  */
-const LIBRARY_READERS: readonly string[] = ['src/derive/appearance.ts', 'src/derive/index.ts'];
+const LIBRARY_READERS: readonly string[] = ['src/derive/appearance.ts', 'src/derive/index.ts', 'src/derive/live.ts'];
 const MAP_REQUESTERS: readonly string[] = ['src/render-scene/realism/map-urls.ts'];
+const MAP_NAMERS: readonly string[] = ['src/colophon/credits.ts'];
 
 interface Module {
   readonly path: string;
@@ -141,6 +149,8 @@ const GLOB = /\bimport\.meta\.glob\s*(?:<[^>]*>\s*)?\(([^)]*)\)/g;
 /** A string naming the library as a module, whatever holds it, or a built dynamic import that mentions it. */
 const NAMES_LIBRARY = /['"`](?:[^'"`\n]*\/)?map-library(?:\.[cm]?[jt]sx?)?(?:[?#][^'"`\n]*)?['"`]|\bimport\s*\([^)]*\bmap-library\b/;
 const NAMES_MAP = /\btextures\/|\.webp\b/i;
+/** A map's path, as a request builds it: what a namer may still never write. */
+const NAMES_MAP_PATH = /\btextures\//i;
 
 function auditLibraryReach(files: readonly Module[]): string[] {
   const failures: string[] = [];
@@ -151,12 +161,12 @@ function auditLibraryReach(files: readonly Module[]): string[] {
         if (path.startsWith('src/derive/') || /\bderive\/|\bmap-/.test(match[1] as string)) failures.push(`library reach: ${path} globs the library: ${(match[1] as string).trim()}`);
       }
     }
-    if (!MAP_REQUESTERS.includes(path) && NAMES_MAP.test(text)) failures.push(`library reach: ${path} names a map`);
+    if (!MAP_REQUESTERS.includes(path) && (MAP_NAMERS.includes(path) ? NAMES_MAP_PATH : NAMES_MAP).test(text)) failures.push(`library reach: ${path} names a map`);
   }
   return failures;
 }
 
-test('among shipped modules only the assignment and the gate import the library, and no shipped file nor index.html names a map', () => {
+test('among shipped modules only the assignment, the gate and the solver chunk’s entry import the library, and no shipped file nor index.html names a map', () => {
   const files = shippedFiles();
   assert.ok(files.some((file) => file.path === 'src/derive/map-library.ts'), 'the walk reads src/');
   assert.ok(files.some((file) => file.path === 'index.html'), 'the walk reads index.html');
@@ -205,7 +215,7 @@ test('the library reach audit rejects each form, and a comment, a near name or a
   }
 });
 
-test('the assignment and the gate alone are admitted, and each does read the library', () => {
+test('the assignment, the gate and the solver chunk’s entry alone are admitted, and each does read the library', () => {
   const line = "import { MAP_LIBRARY } from './map-library.ts';";
   const files = shippedFiles();
   for (const path of LIBRARY_READERS) {
@@ -214,10 +224,25 @@ test('the assignment and the gate alone are admitted, and each does read the lib
     assert.ok(file !== undefined && NAMES_LIBRARY.test(file.text), `${path} still reads it, or the table is stale`);
     assert.match(auditLibraryReach([{ path, text: "const u = 'textures/' + id;" }]).join('\n'), /names a map/, `${path} may read the library, not name a map`);
   }
-  assert.deepEqual([...LIBRARY_READERS].sort(), ['src/derive/appearance.ts', 'src/derive/index.ts']);
-  for (const path of ['src/derive/artifact.ts', 'src/derive/artifact-schema.ts', 'src/derive/pipeline.ts', 'src/derive/live.ts', 'src/derive/entities.ts', 'src/derive/rules.ts', 'src/render-scene/scene.tsx', 'src/render-fallback/chart.tsx', 'src/shell/entry.ts', 'src/colophon/colophon.tsx']) {
+  assert.deepEqual([...LIBRARY_READERS].sort(), ['src/derive/appearance.ts', 'src/derive/index.ts', 'src/derive/live.ts']);
+  for (const path of ['src/derive/artifact.ts', 'src/derive/artifact-schema.ts', 'src/derive/pipeline.ts', 'src/derive/entities.ts', 'src/colophon/credits.ts', 'src/derive/rules.ts', 'src/render-scene/scene.tsx', 'src/render-fallback/chart.tsx', 'src/shell/entry.ts', 'src/colophon/colophon.tsx']) {
     assert.match(auditLibraryReach([{ path, text: line }]).join('\n'), /imports the library/, path);
   }
+});
+
+test('the Colophon’s credit line may name a map’s file and never its path, and does', () => {
+  assert.deepEqual([...MAP_NAMERS], ['src/colophon/credits.ts']);
+  const line = 'const line = `${entry.id}.webp: ${entry.credit}, ${entry.licence}`;';
+  assert.deepEqual(auditLibraryReach([{ path: 'src/colophon/credits.ts', text: line }]), [], 'a file name admitted');
+  for (const text of ['const u = `textures/${entry.id}.webp`;', "const u = '/textures/moon.webp';"]) {
+    assert.match(auditLibraryReach([{ path: 'src/colophon/credits.ts', text }]).join('\n'), /names a map/, `a path is not: ${text}`);
+  }
+  for (const path of ['src/colophon/colophon.tsx', 'src/colophon/credits.tsx', 'src/derive/live.ts']) {
+    assert.match(auditLibraryReach([{ path, text: line }]).join('\n'), /names a map/, path);
+  }
+  const namer = shippedFiles().find((file) => file.path === 'src/colophon/credits.ts');
+  assert.ok(namer !== undefined && NAMES_MAP.test(namer.text), 'it still names one, or the table is stale');
+  assert.match(auditLibraryReach([{ path: 'src/colophon/credits.ts', text: "import { MAP_LIBRARY } from '../derive/map-library.ts';" }]).join('\n'), /imports the library/, 'it names a file, and may not read the library');
 });
 
 test('the realism chunk\'s URL rule alone may name a map, and does', () => {

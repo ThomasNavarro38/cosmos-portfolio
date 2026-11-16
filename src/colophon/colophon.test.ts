@@ -33,6 +33,21 @@
  * given `disabled`, its label altered, the result misnamed, altered or drawn when
  * none is solved, and the new elements drawn before the absences.
  *
+ * What a Planet looks like (8.2, ruling Q1 of 2026-11-16): after the
+ * absences and before the live re-solve, once both the exhibits and the map
+ * library have arrived, `<h2 class="colophon-heading">` reading
+ * `APPEARANCE.heading`, two `<p class="colophon-prose">` reading the statement
+ * and the lead-in, and one `<ul class="colophon-credits">` of one `<li>` per
+ * `MAP_LIBRARY` entry, in library order, its text `<id>.webp: <credit>,
+ * <licence>` and then one `<a>` reading `source` whose `href` is the entry's
+ * `sourceUrl` — the text `creditLine(entry)`, so the page and the line
+ * cannot drift apart, and the `href` read off the entry. Drawn with neither the exhibits alone nor the library alone,
+ * and the same with a solved layout beside it. Driven red by an entry dropped
+ * or reordered, a written href, a link relabelled or doubled, the statement
+ * altered, the heading made an `<h3>`, the list unclassed or made an `<ol>`,
+ * the section moved after the live re-solve or before the absences, and the
+ * section drawn with no library.
+ *
  * The contact route (6.3): a `p.contact-route` directly after the `<h1>`,
  * with or without the exhibits — the mailto address, then the `copy`
  * button — driven red by the route dropped, moved below the exhibits, its
@@ -72,7 +87,12 @@
  * stop the cleanup, run once, the failure logged;
  * and (5.5) the press: a thin binding of `createLiveSolve` built once with the
  * one dynamic import of `../derive/live.ts` and this component's setters, the
- * press handing it `exhibits.career`, the unmount calling its stop.
+ * press handing it `exhibits.career`, the unmount calling its stop. And (8.2)
+ * the credits: an effect whose whole body is `startCredits(loadSolver,
+ * setLibrary, logged)`, run once, its stop the cleanup, through the same
+ * `loadSolver` the tracker is built with — still the file's one `import(` —
+ * and the mounted default, its solver chunk loaded through the harness's Vite
+ * server as on open, draws the credits once the exhibits have arrived.
  */
 
 import { strict as assert } from 'node:assert';
@@ -83,10 +103,14 @@ import { React, elementsOf, parseMarkup, queryAll, renderer, textOf, type Markup
 import type { ColophonLinks, ColophonPage as ColophonPageComponent, default as ColophonComponent } from './colophon.tsx';
 import { EXHIBIT_PATHS, type Exhibits } from './exhibits.ts';
 import { ABSENCES, ABSENCES_HEADING } from './absences.ts';
+import { APPEARANCE, creditLine, type CreditEntry } from './credits.ts';
 import { LIVE_SOLVE } from './live-solve.ts';
 import { CONTACT } from '../shell/contact.ts';
 import type { Surface } from '../shell/detect.ts';
 import { colophonLinks } from '../shell/route-link.ts';
+
+// The library is read here as the shipped page reads it, through a dynamic import: a Colophon module reaches src/derive/ no other way (the boundary gate holds tests to it too).
+const { MAP_LIBRARY } = await import('../derive/map-library.ts');
 
 const CAREER = readFileSync(new URL('../data/career.json', import.meta.url), 'utf8');
 const LAYOUT = readFileSync(new URL('../../generated/layout.generated.json', import.meta.url), 'utf8');
@@ -96,6 +120,14 @@ const EXHIBITS: Exhibits = { career: CAREER, layout: LAYOUT };
 let started: Renderer | undefined;
 after(() => started?.close());
 const harness = (started = await renderer());
+
+// 8.2: the mounted default now requests the solver's chunk on open, so the first
+// mount would load it — and d3-timer, which binds `requestAnimationFrame` from the
+// `window` it first loads under — inside that mount's happy-dom window. A later
+// mount's solve would then schedule on a closed window, and the process would
+// never exit. Loaded here first, outside any mount (it reaches no react-dom), it
+// binds Node's timers, as the pressing test's own first load did before.
+await harness.load('/src/derive/live.ts');
 
 const { ColophonPage, default: Colophon } = await harness.load<{ ColophonPage: typeof ColophonPageComponent; default: typeof ColophonComponent }>('/src/colophon/colophon.tsx');
 
@@ -113,8 +145,11 @@ const onSolve = (): void => undefined;
 /** The links the shell hands the page on each machine, bound to a router that accepts every push, typed as the page declares them. */
 const LINKS: Readonly<Record<Surface, ColophonLinks>> = { scene: colophonLinks('scene', () => true), fallback: colophonLinks('fallback', () => true) };
 
-async function renderPage(exhibits: Exhibits | null, live: Live = IDLE, machine: Surface = 'scene'): Promise<string> {
-  return harness.render(React.createElement(ColophonPage, { links: LINKS[machine], exhibits, ...live, onSolve }), { name: 'ColophonPage' });
+/** The map library as the page receives it once loaded: by default the real one, as the solver chunk re-exports it. */
+type Library = readonly CreditEntry[] | null;
+
+async function renderPage(exhibits: Exhibits | null, live: Live = IDLE, machine: Surface = 'scene', library: Library = MAP_LIBRARY): Promise<string> {
+  return harness.render(React.createElement(ColophonPage, { links: LINKS[machine], exhibits, library, ...live, onSolve }), { name: 'ColophonPage' });
 }
 
 /** The artifact's first Project, as the test reads it from the parsed text. */
@@ -287,6 +322,42 @@ function liveSolve(heading: MarkupElement, framing: MarkupElement, button: Marku
 }
 
 /**
+ * What a Planet looks like (8.2): `<h2 class="colophon-heading">` reading
+ * `APPEARANCE.heading`; `<p class="colophon-prose">` reading the statement,
+ * then one reading the lead-in, neither holding markup; then
+ * `<ul class="colophon-credits">` holding one bare `<li>` per entry of
+ * `library`, in order, each reading `creditLine(entry)` (`<id>.webp: <credit>,
+ * <licence>.`) then ` source`, its one element an `<a>` whose only
+ * attribute is `href`, the entry's `sourceUrl`, reading `APPEARANCE.source`.
+ * The expected text is `creditLine(entry)` and ` source`; the `href` is read off the entry.
+ */
+function appearance(heading: MarkupElement, statement: MarkupElement, lead: MarkupElement, list: MarkupElement, library: readonly CreditEntry[]): string[] {
+  const failures: string[] = [];
+  if (heading.tag !== 'h2' || JSON.stringify(heading.attrs) !== JSON.stringify({ class: 'colophon-heading' })) failures.push(`the appearance heading is ${heading.tag} ${JSON.stringify(heading.attrs)}`);
+  if (textOf(heading) !== APPEARANCE.heading) failures.push(`the appearance <h2> reads ${JSON.stringify(textOf(heading))}`);
+  for (const [name, paragraph, text] of [['statement', statement, APPEARANCE.statement], ['lead-in', lead, APPEARANCE.lead]] as const) {
+    if (JSON.stringify(paragraph.attrs) !== JSON.stringify({ class: 'colophon-prose' })) failures.push(`the ${name} carries ${JSON.stringify(paragraph.attrs)}`);
+    if (elementsOf(paragraph).length !== 0) failures.push(`the ${name} holds markup`);
+    if (textOf(paragraph) !== text) failures.push(`the ${name} reads ${JSON.stringify(textOf(paragraph))}`);
+  }
+  if (list.tag !== 'ul' || JSON.stringify(list.attrs) !== JSON.stringify({ class: 'colophon-credits' })) failures.push(`the credits are ${list.tag} ${JSON.stringify(list.attrs)}, not the ul.colophon-credits`);
+  const items = elementsOf(list);
+  if (items.length !== library.length) return [...failures, `the credits hold ${items.length} entries, not the library's ${library.length}`];
+  items.forEach((item, index) => {
+    const entry = library[index] as CreditEntry;
+    const links = elementsOf(item);
+    const [link] = links;
+    if (item.tag !== 'li' || Object.keys(item.attrs).length !== 0) failures.push(`credit ${index} is ${item.tag} ${JSON.stringify(item.attrs)}, not a bare <li>`);
+    if (links.length !== 1 || link?.tag !== 'a' || JSON.stringify(link.attrs) !== JSON.stringify({ href: entry.sourceUrl }) || elementsOf(link).length !== 0 || textOf(link) !== APPEARANCE.source) {
+      failures.push(`credit ${index} (${entry.id}) does not link ${JSON.stringify(APPEARANCE.source)} to its sourceUrl, alone`);
+    }
+    const text = `${creditLine(entry)} ${APPEARANCE.source}`;
+    if (textOf(item) !== text) failures.push(`credit ${index} reads ${JSON.stringify(textOf(item))}, not ${JSON.stringify(text)}`);
+  });
+  return failures;
+}
+
+/**
  * The contact route (6.3), as the Colophon draws it under its `<h1>`: one
  * `p.contact-route` holding the address as an `a.contact-address` to
  * `mailto:` and the address, then the `button.contact-copy` (`type="button"`)
@@ -358,16 +429,18 @@ function pageOf(root: MarkupElement): MarkupElement | string {
  * whether or not the files have arrived, then, when `expected` is given,
  * the career exhibit, the derivation table worked on its layout's first
  * Project, the layout exhibit, what is not there — the `<h2>` and five `<p>` —
- * and the live re-solve (5.5) — the `<h2>`, the `<p>`, the `<button>`, and the
- * result `<pre>` when one is solved — and nothing else.
+ * what a Planet looks like (8.2) when `library` has arrived — the `<h2>`, two
+ * `<p>` and the `<ul>` — and the live re-solve (5.5) — the `<h2>`, the `<p>`,
+ * the `<button>`, and the result `<pre>` when one is solved — and nothing else.
  */
-function colophonPage(html: string, expected: Exhibits | null, live: Live = IDLE, machine: Surface = 'scene'): string[] {
+function colophonPage(html: string, expected: Exhibits | null, live: Live = IDLE, machine: Surface = 'scene', library: Library = MAP_LIBRARY): string[] {
   const page = pageOf(parseMarkup(html));
   if (typeof page === 'string') return [page];
   const children = elementsOf(page);
   const failures: string[] = [];
   const tags = children.map((child) => child.tag);
-  const want = expected === null ? ['div'] : ['div', 'pre', 'table', 'pre', 'h2', ...PARAGRAPHS.map(() => 'p'), 'h2', 'p', 'button', ...(live.solved === null ? [] : ['pre'])];
+  const credits = library === null ? [] : ['h2', 'p', 'p', 'ul'];
+  const want = expected === null ? ['div'] : ['div', 'pre', 'table', 'pre', 'h2', ...PARAGRAPHS.map(() => 'p'), ...credits, 'h2', 'p', 'button', ...(live.solved === null ? [] : ['pre'])];
   if (JSON.stringify(tags) !== JSON.stringify(want)) return [`the page renders ${JSON.stringify(tags)}, not ${JSON.stringify(want)}`];
   const [chrome, career, table, layout, absencesHeading, ...rest] = children as [MarkupElement, MarkupElement, MarkupElement, MarkupElement, MarkupElement, ...MarkupElement[]];
   failures.push(...chromeRow(chrome, machine));
@@ -376,7 +449,11 @@ function colophonPage(html: string, expected: Exhibits | null, live: Live = IDLE
     failures.push(...derivationTable(table, expected.layout));
     failures.push(...exhibit(layout, LAYOUT_NAME, expected.layout));
     failures.push(...absences(absencesHeading, rest.slice(0, PARAGRAPHS.length)));
-    const [liveHeading, framing, button, result] = rest.slice(PARAGRAPHS.length) as [MarkupElement, MarkupElement, MarkupElement, MarkupElement | undefined];
+    if (library !== null) {
+      const [heading, statement, lead, list] = rest.slice(PARAGRAPHS.length, PARAGRAPHS.length + credits.length) as [MarkupElement, MarkupElement, MarkupElement, MarkupElement];
+      failures.push(...appearance(heading, statement, lead, list, library));
+    }
+    const [liveHeading, framing, button, result] = rest.slice(PARAGRAPHS.length + credits.length) as [MarkupElement, MarkupElement, MarkupElement, MarkupElement | undefined];
     failures.push(...liveSolve(liveHeading, framing, button, result, live));
   }
   return failures;
@@ -483,7 +560,7 @@ test('the page check is red against broken markup', async () => {
   const headingMarkup = /^<h2 [^>]*>[^<]*<\/h2>/.exec(prose)?.[0] ?? '';
   const paragraphMarkup = [...prose.matchAll(/<p class="colophon-prose">[^<]*<\/p>/g)].map((match) => match[0]);
   const [firstParagraph, secondParagraph] = paragraphMarkup as [string, string];
-  assert.ok(absencesStart > secondPre && headingMarkup !== '' && paragraphMarkup.length === PARAGRAPHS.length + 1, 'the heading and five paragraphs follow the layout <pre>, then the framing');
+  assert.ok(absencesStart > secondPre && headingMarkup !== '' && paragraphMarkup.length === PARAGRAPHS.length + 3, 'the heading and five paragraphs follow the layout <pre>, then the appearance statement and lead-in, then the framing');
   for (const [name, markup] of [
     ['the table missing', full.replace(table, '')],
     ['the table after the layout', full.replace(table, '').replace(layoutPre, () => `${layoutPre}${table}`)],
@@ -679,6 +756,93 @@ test('the live re-solve check is red against broken markup', async () => {
   }
 });
 
+// --- What a Planet looks like (8.2) ----------------------------------------------------------------
+
+test('what a Planet looks like: after the absences and before the live re-solve, one entry per library map, each linked to its source', async () => {
+  const html = await renderPage(EXHIBITS);
+  assert.deepEqual(colophonPage(html, EXHIBITS), []);
+  const root = parseMarkup(html);
+  assert.deepEqual([...queryAll(root, 'h1'), ...queryAll(root, 'h2')].map((heading) => `${heading.tag} ${textOf(heading)}`), ['h1 THOMAS NAVARRO · the chart', `h2 ${ABSENCES_HEADING}`, `h2 ${APPEARANCE.heading}`, `h2 ${LIVE_SOLVE.heading}`], 'the headings in order: h1, h2, h2, h2');
+  assert.equal(queryAll(root, 'table.colophon-derivations tbody tr').length, 3, 'the derivation table stays three rows');
+  const links = queryAll(root, 'ul.colophon-credits a');
+  assert.deepEqual(links.map((link) => link.attrs['href']), MAP_LIBRARY.map((entry) => entry.sourceUrl), 'each href is its entry’s sourceUrl, in library order');
+  assert.ok(MAP_LIBRARY.some((entry) => entry.id === 'jupiter') && textOf(queryAll(root, 'ul.colophon-credits')[0] as MarkupElement).includes('jupiter.webp: '), 'the unworn map is listed like the others');
+});
+
+test('what a Planet looks like is drawn only once both the exhibits and the library have arrived', async () => {
+  // The library first: nothing of the page past the chrome row until the files arrive.
+  assert.deepEqual(colophonPage(await renderPage(null, IDLE, 'scene', MAP_LIBRARY), null), []);
+  // The files first: the page as before, with no section.
+  const without = await renderPage(EXHIBITS, IDLE, 'scene', null);
+  assert.deepEqual(colophonPage(without, EXHIBITS, IDLE, 'scene', null), []);
+  assert.ok(!without.includes(APPEARANCE.heading) && !without.includes('colophon-credits'), 'no heading and no list without the library');
+  assert.notDeepEqual(colophonPage(without, EXHIBITS), [], 'the section missing once the library has arrived is caught');
+  // Both: the section, on either machine.
+  assert.deepEqual(colophonPage(await renderPage(EXHIBITS, IDLE, 'fallback'), EXHIBITS, IDLE, 'fallback'), []);
+});
+
+test('a re-solve leaves the credit list as it was', async () => {
+  const listOf = (html: string): string => /<ul class="colophon-credits">[\s\S]*?<\/ul>/.exec(html)?.[0] ?? '';
+  const idle = listOf(await renderPage(EXHIBITS));
+  assert.notEqual(idle, '', 'the list is drawn');
+  for (const live of [{ solved: null, running: true }, { solved: SOLVED, running: false }, { solved: SOLVED, running: true }]) {
+    const html = await renderPage(EXHIBITS, live);
+    assert.deepEqual(colophonPage(html, EXHIBITS, live), []);
+    assert.equal(listOf(html), idle, `${live.running ? 'running' : 'solved'}: the same list, byte for byte`);
+  }
+});
+
+test('the list follows the library: another library is drawn with no code edit', async () => {
+  const other: readonly CreditEntry[] = [...MAP_LIBRARY].reverse().slice(1).map((entry) => ({ ...entry, credit: `${entry.credit} (re-read)` }));
+  assert.deepEqual(colophonPage(await renderPage(EXHIBITS, IDLE, 'scene', other), EXHIBITS, IDLE, 'scene', other), []);
+  assert.notDeepEqual(colophonPage(await renderPage(EXHIBITS, IDLE, 'scene', other), EXHIBITS), [], 'and is not the shipped library’s');
+});
+
+test('the appearance check is red against broken markup', async () => {
+  const full = await renderPage(EXHIBITS);
+  const bare = await renderPage(EXHIBITS, IDLE, 'scene', null);
+  const solved = await renderPage(EXHIBITS, { solved: SOLVED, running: false });
+  const list = /<ul class="colophon-credits">[\s\S]*?<\/ul>/.exec(full)?.[0] ?? '';
+  const items = [...list.matchAll(/<li>[\s\S]*?<\/li>/g)].map((match) => match[0]);
+  const [firstItem, secondItem] = items as [string, string];
+  const headingMarkup = `<h2 class="colophon-heading">${APPEARANCE.heading}</h2>`;
+  const start = full.indexOf(headingMarkup);
+  const section = full.slice(start, full.indexOf(list) + list.length);
+  const liveStart = full.lastIndexOf('<h2 ');
+  const absencesStart = full.indexOf('<h2 ');
+  const firstHref = MAP_LIBRARY[0]?.sourceUrl ?? '';
+  assert.ok(list !== '' && items.length === MAP_LIBRARY.length && start > absencesStart && start < liveStart && firstHref !== '', 'the section, its list and its entries were found between the absences and the live re-solve');
+  for (const [name, markup] of [
+    ['an entry dropped', full.replace(secondItem, '')],
+    ['entries reordered', full.replace(`${firstItem}${secondItem}`, `${secondItem}${firstItem}`)],
+    ['an entry doubled', full.replace(firstItem, `${firstItem}${firstItem}`)],
+    ['a hardcoded href', full.replace(`href="${firstHref}"`, 'href="https://www.nasa.gov/"')],
+    ['the link relabelled', full.replace(firstItem, firstItem.replace(`>${APPEARANCE.source}</a>`, '>NASA</a>'))],
+    ['the link unlinked', full.replace(firstItem, firstItem.replace(/<a [^>]*>([^<]*)<\/a>/, '$1'))],
+    ['a second link in an entry', full.replace(firstItem, firstItem.replace('</li>', ` <a href="${firstHref}">${APPEARANCE.source}</a></li>`))],
+    ['the link opening a new tab', full.replace(`href="${firstHref}"`, `href="${firstHref}" target="_blank"`)],
+    ['the credit altered', full.replace(firstItem, firstItem.replace('.webp: ', '.png: '))],
+    ['the licence’s . doubled', full.replace(firstItem, firstItem.replace(/\.((?:<!-- -->)?\s*<a )/, '..$1'))],
+    ['the statement altered', full.replace('so its colour and texture encode nothing', 'so its colour encodes nothing')],
+    ['the lead-in altered', full.replace(APPEARANCE.lead, 'Maps used:')],
+    ['the heading made an <h3>', full.replace(headingMarkup, `<h3 class="colophon-heading">${APPEARANCE.heading}</h3>`)],
+    ['the heading renamed', full.replace(headingMarkup, '<h2 class="colophon-heading">credits</h2>')],
+    ['the list unclassed', full.replace('<ul class="colophon-credits">', '<ul>')],
+    ['the list an <ol>', full.replace(list, list.replace('<ul class="colophon-credits">', '<ol class="colophon-credits">').replace(/<\/ul>$/, '</ol>'))],
+    ['the section after the live re-solve', full.replace(section, '').replace(/<\/div>$/, `${section}</div>`)],
+    ['the section before the absences', full.slice(0, absencesStart) + section + full.slice(absencesStart).replace(section, '')],
+    ['the section dropped', full.replace(section, '')],
+    ['a disclaimer beside it', full.replace(list, `${list}<p class="colophon-prose">Textures are illustrative only.</p>`)],
+  ] as const) {
+    assert.notEqual(markup, full, `the break "${name}" must apply`);
+    assert.notDeepEqual(colophonPage(markup, EXHIBITS), [], `"${name}" must be rejected`);
+  }
+  // The section drawn where no library has arrived.
+  assert.notDeepEqual(colophonPage(full, EXHIBITS, IDLE, 'scene', null), [], 'the section drawn with no library');
+  assert.notDeepEqual(colophonPage(bare.replace(`<h2 class="colophon-heading">${LIVE_SOLVE.heading}`, `${section}<h2 class="colophon-heading">${LIVE_SOLVE.heading}`), EXHIBITS, IDLE, 'scene', null), [], 'the section written into a page with no library');
+  assert.notDeepEqual(colophonPage(solved, EXHIBITS, { solved: SOLVED, running: false }, 'scene', null), [], 'and beside a solved layout');
+});
+
 // --- The default's effect, audited -----------------------------------------------------------
 
 const COLOPHON_TSX = new URL('./colophon.tsx', import.meta.url);
@@ -696,10 +860,10 @@ function auditEffect(source: string): string[] {
   if (!/useEffect\(\s*\(\)\s*=>\s*startExhibits\(\s*fetch\s*,\s*setExhibits\s*,\s*\(\s*(\w+)\s*\)\s*=>\s*console\.error\([^)]*\b\1\s*\)\s*\)\s*,\s*\[\s*\]\s*\)/.test(code)) {
     failures.push('the effect is not startExhibits(fetch, setExhibits, logged), its stop the cleanup, run once');
   }
-  if ((code.match(/\buseEffect\(/g) ?? []).length !== 2) failures.push('an effect other than the two: the exhibits’, and the unmount’s stop of the live re-solve');
+  if ((code.match(/\buseEffect\(/g) ?? []).length !== 3) failures.push('an effect other than the three: the exhibits’, the credits’, and the unmount’s stop of the live re-solve');
   // The state the effect's `show` writes is the state the page is drawn from.
   if (!/const\s*\[\s*exhibits\s*,\s*setExhibits\s*\]\s*=\s*useState<Exhibits\s*\|\s*null>\(\s*null\s*\)\s*;/.test(code)) failures.push('the files are not held as useState<Exhibits | null>(null)');
-  if (!/return\s*<ColophonPage\s+links=\{\s*links\s*\}\s+exhibits=\{\s*exhibits\s*\}\s+solved=\{\s*solved\s*\}\s+running=\{\s*running\s*\}\s+onSolve=\{\s*onSolve\s*\}\s*\/>\s*;/.test(code)) failures.push('the page is not drawn from the shell’s links, the held files and the held re-solve');
+  if (!/return\s*<ColophonPage\s+links=\{\s*links\s*\}\s+exhibits=\{\s*exhibits\s*\}\s+library=\{\s*library\s*\}\s+solved=\{\s*solved\s*\}\s+running=\{\s*running\s*\}\s+onSolve=\{\s*onSolve\s*\}\s*\/>\s*;/.test(code)) failures.push('the page is not drawn from the shell’s links, the held files, the held library and the held re-solve');
   // Epic 5 item 38: the links are the shell's, handed down, never built here.
   if (!/export\s+default\s+function\s+Colophon\(\s*\{\s*links\s*\}\s*:\s*\{\s*readonly\s+links\s*:\s*ColophonLinks\s*\}\s*\)/.test(code)) failures.push('the default does not take the shell’s links as its one prop');
   if (/\brouter\b|\bnavigate\b|\bhistory\b|ROUTE_PATHS|routeHref|\bhref=["'`]/.test(code)) failures.push('a route built here — the links are the shell’s');
@@ -751,12 +915,14 @@ function auditLiveSolve(source: string): string[] {
   const failures: string[] = [];
   if (!/const\s*\[\s*solved\s*,\s*setSolved\s*\]\s*=\s*useState<string\s*\|\s*null>\(\s*null\s*\)\s*;/.test(code)) failures.push('the solved text is not held as useState<string | null>(null)');
   if (!/const\s*\[\s*running\s*,\s*setRunning\s*\]\s*=\s*useState\(\s*false\s*\)\s*;/.test(code)) failures.push('the in-flight flag is not held as useState(false)');
-  if (!/const \[live\] = useState\(\(\) => createLiveSolve\(\(\) => import\('\.\.\/derive\/live\.ts'\), \{ setSolved, setRunning, log: \((\w+)\) => console\.error\([^)]*\b\1\) \}\)\);/.test(code)) {
-    failures.push("the tracker is not built once as createLiveSolve(() => import('../derive/live.ts'), { setSolved, setRunning, log })");
+  if (!/^const loadSolver = \(\) => import\('\.\.\/derive\/live\.ts'\);$/m.test(code)) failures.push("the solver's chunk is not loaded by one module-level loadSolver = () => import('../derive/live.ts')");
+  if (!/const \[live\] = useState\(\(\) => createLiveSolve\(loadSolver, \{ setSolved, setRunning, log: \((\w+)\) => console\.error\([^)]*\b\1\) \}\)\);/.test(code)) {
+    failures.push('the tracker is not built once as createLiveSolve(loadSolver, { setSolved, setRunning, log })');
   }
   if (!/useEffect\(\(\) => \(\) => live\.stop\(\), \[live\]\);/.test(code)) failures.push('the unmount does not call the tracker’s stop');
   if (!/const onSolve = \(\) => \{\s*if \(exhibits !== null\) live\.press\(exhibits\.career\);\s*\};/.test(code)) failures.push('the press does not hand the tracker exhibits.career');
   if ((code.match(/\bimport\s*\(/g) ?? []).length !== 1) failures.push('a dynamic import other than the solver’s');
+  if ((code.match(/\bloadSolver\b/g) ?? []).length !== 3) failures.push('loadSolver used other than by the tracker and the credits');
   if ((code.match(/\bsetSolved\b/g) ?? []).length !== 2 || (code.match(/\bsetRunning\b/g) ?? []).length !== 2) failures.push('a setter used other than by the tracker');
   if (/\bstartLiveSolve\b/.test(code)) failures.push('a run started beside the tracker');
   if (!/^import \{ LIVE_SOLVE, createLiveSolve \} from '\.\/live-solve\.ts';$/m.test(code)) failures.push('createLiveSolve is not read from ./live-solve.ts');
@@ -776,7 +942,10 @@ test('the press audit rejects the real source with its wiring broken', () => {
     ['the result never shown', (s: string) => s.replace('{ setSolved, setRunning,', '{ setSolved: () => undefined, setRunning,')],
     ['the button never freed', (s: string) => s.replace('{ setSolved, setRunning,', '{ setSolved, setRunning: () => undefined,')],
     ['the layout re-solved instead of the career', (s: string) => s.replace('live.press(exhibits.career)', 'live.press(exhibits.layout)')],
-    ['the gate imported instead', (s: string) => s.replace("createLiveSolve(() => import('../derive/live.ts'),", "createLiveSolve(() => import('../derive/index.ts'),")],
+    ['the gate imported instead', (s: string) => s.replace("const loadSolver = () => import('../derive/live.ts');", "const loadSolver = () => import('../derive/index.ts');")],
+    ['a loader of the tracker’s own', (s: string) => s.replace('createLiveSolve(loadSolver, {', "createLiveSolve(() => import('../derive/live.ts'), {")],
+    ['a loader of the credits’ own', (s: string) => s.replace('startCredits(loadSolver, ', "startCredits(() => import('../derive/live.ts'), ")],
+    ['the loader built in the component', (s: string) => s.replace("const loadSolver = () => import('../derive/live.ts');\n", '').replace('  const [exhibits, setExhibits]', "  const loadSolver = () => import('../derive/live.ts');\n  const [exhibits, setExhibits]")],
     ['a second dynamic import', (s: string) => s.replace('    if (exhibits !== null) live.press(exhibits.career);\n', "    if (exhibits !== null) live.press(exhibits.career);\n    void import('../derive/index.ts');\n")],
     ['a run beside the tracker', (s: string) => s.replace('    if (exhibits !== null) live.press(exhibits.career);\n', "    if (exhibits !== null) live.press(exhibits.career);\n    setRunning(true);\n")],
     ['the result held elsewhere', (s: string) => s.replace('const [solved, setSolved] = useState<string | null>(null);', 'const solved = useLiveSolveStore((state) => state.solved);\n  const setSolved = useLiveSolveStore.getState().set;')],
@@ -785,6 +954,47 @@ test('the press audit rejects the real source with its wiring broken', () => {
     assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
     assert.notDeepEqual(auditLiveSolve(mutated), [], `"${name}" must be rejected`);
   }
+});
+
+/**
+ * The credits (8.2), as source — a thin binding of `startCredits`, executed in
+ * `credits.test.ts`: the library held as `useState<readonly CreditEntry[] |
+ * null>(null)`; one effect, run once, whose whole body is
+ * `startCredits(loadSolver, setLibrary, logged)`, its stop the cleanup and its
+ * failure `console.error`'d; the setter used there alone; and the page handed
+ * that state. `loadSolver` is the press audit's.
+ */
+function auditCredits(source: string): string[] {
+  const code = stripComments(source);
+  const failures: string[] = [];
+  if (!/const\s*\[\s*library\s*,\s*setLibrary\s*\]\s*=\s*useState<readonly CreditEntry\[\]\s*\|\s*null>\(\s*null\s*\)\s*;/.test(code)) failures.push('the library is not held as useState<readonly CreditEntry[] | null>(null)');
+  if (!/useEffect\(\(\) => startCredits\(loadSolver, setLibrary, \((\w+)\) => console\.error\([^)]*\b\1\)\), \[\]\);/.test(code)) failures.push('the credits’ effect is not startCredits(loadSolver, setLibrary, logged), its stop the cleanup, run once');
+  if ((code.match(/\bsetLibrary\b/g) ?? []).length !== 2) failures.push('the setter is used other than as the credits’ show');
+  if ((code.match(/\bstartCredits\(/g) ?? []).length !== 1) failures.push('the credits are loaded other than once');
+  if (!/^import \{ APPEARANCE, creditLine, startCredits, type CreditEntry \} from '\.\/credits\.ts';$/m.test(code)) failures.push('the credits are not read from ./credits.ts');
+  return failures;
+}
+
+test('the default Colophon’s credits are startCredits on open, through the shared loader, its stop the cleanup', () => {
+  assert.deepEqual(auditCredits(readFileSync(COLOPHON_TSX, 'utf8')), []);
+});
+
+test('the credits audit rejects the real source with its wiring broken', () => {
+  const real = readFileSync(COLOPHON_TSX, 'utf8').replace(/\r\n/g, '\n');
+  for (const [name, mutate] of [
+    ['the stop not returned', (s: string) => s.replace('useEffect(() => startCredits(', 'useEffect(() => { startCredits(').replace("credits.', error)), []);", "credits.', error)); }, []);")],
+    ['run on every render', (s: string) => s.replace("credits.', error)), []);", "credits.', error)));")],
+    ['the failure swallowed', (s: string) => s.replace(/startCredits\(loadSolver, setLibrary, \(error\) => console\.error\([^)]*\)\)/, 'startCredits(loadSolver, setLibrary, () => undefined)')],
+    ['the library never shown', (s: string) => s.replace('startCredits(loadSolver, setLibrary,', 'startCredits(loadSolver, () => undefined,')],
+    ['the library shown into another state', (s: string) => s.replace('const [library, setLibrary] = useState<readonly CreditEntry[] | null>(null);', 'const [library] = useState<readonly CreditEntry[] | null>(null);\n  const [, setLibrary] = useState<readonly CreditEntry[] | null>(null);')],
+    ['loaded on the press instead', (s: string) => s.replace('    if (exhibits !== null) live.press(exhibits.career);\n', '    if (exhibits !== null) live.press(exhibits.career);\n    startCredits(loadSolver, setLibrary, () => undefined);\n')],
+  ] as const) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
+    assert.notDeepEqual(auditCredits(mutated), [], `"${name}" must be rejected`);
+  }
+  // The page drawn without the library is the effect audit's.
+  assert.notDeepEqual(auditEffect(real.replace(' library={library} ', ' library={null} ')), [], 'the page drawn without the library');
 });
 
 // --- The default, executed (Epic 5 retro item 42) ---------------------------------------------
@@ -863,6 +1073,12 @@ test('executed: the default Colophon fetches both files once, and draws them, ca
       assert.deepEqual(exhibitsIn(mounted.container), [['career.json', CAREER], ['layout.generated.json', LAYOUT]]);
       assert.deepEqual(requests.map((request) => request.path), [EXHIBIT_PATHS.career, EXHIBIT_PATHS.layout], 'each file fetched once');
       assert.equal(mounted.container.querySelector('table.colophon-derivations') === null, false, 'the derivations drawn between them');
+      // 8.2: the solver chunk, requested on open through the component's own dynamic import, brings the library.
+      await mounted.waitFor(() => mounted.container.querySelectorAll('ul.colophon-credits li').length > 0, 'the credits drawn', 60_000);
+      const credits = [...mounted.container.querySelectorAll('ul.colophon-credits li')];
+      assert.deepEqual(credits.map((item) => item.textContent), MAP_LIBRARY.map((entry) => `${creditLine(entry)} ${APPEARANCE.source}`), 'one entry per library map, in library order');
+      assert.deepEqual(credits.map((item) => item.querySelector('a')?.getAttribute('href')), MAP_LIBRARY.map((entry) => entry.sourceUrl), 'each linked to its source');
+      assert.deepEqual([...mounted.container.querySelectorAll('h2')].map((heading) => heading.textContent), [ABSENCES_HEADING, APPEARANCE.heading, LIVE_SOLVE.heading], 'the section between the absences and the live re-solve');
     } finally {
       await mounted.unmount();
     }

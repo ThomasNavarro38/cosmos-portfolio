@@ -29,6 +29,13 @@
  * the shots are `buildShots` of career's entity graph and appear nowhere in
  * `career.json`. The copy no longer states a count of rules, and none is
  * admitted.
+ *
+ * Re-ruled 2026-11-16 (8.2, Q2 (a)): the thesis adds "and from the map list
+ * below" — held in `src/derive/colophon-claims.test.ts`, every Planet's map in
+ * the committed layout being a library entry's — and the data paragraph reads
+ * "all the career data there is". Both still count two files above, and the
+ * map list is no third file: no `*.json` is named for it, and the names claim
+ * still finds exactly `EXHIBIT_PATHS`' two.
  */
 
 import { strict as assert } from 'node:assert';
@@ -202,6 +209,15 @@ test('"The two files above" is the number of exhibited files', () => {
 test('the thesis’s "Of the two files above" is the number of exhibited files', () => {
   assert.ok(ABSENCES.thesis.startsWith('Of the two files above, '), 'the thesis is scoped to the files on the page');
   assert.deepEqual(filesClaim([ABSENCES.thesis], PATHS.length), []);
+});
+
+test('the re-ruled thesis and data paragraph (8.2, Q2 (a)): the map list below, and all the career data there is', () => {
+  assert.ok(ABSENCES.thesis.endsWith(' is solved from it and from the map list below, shots included.'), 'the thesis names the map list below');
+  assert.ok(ABSENCES.data.includes('The two files above are all the career data there is: '), 'the data paragraph is scoped to the career data');
+  assert.ok(!ABSENCES.data.includes('all the data there is'), 'and no longer claims all the data there is');
+  // Still two files above, in both: the map list counts as none.
+  assert.deepEqual(filesClaim([ABSENCES.thesis, ABSENCES.data], PATHS.length), []);
+  assert.notDeepEqual(filesClaim([ABSENCES.thesis.replace('Of the two files above', 'Of the three files above')], PATHS.length), [], 'the map list counted as a third file is caught');
 });
 
 test('each exhibited file is fetched from this site: a root-relative, same-origin path', () => {

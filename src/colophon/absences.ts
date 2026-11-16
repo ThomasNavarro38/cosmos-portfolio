@@ -10,7 +10,11 @@
  * positions paragraph re-ruled 2026-10-29 (Epic 5 item 40, AV-3 (b), (c)): the
  * thesis is scoped to the two files on the page (of the two, only career.json
  * is authored; layout.generated.json, shots included, is the solver's), and
- * the positions are the solver's, not "the three rules'". Each claim is
+ * the positions are the solver's, not "the three rules'". The thesis and the
+ * data paragraph were re-ruled again 2026-11-16 (8.2, Q2 (a)), once the layout
+ * came to carry each Planet's assigned map: the layout is solved from
+ * career.json "and from the map list below" (the Colophon's credits), and the
+ * two files are "all the career data there is". Each claim is
  * checkable against the two files drawn above it, and a test holds each one
  * against the shipped files, a claim the files falsify turning it red:
  * - `absences.test.ts`: the file names and "the two files above" (both
@@ -20,7 +24,9 @@
  *   "solved from it, shots included" and "every position … computed by the
  *   solver" — the committed layout is `solveLive(career.json)` byte for byte,
  *   its shots `buildShots` of career's entity graph, and career.json holds no
- *   `shots` key and no shot record.
+ *   `shots` key and no shot record — and "and from the map list below": every
+ *   `appearance.map` in the committed layout is a library id, and its
+ *   `meanLuminance` is that entry's.
  * The file names are written literally (they sit mid-sentence, and the closed
  * copy allowlist matches verbatim); the test pins them to `EXHIBIT_PATHS`.
  *
@@ -32,4 +38,4 @@
 export const ABSENCES_HEADING = 'what is not there';
 
 /** The five paragraphs, in order. */
-export const ABSENCES = { thesis: 'Of the two files above, only career.json is authored: layout.generated.json is solved from it, shots included.', data: 'There is no backend and no CMS. The two files above are all the data there is: career.json is written by hand, and layout.generated.json is produced from it and never edited. This page fetched both from this site as static files.', positions: 'There are no position overrides. career.json holds no coordinate, and no entry can pin its own place: every position in layout.generated.json is computed by the solver from career.json, never written by hand.', shots: 'Shots name entities, never coordinates. Each shot gives a subject, an angle and a distance, so when a solve moves a Client, its shot moves with it.', camera: 'There is no per-entry camera work. Every shot’s subject is a Client; a Project is framed at its Client’s stop, never on its own.' } as const;
+export const ABSENCES = { thesis: 'Of the two files above, only career.json is authored: layout.generated.json is solved from it and from the map list below, shots included.', data: 'There is no backend and no CMS. The two files above are all the career data there is: career.json is written by hand, and layout.generated.json is produced from it and never edited. This page fetched both from this site as static files.', positions: 'There are no position overrides. career.json holds no coordinate, and no entry can pin its own place: every position in layout.generated.json is computed by the solver from career.json, never written by hand.', shots: 'Shots name entities, never coordinates. Each shot gives a subject, an angle and a distance, so when a solve moves a Client, its shot moves with it.', camera: 'There is no per-entry camera work. Every shot’s subject is a Client; a Project is framed at its Client’s stop, never on its own.' } as const;

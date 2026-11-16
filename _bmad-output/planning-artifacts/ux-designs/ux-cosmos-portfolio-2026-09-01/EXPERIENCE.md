@@ -223,7 +223,12 @@ Copy exists in exactly five places. There is no sixth.
 1. Notables and field values — the record.
 2. The Shallow Project rule line.
 3. Two lines of corner chrome per frame, `{typography.chrome}`.
-4. The Colophon's annotations on the mapping rules, its statement of what is not there, the framing of its live re-solve (§4.7), and at M3 its one statement that a Planet's appearance is assigned, with the map credits (AD-21; exact wording ruled when that story is built).
+4. The Colophon's annotations on the mapping rules, its statement of what is not there, the framing of its live re-solve (§4.7), and at M3 its one statement that a Planet's appearance is assigned, with the map credits (AD-21). The M3 wording, ruled by Thomas on 2026-11-16 (story 8.2, architecture memlog entry 97), verbatim:
+   - Heading: `what a Planet looks like`
+   - Statement: `A Planet's surface is not data. Each Planet is assigned one of the maps below from its ID alone, by a fixed rule in the solver, so its colour and texture encode nothing: recency is the outline's brightness, the subject is the white stroke, and Deep or Shallow is the Ring and the Moon.`
+   - Lead-in: `Every map this site serves, worn or not:`
+   - One entry per library map, in library order: `<id>.webp: <credit>, <licence>.` (each licence already ends in `.`), then a link reading `source` to the entry's source page. Each entry's credit and licence are the map library's data, not copy.
+   - The statement of what is not there, re-ruled the same day: its thesis reads `Of the two files above, only career.json is authored: layout.generated.json is solved from it and from the map list below, shots included.`, and its data paragraph reads `The two files above are all the career data there is` where it read `all the data there is`.
 5. The contact route.
 
 Page metadata — the document's title, its description and the preview image's alt text — is never drawn on any surface; it is not a sixth place, and it is held to the same voice.

@@ -512,11 +512,12 @@ test('the shipped app builds under the assertion, measured within its budget', a
   const colophon = lazySurface(chunks, graph, 'src/colophon/colophon.tsx', 'src/shell/colophon-host.tsx');
   assert.deepEqual(
     Object.keys(colophon.modules).map(local).filter((id) => id.startsWith('src/')).sort(),
-    ['src/colophon/absences.ts', 'src/colophon/colophon.css', 'src/colophon/colophon.tsx', 'src/colophon/derivations.ts', 'src/colophon/exhibits.ts', 'src/colophon/json-setting.ts', 'src/colophon/live-solve.ts'],
-    'and holds the colophon alone (5.1: with its exhibits loader; 5.2: its derivation rows and stylesheet; 5.3: its JSON setting; 5.4: its statement of what is not there; 5.5: its live re-solve’s copy and run)',
+    ['src/colophon/absences.ts', 'src/colophon/colophon.css', 'src/colophon/colophon.tsx', 'src/colophon/credits.ts', 'src/colophon/derivations.ts', 'src/colophon/exhibits.ts', 'src/colophon/json-setting.ts', 'src/colophon/live-solve.ts'],
+    'and holds the colophon alone (5.1: with its exhibits loader; 5.2: its derivation rows and stylesheet; 5.3: its JSON setting; 5.4: its statement of what is not there; 5.5: its live re-solve’s copy and run; 8.2: its appearance copy and credit lines)',
   );
   // 5.5: the solver is its own lazy chunk — off the entry graph, reached only by
-  // the colophon chunk's dynamic import (requested on the press, never on load:
+  // the colophon chunk's dynamic import (requested when the Colophon opens, for
+  // the map credits it re-exports, 8.2 ruling Q4, and used again by the press:
   // no static import reaches it), and reaching neither the scene nor react-dom.
   const solver = lazySurface(chunks, graph, 'src/derive/live.ts', 'src/colophon/colophon.tsx');
   assert.notEqual(solver.fileName, colophon.fileName, 'the solver is not in the colophon chunk');
@@ -611,11 +612,15 @@ test('the shipped app builds under the assertion, measured within its budget', a
   // cannot feed a renderer, and the committed layout is the only one either reads.
   const sceneChunk = chunks.find((out) => Object.keys(out.modules).some((id) => local(id) === 'src/render-scene/scene.tsx'));
   assert.ok(sceneChunk !== undefined, 'the scene was emitted');
+  // 8.2: the map library is emitted in the solver chunk alone, so neither the entry graph, the scene's chunk nor the colophon chunk carries it.
+  const libraryHolders = chunks.filter((out) => Object.keys(out.modules).some((id) => local(id) === 'src/derive/map-library.ts')).map((out) => out.fileName);
+  assert.deepEqual(libraryHolders, [solver.fileName], 'the map library is emitted in the solver chunk alone');
   for (const renderer of [sceneChunk, chart]) {
     assert.deepEqual(rendererCarries(chunks, renderer.fileName), [], `${renderer.fileName} and what loads with it carry no solver, data, zod or d3-force-3d`);
     const sharedChunk = chunks.find((out) => renderer.imports.includes(out.fileName)) as Rolldown.OutputChunk;
     assert.ok(sharedChunk !== undefined, `${renderer.fileName} imports a chunk statically`);
-    for (const id of ['src/derive/live.ts', 'src/derive/pipeline.ts', 'src/data/schema.ts', ...SOLVER_PACKAGES.map((name) => `node_modules/${name}/src/index.js`)]) {
+    // 8.2: the map library too, which the Colophon's credits read through the solver chunk alone.
+    for (const id of ['src/derive/live.ts', 'src/derive/pipeline.ts', 'src/derive/map-library.ts', 'src/data/schema.ts', ...SOLVER_PACKAGES.map((name) => `node_modules/${name}/src/index.js`)]) {
       for (const target of [renderer, sharedChunk]) {
         const mutated: Edges[] = chunks.map((out): Edges => (out === target ? { ...out, modules: { ...out.modules, ...fake(id) } } : out));
         assert.ok(rendererCarries(mutated, renderer.fileName).includes(target.fileName), `${renderer.fileName}: ${id} in ${target === renderer ? 'its own chunk' : target.fileName} is caught`);

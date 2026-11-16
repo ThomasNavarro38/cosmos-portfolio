@@ -1614,3 +1614,21 @@ Still open after 3.5:
   evidence: spec 8.1 Design Notes, "Realism's frame path"; src/render-scene/realism-mount.tsx; src/render-scene/realism/fill-layer.ts.
   location: src/render-scene/realism-mount.tsx
   severity: low
+
+## Deferred from: code review of spec-8-2-the-colophon-credits-the-maps.md (2026-11-16)
+
+- source_spec: spec-8-2-the-colophon-credits-the-maps.md
+  summary: The 7.10 route record says /colophon/ requests no solver chunk on load; since ruling Q4 it requests the solver chunk (live-*.js) on open.
+  evidence: spikes/realism-failure/results/routes.txt records /colophon/'s requests from 7.10, and colophon.tsx now runs startCredits(loadSolver, ...) on mount. checkRoutes still passes, since the solver chunk holds no textures/ reference and no realism module. 8.5's live check should re-record /colophon/'s requests.
+  location: spikes/realism-failure/results/routes.txt
+  severity: low
+- source_spec: spec-8-2-the-colophon-credits-the-maps.md
+  summary: A failed solver-chunk import on open is cached by the browser, so a later "solve it again" press fails as well.
+  evidence: The credits and the press share loadSolver = () => import('../derive/live.ts'). A rejected dynamic import of the same specifier stays rejected for the document, so a transient failure on open now disables the live re-solve until reload. Each failure is one console.error, silent by design.
+  location: src/colophon/colophon.tsx
+  severity: medium
+- source_spec: spec-8-2-the-colophon-credits-the-maps.md
+  summary: colophon.test.ts loads /src/derive/live.ts at top level, before any mounted window, so d3-timer binds Node's timers; without it the file never exits.
+  evidence: The test process hung once the mounted default loaded the solver inside a happy-dom window. The cause (d3-timer binding the first window's timers) is a guess, not proven, and the workaround depends on load order.
+  location: src/colophon/colophon.test.ts
+  severity: low

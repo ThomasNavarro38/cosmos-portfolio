@@ -3,11 +3,15 @@
  * the `career.json` text the Colophon already holds.
  *
  * Reached by one dynamic import, `import('../derive/live.ts')` in
- * `src/colophon/colophon.tsx`, on the button press alone, so it is its own
+ * `src/colophon/colophon.tsx`, on open (story 8.2, ruling Q4), so it is its own
  * lazy chunk: never on the entry graph and never in either renderer's
  * (`scripts/bundle-assertion.test.ts`). Its output is drawn in the Colophon as
  * a third exhibit and read by nothing else: the committed
  * `layout.generated.json` stays the only layout any renderer reads.
+ *
+ * **The map library, re-exported** (8.2): the Colophon credits every map
+ * through this same chunk, which already carries `map-library.ts` for the
+ * assignment, so the credits add no module and no request of their own.
  *
  * **The same solver.** `solveLive` parses the text, holds it to `CareerSchema`,
  * takes its digest — sha256, lowercase hex, over the text with its line endings
@@ -30,6 +34,8 @@
 import { CareerSchema } from '../data/schema.ts';
 import { serializeArtifact } from './artifact.ts';
 import { normaliseLineEndings, solveArtifact } from './pipeline.ts';
+
+export { MAP_LIBRARY } from './map-library.ts';
 
 /**
  * sha256 of the normalised UTF-8 text, as lowercase hex — `sourceDigestOf`'s

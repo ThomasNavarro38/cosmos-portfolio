@@ -36,6 +36,15 @@
  * `ink-prose`, held to `measure-prose`, as the panel's `.panel-prose`. No
  * bold, no transform.
  *
+ * What a Planet looks like (8.2): its heading and its two paragraphs are the
+ * same two rules. The credit list (`.colophon-credits`) is the prose's role,
+ * ink and measure, unmarked (no bullet, no indent), each entry `space-sm`
+ * apart; each entry's `source` link takes the chrome links' treatment:
+ * `ink-label` with a 1px `ink-label` underline at rest, `ink-lift` and a
+ * `stroke-focus` underline raised, the `stroke-focus` outline 3px out on
+ * keyboard focus (a system one under forced colours). No new hue and no new
+ * colour token.
+ *
  * The live re-solve (5.5): its heading and framing are the same two rules.
  * Its button (`.colophon-solve`) is the panel's in-type text action,
  * `.panel-release` (`src/shell/focus-panel.css`), declaration for declaration
@@ -226,6 +235,40 @@
   color: var(--color-ink-prose-dark);
 }
 
+.colophon-credits {
+  margin: 0 0 var(--space-md);
+  padding: 0;
+  max-width: var(--space-measure-prose);
+  list-style: none;
+  font-family: var(--type-notable-prose-font-family);
+  font-size: var(--type-notable-prose-font-size);
+  font-weight: var(--type-notable-prose-font-weight);
+  line-height: var(--type-notable-prose-line-height);
+  letter-spacing: var(--type-notable-prose-letter-spacing);
+  color: var(--color-ink-prose-dark);
+}
+
+.colophon-credits li {
+  margin: 0 0 var(--space-sm);
+}
+
+.colophon-credits a {
+  color: var(--color-ink-label-dark);
+  text-decoration: none;
+  border-bottom: 1px solid var(--color-ink-label-dark);
+}
+
+.colophon-credits a:hover,
+.colophon-credits a:focus-visible {
+  color: var(--color-ink-lift-dark);
+  border-bottom-color: var(--color-stroke-focus-dark);
+}
+
+.colophon-credits a:focus-visible {
+  outline: 1px solid var(--color-stroke-focus-dark);
+  outline-offset: 3px;
+}
+
 .colophon-solve {
   margin: var(--space-xl) 0 0;
   padding: 0;
@@ -271,7 +314,7 @@
 
 /*
  * Forced colours flatten the ink steps: there, keyboard focus on an exhibit,
- * on the re-solve's button or on a route link keeps a system-coloured outline,
+ * on the re-solve's button, on a route link or on a credit's source link keeps a system-coloured outline,
  * as the chart's links do.
  */
 @media (forced-colors: active) {
@@ -285,6 +328,10 @@
 
   .colophon-chrome-heading a:focus-visible,
   .colophon-routes a:focus-visible {
+    outline: 1px solid CanvasText;
+  }
+
+  .colophon-credits a:focus-visible {
     outline: 1px solid CanvasText;
   }
 }

@@ -4,13 +4,19 @@
  * day), each held by the relation it asserts rather than by a count of words:
  *
  * - `ABSENCES.thesis`, "Of the two files above, only career.json is authored:
- *   layout.generated.json is solved from it, shots included." — the committed
+ *   layout.generated.json is solved from it and from the map list below, shots
+ *   included." (re-ruled 2026-11-16, story 8.2, Q2 (a)) — the committed
  *   `layout.generated.json` is `solveLive(career.json)` byte for byte, and that
  *   solve carries the shots; the committed shots are `buildShots` of the entity
  *   graph `career.json` derives to; and `career.json` holds no `shots` key at
  *   any depth and no object carrying two or more of a shot's fields
  *   (`subject`, `angle`, `distance`, `framing`: a shot record). "The two
- *   files above" is `absences.test.ts`'s (the `EXHIBIT_PATHS` count).
+ *   files above" is `absences.test.ts`'s (the `EXHIBIT_PATHS` count). "and
+ *   from the map list below": every Planet's `appearance.map` in the committed
+ *   layout is the id of a `MAP_LIBRARY` entry, and its `meanLuminance` is that
+ *   entry's — the library the Colophon lists below the absences
+ *   (`src/colophon/colophon.test.ts` holds that the list drawn is
+ *   `MAP_LIBRARY`, entry for entry). A layout with no appearance to read fails.
  * - `ABSENCES.positions`, "… every position in layout.generated.json is
  *   computed by the solver from career.json, never written by hand." — the same
  *   byte equality: every position in the committed file is the solve's.
@@ -36,13 +42,14 @@ import { test } from 'node:test';
 import { CareerSchema } from '../data/schema.ts';
 import { deriveEntities } from './entities.ts';
 import { solveLive } from './live.ts';
+import { MAP_LIBRARY, type MapEntry } from './map-library.ts';
 import { buildShots } from './shots.ts';
 
 const CAREER_TEXT = readFileSync(new URL('../data/career.json', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const COMMITTED = readFileSync(new URL('../../generated/layout.generated.json', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const ABSENCES_SOURCE = readFileSync(new URL('../colophon/absences.ts', import.meta.url), 'utf8');
 
-const THESIS = 'Of the two files above, only career.json is authored: layout.generated.json is solved from it, shots included.';
+const THESIS = 'Of the two files above, only career.json is authored: layout.generated.json is solved from it and from the map list below, shots included.';
 const POSITIONS = 'There are no position overrides. career.json holds no coordinate, and no entry can pin its own place: every position in layout.generated.json is computed by the solver from career.json, never written by hand.';
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
@@ -86,6 +93,38 @@ function shotsDerivedClaim(layout: Layout, derived: Json): string[] {
   ours.forEach((shot, index) => {
     if (JSON.stringify(shot) !== JSON.stringify(theirs[index])) failures.push(`shots[${index}] is ${JSON.stringify(shot)}, not the derived ${JSON.stringify(theirs[index] ?? null)}`);
   });
+  return failures;
+}
+
+/** A Planet's appearance as the committed layout writes it: the two fields the library supplies. */
+interface Appearance {
+  readonly map?: Json;
+  readonly meanLuminance?: Json;
+}
+type AppearanceLayout = { readonly clients?: readonly { readonly projects?: readonly { readonly id?: Json; readonly appearance?: Appearance }[] }[] };
+
+/**
+ * "and from the map list below": every Planet's `appearance.map` is a library
+ * entry's id and its `meanLuminance` that entry's; at least one Planet carries
+ * an appearance, so the check is never vacuous.
+ */
+function libraryClaim(layout: AppearanceLayout, library: readonly MapEntry[]): string[] {
+  const byId = new Map(library.map((entry) => [entry.id, entry]));
+  const projects = (layout.clients ?? []).flatMap((client) => client.projects ?? []);
+  const failures: string[] = [];
+  let read = 0;
+  for (const project of projects) {
+    const appearance = project.appearance;
+    if (appearance === undefined) {
+      failures.push(`${JSON.stringify(project.id ?? null)} carries no appearance`);
+      continue;
+    }
+    read += 1;
+    const entry = typeof appearance.map === 'string' ? byId.get(appearance.map) : undefined;
+    if (entry === undefined) failures.push(`${JSON.stringify(project.id ?? null)} wears ${JSON.stringify(appearance.map ?? null)}, which is not on the map list`);
+    else if (appearance.meanLuminance !== entry.meanLuminance) failures.push(`${JSON.stringify(project.id ?? null)} records meanLuminance ${JSON.stringify(appearance.meanLuminance ?? null)}, not ${entry.id}'s ${entry.meanLuminance}`);
+  }
+  if (read === 0) failures.push('the layout carries no appearance to hold to the map list');
   return failures;
 }
 
@@ -154,6 +193,10 @@ test('"layout.generated.json is solved from it" and "every position … computed
 test('"shots included": the solve of career.json carries the shots, and they are buildShots of its entity graph', async () => {
   assert.deepEqual(shotsIncludedClaim(await solveLive(CAREER_TEXT)), []);
   assert.deepEqual(shotsDerivedClaim(JSON.parse(COMMITTED) as Layout, derivedShots(CAREER_TEXT)), []);
+});
+
+test('"and from the map list below": every Planet’s map is a library id, and its mean luminance the library’s', () => {
+  assert.deepEqual(libraryClaim(JSON.parse(COMMITTED) as AppearanceLayout, MAP_LIBRARY), []);
 });
 
 test('"only career.json is authored": career.json holds no shots key and no shot record', () => {
@@ -232,9 +275,36 @@ test('a shot written into career.json’s text falsifies "only career.json is au
   assert.deepEqual(shotsAbsentClaim(JSON.parse(editedCareer('a distance alone', entry, `${entry}\n      "notable": { "distance": 3 },`)) as Json), []);
 });
 
+test('a map off the list, a luminance not the library’s, or nothing to read falsifies "and from the map list below"', () => {
+  const committed = (): { clients: { projects: { id: string; appearance?: { map: Json; meanLuminance: Json } }[] }[] } => JSON.parse(COMMITTED) as never;
+  const first = (layout: ReturnType<typeof committed>) => {
+    const project = layout.clients[0]?.projects[0];
+    assert.ok(project?.appearance !== undefined, 'the committed layout’s first Project carries an appearance');
+    return project as { id: string; appearance: { map: Json; meanLuminance: Json } };
+  };
+  const edits: readonly (readonly [string, (layout: ReturnType<typeof committed>) => void])[] = [
+    ['a map off the list', (layout) => (first(layout).appearance.map = 'europa')],
+    ['a map named by its file', (layout) => (first(layout).appearance.map = `${String(first(layout).appearance.map)}.webp`)],
+    ['a luminance nudged', (layout) => (first(layout).appearance.meanLuminance = Number(first(layout).appearance.meanLuminance) + 0.001)],
+    ['an appearance dropped', (layout) => delete (first(layout) as { appearance?: unknown }).appearance],
+    ['no appearance anywhere', (layout) => layout.clients.forEach((client) => client.projects.forEach((project) => delete project.appearance))],
+  ];
+  for (const [name, edit] of edits) {
+    const layout = committed();
+    edit(layout);
+    assert.notDeepEqual(libraryClaim(layout as AppearanceLayout, MAP_LIBRARY), [], `"${name}" must be rejected`);
+  }
+  // The library is what is compared: a list without a worn map, or with its luminance re-measured, falsifies it too.
+  const worn = String(first(committed()).appearance.map);
+  assert.notDeepEqual(libraryClaim(JSON.parse(COMMITTED) as AppearanceLayout, MAP_LIBRARY.filter((entry) => entry.id !== worn)), [], 'a worn map dropped from the list');
+  assert.notDeepEqual(libraryClaim(JSON.parse(COMMITTED) as AppearanceLayout, MAP_LIBRARY.map((entry) => (entry.id === worn ? { ...entry, meanLuminance: entry.meanLuminance + 0.01 } : entry))), [], 'a worn map re-measured');
+  assert.match(libraryClaim({ clients: [] }, MAP_LIBRARY).join('\n'), /carries no appearance to hold/, 'an empty layout has nothing to measure');
+});
+
 test('a reworded thesis or positions paragraph is caught here, before its relation is re-ruled', () => {
   for (const [name, source] of [
     ['the old thesis', ABSENCES_SOURCE.replace(THESIS, 'The layout is never authored; the camera is.')],
+    ['the thesis before the map list', ABSENCES_SOURCE.replace(THESIS, 'Of the two files above, only career.json is authored: layout.generated.json is solved from it, shots included.')],
     ['the first re-ruled thesis', ABSENCES_SOURCE.replace(THESIS, 'Only career.json is authored: the layout is solved from it, and the shots are derived from it.')],
     ['the old positions paragraph', ABSENCES_SOURCE.replace(POSITIONS, POSITIONS.replace('computed by the solver from career.json, never written by hand', 'solved from the three rules above'))],
   ] as const) {

@@ -742,18 +742,20 @@ test('no test in this suite writes into src/ or generated/', () => {
  * re-export or a dynamic import counts too. Here rather than beside the
  * router's audit because `src/shell/` may not import `src/derive/`.
  */
-test('the colophon imports React, ./exhibits.ts, ./derivations.ts, ./json-setting.ts, ./absences.ts, ./live-solve.ts, ../shell/chrome-model.ts, ../shell/contact-route.tsx and ./colophon.css, and ../derive/live.ts dynamically, only; and exhibits.ts, derivations.ts, json-setting.ts, absences.ts, live-solve.ts and the shell’s contact.ts import nothing', () => {
+test('the colophon imports React, ./exhibits.ts, ./derivations.ts, ./json-setting.ts, ./absences.ts, ./credits.ts, ./live-solve.ts, ../shell/chrome-model.ts, ../shell/contact-route.tsx and ./colophon.css, and ../derive/live.ts dynamically, only; and exhibits.ts, derivations.ts, json-setting.ts, absences.ts, credits.ts, live-solve.ts and the shell’s contact.ts import nothing', () => {
   const read = (path: string): string => readFileSync(join(SRC_ROOT, path), 'utf8');
   const importsOf = (source: string): (string | null)[] => findImports(source).map((found) => found.specifier);
   const colophon = read('colophon/colophon.tsx');
   // 6.3: the contact route, the one shell module admitted — the shared component, in the `ui` chunk.
   // Epic 5 item 38: and the identity's two words, `chrome-model.ts`, in the same `ui` chunk — never the router, `route-link.ts` or detection.
-  const admitted = ['react', './exhibits.ts', './derivations.ts', './json-setting.ts', './absences.ts', './live-solve.ts', '../shell/chrome-model.ts', '../shell/contact-route.tsx', './colophon.css', '../derive/live.ts'];
-  assert.deepEqual(importsOf(colophon), admitted, 'the colophon imports React, ./exhibits.ts, ./derivations.ts, ./json-setting.ts, ./absences.ts, ./live-solve.ts, ../shell/chrome-model.ts, ../shell/contact-route.tsx and ./colophon.css, and ../derive/live.ts dynamically, only');
+  // 8.2: and the appearance copy and credit lines, `./credits.ts`, import-free like its neighbours.
+  const admitted = ['react', './exhibits.ts', './derivations.ts', './json-setting.ts', './absences.ts', './credits.ts', './live-solve.ts', '../shell/chrome-model.ts', '../shell/contact-route.tsx', './colophon.css', '../derive/live.ts'];
+  assert.deepEqual(importsOf(colophon), admitted, 'the colophon imports React, ./exhibits.ts, ./derivations.ts, ./json-setting.ts, ./absences.ts, ./credits.ts, ./live-solve.ts, ../shell/chrome-model.ts, ../shell/contact-route.tsx and ./colophon.css, and ../derive/live.ts dynamically, only');
   // 5.5: the solver is reached by a dynamic import alone, never a static one.
   const solver = findImports(colophon).filter((found) => found.specifier === '../derive/live.ts');
   assert.equal(solver.length, 1, 'one import of the solver');
-  assert.ok(/\bimport\s*\(\s*$/.test(colophon.slice(0, colophon.indexOf("'../derive/live.ts'", colophon.indexOf('createLiveSolve(')))), 'and it is the dynamic import in the press');
+  // 8.2: one module-level loader, shared by the credits (on open) and the press.
+  assert.ok(/^const loadSolver = \(\) => import\('\.\.\/derive\/live\.ts'\);$/m.test(colophon), 'and it is the dynamic import of the one shared loader');
   for (const extra of [
     "import '../shell/page.css';",
     // 6.3: the contact route's own modules reached past its component, or a second shell module.
@@ -777,7 +779,7 @@ ${extra}
 `), admitted, `"${extra}" is seen`);
   }
   assert.notDeepEqual(
-    importsOf(colophon.replace("() => import('../derive/live.ts'),", "() => import('../derive/index.ts'),")),
+    importsOf(colophon.replace("() => import('../derive/live.ts');", "() => import('../derive/index.ts');")),
     admitted,
     'the gate imported in the solver’s place is seen',
   );
@@ -808,6 +810,13 @@ ${absences}`), [], `"${extra}" is seen`);
   for (const extra of ["import { solveLive } from '../derive/live.ts';", "const l = () => import('../derive/live.ts');", "import type { LiveSolver } from '../derive/live.ts';", "import { EXHIBIT_PATHS } from './exhibits.ts';"]) {
     assert.notDeepEqual(importsOf(`${extra}
 ${liveSolve}`), [], `"${extra}" is seen`);
+  }
+  // 8.2: the credits take their loader as an argument; the module names no solver, no library and no data.
+  const credits = read('colophon/credits.ts');
+  assert.deepEqual(importsOf(credits), [], 'and credits.ts imports nothing');
+  for (const extra of ["import { MAP_LIBRARY } from '../derive/map-library.ts';", "import type { MapEntry } from '../derive/map-library.ts';", "const l = () => import('../derive/live.ts');", "import layout from '../../generated/layout.generated.json';"]) {
+    assert.notDeepEqual(importsOf(`${extra}
+${credits}`), [], `"${extra}" is seen`);
   }
   // 6.3: the contact route's copy and press take the clipboard as an argument; the module names nothing.
   const contact = read('shell/contact.ts');

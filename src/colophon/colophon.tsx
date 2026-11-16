@@ -61,6 +61,23 @@
  * them: every sentence points at "the files above". No `<section>`, no
  * landmark beyond the host's `<main>`.
  *
+ * **What a Planet looks like** (8.2, AD-21, ruling Q1 of 2026-11-16). After the
+ * absences and before the live re-solve, drawn only once both the exhibits
+ * and the map library have arrived: an `h2.colophon-heading`
+ * (`APPEARANCE.heading`), one `p.colophon-prose` stating that a Planet's
+ * appearance is assigned from its ID and encodes nothing
+ * (`APPEARANCE.statement`), one `p.colophon-prose` lead-in (`APPEARANCE.lead`),
+ * and one `ul.colophon-credits` holding one `<li>` per library entry, in
+ * library order: `creditLine(entry)` (`credits.ts`), then an `<a>` reading
+ * `APPEARANCE.source` whose `href` is the entry's `sourceUrl`. No URL is
+ * written here; every one arrives with the library. The library is loaded on
+ * open (ruling Q4) by the second effect, whose whole body is `startCredits`
+ * (executed in `credits.test.ts`), its stop the cleanup, through `loadSolver`,
+ * this file's one dynamic import, shared with the live re-solve. A failed load
+ * is logged once with `console.error` and draws nothing of the section; the
+ * rest of the page is as it would be without it. It takes no row in the
+ * derivation table, and the live re-solve never redraws it.
+ *
  * **The live re-solve** (5.5, FR-21, rulings Q1–Q5 (a)). Last, drawn only with
  * the exhibits: an `h2.colophon-heading` (`LIVE_SOLVE.heading`), one
  * `p.colophon-prose` (`LIVE_SOLVE.framing`, the ruled framing) and a
@@ -69,9 +86,11 @@
  * drop keyboard focus from the button just pressed. Pressing it hands
  * `exhibits.career`, the text already on the page (no second fetch), to the
  * tracker `createLiveSolve` (`live-solve.ts`, executed in `live-solve.test.ts`),
- * built once with this file's one dynamic import,
- * `import('../derive/live.ts')` — the solver's own lazy chunk, requested on
- * the press and never before — and this component's two setters. A press while
+ * built once with `loadSolver`, this file's one dynamic import,
+ * `import('../derive/live.ts')` — the solver's own lazy chunk, requested when
+ * the page opens, since the credits read the map library through it (8.2,
+ * ruling Q4), and so already in hand at the press — and this component's two
+ * setters. A press while
  * a run is in flight is ignored there. The solved text is held in this
  * component's state alone and drawn in full as a third exhibit, named
  * `LIVE_SOLVE.result`; no store, no shell module and no renderer reads it, so
@@ -87,7 +106,7 @@
  * the route line, inside the chrome row.
  *
  * It imports React, `exhibits.ts`, `derivations.ts`, `json-setting.ts`,
- * `absences.ts`, `live-solve.ts`, `../shell/chrome-model.ts` (the identity's
+ * `absences.ts`, `credits.ts`, `live-solve.ts`, `../shell/chrome-model.ts` (the identity's
  * name, in the `ui` chunk), `../shell/contact-route.tsx` and
  * `colophon.css`, and nothing else: no other shell module — never the router,
  * `route-link.ts` or detection — not the motion
@@ -101,10 +120,14 @@ import { EXHIBIT_NAMES, startExhibits, type Exhibits } from './exhibits.ts';
 import { DERIVATION_LABELS, derivationRows, type DerivationInput } from './derivations.ts';
 import { jsonRuns } from './json-setting.ts';
 import { ABSENCES, ABSENCES_HEADING } from './absences.ts';
+import { APPEARANCE, creditLine, startCredits, type CreditEntry } from './credits.ts';
 import { LIVE_SOLVE, createLiveSolve } from './live-solve.ts';
 import { IDENTITY_NAME } from '../shell/chrome-model.ts';
 import { ContactRoute } from '../shell/contact-route.tsx';
 import './colophon.css';
+
+/** The solver's chunk, `src/derive/live.ts`: the one dynamic import, shared by the credits (on open) and the live re-solve. */
+const loadSolver = () => import('../derive/live.ts');
 
 /** One link of the chrome row, as the shell builds it: its key, its text, its `href`, and its click. */
 export interface ColophonLink {
@@ -186,11 +209,12 @@ export interface LiveSolveState {
  * The surface as drawn: one `div.colophon` — the page's column, the chart's
  * `.chart` mirrored (D-G6, Epic 5 item 39) — holding the chrome row — the
  * heading, the contact route and the route line — and, once the files have
- * arrived, the two files with the derivations between them, what is not there, the live
+ * arrived, the two files with the derivations between them, what is not there,
+ * what a Planet looks like once the map library has arrived too, the live
  * re-solve's heading, framing and button, and its result once a run has
  * succeeded.
  */
-export function ColophonPage({ links, exhibits, solved, running, onSolve }: { readonly links: ColophonLinks; readonly exhibits: Exhibits | null } & LiveSolveState) {
+export function ColophonPage({ links, exhibits, library, solved, running, onSolve }: { readonly links: ColophonLinks; readonly exhibits: Exhibits | null; readonly library: readonly CreditEntry[] | null } & LiveSolveState) {
   return (
     <div className="colophon">
       <div className="colophon-chrome">
@@ -217,6 +241,20 @@ export function ColophonPage({ links, exhibits, solved, running, onSolve }: { re
               {text}
             </p>
           ))}
+          {library === null ? null : (
+            <>
+              <h2 className="colophon-heading">{APPEARANCE.heading}</h2>
+              <p className="colophon-prose">{APPEARANCE.statement}</p>
+              <p className="colophon-prose">{APPEARANCE.lead}</p>
+              <ul className="colophon-credits">
+                {library.map((entry) => (
+                  <li key={entry.id}>
+                    {creditLine(entry)} <a href={entry.sourceUrl}>{APPEARANCE.source}</a>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
           <h2 className="colophon-heading">{LIVE_SOLVE.heading}</h2>
           <p className="colophon-prose">{LIVE_SOLVE.framing}</p>
           <button type="button" className="colophon-solve" aria-disabled={running} onClick={onSolve}>
@@ -231,13 +269,15 @@ export function ColophonPage({ links, exhibits, solved, running, onSolve }: { re
 
 export default function Colophon({ links }: { readonly links: ColophonLinks }) {
   const [exhibits, setExhibits] = useState<Exhibits | null>(null);
+  const [library, setLibrary] = useState<readonly CreditEntry[] | null>(null);
   const [solved, setSolved] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   useEffect(() => startExhibits(fetch, setExhibits, (error) => console.error('the colophon could not load its exhibits.', error)), []);
-  const [live] = useState(() => createLiveSolve(() => import('../derive/live.ts'), { setSolved, setRunning, log: (error) => console.error('the colophon could not solve career.json here.', error) }));
+  useEffect(() => startCredits(loadSolver, setLibrary, (error) => console.error('the colophon could not load its map credits.', error)), []);
+  const [live] = useState(() => createLiveSolve(loadSolver, { setSolved, setRunning, log: (error) => console.error('the colophon could not solve career.json here.', error) }));
   useEffect(() => () => live.stop(), [live]);
   const onSolve = () => {
     if (exhibits !== null) live.press(exhibits.career);
   };
-  return <ColophonPage links={links} exhibits={exhibits} solved={solved} running={running} onSolve={onSolve} />;
+  return <ColophonPage links={links} exhibits={exhibits} library={library} solved={solved} running={running} onSolve={onSolve} />;
 }
