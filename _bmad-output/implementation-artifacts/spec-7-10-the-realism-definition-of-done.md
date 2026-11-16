@@ -182,9 +182,46 @@ deferred:
 - Given a production build in Chrome, when `/chart/` and `/colophon/` load, then neither requests a map, the `realism` chunk or an off-site URL, while `/` requests both.
 - Given `m3-realism`, when `npm test`, `npm run typecheck`, `npm run gate` and `npm run build` run, then they pass, with the one skip named and explained, and the chunk budgets hold.
 
+### Review Findings
+
+Follow-up review, 2026-11-15. 1 decision, 8 patch, 0 defer, 31 dismissed.
+
+- [x] [Review][Decision] (resolved 2026-11-15, Thomas: accept the exemption; becomes the first patch below) The routes driver exempts off-site requests to an injected origin, but AC6 and Block If say any off-site request fails and HALTs — `spikes/realism-failure/routes.mjs:169` (`machine`) lists 18, 18 and 17 requests to `gc.kis.v2.scr.kaspersky-labs.com` on `/chart/`, `/colophon/` and `/`, and they do not fail. `routes.txt:105` prints a plain PASS ("requested … no off-site URL"), and the record's summary (`realism-done-7-10.md:10`) says "nothing off-site". The exemption is reasoned in the record's Limits (line 176), but no ruling or Spec Change Log entry admits it. The "server answered exactly the site's requests" argument also cannot see off-site traffic.
+- [x] [Review][Patch] Record the accepted exemption: a Spec Change Log entry with Thomas's ruling, and the record's summary and the driver's PASS line naming the exempted origin [_bmad-output/implementation-artifacts/realism-done-7-10.md:10]
+- [x] [Review][Patch] The record guard counts every line holding ` Automated `, the 7 budget-matrix rows included, so the AC table could lose 7 rows and still meet the floor of 20. It should count the Automated table's rows only and require each of AC1-AC7 [src/render-scene/realism/done.test.ts:457]
+- [x] [Review][Patch] Row 1, AC1, is marked "Automated (record)", but no test holds AC1: the guard only checks that named tests exist. The M2-tests-at-HEAD run is manual and saved, so the Kind should say Manual [_bmad-output/implementation-artifacts/realism-done-7-10.md:20]
+- [x] [Review][Patch] The M2-tests-at-HEAD run copied in this story's `check-pins.ts` and `bundle-assertion.ts` before the review patched both. Rerun M2's `scripts/check-pins.test.ts` and `scripts/bundle-assertion.test.ts` against HEAD's scripts and record the result [spikes/realism-failure/results/m2-tests-at-head.txt:9]
+- [x] [Review][Patch] The record and the transcript call `scripts/check-pins.test.ts` "unchanged since M2". That held at the baseline, but this commit changes the file. Say M2's version was run [_bmad-output/implementation-artifacts/realism-done-7-10.md:51]
+- [x] [Review][Patch] The transcript still says "Every edit is the allowance's own text as HEAD writes it", which the review reworded in the record, because F2 keeps M2's message beside the value 10 [spikes/realism-failure/results/m2-tests-at-head.txt:188]
+- [x] [Review][Patch] The NFR-5 light assertion compares `plan.light` with `lightDirection(...)`, the function `fillPlans` itself calls. Add an independent check: a dot product with the normalised Planet-to-Star vector close to 1 [src/render-scene/realism/done.test.ts:568]
+- [x] [Review][Patch] The sphere audit misses drei's `<Sphere>` element, and `@react-three/drei` is a runtime dependency, so a second sphere could pass unseen. Add the pattern and a break [src/render-scene/realism/done.test.ts:175]
+- [x] [Review][Patch] The review summary's counts are wrong: it says "3 deferred" where the frontmatter lists 4, and its score leaves out the 2 high findings. `sprint-status.yaml` still shows 7-10 as `backlog` [_bmad-output/implementation-artifacts/spec-7-10-the-realism-definition-of-done.md:262]
+
 ## Spec Change Log
 
+### 2026-11-15 — AC6's off-site rule admits a script injected in transit (Thomas's ruling)
+- **Trigger:** the follow-up review found that `spikes/realism-failure/routes.mjs` exempts requests to an origin whose script appears in the document Chrome received but not in the file served. On the dev machine that origin is `gc.kis.v2.scr.kaspersky-labs.com`, the antivirus web protection, with 17 or 18 requests per load. AC6 and Block If said any off-site request fails and HALTs.
+- **Ruling:** accept the exemption. A request to an injected script's origin is the machine's, not the site's. It is listed, not failed. Every other off-site request still fails the run, and the static half (`first-paint.test.ts`'s collection scan, `checkRoutes`) holds the source.
+- **Amended:** the record's status line names the exempted origin. The driver's PASS line now names the exemption. `results/routes.txt` was produced under the earlier PASS wording and was not rerun.
+- **Known-bad state avoided:** a PASS line and a record summary claiming "nothing off-site", while 18 off-site requests per route were silently exempted.
+
 ## Review Triage Log
+
+### 2026-11-15 — Follow-up review pass
+- decision: 1 (medium; resolved: accept the off-site exemption, see the Spec Change Log)
+- patch: 9 (medium 2, low 7)
+- defer: 0
+- reject: 31
+- addressed_findings:
+  - `[medium]` `[patch]` The exemption is recorded: a Spec Change Log entry, the record's status line, and the driver's PASS line.
+  - `[medium]` `[patch]` The M2-tests-at-HEAD run predated the review's patches to `check-pins.ts` and `bundle-assertion.ts`. M2's `check-pins.test.ts` and `bundle-assertion.test.ts` were rerun against `7263068`: pass 1, 51 tests, 50 pass, 1 fail (F1, B(7)); pass 2, 51 of 51. Appended to the transcript and the record.
+  - `[low]` `[patch]` The record guard counted every ` Automated ` line, the budget matrix included. It now reads the Automated table through `tableUnder`, requires a row for each of AC1-AC7, and floors that table's automated rows at 19.
+  - `[low]` `[patch]` Row 1 (AC1) is now Manual. The guard test holds the record, not the run.
+  - `[low]` `[patch]` "`scripts/check-pins.test.ts`, unchanged since M2" now says it was M2's version at the baseline, in the record and the transcript.
+  - `[low]` `[patch]` The transcript's "Every edit is the allowance's own text as HEAD writes it" now matches the record: values and list entries only, with M2's messages kept.
+  - `[low]` `[patch]` NFR-5's light is also checked independently of `lightDirection`: its cosine with the Planet-to-Star vector is 1.
+  - `[low]` `[patch]` The sphere audit reads drei's `<Sphere>`, since drei is a runtime dependency, with a break.
+  - `[low]` `[patch]` The review summary's deferral and score wording is corrected, and `sprint-status.yaml` is synced.
 
 ### 2026-11-15 — Review pass
 - intent_gap: 0
@@ -245,10 +282,12 @@ No adaptive quality was found. The unchanged sets are empty since M2. NFR-5 hold
 
 **Review:**
 - 15 patches applied: high 2, medium 4, low 9.
-- 3 deferred, all low: `checkRoutes` reads JavaScript only; CI's shallow checkout skips the git-backed tests; the routes driver is not robust to exceptions or hangs.
+- 3 deferred by the review, all low: `checkRoutes` reads JavaScript only; CI's shallow checkout skips the git-backed tests; the routes driver is not robust to exceptions or hangs. The frontmatter lists 4, since it also holds the implementation's own deferral (ports and fixed waits), which the review registered in `deferred-work.md`.
 - 16 rejected.
 
-**Follow-up review recommended: true.** Two patched findings were high. Score: 3 × 4 medium + 9 low = 21.
+**Follow-up review recommended: true.** Two patched findings were high, which alone calls for a follow-up. The medium and low findings score 3 × 4 medium + 9 low = 21.
+
+**Follow-up review (2026-11-15):** 1 decision (accepted, by Thomas's ruling), 9 patches applied, 0 deferred, 31 dismissed. See Review Findings and the Review Triage Log.
 
 **Verification (2026-11-15, after the patches):**
 - `npm test`: 2,108 tests, 2,107 pass, 0 fail, 1 skipped. The skip is environmental: "the walk keeps a symlinked file…", since this account cannot create symlinks.

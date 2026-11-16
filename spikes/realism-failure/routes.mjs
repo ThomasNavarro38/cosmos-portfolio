@@ -198,7 +198,7 @@ try {
   server.kill();
 }
 
-out.push('', failures.length === 0 ? 'PASS: neither /chart/ nor /colophon/ requested a map, the realism chunk or an off-site URL, and / requested both.' : `FAIL:\n${failures.map((line) => `  ${line}`).join('\n')}`);
+out.push('', failures.length === 0 ? 'PASS: neither /chart/ nor /colophon/ requested a map, the realism chunk or an off-site URL beyond the injected origin listed above (exempt by ruling, 2026-11-15), and / requested both.' : `FAIL:\n${failures.map((line) => `  ${line}`).join('\n')}`);
 writeFileSync(outFile, `${out.join('\n')}\n`);
 console.log(out.join('\n'));
 process.exit(failures.length === 0 ? 0 : 1);

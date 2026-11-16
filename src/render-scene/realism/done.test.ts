@@ -45,7 +45,7 @@ import { after, test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { type Mesh, type Object3D, Scene } from 'three';
 import { loadMutant } from '../../../scripts/mutant.ts';
-import { missingNamedTests } from '../../../scripts/record-table.ts';
+import { missingNamedTests, tableUnder } from '../../../scripts/record-table.ts';
 import { filesUnder, isTestFile, SOURCE_MODULE, stripComments, stripCommentsAndStrings } from '../../../scripts/source-scan.ts';
 import type { RealismArtifact } from '../realism-status.ts';
 import { DUST_DRAWS_BUDGET, PLANET_DRAWS_BUDGET, SPHERE_HEIGHT_SEGMENTS_BUDGET, SPHERE_WIDTH_SEGMENTS_BUDGET, STAR_DRAWS_BUDGET } from './budgets.ts';
@@ -165,14 +165,15 @@ function bracketed(code: string, open: number): string {
   return code.slice(open + 1);
 }
 
-/** Every sphere geometry a module builds, three's class (bare or through a namespace) or R3F's element, with its arguments. */
+/** Every sphere geometry a module builds, three's class (bare or through a namespace), R3F's element or drei's, with its arguments. */
 function spheresIn({ path, source }: Module): { readonly path: string; readonly args: string }[] {
   const code = stripComments(source);
   const found: { path: string; args: string }[] = [];
   for (const match of code.matchAll(/\bnew\s+(?:\w+\.)*SphereGeometry\s*\(/g)) {
     found.push({ path, args: bracketed(code, (match.index ?? 0) + match[0].length - 1).replace(/\s+/g, ' ').trim() });
   }
-  for (const match of code.matchAll(/<sphereGeometry\b/g)) {
+  // drei's `<Sphere>` builds its own geometry, and drei is a runtime dependency.
+  for (const match of code.matchAll(/<(?:sphereGeometry|Sphere)\b/g)) {
     const at = code.indexOf('args={', match.index);
     const end = code.indexOf('>', match.index);
     found.push({ path, args: at !== -1 && at < end ? bracketed(code, at + 'args='.length).replace(/\s+/g, ' ').trim() : '' });
@@ -237,6 +238,7 @@ test('the sphere fails past its budget, given no sphere to measure, given a seco
     ['a second sphere outside realism/', adding('src/render-scene/x.ts', 'const g = new SphereGeometry(1, 8, 8);'), /2 spheres are built beyond M2's/],
     ['a sphere through a namespace', adding('src/shell/x.ts', 'const g = new THREE.SphereGeometry(1, 8, 8);'), /2 spheres are built beyond M2's .*src\/shell\/x\.ts: 1, 8, 8/],
     ['a sphere element', adding('src/render-scene/x.tsx', 'const m = <mesh><sphereGeometry args={[1, 32, 16]} /></mesh>;'), /2 spheres are built beyond M2's .*\[1, 32, 16\]/],
+    ["drei's sphere", adding('src/render-scene/x.tsx', 'const m = <Sphere args={[1, 24, 12]} />;'), /2 spheres are built beyond M2's .*\[1, 24, 12\]/],
     ['other segments', replaced(layer.source.replace(LINE, 'new SphereGeometry(1, 128, 64)')), /not the layer's from the budgeted constants/],
     ['nested arguments', replaced(layer.source.replace(LINE, 'new SphereGeometry(1, Math.min(FILL_SPHERE_WIDTH_SEGMENTS, 128), FILL_SPHERE_HEIGHT_SEGMENTS)')), /\(1, Math\.min\(FILL_SPHERE_WIDTH_SEGMENTS, 128\), FILL_SPHERE_HEIGHT_SEGMENTS\), not the layer's/],
     ['an M2 sphere changed', modules.map((module) => (module.path === 'src/render-scene/mote-field.tsx' ? { ...module, source: module.source.replace('[MOTE_RADIUS, 12, 8]', '[MOTE_RADIUS, 64, 32]') } : module)), /M2's src\/render-scene\/mote-field\.tsx sphere .* is not built exactly once/],
@@ -454,7 +456,10 @@ test('the Fallback reads no appearance anywhere in its run-time closure, and the
 test('the definition-of-done record names, row by row, tests that exist and run', () => {
   const record = readFileSync(join(REPO_ROOT, '_bmad-output', 'implementation-artifacts', 'realism-done-7-10.md'), 'utf8');
   assert.deepEqual(missingNamedTests(record, REPO_ROOT), []);
-  assert.ok(record.split('\n').filter((line) => line.startsWith('|') && / Automated /.test(line)).length >= 20, 'every AC has its rows');
+  // The AC table alone: the budget matrix further down has Automated rows of its own, which must not make up the count.
+  const [, ...rows] = tableUnder(record, '## Automated');
+  for (let ac = 1; ac <= 7; ac += 1) assert.ok(rows.some((cells) => cells[1]?.startsWith(`AC${ac}:`)), `AC${ac} has a row in the Automated table`);
+  assert.ok(rows.filter((cells) => /^Automated\b/.test(cells[2] ?? '')).length >= 19, `the Automated table keeps its automated rows: ${rows.length} rows read`);
 });
 
 // --- AC4: the sets M3 must leave alone, as git holds them -----------------------------------------
@@ -566,6 +571,10 @@ function appendAndSolve(entry: Readonly<Record<string, unknown>>): string {
   assert.ok(plan.light.every(Number.isFinite), 'its light is finite');
   assert.ok(Math.abs(Math.hypot(...plan.light) - 1) < 1e-12, 'and a unit vector');
   assert.deepEqual(plan.light, lightDirection(project.position, owner.position), 'toward its own Star');
+  // Independent of `lightDirection`: a negated or swapped light would point away.
+  const toStar = [owner.position.x - project.position.x, owner.position.y - project.position.y, owner.position.z - project.position.z] as const;
+  const cosine = (plan.light[0] * toStar[0] + plan.light[1] * toStar[1] + plan.light[2] * toStar[2]) / Math.hypot(...toStar);
+  assert.ok(Math.abs(cosine - 1) < 1e-9, `the light points at its Star from the Planet (cosine ${cosine})`);
   assert.equal(plan.map, look.map);
   assert.equal(plan.meanLuminance, entryOfLibrary.meanLuminance);
   return owner.id;

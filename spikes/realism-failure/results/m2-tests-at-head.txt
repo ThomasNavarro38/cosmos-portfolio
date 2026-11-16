@@ -8,7 +8,7 @@ What was run
 - This story's two edited scripts copied over HEAD's, so the run is against the source as this story leaves it:
   `scripts/check-pins.ts` (the closed list) and `scripts/bundle-assertion.ts` (`checkRoutes`). Both are additive.
 - Each M2 test file the epic changed overwritten by its 4669784 version (`git show 4669784:<file> > <file>`), and
-  `scripts/check-pins.test.ts` run beside them, unchanged since M2, against the new `check-pins.ts`.
+  `scripts/check-pins.test.ts` run beside them, still M2's version at the baseline 3b48f29, against the new `check-pins.ts`.
 - No M2 test is missing at HEAD: every one of the 73 `*.test.ts` files in 4669784's tree exists at HEAD, and
   `git diff --name-status 4669784 HEAD` lists no D or R for a test file.
 - The worktree was removed afterwards (`git worktree remove --force`).
@@ -185,7 +185,8 @@ test at src\shell\chart-offer.test.ts:315:1
 
 
 Pass 2: the same files with only the edit each named allowance admits (the patch below), so the rest of every test
-that aborted at its first assertion also runs. Every edit is the allowance's own text as HEAD writes it.
+that aborted at its first assertion also runs. Each edit is the value or list entry the allowance admits, as HEAD has it;
+M2's titles and messages are left as M2 wrote them (so F2's message still says 9 beside the value 10).
 ℹ tests 543
 ℹ suites 0
 ℹ pass 543
@@ -299,3 +300,27 @@ The allowance patch (4669784's file -> allowance-applied):
  };
  
  /** Every specifier a source names in an import, export-from, dynamic import or require. */
+
+
+Rerun after the review, 2026-11-15, on the same machine (Node 24.13.0). The run above copied in check-pins.ts and
+bundle-assertion.ts as they stood before the review patched both. A fresh detached worktree of 7263068, node_modules
+copied in (robocopy), with M2's scripts/check-pins.test.ts and scripts/bundle-assertion.test.ts from 4669784:
+
+  node --test scripts/check-pins.test.ts scripts/bundle-assertion.test.ts
+
+Pass 1, M2's files as written:
+✖ the shipped app builds under the assertion, measured within its budget (241.6219ms)
+ℹ tests 51
+ℹ pass 50
+ℹ fail 1
+ℹ skipped 0
+✖ failing tests:
+✖ the shipped app builds under the assertion, measured within its budget (241.6219ms)
+
+Pass 2, with F1's B(7) edit applied (the two list entries above, nothing else):
+ℹ tests 51
+ℹ pass 51
+ℹ fail 0
+ℹ skipped 0
+
+The worktree was removed afterwards.

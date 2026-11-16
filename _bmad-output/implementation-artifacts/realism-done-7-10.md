@@ -7,7 +7,7 @@
 - Quality never adapts.
 - The preview, camera, Rail, Focus and Mote sets are unchanged since M2.
 - A new Project stays one JSON entry, with an appearance and a light toward its own Star.
-- In Chrome, `/chart/` and `/colophon/` request no map, no `realism` chunk and nothing off-site, while `/` requests both.
+- In Chrome, `/chart/` and `/colophon/` request no map, no `realism` chunk and nothing off-site of the site's own, while `/` requests both. The one off-site origin seen, `gc.kis.v2.scr.kaspersky-labs.com`, belongs to a script the machine's antivirus injects in transit. By Thomas's ruling (2026-11-15) it is exempt: see [The machine adds requests of its own](#the-routes-run).
 
 Three instrument gaps are closed, each by an additive check: `check-pins` now counts runtime dependencies, the added-draws check fails on an artifact with nothing to draw, and `checkRoutes` plus a Chrome driver show that the Fallback and the Colophon request no realism.
 
@@ -17,7 +17,7 @@ Three instrument gaps are closed, each by an additive check: `check-pins` now co
 
 | # | Spec AC | Kind | Held by | Notes |
 | --- | --- | --- | --- | --- |
-| 1 | AC1: M2's tests at HEAD fail only by an allowance or the mandate | Automated (record) | `src/render-scene/realism/done.test.ts` "the definition-of-done record names, row by row, tests that exist and run" | The run is [M2's tests at HEAD](#m2s-tests-at-head-ad-19s-listing), saved in `spikes/realism-failure/results/m2-tests-at-head.txt`. |
+| 1 | AC1: M2's tests at HEAD fail only by an allowance or the mandate | Manual | The run, [M2's tests at HEAD](#m2s-tests-at-head-ad-19s-listing), saved in `spikes/realism-failure/results/m2-tests-at-head.txt`. | No test reruns M2's files. `src/render-scene/realism/done.test.ts` "the definition-of-done record names, row by row, tests that exist and run" guards this record, not the run. |
 | 2 | AC1: B(4), the glow allowance, as HEAD writes it | Automated | `src/render-scene/scene-model.test.ts` "no shadow, blur, glow, bloom, radius or light in the scene or the shell"; `src/render-scene/scene-model.test.ts` "the glow allowance is the one identifier in the one file and the word under realism/, and it is in use" | |
 | 3 | AC1: B(1), the render-order pins | Automated | `src/render-scene/scene-model.test.ts` "every renderOrder is exactly one of the five names scene-model.ts declares" | Additive. M2's pins pass at HEAD. |
 | 4 | AC1: B(5), B(6), B(3), B(8), the mandate | Automated | `src/identity-audit.test.ts` "achromatic: every -dark colour token outside the realism family has OKLCH chroma < 0.02"; `src/first-paint.test.ts` "a map’s source URL is admitted on NASA and USGS hosts, in map-library.ts alone, and each near miss fails"; `src/shell/chart-offer.test.ts` "chart-offer.ts is imported by the chrome, the scene host, the sampler and the realism mount alone, each for its own names"; `src/render-scene/scene-model.test.ts` "only the pacing surfaces reference the reduced-motion preference, each in its own role"; `src/derive/artifact-schema.test.ts` "the version is 10 now that each Project carries its appearance, and changing the shape means changing it" | |
@@ -48,7 +48,7 @@ An audit change is a change in what an M2 test or audit accepts or rejects. Mess
 
 - This story's `check-pins.ts` and `bundle-assertion.ts` were copied in.
 - Each M2 test file the epic changed (11 of them) was overwritten with its `4669784` version.
-- `scripts/check-pins.test.ts`, unchanged since M2, was run beside them.
+- `scripts/check-pins.test.ts`, still M2's version at the baseline `3b48f29` (this story changes it since), was run beside them.
 - `node_modules` was copied in. A junction made Vite print three's path absolute, and that alone failed two fixture tests.
 - The worktree was removed afterwards.
 
@@ -57,6 +57,8 @@ An audit change is a change in what an M2 test or audit accepts or rejects. Mess
 **Pass 2, the same files with only each allowance's own edit:** the edit is the value or list entry HEAD admits, with M2's titles and messages left as M2 wrote them (so F2's patch changes `9` to `10` and nothing else). The rest of every test that stopped at its first assertion runs too. Result: 543 tests, 543 pass.
 
 Every one of the 73 test files in `4669784`'s tree exists at HEAD, with no deletion or rename.
+
+**Rerun after the review (2026-11-15).** The run above used this story's `check-pins.ts` and `bundle-assertion.ts` as they stood before its first review patched both. M2's `scripts/check-pins.test.ts` and `scripts/bundle-assertion.test.ts` were run again against the scripts at `7263068`, in a fresh temporary worktree with `node_modules` copied in. Pass 1: 51 tests, 50 pass, 1 fail, "the shipped app builds under the assertion, measured within its budget". That is F1, mapped to B(7). Pass 2, with that allowance's two list entries applied: 51 tests, 51 pass. The other M2 files are unaffected, since the review's patches touched no other module they test.
 
 ### Each failure, mapped
 
