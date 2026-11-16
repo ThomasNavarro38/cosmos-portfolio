@@ -17,6 +17,9 @@ import {
   SUSTAINED_GAPS,
   SUSTAIN_SECONDS,
   WARMUP_SECONDS,
+  WINDOW_CAPACITY,
+  bindWorstWindowSink,
+  type WorstWindowSink,
   chartOffered,
   resetChartOfferForTest,
   resetFrameSampling,
@@ -267,6 +270,8 @@ const IMPORTERS: Readonly<Record<string, readonly string[]>> = {
   'src/render-scene/frame-sampler.tsx': ['sampleFrame'],
   // 7.8, AD-19's importer-table allowance: realism's owner resets sampling when upload begins and when its first visible frame begins.
   'src/render-scene/realism-mount.tsx': ['resetFrameSampling'],
+  // 8.1, AD-23: the worst window's sink, bound outside the monitor, writes it to the visitor's own timeline.
+  'src/render-scene/worst-window-mark.tsx': ['bindWorstWindowSink'],
 };
 
 /** Every specifier a source names in an import, export-from, dynamic import or require. */
@@ -290,7 +295,7 @@ function offerImporters(files: readonly SourceFile[]): string[] {
     if (edges.length === 0) continue;
     const names = IMPORTERS[file.path];
     if (names === undefined) {
-      failures.push(`${file.path} imports chart-offer.ts — only the chrome, the scene host, the sampler and the realism mount may`);
+      failures.push(`${file.path} imports chart-offer.ts — only the chrome, the scene host, the sampler, the realism mount and the worst-window mark may`);
       continue;
     }
     seen.add(file.path);
@@ -314,7 +319,7 @@ function offerImporters(files: readonly SourceFile[]): string[] {
   return failures;
 }
 
-test('chart-offer.ts is imported by the chrome, the scene host, the sampler and the realism mount alone, each for its own names', () => {
+test('chart-offer.ts is imported by the chrome, the scene host, the sampler, the realism mount and the worst-window mark alone, each for its own names', () => {
   assert.deepEqual(offerImporters(shipped()), []);
 });
 
@@ -467,5 +472,494 @@ test('the reset audit rejects the real host with any one reset broken', () => {
     const mutated = mutate(real);
     assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
     assert.notDeepEqual(auditResets(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
+// --- The worst window (8.1, AD-23) --------------------------------------------------------------
+
+/** A spy sink: every call's `[frames, seconds, gaps]`, in order. */
+function spy(): { readonly calls: (readonly [number, number, number])[]; readonly sink: WorstWindowSink } {
+  const calls: (readonly [number, number, number])[] = [];
+  return { calls, sink: (frames, seconds, gaps) => void calls.push([frames, seconds, gaps]) };
+}
+
+/** A call's framerate: frames over seconds. */
+const fps = (call: readonly [number, number, number] | undefined): number => (call === undefined ? Number.NaN : call[0] / call[1]);
+
+test('the ring holds 8192 frames: five seconds at 1638fps', () => {
+  assert.equal(WINDOW_CAPACITY, 8192);
+  assert.ok(WINDOW_CAPACITY / SUSTAIN_SECONDS > 1638 && WINDOW_CAPACITY / SUSTAIN_SECONDS < 1639);
+});
+
+test('healthy: 60fps for 30 s — the worst is ≈ 60fps, written once on the first full window, with no gap', () => {
+  const out = spy();
+  bindWorstWindowSink(out.sink);
+  run(60, WARMUP_SECONDS + SUSTAIN_SECONDS - 0.1);
+  assert.deepEqual(out.calls, [], 'nothing before the first full window');
+  run(60, 30);
+  assert.equal(out.calls.length, 1, 'written once');
+  assert.ok(Math.abs(fps(out.calls[0]) - 60) < 0.5, `≈ 60fps, got ${fps(out.calls[0])}`);
+  assert.ok((out.calls[0]?.[1] ?? 0) >= SUSTAIN_SECONDS, 'a full window');
+  assert.equal(out.calls[0]?.[2], 0, 'no gap');
+});
+
+test('a fall: 60fps for 30 s, then 20fps for 10 s — the worst falls to ≈ 20fps, each strict fall written, the offer latched as shipped', () => {
+  const out = spy();
+  let notified = 0;
+  subscribeChartOffer(() => notified++);
+  bindWorstWindowSink(out.sink);
+  run(60, 30);
+  run(BELOW, 10);
+  assert.ok(out.calls.length > 1, 'the fall is written as it falls');
+  for (let i = 1; i < out.calls.length; i++) assert.ok(fps(out.calls[i]) < fps(out.calls[i - 1]), `call ${i} is a strict fall`);
+  assert.ok(Math.abs(fps(out.calls.at(-1)) - BELOW) < 0.5, `≈ ${BELOW}fps, got ${fps(out.calls.at(-1))}`);
+  assert.equal(chartOffered(), true);
+  assert.equal(notified, 1);
+});
+
+test('past the latch: 20fps for 8 s (latched), then 10fps for 10 s — the worst keeps falling to ≈ 10fps', () => {
+  const out = spy();
+  let notified = 0;
+  subscribeChartOffer(() => notified++);
+  bindWorstWindowSink(out.sink);
+  run(BELOW, 8);
+  assert.equal(chartOffered(), true, 'latched');
+  run(10, 10);
+  assert.ok(Math.abs(fps(out.calls.at(-1)) - 10) < 0.5, `≈ 10fps, got ${fps(out.calls.at(-1))}`);
+  assert.equal(notified, 1, 'the latch notified once, the worst kept sampling');
+});
+
+test('partial only: 10fps for 4 s, a reset, 10fps for 4 s — no full window, so no worst and no write', () => {
+  const out = spy();
+  bindWorstWindowSink(out.sink);
+  run(10, 4);
+  resetFrameSampling();
+  run(10, 4);
+  assert.deepEqual(out.calls, []);
+});
+
+test('a gap splits: 10fps for 4 s, one 1.5 s delta, 10fps for 4 s — no worst, one gap, written with frames 0', () => {
+  const out = spy();
+  bindWorstWindowSink(out.sink);
+  run(10, 4);
+  sampleFrame(GAP);
+  run(10, 4);
+  assert.deepEqual(out.calls, [[0, 0, 1]]);
+});
+
+test('a gap with a worst: the gap is written with the current worst window', () => {
+  const out = spy();
+  bindWorstWindowSink(out.sink);
+  run(BELOW, 8);
+  const worst = out.calls.at(-1);
+  assert.ok(worst !== undefined);
+  sampleFrame(GAP);
+  assert.deepEqual(out.calls.at(-1), [worst[0], worst[1], 1]);
+});
+
+test('a tab return never spans a window: 20fps for 4.5 s past the warm-up, the host’s reset, the same again — no worst', () => {
+  const out = spy();
+  bindWorstWindowSink(out.sink);
+  run(BELOW, WARMUP_SECONDS + 4.5);
+  resetFrameSampling();
+  run(BELOW, WARMUP_SECONDS + 4.5);
+  assert.deepEqual(out.calls, []);
+  assert.equal(chartOffered(), false);
+});
+
+test('the warm-up is excluded: 5fps for 1.8 s, then 60fps for 30 s — the worst is ≈ 60fps', () => {
+  const out = spy();
+  bindWorstWindowSink(out.sink);
+  run(5, WARMUP_SECONDS - 0.2);
+  run(60, 30);
+  assert.ok(out.calls.length >= 1);
+  assert.ok(Math.abs(fps(out.calls.at(-1)) - 60) < 0.5, `≈ 60fps, got ${fps(out.calls.at(-1))}`);
+});
+
+test('bad deltas — NaN, 0, -1, ±Infinity — are no frame, no gap and no write', () => {
+  const bads = [Number.NaN, 0, -1, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+  const out = spy();
+  bindWorstWindowSink(out.sink);
+  for (let i = 0; i < 1000; i++) sampleFrame(bads[i % bads.length] as number);
+  assert.deepEqual(out.calls, [], 'no write, and no gap counted');
+  // Interleaved through a run, they move the worst by nothing.
+  resetChartOfferForTest();
+  const clean = spy();
+  bindWorstWindowSink(clean.sink);
+  run(BELOW, 9);
+  resetChartOfferForTest();
+  const mixed = spy();
+  bindWorstWindowSink(mixed.sink);
+  for (let i = 0; i < Math.round(BELOW * 9); i++) {
+    sampleFrame(bads[i % bads.length] as number);
+    sampleFrame(1 / BELOW);
+  }
+  assert.ok(clean.calls.length > 0);
+  assert.deepEqual(mixed.calls, clean.calls);
+});
+
+test('ring overflow: 2000fps for 10 s — the oldest frame drops, the window never fills: no worst, no latch', () => {
+  const out = spy();
+  bindWorstWindowSink(out.sink);
+  run(2000, 10);
+  assert.deepEqual(out.calls, []);
+  assert.equal(chartOffered(), false);
+  // The ring still works once it has wrapped: a slow run after it fills the window and is the worst.
+  run(BELOW, 10);
+  assert.ok(Math.abs(fps(out.calls.at(-1)) - BELOW) < 0.5, `≈ ${BELOW}fps after the wrap, got ${fps(out.calls.at(-1))}`);
+  assert.equal(chartOffered(), true);
+});
+
+test('the ring keeps the shipped arithmetic: the latch fires at the same frame as the shipped queue would', () => {
+  // A reference monitor in the shipped queue's shape, over the same deltas.
+  const reference = (deltas: readonly number[]): number => {
+    const queue: number[] = [];
+    let head = 0;
+    let sum = 0;
+    let warmed = 0;
+    for (let i = 0; i < deltas.length; i++) {
+      const delta = deltas[i] as number;
+      if (warmed < WARMUP_SECONDS) {
+        warmed += delta;
+        continue;
+      }
+      queue.push(delta);
+      sum += delta;
+      while (head < queue.length - 1 && sum - (queue[head] ?? 0) >= SUSTAIN_SECONDS) {
+        sum -= queue[head] ?? 0;
+        head += 1;
+      }
+      if (sum >= SUSTAIN_SECONDS && (queue.length - head) / sum < FALLBACK_FLOOR_FPS) return i + 1;
+    }
+    return -1;
+  };
+  let seed = 7;
+  const random = (): number => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  let latched = 0;
+  for (let trial = 0; trial < 20; trial++) {
+    const deltas = Array.from({ length: 2000 }, (_, i) => (i < 300 ? 1 / 60 : 1 / (BELOW + 4 * random())) * (0.8 + 0.4 * random()));
+    const expected = reference(deltas);
+    if (expected > 0) latched += 1;
+    assert.equal(latchIndex(deltas), expected, `trial ${trial}`);
+  }
+  assert.ok(latched > 0, 'some trials latch');
+});
+
+test('a sink that throws on every call: sampling, the latch and the worst are unaffected', () => {
+  const ref = spy();
+  bindWorstWindowSink(ref.sink);
+  run(60, 30);
+  run(BELOW, 10);
+  sampleFrame(GAP);
+  const expected = ref.calls.at(-1);
+  resetChartOfferForTest();
+  let thrown = 0;
+  bindWorstWindowSink(() => {
+    thrown += 1;
+    throw new Error('sink refused');
+  });
+  assert.doesNotThrow(() => {
+    run(60, 30);
+    run(BELOW, 10);
+    sampleFrame(GAP);
+  });
+  assert.ok(thrown > 1, 'the sink was called, and threw');
+  assert.equal(chartOffered(), true);
+  const late = spy();
+  bindWorstWindowSink(late.sink);
+  assert.deepEqual(late.calls, [expected], 'the same worst and gap count as with a quiet sink');
+});
+
+test('a late bind: a worst exists, then a sink binds — called once at bind with the current values', () => {
+  run(BELOW, 8);
+  const out = spy();
+  bindWorstWindowSink(out.sink);
+  assert.equal(out.calls.length, 1);
+  assert.ok(Math.abs(fps(out.calls[0]) - BELOW) < 0.5);
+  assert.equal(out.calls[0]?.[2], 0);
+});
+
+test('a late bind with a gap and no worst is called once; with neither it is not called', () => {
+  const none = spy();
+  bindWorstWindowSink(none.sink);
+  assert.deepEqual(none.calls, [], 'nothing to write');
+  sampleFrame(GAP);
+  const out = spy();
+  bindWorstWindowSink(out.sink);
+  assert.deepEqual(out.calls, [[0, 0, 1]]);
+});
+
+test('the port holds one sink: a new bind replaces the old, and a stale unbind leaves the current one bound', () => {
+  const first = spy();
+  const second = spy();
+  const unbindFirst = bindWorstWindowSink(first.sink);
+  const unbindSecond = bindWorstWindowSink(second.sink);
+  unbindFirst();
+  run(BELOW, 8);
+  assert.deepEqual(first.calls, [], 'the replaced sink hears nothing');
+  assert.ok(second.calls.length >= 1, 'a stale unbind did not clear the current sink');
+  unbindSecond();
+  const count = second.calls.length;
+  run(10, 10);
+  assert.equal(second.calls.length, count, 'unbound, it hears nothing more');
+  // The same function bound twice: the first bind's unbind is stale too.
+  const same = spy();
+  const unbindA = bindWorstWindowSink(same.sink);
+  bindWorstWindowSink(same.sink);
+  unbindA();
+  const before = same.calls.length;
+  sampleFrame(GAP);
+  assert.equal(same.calls.length, before + 1, 'the second bind of the same sink is still current');
+});
+
+test('overlapping binds: the newest unbinds first, so the earlier one is written to again', () => {
+  const earlier = spy();
+  const newer = spy();
+  bindWorstWindowSink(earlier.sink);
+  const unbindNewer = bindWorstWindowSink(newer.sink);
+  sampleFrame(GAP);
+  assert.equal(earlier.calls.length, 0, 'only the newest live bind is written to');
+  assert.equal(newer.calls.length, 1);
+  unbindNewer();
+  sampleFrame(GAP);
+  assert.deepEqual(earlier.calls, [[0, 0, 2]], 'the earlier bind is current again');
+  assert.equal(newer.calls.length, 1, 'the unbound one hears nothing more');
+});
+
+test('overlapping binds: the earliest unbinds first, so the newest stays current', () => {
+  const earlier = spy();
+  const newer = spy();
+  const unbindEarlier = bindWorstWindowSink(earlier.sink);
+  bindWorstWindowSink(newer.sink);
+  unbindEarlier();
+  sampleFrame(GAP);
+  assert.deepEqual(newer.calls, [[0, 0, 1]]);
+  assert.deepEqual(earlier.calls, []);
+});
+
+test('overlapping binds: both unbind, in either order, and none is left', () => {
+  for (const order of ['newest first', 'earliest first'] as const) {
+    resetChartOfferForTest();
+    const earlier = spy();
+    const newer = spy();
+    const unbindEarlier = bindWorstWindowSink(earlier.sink);
+    const unbindNewer = bindWorstWindowSink(newer.sink);
+    if (order === 'newest first') {
+      unbindNewer();
+      unbindEarlier();
+    } else {
+      unbindEarlier();
+      unbindNewer();
+    }
+    // Unbinding twice changes nothing.
+    unbindEarlier();
+    unbindNewer();
+    sampleFrame(GAP);
+    assert.deepEqual(earlier.calls, [], `${order}: the earlier one hears nothing`);
+    assert.deepEqual(newer.calls, [], `${order}: the newer one hears nothing`);
+  }
+});
+
+test('the gap count is page-life: resetFrameSampling never clears it; only the test reset does', () => {
+  const out = spy();
+  bindWorstWindowSink(out.sink);
+  run(10, 4);
+  sampleFrame(GAP);
+  resetFrameSampling();
+  run(10, 1);
+  sampleFrame(GAP);
+  resetFrameSampling();
+  sampleFrame(GAP);
+  assert.deepEqual(
+    out.calls.map((call) => call[2]),
+    [1, 2, 3],
+  );
+  resetChartOfferForTest();
+  const fresh = spy();
+  bindWorstWindowSink(fresh.sink);
+  assert.deepEqual(fresh.calls, [], 'the test reset clears the gaps, the worst and the sink');
+  sampleFrame(GAP);
+  assert.deepEqual(fresh.calls, [[0, 0, 1]]);
+  assert.equal(out.calls.length, 3, 'the old sink was unbound by the test reset');
+});
+
+test('sustained gaps past the latch: each is written, none notifies again', () => {
+  const out = spy();
+  let notified = 0;
+  subscribeChartOffer(() => notified++);
+  bindWorstWindowSink(out.sink);
+  for (let i = 0; i < SUSTAINED_GAPS * 3; i++) sampleFrame(GAP);
+  assert.equal(chartOffered(), true);
+  assert.equal(notified, 1);
+  assert.deepEqual(
+    out.calls.map((call) => call[2]),
+    Array.from({ length: SUSTAINED_GAPS * 3 }, (_, i) => i + 1),
+  );
+});
+
+// --- sampleFrame and its direct helpers allocate nothing (8.1) ----------------------------------
+
+/** The body of the module function `name` (exported or not), comments already stripped; `''` if absent. */
+function functionBody(code: string, name: string): string {
+  return new RegExp(`\\n(?:export )?function ${name}\\([^)]*\\)[^{]*\\{([\\s\\S]*?)\\n\\}`).exec(code)?.[1] ?? '';
+}
+
+/**
+ * `sampleFrame` and the module helpers it calls directly, bar the once-only
+ * latch, hold no allocation: no array or object literal, no `new`, no `push`,
+ * `slice`, `concat` or spread, no closure, and no string building. The bound
+ * sink's own write (`render-scene/worst-window.ts`) is outside this rule, by
+ * spec 8.1's Design Notes: it runs on every strict fall and every gap, and
+ * allocates its detail.
+ */
+function auditAllocation(source: string): string[] {
+  const code = stripComments(source);
+  const failures: string[] = [];
+  const sampler = functionBody(code, 'sampleFrame');
+  if (sampler === '') return ['sampleFrame is not found'];
+  const called = [...new Set([...sampler.matchAll(/\b([a-zA-Z_]\w*)\s*\(/g)].map((match) => match[1] ?? ''))];
+  const helpers = called.filter((name) => name !== 'latch' && name !== 'sampleFrame' && functionBody(code, name) !== '');
+  const path: (readonly [string, string])[] = [['sampleFrame', sampler], ...helpers.map((helper) => [helper, functionBody(code, helper)] as const)];
+  for (const [name, body] of path) {
+    if (/(?:^|[=(,:;?&|!{}]|\breturn)\s*\[/m.test(body)) failures.push(`${name}: an array literal`);
+    if (/(?:[=(,:?&|!]|\breturn)\s*\{/.test(body)) failures.push(`${name}: an object literal`);
+    if (/\bnew\b/.test(body)) failures.push(`${name}: new`);
+    if (/\.\s*(?:push|unshift|slice|splice|concat|map|filter|from)\s*\(/.test(body)) failures.push(`${name}: an allocating array method`);
+    if (/\.\.\./.test(body)) failures.push(`${name}: a spread`);
+    if (/=>|\bfunction\b/.test(body)) failures.push(`${name}: a closure`);
+    if (/['"`]/.test(body)) failures.push(`${name}: a string`);
+  }
+  if (!helpers.includes('reportWorst')) failures.push('the sampler does not report through reportWorst');
+  return failures;
+}
+
+test('sampleFrame and the helpers it calls directly allocate nothing per frame (the sink’s own write is outside the rule)', () => {
+  assert.deepEqual(auditAllocation(read(OFFER_TS)), []);
+});
+
+test('the allocation audit rejects each per-frame allocation', () => {
+  const real = read(OFFER_TS);
+  const SAMPLE = '  if (!(Number.isFinite(deltaSeconds) && deltaSeconds > 0)) return;\n';
+  const mutations: readonly (readonly [string, string, RegExp])[] = [
+    ['a push', `${SAMPLE}  frameLog.push(deltaSeconds);\n`, /an allocating array method/],
+    ['an array literal', `${SAMPLE}  const kept = [deltaSeconds];\n`, /an array literal/],
+    ['an object literal', `${SAMPLE}  const kept = { deltaSeconds };\n`, /an object literal/],
+    ['new', `${SAMPLE}  const kept = new Float64Array(1);\n`, /new/],
+    ['a spread', `${SAMPLE}  Math.max(...kept);\n`, /a spread/],
+    ['an arrow', `${SAMPLE}  const later = () => deltaSeconds;\n`, /a closure/],
+    ['a slice', `${SAMPLE}  kept = kept.slice(1);\n`, /an allocating array method/],
+    ['a string', `${SAMPLE}  const label = \`\${deltaSeconds}s\`;\n`, /a string/],
+  ];
+  for (const [name, replacement, message] of mutations) {
+    const mutated = real.replace(SAMPLE, replacement);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
+    assert.match(auditAllocation(mutated).join('\n'), message, `"${name}" must be rejected`);
+  }
+  // A helper the sampler calls is on the path too.
+  const helper = real.replace(/(\nfunction reportWorst\(\)[^{]*\{\n)/, '$1  const kept = [worstFrames];\n');
+  assert.notEqual(helper, real, 'the helper mutation must apply');
+  assert.match(auditAllocation(helper).join('\n'), /reportWorst: an array literal/);
+});
+
+// --- The port is the only way out (8.1) ---------------------------------------------------------
+
+/**
+ * The worst window leaves the monitor through the bound sink alone: the sink is
+ * invoked at exactly one site, which hands it the worst and the gap count; no
+ * export reads them; and nothing in the module reaches a global, a log, a
+ * request or storage.
+ */
+function auditPort(source: string): string[] {
+  const code = stripComments(source);
+  const failures: string[] = [];
+  if (/\b(?:globalThis|self|console|fetch|sendBeacon|XMLHttpRequest|WebSocket|EventSource|localStorage|sessionStorage|indexedDB|postMessage|Image)\b/.test(code)) {
+    failures.push('reaches a global, a log, a request or storage');
+  }
+  if ((code.match(/\bsink\s*\(/g) ?? []).length !== 1 || !/\bsink\(worstFrames, worstSeconds, pageGaps\);/.test(code)) {
+    failures.push('the sink is invoked other than at one site, with the worst and the gap count');
+  }
+  const exported = [...code.matchAll(/^export (?:const|function|type|let|var|class)\s+(\w+)/gm)].map((match) => match[1] ?? '').sort();
+  const expected = [
+    'FALLBACK_FLOOR_FPS',
+    'MAX_FRAME_SECONDS',
+    'SUSTAINED_GAPS',
+    'SUSTAIN_SECONDS',
+    'WARMUP_SECONDS',
+    'WINDOW_CAPACITY',
+    'WorstWindowSink',
+    'bindWorstWindowSink',
+    'chartOffered',
+    'resetChartOfferForTest',
+    'resetFrameSampling',
+    'sampleFrame',
+    'subscribeChartOffer',
+  ].sort();
+  if (JSON.stringify(exported) !== JSON.stringify(expected)) failures.push(`exports ${JSON.stringify(exported)} — no reader of the worst beside the port`);
+  if (/^export\s*\{|^export default\b/m.test(code)) failures.push('a re-export');
+  return failures;
+}
+
+test('the worst window leaves the monitor only through the bound sink', () => {
+  assert.deepEqual(auditPort(read(OFFER_TS)), []);
+});
+
+test('the port audit rejects each other way out', () => {
+  const real = read(OFFER_TS);
+  const SINK = 'sink(worstFrames, worstSeconds, pageGaps);';
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['a getter of the worst', (s) => `${s}\nexport function worstWindow(): number {\n  return worstRate;\n}\n`],
+    ['a log', (s) => s.replace(SINK, `${SINK}\n    console.log(worstFrames);`)],
+    ['a global', (s) => s.replace(SINK, `${SINK}\n    globalThis.worst = worstFrames;`)],
+    ['a request', (s) => s.replace(SINK, `${SINK}\n    void fetch('/t');`)],
+    ['storage', (s) => s.replace(SINK, `${SINK}\n    localStorage.setItem('w', 'x');`)],
+    ['a second call site', (s) => s.replace(SINK, `${SINK}\n    sink(worstFrames, worstSeconds, 0);`)],
+    ['the gap count dropped from the port', (s) => s.replace(SINK, 'sink(worstFrames, worstSeconds, 0);')],
+    ['a re-export', (s) => `${s}\nexport { worstFrames };\n`],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
+    assert.notDeepEqual(auditPort(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
+// --- The gap count survives the resets (8.1) ----------------------------------------------------
+
+/** `resetFrameSampling` clears the window and the gap run, never the page-life gap count or the worst; the test reset clears both. */
+function auditGapCount(source: string): string[] {
+  const code = stripComments(source);
+  const failures: string[] = [];
+  const reset = functionBody(code, 'resetFrameSampling');
+  const forTest = functionBody(code, 'resetChartOfferForTest');
+  if (reset === '') failures.push('resetFrameSampling is not found');
+  if (/\bpageGaps\b/.test(reset)) failures.push('resetFrameSampling touches the page-life gap count');
+  if (/\bworst(?:Rate|Frames|Seconds)\b/.test(reset)) failures.push('resetFrameSampling touches the worst window');
+  if (!/\bpageGaps = 0;/.test(forTest)) failures.push('the test reset does not clear the gap count');
+  const writes = [...code.matchAll(/\bpageGaps\s*(?:=(?!=)|\+=|-=|\+\+|--)/g)].length;
+  if (writes !== 3) failures.push(`the gap count is written ${writes} times — its declaration, its one increment and the test reset`);
+  if (!/\bpageGaps \+= 1;/.test(functionBody(code, 'sampleFrame'))) failures.push('a gap does not count');
+  return failures;
+}
+
+test('the page-life gap count is never cleared by resetFrameSampling', () => {
+  assert.deepEqual(auditGapCount(read(OFFER_TS)), []);
+});
+
+test('the gap-count audit rejects each clear', () => {
+  const real = read(OFFER_TS);
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['cleared by the sampling reset', (s) => s.replace(/(\nexport function resetFrameSampling\(\): void \{\n)/, '$1  pageGaps = 0;\n')],
+    ['the worst cleared by the sampling reset', (s) => s.replace(/(\nexport function resetFrameSampling\(\): void \{\n)/, '$1  worstRate = Number.POSITIVE_INFINITY;\n')],
+    ['kept by the test reset', (s) => s.replace(/\n {2}pageGaps = 0;\n/, '\n')],
+    ['cleared on a frame', (s) => s.replace('  gaps = 0;\n  if (warmed', '  gaps = 0;\n  pageGaps = 0;\n  if (warmed')],
+    ['a gap not counted', (s) => s.replace('pageGaps += 1;', '')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply`);
+    assert.notDeepEqual(auditGapCount(mutated), [], `"${name}" must be rejected`);
   }
 });

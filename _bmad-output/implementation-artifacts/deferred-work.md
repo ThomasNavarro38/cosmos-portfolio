@@ -1606,3 +1606,11 @@ Still open after 3.5:
   evidence: A surface that throws after its title is set still reports PASS; a missing CDP reply hangs the run with no output. Edge Case Hunter, Blind Hunter.
   location: spikes/realism-failure/routes.mjs
   severity: low
+
+## Deferred from: implementation of spec-8-1-the-worst-window-on-the-visitor-s-own-timeline.md (2026-11-16)
+
+- source_spec: spec-8-1-the-worst-window-on-the-visitor-s-own-timeline.md
+  summary: Decided in 8.1 (Epic 7 retro item 55, R4), open for Thomas to overturn. Realism's frame path is not held to "allocates nothing per frame" in 8.1; only the sampler is. The spec's reason is that realism's per-frame draw literal and subject thunk in realism-mount.tsx, and the mapFromWorld array in fill-layer.ts, are settled 7.x code, verified in the browser and pinned by realism audits, and hoisting them would reopen that layer outside 8.1's ACs. Their GC cost is what a target run's scene-worst-window entry would expose, so that run is the evidence for overturning this.
+  evidence: spec 8.1 Design Notes, "Realism's frame path"; src/render-scene/realism-mount.tsx; src/render-scene/realism/fill-layer.ts.
+  location: src/render-scene/realism-mount.tsx
+  severity: low

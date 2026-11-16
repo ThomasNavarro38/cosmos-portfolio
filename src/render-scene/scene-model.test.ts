@@ -3664,6 +3664,151 @@ test('the First Paint mount audit rejects the real scene with any one guarantee 
   }
 });
 
+// --- The worst window's mark (8.1) -------------------------------------------
+
+const WORST_WINDOW_MARK_TSX = fileURLToPath(new URL('./worst-window-mark.tsx', import.meta.url));
+
+/** The binding's sink, exactly: `performance.mark` and `performance.clearMarks` bound to `performance`, or no-ops where either is missing. */
+const WORST_WINDOW_SINK = [
+  "const timeline = typeof performance !== 'undefined' && typeof performance?.mark === 'function' && typeof performance?.clearMarks === 'function';",
+  'const mark: (name: string, options: PerformanceMarkOptions) => void = timeline ? performance.mark.bind(performance) : () => undefined;',
+  'const clear: (name: string) => void = timeline ? performance.clearMarks.bind(performance) : () => undefined;',
+] as const;
+
+/**
+ * `worst-window-mark.tsx`'s contract, as a pure function over its source: the
+ * timeline bound once at module scope (exactly `WORST_WINDOW_SINK`), the one
+ * sink built from it at module scope, and a component that is exactly
+ * `useEffect(() => bindWorstWindowSink(writeWorstWindow), []); return null;` —
+ * the unbind returned as the effect's cleanup, no frame loop, no state, no store
+ * read, no DOM, no log, no send, no element, and imports of `useEffect`,
+ * `bindWorstWindowSink` and `createWorstWindowMark` alone. Every rule of the
+ * builder and the binding is executed in `worst-window.test.ts`, and the port in
+ * `chart-offer.test.ts`; the component body is the one unexecuted residual,
+ * pinned here.
+ */
+function auditWorstWindowMark(source: string): string[] {
+  const code = stripCommentsAndStrings(source);
+  const quoted = stripComments(source);
+  const failures: string[] = [];
+  const squash = (text: string) => text.replace(/\s+/g, ' ').trim();
+  const body = /export function WorstWindowMark\(\)\s*\{([\s\S]*?)\n\}/.exec(code)?.[1] ?? '';
+  if (squash(body) !== 'useEffect(() => bindWorstWindowSink(writeWorstWindow), []); return null;') {
+    failures.push('the binding is not exactly useEffect(() => bindWorstWindowSink(writeWorstWindow), []) and return null');
+  }
+  if ((code.match(/\buseEffect\s*\(/g) ?? []).length !== 1) failures.push('runs other than one effect');
+  if ((code.match(/\bbindWorstWindowSink\s*\(/g) ?? []).length !== 1) failures.push('binds the sink other than once, in the effect');
+  if (/\buse(?!Effect\b)[A-Z]\w*\b/.test(code)) failures.push('holds a hook beyond useEffect — no frame loop, no state, no ref, no store read');
+  if (/\bnavigationStore\b|\bgetState\b|\bsubscribe\b|['"]zustand/.test(quoted)) failures.push('reads the store');
+  if (/\bwindow\b|\bdocument\b|\bnavigator\b|\bglobalThis\b|addEventListener|matchMedia/.test(code)) failures.push('reads the DOM — the binding reads performance alone');
+  if (/\brequestAnimationFrame\b|\bsetTimeout\b|\bsetInterval\b|\bDate\b/.test(code)) failures.push('reads a clock or schedules a frame');
+  const squashed = squash(quoted);
+  if (WORST_WINDOW_SINK.some((line) => !squashed.includes(line))) failures.push('the sink is not performance.mark and performance.clearMarks bound to performance, with no-ops where either is missing');
+  if ((code.match(/\bperformance\b/g) ?? []).length !== 7) failures.push('reads performance beyond the sink — no clock, no other entry');
+  if (!/^export const writeWorstWindow = createWorstWindowMark\(mark, clear\);$/m.test(code) || (code.match(/\bcreateWorstWindowMark\s*\(/g) ?? []).length !== 1) {
+    failures.push('the sink is not built once at module scope');
+  }
+  if (/\bconsole\b/.test(code)) failures.push('logs the worst window — it stays on the timeline');
+  if (/\bfetch\b|\bsendBeacon\b|\bXMLHttpRequest\b|\bWebSocket\b|\bEventSource\b|\bpostMessage\b|\blocalStorage\b|\bsessionStorage\b|\bindexedDB\b/.test(code)) {
+    failures.push('sends or stores the worst window — nothing leaves the browser');
+  }
+  if (/\b(?:navigate|history|location|router)\b/i.test(code)) failures.push('names navigation');
+  const imports = [...quoted.matchAll(/^import[^\n]*$/gm)].map((match) => squash(match[0]));
+  const expected = [
+    "import { useEffect } from 'react';",
+    "import { bindWorstWindowSink } from '../shell/chart-offer.ts';",
+    "import { createWorstWindowMark } from './worst-window.ts';",
+  ];
+  if (JSON.stringify(imports) !== JSON.stringify(expected)) {
+    failures.push(`imports ${JSON.stringify(imports)} — useEffect, bindWorstWindowSink and createWorstWindowMark alone`);
+  }
+  if (/<[a-zA-Z]/.test(code)) failures.push('draws an element — the binding renders null');
+  return failures;
+}
+
+test('the worst-window mark is one effect binding the module-scope sink to the monitor, and renders null', () => {
+  assert.deepEqual(auditWorstWindowMark(readFileSync(WORST_WINDOW_MARK_TSX, 'utf8')), []);
+});
+
+test('the worst-window mark audit rejects the real binding with any one guarantee broken', () => {
+  const real = readFileSync(WORST_WINDOW_MARK_TSX, 'utf8');
+  const SINK = 'export const writeWorstWindow = createWorstWindowMark(mark, clear);';
+  const EFFECT = '  useEffect(() => bindWorstWindowSink(writeWorstWindow), []);';
+  const mutations: readonly (readonly [string, (source: string) => string, RegExp])[] = [
+    ['the effect dropped', (s) => s.replace(`${EFFECT}\n`, ''), /not exactly useEffect/],
+    ['no cleanup: the unbind dropped', (s) => s.replace(EFFECT, '  useEffect(() => {\n    bindWorstWindowSink(writeWorstWindow);\n  }, []);'), /not exactly useEffect/],
+    ['bound on every render', (s) => s.replace(EFFECT, '  useEffect(() => bindWorstWindowSink(writeWorstWindow));'), /not exactly useEffect/],
+    ['bound in the render', (s) => s.replace(EFFECT, '  bindWorstWindowSink(writeWorstWindow);'), /not exactly useEffect/],
+    ['bound twice', (s) => s.replace(EFFECT, `${EFFECT}\n  useEffect(() => bindWorstWindowSink(writeWorstWindow), []);`), /other than one effect/],
+    ['a frame loop', (s) => s.replace('  return null;', '  useFrame(() => undefined);\n  return null;'), /a hook beyond useEffect/],
+    ['state', (s) => s.replace(EFFECT, `  const [bound] = useState(false);\n${EFFECT}`), /a hook beyond useEffect/],
+    ['a store read', (s) => s.replace(EFFECT, '  useEffect(() => (navigationStore.getState().mode === "rail" ? bindWorstWindowSink(writeWorstWindow) : undefined), []);'), /reads the store/],
+    ['the document read', (s) => s.replace('  return null;', '  void document.hidden;\n  return null;'), /reads the DOM/],
+    ['an unguarded timeline', (s) => s.replace("typeof performance !== 'undefined' && typeof performance?.mark === 'function' && typeof performance?.clearMarks === 'function'", 'true'), /the sink is not/],
+    ['clearMarks unguarded', (s) => s.replace(" && typeof performance?.clearMarks === 'function'", ''), /the sink is not/],
+    ['mark never cleared', (s) => s.replace('timeline ? performance.clearMarks.bind(performance) : () => undefined', '() => undefined'), /the sink is not/],
+    ['a clock', (s) => s.replace('  return null;', '  void performance.now();\n  return null;'), /reads performance beyond the sink/],
+    ['the sink per mount', (s) => s.replace(`${SINK}\n`, '').replace(EFFECT, `  const writeWorstWindow = createWorstWindowMark(mark, clear);\n${EFFECT}`), /module scope/],
+    ['a console call', (s) => s.replace('  return null;', "  console.log('worst');\n  return null;"), /logs the worst window/],
+    ['a send', (s) => s.replace('  return null;', "  void fetch('/t');\n  return null;"), /sends or stores/],
+    ['a storage write', (s) => s.replace('  return null;', "  localStorage.setItem('w', 'x');\n  return null;"), /sends or stores/],
+    ['an element drawn', (s) => s.replace('  return null;', '  return <group />;'), /draws an element/],
+    ['another import', (s) => s.replace("import { createWorstWindowMark } from './worst-window.ts';", "import { createWorstWindowMark } from './worst-window.ts';\nimport { navigationStore } from '../shell/state.ts';"), /imports/],
+  ];
+  for (const [name, mutate, message] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped binding`);
+    assert.match(auditWorstWindowMark(mutated).join('\n'), message, `"${name}" must be rejected with its own message`);
+  }
+});
+
+/**
+ * The binding's mount in `scene.tsx`: once, inside the `<Canvas>`,
+ * unconditionally, with no props, after `<FrameSampler />` and before
+ * `<FirstFrameMark />` — so `<RealismMount>` stays immediately after the mark.
+ */
+function auditWorstWindowMount(source: string): string[] {
+  const code = stripCommentsAndStrings(source);
+  const failures: string[] = [];
+  const inside = /<Canvas\b[\s\S]*<\/Canvas>/.exec(code)?.[0] ?? '';
+  if (!/<WorstWindowMark\s*\/>/.test(inside)) failures.push('the binding is not mounted inside the Canvas, with no props');
+  if ((code.match(/<WorstWindowMark\b/g) ?? []).length !== 1) failures.push('the binding is mounted other than once');
+  if (/(?:&&|\|\||\?|:|\{|\[|=>|,)\s*(?:\(\s*)*<WorstWindowMark\b/.test(code)) failures.push('the binding is mounted conditionally — it must be an unconditional direct child of the Canvas');
+  const sampler = inside.search(/<FrameSampler\b/);
+  const binding = inside.search(/<WorstWindowMark\b/);
+  const mark = inside.search(/<FirstFrameMark\b/);
+  if (sampler === -1 || binding === -1 || mark === -1 || !(sampler < binding && binding < mark)) failures.push('the binding is not mounted between the sampler and the First Paint mark');
+  if (!/import\s*\{\s*WorstWindowMark\s*\}\s*from\s*'\.\/worst-window-mark\.tsx'/.test(stripComments(source))) failures.push('WorstWindowMark is not imported');
+  return failures;
+}
+
+test('the scene mounts the worst-window mark once inside the Canvas, between the sampler and the First Paint mark', () => {
+  assert.deepEqual(auditWorstWindowMount(readFileSync(SCENE_TSX, 'utf8')), []);
+});
+
+test('the worst-window mount audit rejects the real scene with any one guarantee removed', () => {
+  const real = readFileSync(SCENE_TSX, 'utf8');
+  const MOUNT = '<WorstWindowMark />';
+  const mutations: readonly (readonly [string, (source: string) => string, RegExp])[] = [
+    ['unmounted', (s) => s.replace(MOUNT, ''), /not mounted inside the Canvas/],
+    ['outside the Canvas', (s) => s.replace(MOUNT, '').replace('</Canvas>', `</Canvas>\n      ${MOUNT}`), /not mounted inside the Canvas/],
+    ['mounted twice', (s) => s.replace(MOUNT, `${MOUNT}\n        ${MOUNT}`), /other than once/],
+    ['mounted behind &&', (s) => s.replace(MOUNT, `{false && ${MOUNT}}`), /conditionally/],
+    ['mounted behind && in parentheses', (s) => s.replace(MOUNT, `{flag && (${MOUNT})}`), /conditionally/],
+    ['mounted in a ternary', (s) => s.replace(MOUNT, `{flag ? ${MOUNT} : null}`), /conditionally/],
+    ['mounted in an array', (s) => s.replace(MOUNT, `{[${MOUNT}]}`), /conditionally/],
+    ['handed a prop', (s) => s.replace(MOUNT, '<WorstWindowMark name="x" />'), /with no props/],
+    ['before the sampler', (s) => s.replace(MOUNT, '').replace('<FrameSampler />', `${MOUNT}\n        <FrameSampler />`), /between the sampler and the First Paint mark/],
+    ['after the First Paint mark', (s) => s.replace(MOUNT, '').replace('<FirstFrameMark />', `<FirstFrameMark />\n        ${MOUNT}`), /between the sampler and the First Paint mark/],
+    ['not imported', (s) => s.replace("import { WorstWindowMark } from './worst-window-mark.tsx';\n", ''), /not imported/],
+  ];
+  for (const [name, mutate, message] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped scene`);
+    assert.match(auditWorstWindowMount(mutated).join('\n'), message, `"${name}" must be rejected with its own message`);
+  }
+});
+
 // --- The Moons (3.3) --------------------------------------------------------
 
 /**
