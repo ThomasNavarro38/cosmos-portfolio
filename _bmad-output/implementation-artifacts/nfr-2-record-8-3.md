@@ -166,13 +166,13 @@ Moving line-work, changing Focus framing, adding a post pass or changing a budge
 
 Thomas writes these. Each field stays on its own line, its value after the label. A verdict is given by replacing `Not yet given.`; from then on `npm test` requires the date (as `YYYY-MM-DD`), the machine and the browser written, the Commit field holding the judged build's full 40-hex commit, the Poses field written, and the Screenshots field naming at least one screenshot, each stored beside this record as `judgement-8-4-<pose>.png`: `judgement-8-4-opening-frame.png`, `judgement-8-4-client-stop.png`, `judgement-8-4-focus.png`, `judgement-8-4-rail-2.8333.png`, and `judgement-8-4-keyboard-band.png` for the band. If another build is judged, its commit and chunk names replace those under The build too. The machine is named with its model, CPU, GPU and display, and is not the target profile.
 
-- **Date:** To be written by Thomas.
-- **Machine:** To be written by Thomas.
-- **Browser:** To be written by Thomas.
-- **Commit:** `2adeaa5c20f9602250f5aed4c251b0927a301457`, the build above, unless another build was judged.
-- **Poses:** the four above: `opening frame`, `Client stop` (stop 1, Decathlon), `Focus` (Store labelling generation), `rail(p=2.8333)`.
-- **Verdict:** Not yet given.
-- **Screenshots:** None yet.
+- **Date:** 2026-11-17.
+- **Machine:** Intel(R) Core(TM) i9-14900KF (3.20 GHz), NVIDIA GeForce RTX 4080 SUPER (16 Go), display Samsung Odyssey Ark 55; not the target profile.
+- **Browser:** Chrome 157.0.8103.79.
+- **Commit:** `2adeaa5c20f9602250f5aed4c251b0927a301457`, the build above (its three chunk names emitted as listed).
+- **Poses:** the four above: `opening frame`, `Client stop` (stop 1, Decathlon), `Focus` (Store labelling generation), `rail(p=2.8333)`; and the keyboard band from Client stop 1.
+- **Verdict:** Rejected. "The strokes look off (the rail track, planets and satelites orbits). The stars don't look real, the stroke around and the circle inside looks weird. The stars colors should change, it's always the same and doesn't feel real."
+- **Screenshots:** `judgement-8-4-opening-frame.png`, `judgement-8-4-client-stop.png`, `judgement-8-4-focus.png`, `judgement-8-4-rail-2.8333.png`, `judgement-8-4-keyboard-band.png`.
 
 ## Live (8.5)
 
