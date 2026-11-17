@@ -130,6 +130,22 @@ deferred: []
 - Given the agent's run ends, when the record is read, then the verdict is `Not yet given.` and the section says the machine is not the target profile and the status stays "not yet passed".
 - Given Thomas later writes a verdict, when `npm test` runs, then it passes only with every field filled and every named screenshot present beside the record.
 
+### Review Findings
+
+Code review 2026-11-17 (`git diff 2adeaa5 8422775`): Blind Hunter, Edge Case Hunter, Verification Gap and Acceptance Auditor.
+
+- [x] [Review][Decision] The agent pre-filled the Commit and Poses fields — `nfr-2-record-8-3.md:172-173` carry the build hash and the four poses, so the recorded-state checks "Commit a 40-hex hash" and "Poses written" (`scripts/nfr-2-record.test.ts:374,376`) pass on the agent's text, and Thomas can record a verdict without confirming which build and poses he judged. The matrix's Recorded row has Thomas fill them. Options: leave them as placeholders for Thomas (and require the Poses field to name the four), or keep them pre-filled as a default he confirms. Resolved 2026-11-17: kept pre-filled as a default Thomas confirms (dismissed).
+- [x] [Review][Decision] The "Thomas's call" column is never required — a recorded verdict passes with all seven looks uncalled (`auditJudgement` reads no checklist cell beyond the first), though ruling on those looks is why Epic 7 routed them here. Options: require a non-empty call per look once a verdict is recorded, or leave the column optional with the overall verdict standing for all seven. Resolved 2026-11-17: the column stays optional; the overall verdict stands for all seven (dismissed).
+- [x] [Review][Patch] The recorded Commit is not tied to The build, and the build's own hash is not required — the always-check `HASH.test(section)` is met by the pre-filled Commit line alone, so the build can lose its hash, and a recorded Commit naming another build passes while The build keeps 2adeaa5 and its chunk names, contrary to the sheet's "its commit and chunk names replace those under The build". Require the hash inside `### The build`, and the recorded Commit to equal it. [scripts/nfr-2-record.test.ts:341,374]
+- [x] [Review][Patch] The tilt values are offered as a free lever, though AC 8.4-3's tunables (map choice, ambient floor, glow and fade values, spin rates) do not include tilt — mark `TILT_MIN`/`TILT_MAX` as needing a ruling, as the sheet's own rule requires. [_bmad-output/implementation-artifacts/nfr-2-record-8-3.md:154]
+- [x] [Review][Patch] No test covers Verdict or Poses left as `To be written by Thomas.` — deleting `|| given === FIELD_PLACEHOLDER` or `|| posesGiven === FIELD_PLACEHOLDER` keeps the suite green. Loop all written fields over `''` and the placeholder. [scripts/nfr-2-record.test.ts:366,376,556]
+- [x] [Review][Patch] The recorded Date is checked for shape only — `2026-99-99` passes, and the regex is unanchored. Require a real calendar date. [scripts/nfr-2-record.test.ts:368]
+- [x] [Review][Patch] The screenshot pattern has no left or right boundary — `old-judgement-8-4-focus.png` is read as `judgement-8-4-focus.png`, and existence is checked for the wrong file. [scripts/nfr-2-record.test.ts:315]
+- [x] [Review][Patch] A field line written twice is read silently by its first occurrence — an old pending Verdict line can mask a new one. Fail on a duplicate label. [scripts/nfr-2-record.test.ts:322]
+- [x] [Review][Patch] A value of markup only (`**`, a pair of backticks) counts as written for Date, Machine, Browser, Poses and Verdict. Strip markup before the blank check, as `isPending` does. [scripts/nfr-2-record.test.ts:366-376]
+- [x] [Review][Patch] The rail pose opens DevTools and never says to close it before judging or taking the screenshot. [_bmad-output/implementation-artifacts/nfr-2-record-8-3.md:139]
+- [x] [Review][Patch] The keyboard-band steps conflict with Client stop's — "from a fresh load at Client stop 1 with no click", while reaching stop 1 may need the click fallback, which changes the Tab count. State one self-contained sequence, confirmed on the preview build. [_bmad-output/implementation-artifacts/nfr-2-record-8-3.md:156] Fixed by wording that rests on what is seen ("Tab until the entry shows"), not a count; not re-run in a browser.
+
 ## Spec Change Log
 
 ## Review Triage Log

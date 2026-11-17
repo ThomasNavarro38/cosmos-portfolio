@@ -27,16 +27,17 @@
  *
  * - **(g) The 8.4 judgement sheet, in two states.** Always: the section says the
  *   machine is not the target profile and the status stays "not yet passed", and
- *   holds a 40-hex build commit, the build's three chunk names, AC 8.4-1's two
- *   criteria ("realistic, not a screensaver", label contrast), the four poses
+ *   holds a 40-hex commit under The build, the build's three chunk names, AC 8.4-1's
+ *   two criteria ("realistic, not a screensaver", label contrast), the four poses
  *   (`opening frame`, `Client stop`, `Focus`, `rail(p=2.8333)`) with the `2266.64`
  *   wheel step, the seven looks Epic 7 routed to it, the rejection route's levers,
  *   AD-23 and the memlog, and the fields Date, Machine, Browser, Commit, Poses,
- *   Verdict and Screenshots. Pending (the verdict reads `Not yet given.`, markup
- *   and the period aside): nothing more, so the agent's sheet passes as written.
- *   Recorded (any other verdict): Date as `YYYY-MM-DD`, Machine, Browser and Poses
- *   written, Commit a 40-hex hash, and the Screenshots field naming at least one
- *   `judgement-8-4-*.png`, each present beside the record. Existence is injected,
+ *   Verdict and Screenshots, each on one line only. Pending (the verdict reads
+ *   `Not yet given.`, markup and the period aside): nothing more, so the agent's
+ *   sheet passes as written. Recorded (any other verdict): a real `YYYY-MM-DD`
+ *   Date; Machine, Browser, Poses and the verdict written (not empty, markup or the
+ *   placeholder); Commit the 40-hex hash under The build; and the Screenshots field
+ *   naming at least one `judgement-8-4-*.png`, each present beside the record. Existence is injected,
  *   so the mutations need no file; the record as it stands is read against the
  *   real directory, so it passes in either state.
  * - **(h) Live (8.5):** the status stays "not yet passed".
@@ -311,17 +312,34 @@ const FIELD_PLACEHOLDER = 'To be written by Thomas.';
 const VERDICT_PENDING = 'Not yet given.';
 /** Pending, read loosely: markup and the closing period do not make a verdict. */
 const isPending = (value: string | undefined): boolean => value !== undefined && /^not yet given\.?$/i.test(value.replace(/[*_`]/g, '').trim());
-/** A screenshot's name: `judgement-8-4-<pose>.png`, beside the record. */
-const SCREENSHOT = /judgement-8-4-[\w.()=-]+?\.png/g;
+/** Unwritten, read loosely as `isPending` reads the verdict: nothing, markup alone, or the placeholder. */
+const isUnwritten = (value: string): boolean => {
+  const bare = value.replace(/[*_`]/g, '').trim();
+  return bare === '' || /^to be written by thomas\.?$/i.test(bare);
+};
+/** A real calendar date, `YYYY-MM-DD`, standing alone among the digits: `2026-02-30` is no date. */
+function holdsCalendarDate(value: string): boolean {
+  const hit = /(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)/.exec(value);
+  if (hit === null) return false;
+  const [year, month, day] = [Number(hit[1]), Number(hit[2]), Number(hit[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+/**
+ * A screenshot's name: `judgement-8-4-<pose>.png`, beside the record. Bounded on
+ * both sides, so `old-judgement-8-4-focus.png` is not read as another file's name.
+ */
+const SCREENSHOT = /(?<![\w.-])judgement-8-4-[\w.()=-]+?\.png(?![\w.-])/g;
 
 /** A screenshot beside the record, by its bare name. */
 type Exists = (name: string) => boolean;
 const besideRecord: Exists = (name) => existsSync(join(dirname(RECORD_PATH), name));
 
+const fieldLine = (label: string, flags: string): RegExp => new RegExp(`^\\s*- \\*\\*${label}:\\*\\*(.*)$`, flags);
+
 /** A field's value on its `- **Label:**` line, trimmed; undefined when no line carries the label. */
 function fieldOf(section: string, label: string): string | undefined {
-  const hit = new RegExp(`^\\s*- \\*\\*${label}:\\*\\*(.*)$`, 'm').exec(section);
-  return hit?.[1]?.trim();
+  return fieldLine(label, 'm').exec(section)?.[1]?.trim();
 }
 
 /**
@@ -338,7 +356,6 @@ function auditJudgement(record: string, exists: Exists): string[] {
   const prose = flat(section);
   if (!/not the target profile/i.test(prose)) failures.push('8.4: it does not say the machine is not the target profile');
   if (!/not yet passed/i.test(prose)) failures.push('8.4: it does not say the status stays "not yet passed"');
-  if (!HASH.test(section)) failures.push('8.4: no full 40-hex build commit');
   for (const [criterion, pattern] of CRITERIA) if (!pattern.test(prose)) failures.push(`8.4: it does not name the criterion "${criterion}"`);
   const sub = (heading: string): string | undefined => {
     const text = sectionOf(section, heading);
@@ -347,6 +364,9 @@ function auditJudgement(record: string, exists: Exists): string[] {
   };
   const firstCells = (text: string | undefined): string[] => (text === undefined ? [] : rowsOf(text).map((cells) => cells[0] ?? ''));
   const build = sub(SHEET.build);
+  // Under The build itself: the verdict's Commit line must not stand in for it.
+  const buildCommit = build === undefined ? undefined : HASH.exec(build)?.[0];
+  if (build !== undefined && buildCommit === undefined) failures.push('8.4: no full 40-hex build commit');
   if (build !== undefined) for (const [chunk, pattern] of CHUNKS) if (!pattern.test(build)) failures.push(`8.4: the build does not name the ${chunk} chunk`);
   const poses = sub(SHEET.poses);
   const poseCells = firstCells(poses);
@@ -360,20 +380,23 @@ function auditJudgement(record: string, exists: Exists): string[] {
   if (verdict === undefined) return failures;
   const values = new Map(FIELDS.map((label) => [label, fieldOf(verdict, label)]));
   for (const [label, value] of values) if (value === undefined) failures.push(`8.4: no "${label}" field`);
+  // Only the first line of a label is read, so a second one would be read past silently.
+  for (const label of FIELDS) if ((verdict.match(fieldLine(label, 'gm')) ?? []).length > 1) failures.push(`8.4: the "${label}" field is written more than once`);
   const given = values.get('Verdict');
   if (given === undefined || isPending(given)) return failures;
   // Recorded: a verdict is given, so every field it rests on must be written.
-  if (given === '' || given === FIELD_PLACEHOLDER) failures.push('8.4: the verdict is blank');
-  for (const label of ['Date', 'Machine', 'Browser'] as const) {
+  if (isUnwritten(given)) failures.push('8.4: the verdict is blank');
+  for (const label of ['Date', 'Machine', 'Browser', 'Poses'] as const) {
     const value = values.get(label);
-    if (value !== undefined && (value === '' || value === FIELD_PLACEHOLDER)) failures.push(`8.4: a verdict is given and the "${label}" field is not written`);
+    if (value !== undefined && isUnwritten(value)) failures.push(`8.4: a verdict is given and the "${label}" field is not written`);
   }
   const date = values.get('Date');
-  if (date !== undefined && date !== '' && date !== FIELD_PLACEHOLDER && !/\b\d{4}-\d{2}-\d{2}\b/.test(date)) failures.push('8.4: a verdict is given and the "Date" field is not a YYYY-MM-DD date');
+  if (date !== undefined && !isUnwritten(date) && !holdsCalendarDate(date)) failures.push('8.4: a verdict is given and the "Date" field is not a YYYY-MM-DD date');
   const commit = values.get('Commit');
-  if (commit !== undefined && !HASH.test(commit)) failures.push('8.4: a verdict is given and the "Commit" field holds no full 40-hex commit');
-  const posesGiven = values.get('Poses');
-  if (posesGiven !== undefined && (posesGiven === '' || posesGiven === FIELD_PLACEHOLDER)) failures.push('8.4: a verdict is given and the "Poses" field is not written');
+  const judged = commit === undefined ? undefined : HASH.exec(commit)?.[0];
+  if (commit !== undefined && judged === undefined) failures.push('8.4: a verdict is given and the "Commit" field holds no full 40-hex commit');
+  // 8.5 matches the merged build by The build's commit and chunks, so the judged commit must be that one.
+  else if (judged !== undefined && buildCommit !== undefined && judged !== buildCommit) failures.push('8.4: a verdict is given and the "Commit" field is not the commit under The build');
   const named = [...new Set(values.get('Screenshots')?.match(SCREENSHOT) ?? [])];
   if (named.length === 0) failures.push('8.4: a verdict is given and the "Screenshots" field names no judgement-8-4-*.png');
   for (const name of named) if (!exists(name)) failures.push(`8.4: the screenshot ${name} is not beside the record`);
@@ -544,17 +567,27 @@ test('the 8.4 judgement sheet holds in both states: pending as written, recorded
   assert.deepEqual(auditJudgement(recorded, present), [], 'a complete recorded verdict passes');
   assert.deepEqual(auditRecord(recorded, instrument(), present), [], 'and the whole record with it');
 
-  // A verdict with a blank field.
-  for (const label of ['Date', 'Machine', 'Browser']) {
-    fails(setField(recorded, label, FIELD_PLACEHOLDER), new RegExp(`the "${label}" field is not written`), `${label} left as the placeholder`, present);
-    fails(setField(recorded, label, ''), new RegExp(`the "${label}" field is not written`), `${label} emptied`, present);
+  // A verdict with a blank field: the placeholder, nothing, or markup alone.
+  const blanks = [FIELD_PLACEHOLDER, '', '**', '``', '**To be written by Thomas.**'];
+  for (const label of ['Date', 'Machine', 'Browser', 'Poses']) {
+    for (const blank of blanks) fails(setField(recorded, label, blank), new RegExp(`the "${label}" field is not written`), `${label} as ${JSON.stringify(blank)}`, present);
   }
-  fails(setField(recorded, 'Verdict', ''), /the verdict is blank/, 'an empty verdict', present);
-  fails(setField(recorded, 'Date', 'soon.'), /"Date" field is not a YYYY-MM-DD date/, 'a date that is no date', present);
+  for (const blank of blanks) fails(setField(recorded, 'Verdict', blank), /the verdict is blank/, `the verdict as ${JSON.stringify(blank)}`, present);
+  for (const bad of ['soon.', '2026-99-99.', '2026-02-30.', '12026-11-20.']) fails(setField(recorded, 'Date', bad), /"Date" field is not a YYYY-MM-DD date/, `the date ${bad}`, present);
+  assert.deepEqual(auditJudgement(setField(recorded, 'Date', '2028-02-29, evening.'), present), [], 'a leap day, with words after it, is a date');
   fails(setField(recorded, 'Commit', ''), /"Commit" field holds no full 40-hex commit/, 'the commit emptied', present);
   fails(setField(recorded, 'Commit', '`2adeaa5`'), /"Commit" field holds no full 40-hex commit/, 'a short commit', present);
-  fails(setField(recorded, 'Poses', ''), /"Poses" field is not written/, 'the poses emptied', present);
   fails(inSheet(/^\s*- \*\*Commit:\*\*.*\n/m, '', recorded), /no "Commit" field/, 'the commit line dropped from a recorded sheet', present);
+  // The judged commit is the one under The build: another build replaces both.
+  const otherBuild = 'f'.repeat(40);
+  fails(setField(recorded, 'Commit', `\`${otherBuild}\``), /the "Commit" field is not the commit under The build/, "a judged commit that is not the build's", present);
+  assert.deepEqual(auditJudgement(inSheet(new RegExp(HASH.source, 'g'), otherBuild, recorded), present), [], 'another build, written under The build too, passes');
+  const buildPart = sectionOf(judgement, SHEET.build) as string;
+  fails(inSheet(buildPart, buildPart.replace(new RegExp(HASH.source, 'g'), '2adeaa5')), /no full 40-hex build commit/, 'the build shortened while the Commit field keeps its hash');
+  // A field written twice, in either state: the first line must not stand for the sheet.
+  const verdictLine = /^\s*- \*\*Verdict:\*\*.*$/m;
+  fails(inSheet(verdictLine, (line) => `${line}\n- **Verdict:** ${VERDICT_PENDING}`, recorded), /the "Verdict" field is written more than once/, 'a pending line left under a recorded verdict', present);
+  fails(inSheet(verdictLine, (line) => `- **Verdict:** Ships.\n${line}`, pendingRecord), /the "Verdict" field is written more than once/, 'a verdict written above the pending line');
   const dollars = setField(recorded, 'Verdict', 'costs $1 and $&; ships.');
   assert.equal(fieldOf(sectionOf(dollars, HEADINGS.judgement) as string, 'Verdict'), 'costs $1 and $&; ships.', 'a $ in a value is kept as written');
   assert.deepEqual(auditJudgement(dollars, present), [], 'and the sheet holding it passes');
@@ -562,6 +595,11 @@ test('the 8.4 judgement sheet holds in both states: pending as written, recorded
   fails(recorded, /the screenshot judgement-8-4-rail-2\.8333\.png is not beside the record/, 'a named PNG absent', (name) => name === shots[0]);
   fails(setField(recorded, 'Screenshots', 'None yet.'), /names no judgement-8-4-\*\.png/, 'a verdict with no screenshot', present);
   fails(setField(recorded, 'Screenshots', '`opening.png`'), /names no judgement-8-4-\*\.png/, 'a screenshot not named judgement-8-4-*', present);
+  // A longer name only holds a screenshot's name: it is another file, whatever exists.
+  const anything: Exists = () => true;
+  for (const longer of ['`old-judgement-8-4-opening-frame.png`', '`judgement-8-4-opening-frame.png.bak`']) {
+    fails(setField(recorded, 'Screenshots', longer), /names no judgement-8-4-\*\.png/, `the longer name ${longer}`, anything);
+  }
   // A field's line dropped, in either state.
   for (const label of FIELDS) fails(inSheet(new RegExp(`^\\s*- \\*\\*${label}:\\*\\*.*\\n`, 'm'), ''), new RegExp(`no "${label}" field`), `the ${label} field dropped`);
   // A pose or a look dropped.
