@@ -22,6 +22,12 @@
  *   `og:`/`twitter:` title, description and image alt) is in `META_COPY` (6.1).
  * - **Voice** — no work-in-progress, beta or apologetic word in any shipped
  *   string, in `career.json` or in `index.html`.
+ * - **Framerate** — no shipped surface says "not yet passed" or claims a
+ *   framerate (8.3, NFR-2): the Voice scope, plus the whole text of every text
+ *   file under `public/` (svg, html, txt, json, webmanifest, xml, css; comments
+ *   included, since `public/` is served as it is) and every string in the
+ *   committed artifact. NFR-2's status is the record's alone
+ *   (`nfr-2-record-8-3.md`).
  * - **Bands** — no Body in the committed artifact carries `stroke-dust` (ruling
  *   4b-i).
  * - **Page** and **Index** — the full-viewport page (ruling 7a) and the index
@@ -1777,6 +1783,148 @@ test('voice: a beta tag, an apology or a placeholder fails with its own line', (
   // Markup shipped under `src/` is scanned, its comments aside.
   assert.match(auditVoice({ 'x.svg': '<svg><text>beta</text></svg>\n' }, career, html).join('\n'), /^voice: src\/x\.svg says "beta"/);
   assert.deepEqual(auditVoice({ 'x.svg': '<svg><!-- draft --></svg>\n' }, career, html), []);
+});
+
+// --- Framerate (8.3, NFR-2) --------------------------------------------------------------------------
+
+/**
+ * The framerate register, case-insensitive:
+ *
+ * - "not yet passed", spaced or hyphenated;
+ * - a rate figure: a number, or the `}` closing a template interpolation
+ *   (`${rate} fps`), then optional space or hyphen, then `fps`, `frames/s`,
+ *   `frames/sec`, or "frames per second" / "frames a second" (`60fps`,
+ *   `60-fps`, `29.5 fps`, `30 frames/s`, `30 frames a second`);
+ * - `fps` before a figure, after an optional `:` or `=` (`fps: 60`, `FPS 30`);
+ * - the words "frame rate" (`framerate`, `frame-rate`, plural) and "frames per
+ *   second".
+ *
+ * `'fps'` alone, and an `fps` identifier, are not a claim. NFR-2's status lives
+ * in `nfr-2-record-8-3.md` alone; no shipped surface says it, nor claims a rate.
+ */
+const FRAMERATE =
+  /\bnot[\s-]+yet[\s-]+passed\b|(?:\d+(?:\.\d+)?|\})[\s-]*(?:fps\b|frames?\s*\/\s*s(?:ec)?\b|frames[\s-]+(?:per|a)[\s-]+second\b)|\bfps\s*[:=]?\s*\d+(?:\.\d+)?|\bframe[\s-]*rates?\b|\bframes[\s-]+per[\s-]+second\b/i;
+
+/** The text files `public/` serves as they are, by extension. */
+const PUBLIC_TEXT = /\.(?:svg|html?|txt|json|webmanifest|xml|css)$/i;
+
+/** A shipped surface beyond the Voice scope: `public/`'s text files by repo path (undefined when there is no `public/`), and the committed artifact's text. */
+interface FramerateExtras {
+  readonly publicFiles: Readonly<Record<string, string>> | undefined;
+  readonly artifact: string;
+}
+
+/**
+ * The Voice scope (every shipped string and template literal, JSX text, shipped
+ * `.html`/`.svg` under `src/` with comments aside, `career.json`, `index.html`),
+ * plus the whole text of every text file under `public/` (comments included,
+ * since `public/` is served as it is, as `index.html` is read whole), and every
+ * string in `generated/layout.generated.json`, keys included. Comments in a
+ * module are not shipped.
+ */
+function auditFramerate(files: Readonly<Record<string, string>>, career: string, html: string, extras: FramerateExtras): string[] {
+  const failures: string[] = [];
+  const check = (where: string, text: string): void => {
+    const hit = FRAMERATE.exec(text);
+    if (hit !== null) failures.push(`framerate: ${where} says ${JSON.stringify(hit[0])} — ${JSON.stringify(text.trim().slice(0, 80))}`);
+  };
+  for (const [path, source] of Object.entries(files)) {
+    const language = languageOf(path) ?? 'script';
+    if (language === 'markup') {
+      check(`src/${path}`, codeOf(source, 'markup'));
+      continue;
+    }
+    const code = codeOf(source, language);
+    for (const [, , quoted, template] of code.matchAll(LITERAL)) check(`src/${path}`, (quoted ?? template) as string);
+    if (path.endsWith('.tsx')) for (const drawn of jsxDrawn(code)) if (drawn.kind === 'text') check(`src/${path}`, drawn.text);
+  }
+  const strings = (where: string, json: string): void => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(json);
+    } catch {
+      failures.push(`framerate: ${where} is not JSON, so it could not be read`);
+      return;
+    }
+    for (const text of jsonStrings(parsed)) check(where, text);
+  };
+  strings('src/data/career.json', career);
+  check('index.html', html);
+  if (extras.publicFiles === undefined) failures.push('framerate: there is no public/ to read');
+  else if (Object.keys(extras.publicFiles).length === 0) failures.push('framerate: public/ holds no text file to read');
+  else for (const [path, source] of Object.entries(extras.publicFiles)) check(path, source);
+  strings('generated/layout.generated.json', extras.artifact);
+  return failures;
+}
+
+/** Every text file under `public/`, by repo path, with LF line endings; undefined when there is no `public/`. */
+function publicTexts(): Record<string, string> | undefined {
+  const root = at('../public');
+  if (!existsSync(root)) return undefined;
+  const found: Record<string, string> = {};
+  for (const file of filesUnder(root)) {
+    if (!PUBLIC_TEXT.test(file)) continue;
+    found[`public/${relative(root, file).split(sep).join('/')}`] = readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+  }
+  return found;
+}
+
+const framerateExtras = (): FramerateExtras => ({ publicFiles: publicTexts(), artifact: read('../generated/layout.generated.json') });
+
+test('framerate: no shipped string, career.json, index.html, public/ text file or artifact string says "not yet passed" or claims a rate', () => {
+  const extras = framerateExtras();
+  assert.ok(extras.publicFiles !== undefined && 'public/favicon.svg' in extras.publicFiles, `the walk reads public/: ${Object.keys(extras.publicFiles ?? {}).join(', ')}`);
+  assert.deepEqual(auditFramerate(shippedFiles(), read('./data/career.json'), read('../index.html'), extras), []);
+});
+
+test('framerate: a rate claimed, or "not yet passed", on any surface fails with its own line, and a comment passes', () => {
+  const scripts = shippedFiles();
+  const career = read('./data/career.json');
+  const html = read('../index.html');
+  const extras = framerateExtras();
+  const publicFiles = extras.publicFiles ?? {};
+  const audit = (over: Partial<{ files: Record<string, string>; career: string; html: string; extras: FramerateExtras }>): string =>
+    auditFramerate(over.files ?? scripts, over.career ?? career, over.html ?? html, over.extras ?? extras).join('\n');
+  const inScript = (text: string): string => audit({ files: { 'x.ts': text } });
+  assert.match(
+    audit({ files: { ...scripts, 'shell/chrome-model.ts': (scripts['shell/chrome-model.ts'] as string).replace("'THOMAS NAVARRO · the model'", "'THOMAS NAVARRO · the model at 60fps'") } }),
+    /^framerate: src\/shell\/chrome-model\.ts says "60fps"/m,
+  );
+  assert.match(audit({ career: career.replace(/"notable": "/, '"notable": "Not yet passed. ') }), /^framerate: src\/data\/career\.json says "Not yet passed"/m);
+  assert.match(audit({ html: html.replace('</title>', ' — smooth frame rate</title>') }), /^framerate: index\.html says "frame rate"/m);
+  const favicon = publicFiles['public/favicon.svg'] as string;
+  assert.match(
+    audit({ extras: { ...extras, publicFiles: { ...publicFiles, 'public/favicon.svg': favicon.replace('</svg>', '<title>frame rate</title></svg>') } } }),
+    /^framerate: public\/favicon\.svg says "frame rate"/m,
+  );
+  // Every public/ text file is read whole: a comment there is served, so it fails too.
+  assert.match(audit({ extras: { ...extras, publicFiles: { ...publicFiles, 'public/x.svg': '<svg><!-- 60fps --></svg>\n' } } }), /^framerate: public\/x\.svg says "60fps"/m);
+  for (const name of ['x.html', 'robots.txt', 'x.json', 'site.webmanifest', 'sitemap.xml', 'x.css']) {
+    assert.match(audit({ extras: { ...extras, publicFiles: { ...publicFiles, [`public/${name}`]: 'runs at 30 fps\n' } } }), new RegExp(`^framerate: public/${name.replace('.', '\\.')} says "30 fps"`, 'm'), name);
+  }
+  // The other forms: hyphenated, spaced, decimal, plural, after a figure or an interpolation, and in the artifact's strings.
+  assert.match(inScript("export const a = 'not-yet-passed';\n"), /^framerate: src\/x\.ts says "not-yet-passed"/m);
+  assert.match(inScript('export const a = `holds\n29.5 fps`;\n'), /^framerate: src\/x\.ts says "29\.5 fps"/m);
+  assert.match(audit({ files: { 'x.tsx': 'export const A = () => <p>Frames per second: high</p>;\n' } }), /^framerate: src\/x\.tsx says "Frames per second"/m);
+  assert.match(inScript("export const a = 'framerates';\n"), /^framerate: src\/x\.ts says "framerates"/m);
+  assert.match(inScript("export const a = 'held at 60-fps';\n"), /^framerate: src\/x\.ts says "60-fps"/m);
+  assert.match(inScript("export const a = 'fps: 60';\n"), /^framerate: src\/x\.ts says "fps: 60"/m);
+  assert.match(inScript("export const a = 'FPS 30';\n"), /^framerate: src\/x\.ts says "FPS 30"/m);
+  assert.match(inScript("export const a = 'fps=24';\n"), /^framerate: src\/x\.ts says "fps=24"/m);
+  assert.match(inScript("export const a = '30 frames/s';\n"), /^framerate: src\/x\.ts says "30 frames\/s"/m);
+  assert.match(inScript("export const a = '30 frames/sec';\n"), /^framerate: src\/x\.ts says "30 frames\/sec"/m);
+  assert.match(inScript("export const a = '30 frames a second';\n"), /^framerate: src\/x\.ts says "30 frames a second"/m);
+  assert.match(inScript('export const a = `${rate} fps`;\n'), /^framerate: src\/x\.ts says "} fps"/m);
+  assert.match(audit({ extras: { ...extras, artifact: extras.artifact.replace(/"name": "/, '"name": "30fps ') } }), /^framerate: generated\/layout\.generated\.json says "30fps"/m);
+  // Nothing to read fails with the audit's own line, never an unnamed fs error.
+  assert.match(audit({ extras: { ...extras, publicFiles: {} } }), /public\/ holds no text file/);
+  assert.match(audit({ extras: { ...extras, publicFiles: undefined } }), /there is no public\/ to read/);
+  assert.match(audit({ extras: { ...extras, artifact: '{' } }), /generated\/layout\.generated\.json is not JSON/);
+  // A comment in a module is prose for the next reader, not shipped copy.
+  assert.equal(inScript('// held at 60fps, frames per second; not yet passed\nexport const a = 1;\n'), '');
+  assert.equal(audit({ files: { 'x.svg': '<svg><!-- 60fps frame rate --></svg>\n' } }), '');
+  // An identifier is not a string, and `'fps'` alone is no claim: `fps`, `FALLBACK_FLOOR_FPS` and the label pass.
+  assert.equal(inScript("export const fps = 24; export const FALLBACK_FLOOR_FPS = 24; export const label = 'fps';\n"), '');
 });
 
 // --- Bands (ruling 4b-i) -----------------------------------------------------------------------------
