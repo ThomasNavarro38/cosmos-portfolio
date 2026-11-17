@@ -499,7 +499,16 @@ A visitor who opens the Colophon reads that a Planet's appearance is assigned an
 **NFRs recorded:** NFR-2 and NFR-2a, recorded and not passed; the 24fps floor unchanged
 **Requirements:** AR-M3-10, AR-M3-11, AR-M3-13, AR-M3-14, UX-DR63
 **ADs realised:** AD-21's Colophon part, AD-23's instrument and record
-**Standalone:** Requires Epic 7 and nothing later. Needs two of Thomas's rulings: the Colophon wording and the on-screen judgement. A failed judgement returns to Epic 7's tunable values; moving line-work or adding a composer needs a new ruling (spine, Deferred).
+**Standalone:** Requires Epic 7; **8.5 also requires Epic 9**. Needs two of Thomas's rulings: the Colophon wording and the on-screen judgement. The 8.4 judgement was rejected (2026-11-17), and its points were ruled into Epic 9 by the Sprint Change Proposal of that date (`sprint-change-proposal-2026-11-17.md`). A failed judgement from now on returns to the tunable values of Epics 7 and 9; moving line-work or adding a composer still needs a new ruling (spine, Deferred).
+
+### Epic 9: The Scene Becomes the Sky
+
+On a capable machine, once realism has arrived, the visitor no longer sees a schematic laid over the realism: each stroke is replaced by a physical object carrying the same meaning. Stars shine with a limb-darkened, slowly granulating, slowly pulsing core in a colour of their own; orbits are faint debris belts; the Rail is a stretched nebula; a Deep Planet wears a real ring and moon; a Planet's recency is its atmosphere rim. Every Star is named with its Client. First Paint, the Fallback, the link preview and the failure path keep the line-work, and colour still means nothing.
+
+**FRs honoured:** FR-3 (carriers amended, still one rule), FR-9 (Deep/Shallow, now physical), FR-11 (Client names, now in the scene), FR-21 (statement extended to Stars)
+**NFRs held:** NFR-1, NFR-3, NFR-7, and NFR-2's budgets
+**ADs realised:** the 2026-11-17 amendments to AD-19, AD-20, AD-21, AD-22 and AD-23
+**Standalone:** Requires Epics 7 and 8.1–8.4. Born of the 8.4 rejection (Sprint Change Proposal 2026-11-17). **Stop rule:** the cost spike (9.1) comes first, and no build story starts before 9.2's rulings are recorded. 8.5 waits on a passing 9.11 verdict.
 
 ### Dependency flow
 
@@ -510,10 +519,11 @@ Epic 1 (pipeline + artifact)
   ├─→ Epic 5 (colophon)
   └─→ Epic 6 (launch surface — needs Epic 2 and Epic 4 in place to verify)
 
-Epics 1–6 (done) ─→ Epic 7 (the realistic scene) ─→ Epic 8 (credited, recorded, deployed)
+Epics 1–6 (done) ─→ Epic 7 (the realistic scene) ─→ Epic 8, 8.1–8.4 (credited, recorded, judged: rejected)
+                  ─→ Epic 9 (the scene becomes the sky) ─→ 8.5 (deployed)
 ```
 
-Epic 1 → 2 → 3 is a hard chain. Epics 4, 5, and 6 depend only on Epic 1's artifact; 6 additionally needs 2 and 4 present to verify against. Epics 7 and 8 are M3, an upgrade to the live site. No epic requires a later epic to function.
+Epic 1 → 2 → 3 is a hard chain. Epics 4, 5, and 6 depend only on Epic 1's artifact; 6 additionally needs 2 and 4 present to verify against. Epics 7, 8 and 9 are M3, an upgrade to the live site; 8.5 is the last M3 story and needs Epic 9. No epic requires a later epic to function.
 
 ---
 
@@ -3094,13 +3104,14 @@ So that the upgrade arrives and the link I was sent still works as before.
 
 **Given** the gates before merging
 **When** `m3-realism` is ready
-**Then** the 8.4 verdict is a pass for the build being merged, and `npm test`, `tsc` and `npm run build` pass, with any skip named
+**Then** the **9.11** verdict is a pass for the build being merged (8.4's rejection stays on record), and `npm test`, `tsc` and `npm run build` pass, with any skip named
 **And** Thomas gives the go-ahead for the merge, since merging to `main` publishes
 
 **Given** silent failure hides a broken deploy (AD-22, UX-DR61)
 **When** the site is live at `https://thomasnavarro38.github.io/cosmos-portfolio/`
 **Then** on a real browser every map and the `realism` chunk return 200 under the `/cosmos-portfolio/` base, and the layer is actually seen to fade in
 **And** "no error on screen" is not accepted as evidence
+**And** the live Stars show their Client names and their tints, and the crossfade from line-work to realism is seen to happen, not just the fade-in
 
 **Given** First Paint (NFR-1, story 6.4)
 **When** the live first frame is measured by 6.4's P1 procedure
@@ -3117,3 +3128,170 @@ So that the upgrade arrives and the link I was sent still works as before.
 **Given** the record (AD-23)
 **When** this story closes
 **Then** the 8.3 record names the live commit and still reads NFR-2 **not yet passed**
+
+## Epic 9: The Scene Becomes the Sky
+
+Thomas's on-screen judgement (8.4, 2026-11-17) rejected M3: the line-work reads as a schematic laid over the realism, and the Stars do not read as Stars. Epic 9 replaces each stroke, once realism has arrived, with a physical object carrying the same meaning, and names every Star. Source: `sprint-change-proposal-2026-11-17.md`.
+
+**FRs:** FR-3, FR-9, FR-11, FR-21 · **ADs:** the 2026-11-17 amendments to AD-19..AD-23 · **Delivery:** continues on `m3-realism`; nothing reaches `main` before 8.5.
+
+**Carried invariants (every story):** First Paint stays schematic (AD-22); on realism failure the line-work stays (AD-25); the Fallback, phones and the link preview are unchanged (AD-24); Dust stays exactly as M2 draws it; no post pass, composer, full-screen target, shadow map, scene light or new dependency; colour encodes nothing; white is spent once per frame; every label keeps its contrast floor.
+
+### Story 9.1: The cost spike
+
+As Thomas,
+I want the debris belt, the nebula ribbon and the ring disc prototyped and measured before anything is built,
+So that the rulings in 9.2 rest on measured bytes and draw calls, not guesses.
+
+**Acceptance Criteria:**
+
+**Given** a throwaway prototype outside `src/` (AD-23)
+**When** each object is drawn on the production build
+**Then** its minified bytes (per chunk) and draw calls are recorded against AD-23's limits, with the `scene` chunk's remaining headroom stated
+**And** each is captured at 1920×1080 and on the Odyssey Ark for Thomas to look at, labelled as a spike and not a judgement
+
+**Given** a limit would be exceeded
+**When** the figures are recorded
+**Then** the record proposes a new limit as the measured figure plus a stated margin, for 9.2 to rule on
+
+### Story 9.2: The rulings
+
+As Thomas,
+I want the Sprint Change Proposal's document amendments recorded as rulings,
+So that every build story in Epic 9 has a written rule to be held to.
+
+**Acceptance Criteria:**
+
+**Given** the approved proposals 2–7
+**When** this story closes
+**Then** the PRD (FR-3), the spine (AD-19..AD-23) and DESIGN.md/EXPERIENCE.md carry the approved text, each amendment dated 2026-11-17
+**And** the memlog records the rulings: line-work under realism, the Star look, Star colour, the physical Deep/Shallow signal, the extended draw order and any budget change with 9.1's figures
+**And** `epic-8-context.md` is regenerated, and an `epic-9-context.md` is compiled
+
+### Story 9.3: Client names on the Stars
+
+As a visitor,
+I want each Star to show its Client's name,
+So that I know what each Star represents.
+
+**Acceptance Criteria:**
+
+**Given** DESIGN §7.1
+**When** the scene draws, in every session, realism or not
+**Then** each Client Star carries its name below it in `scene-label-client`, in `ink-lift` as the subject and `ink-quiet` or `ink-faint` as receded, on a `surface-base` plate as the Project label's (7.9)
+**And** every name keeps its contrast floor over a fill, a glow or the nebula, proven by the identity audit
+**And** the "no readable label near the frame edge" rule and "one label per object" hold
+
+### Story 9.4: Stars that shine
+
+As a visitor,
+I want a Star to look like a star,
+So that the scene reads as sky rather than as a diagram.
+
+**Acceptance Criteria:**
+
+**Given** realism has arrived (AD-19, AD-20 as amended)
+**When** a Star is drawn
+**Then** it has no outline and no core dot; its core is limb-darkened into its glow, with slow granulation and a slow pulse phased from its ID
+**And** its rest luminance follows its `luminanceBand`, the pulse never leaves the band, and only `sceneSubject`'s core reaches `stroke-focus`, at its centre alone
+**And** granulation and pulse stop when `reducedMotion()` is true
+**And** the draw calls stay 2 per Star
+
+### Story 9.5: A colour per Star
+
+As a visitor,
+I want each Star to have its own colour,
+So that the sky feels real, while colour still means nothing.
+
+**Acceptance Criteria:**
+
+**Given** AD-21 as amended
+**When** the artifact is solved
+**Then** each Star carries `appearance: { tint, pulsePhase }` from its entity ID alone, `tint` one of the five `realism-star-*` tokens, under a new `SCHEMA_VERSION`, with `solveLive` byte-identical
+**And** the tint never changes in time, and a Star's glow takes its tint
+**And** the Colophon's copy place 4 shows the ruled heading and statement verbatim (proposal 7), pinned by `credits.test.ts` and the identity audit
+
+### Story 9.6: Orbits as debris belts
+
+As a visitor,
+I want an orbit to be a faint belt of debris rather than a drawn ellipse,
+So that what holds a Planet to its Star is part of the sky.
+
+**Acceptance Criteria:**
+
+**Given** realism has arrived
+**When** orbits are drawn
+**Then** each is a faint, wide, static band along its ellipse, all in one merged mesh (1 draw call), its brightness its Planet's `luminanceBand`, under the luminance ceiling
+**And** it cannot be read as Dust: it has no particles and no motion
+
+### Story 9.7: The Rail as a nebula
+
+As a visitor,
+I want the timeline to be a stretched nebula,
+So that the path through time is part of the sky.
+
+**Acceptance Criteria:**
+
+**Given** realism has arrived
+**When** the Rail is drawn
+**Then** it is one noise-shaded ribbon mesh along the Rail's curve (1 draw call, no raymarching), in `realism-nebula`, drifting slowly, frozen under reduced motion
+**And** it stays under the luminance ceiling and every label keeps its contrast floor over it
+
+### Story 9.8: Deep Planets wear a ring and a moon
+
+As a visitor,
+I want a Deep Project to wear a real ring and moon,
+So that I can still tell which entries are worth reading.
+
+**Acceptance Criteria:**
+
+**Given** the Deep/Shallow signal (FR-9, DESIGN §7.2 as amended)
+**When** realism has arrived
+**Then** a Deep Project wears a thin, tilted, semi-transparent ring disc and a small lit moon sphere on the shared geometry, both achromatic, and a Shallow Project wears neither
+**And** the signal uses neither size nor brightness, and stays readable at client-stop distance at 1080p
+**And** the draw calls are 2 per Deep Project
+
+### Story 9.9: The atmosphere rim
+
+As a visitor,
+I want a Planet's edge to be its atmosphere,
+So that recency reads without a drawn outline.
+
+**Acceptance Criteria:**
+
+**Given** FR-3 as amended
+**When** realism has arrived
+**Then** a Planet's outline is replaced by a limb rim inside its fill shader (no added draw call), its brightness its `luminanceBand`, white only on the subject
+
+### Story 9.10: The handover
+
+As a visitor,
+I want the line-work to give way to the sky in one move,
+So that I never see half a schematic and half a sky.
+
+**Acceptance Criteria:**
+
+**Given** AD-22 as amended
+**When** realism fades in
+**Then** on the one fade uniform the realism layer rises and the line-work it replaces falls, together and whole
+**And** on failure the line-work stays at its token values, with no error and no message
+**And** the hover and keyboard affordance, leaders, plates, Mote orbits and Dust are unchanged in every session
+**And** every audit (render order, draw calls, luminance ceiling, achromatic, reduced motion, bundle) passes, each change naming its allowance
+
+### Story 9.11: The second judgement
+
+As Thomas,
+I want to judge the new scene on screen,
+So that M3 ships on a look I have accepted.
+
+**Acceptance Criteria:**
+
+**Given** the production build at this story's commit
+**When** the agent prepares the sheet in the 8.3 record, beside 8.4's section
+**Then** it names the build commit and chunk names, 8.4's four poses plus a Star close-up, each judged at 1920×1080 and on the Odyssey Ark
+**And** its checklist carries 8.4's routed looks: the Star's dark ring closed as superseded by 9.4; overlapping rest glows re-checked under tints; the others carried
+**And** the agent writes no verdict and stops
+
+**Given** Thomas records a verdict
+**When** `npm test` runs
+**Then** it passes only with every field filled and every named screenshot present, and the record still reads NFR-2 **not yet passed**
