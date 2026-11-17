@@ -127,7 +127,7 @@ development_status:
   8-1-the-worst-window-on-the-visitor-s-own-timeline: done
   8-2-the-colophon-credits-the-maps: done
   8-3-the-record-says-not-yet-passed: done
-  8-4-thomas-s-on-screen-judgement: backlog
+  8-4-thomas-s-on-screen-judgement: review
   8-5-m3-reaches-the-live-site: backlog
   epic-8-retrospective: optional
 action_items:
@@ -708,7 +708,14 @@ action_items:
     action: "On creating 8.4's spec, list the Epic 7 looks routed to it as a checklist
       and add a Rail pose at p=2.8333"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-11-17: story 8.4 — nfr-2-record-8-3.md, On-screen judgement (8.4), is
+      the judgement sheet: the build (2adeaa5, its entry, scene and realism chunks), four
+      poses (opening frame, Client stop 1, Focus, and rail(p=2.8333) by one wheel event
+      of deltaY 2266.64, its landing confirmed on the production build) and a checklist
+      of the seven routed looks, each with where to look, its deferred-work evidence and
+      the levers a rejection may use. scripts/nfr-2-record.test.ts holds every pose and
+      look. The verdict is Thomas's and not yet given"
     ref: "_bmad-output/implementation-artifacts/epic-7-retro-11-16-2026.md"
   - id: "epic-7-retro-item-54-8-3-s-record-lists-beside-nfr-2-what-was"
     epic: 7

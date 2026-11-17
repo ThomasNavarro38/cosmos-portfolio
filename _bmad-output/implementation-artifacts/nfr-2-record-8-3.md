@@ -115,7 +115,64 @@ None of these has been run on any machine. Each is listed beside NFR-2 so its ab
 
 ## On-screen judgement (8.4)
 
-No verdict has been recorded. Story 8.4 records Thomas's on-screen judgement here: the date, the machine, the browser, the commit, the poses, the verdict in Thomas's words, and the screenshots stored beside this record. The entry must say that the machine is not the target profile, so a judgement made on it is not a framerate result and leaves the status unchanged.
+The framerate gate cannot run, so M3 ships on Thomas's own judgement of the realism layer on a real display. This section is the sheet for it: the build to judge, the poses to judge it at, the looks Epic 7 routed here (Epic 7 retro F4, item 53), the route back if a pose is rejected, and the fields for the verdict. The agent that prepared it wrote no verdict and judged no look.
+
+The machine the judgement is made on is not the target profile, so nothing about framerate follows from it, whatever it shows. The status stays "not yet passed" after any verdict, pass or reject.
+
+### The build
+
+- **Build commit:** `2adeaa5c20f9602250f5aed4c251b0927a301457` (`git rev-parse HEAD` at preparation, 2026-11-17). Story 8.4's own commit adds only `scripts/nfr-2-record.test.ts`, this record, its spec (`spec-8-4-thomas-s-on-screen-judgement.md`) and the sprint status, and changes no shipped module, so a build of it is this build.
+- **Emitted by `npm run build`** (in `dist/assets/`): the entry `index-ClN-7EAw.js`, `scene-BK7T607y.js` and `realism-TxJryhhe.js`. The names are content hashes of the JavaScript alone. A build that emits other names is not the judged build, and the judgement does not carry over to it. The same three names are necessary, not sufficient: they say nothing of the stylesheets or the maps, so 8.5 also checks the build commit. The bundle assertion read the entry at 3,278 of 4,000 bytes, `realism` at 8,560 of 24,000 and `scene` at 953,039 of 960,000, all within budget.
+- **Serve:** `npm run build`, then `npm run preview`, then open `http://localhost:4173/cosmos-portfolio/`. Never the dev server.
+
+### The poses
+
+At each pose Thomas judges two things (AC 8.4-1): whether the layer reads as realistic, not a screensaver, and label contrast, whether every label still reads against what realism draws behind it.
+
+Each pose was reached by its steps on this build at 1920×1080 (the dev machine, Chrome 157.0.8103.79, a fresh profile), by real key and mouse input over the DevTools protocol, except `rail(p=2.8333)`, whose one wheel event is dispatched from the Console, as its steps say. Coordinates are for a 1920×1080 viewport; at another size the Bodies keep their places in the frame, not their pixels.
+
+| Pose | Steps | What it shows |
+| --- | --- | --- |
+| `opening frame` | Open a new tab and load the URL above (a fresh load). Give no input for about 9 s, until the realism fade has finished. `history.state` reads `null`. | The whole field from keyframe 0: all six Stars and eight Planets, small, at rest. |
+| `Client stop` (stop 1) | From the opening frame, press ArrowDown once and wait about 5 s. `history.state.scrollProgress` reads `1`. If the arrow does nothing, the page lacks keyboard focus: click an empty corner once (an empty click does nothing in the scene), then press it. | Stop 1's Client, Decathlon (`client:decathlon`, `buildRail(...).keyframes[1].subject`): its Star lit as the subject at the centre, its one Planet to the right. |
+| `Focus` | From Client stop 1, click the Planet to the right of Decathlon's Star, at about (1651, 540): Store labelling generation (`project:decathlon/store-labelling-generation`, the moon map). Wait about 6 s. The panel opens titled "Store labelling generation". Escape releases it, back to Client stop 1 with the path unchanged. | The Planet's fill at its largest, its Motes and labels, and the panel. |
+| `rail(p=2.8333)` | A fresh load in a new tab; wait about 9 s for the fade. Open DevTools undocked (a separate window, so the viewport keeps its size) and run in the Console: `document.querySelector('.scene-host').dispatchEvent(new WheelEvent('wheel', { deltaY: 2266.64, bubbles: true, cancelable: true }))`. That is 2.8333 × `WHEEL_PIXELS_PER_STOP` (800): one event through the shipped wheel path, so the store moves with the camera. After about 1 s, `history.state.scrollProgress` reads `2.8333`. | Between stops 2 and 3, near SNCF Connect & Tech: the worst pose 7.7 measured for a farther fill over a nearer glow. |
+
+**The landing, confirmed on this build:** the wheel event was taken (`defaultPrevented` true), and `history.state.scrollProgress` read `null` at 250 ms (the router's trailing save not yet written), then `2.8333` at 0.5 s, 1 s, 2 s, 4 s and 8 s. A reload cannot carry the pose: the router restores a saved position only at creation or on a route-changing pop, and `pagehide` saves the store's own value first.
+
+The captures made while confirming the poses are not the judgement's screenshots, and are not stored here.
+
+### The checklist
+
+Each look is judged at the poses named, on Thomas's display. The evidence is the entry in `deferred-work.md` that routed it here. "Levers" names what a rejection may change by AC 8.4-3 (below); a lever outside Epic 7's tunable values is marked as needing a ruling.
+
+| Look | Where to look | Evidence | Levers if rejected | Thomas's call |
+| --- | --- | --- | --- | --- |
+| A farther fill over a nearer glow | `rail(p=2.8333)`, lower left: inside the glow of SNCF Connect & Tech (the large Star left of centre), SNCF's Star and its Planet Client referential (the mars map) are farther and draw over the glow. | `deferred-work.md:1355`: 549 pixels at this pose (462 under SNCF's fill, 87 under Client referential's), 0 at every stop and Focus; the draw order stands by AD-19. Screenshot `realism-glow-7-7-overlap-worst.png` (its strokes are keyframe 0's, not this pose's). | Glow values (`GLOW_SUBJECT_PEAK`, `GLOW_REST_PEAK`, `GLOW_RADIUS_RATIO`) or the map choice. Reversing the draw order needs a ruling. | |
+| Half-disc Planets | Every pose; largest at `Focus`, where Store labelling generation is lit on one half with a straight terminator. | `deferred-work.md:1430`: the light's in-plane share is 0.995 or 1 at every stop and Focus (`realism-fills-7-6.md`, Lit by its own Star). | The ambient floor (`realism-ambient-floor-dark`), which lifts the night side; the map choice. Moving the light is not a tunable value and needs a ruling. | |
+| The Star's dark ring | The Stars at rest: at `rail(p=2.8333)` SNCF (lower left) and Air France-KLM (right of centre), and the opening frame's six. The stroke-rest outline and the core dot read dark on a fill near its ceiling. | `deferred-work.md:1454-1456`, `realism-glow-7-7-overlap-worst.png`; 7.9 passed it on unchanged. | Glow values: the Star fill's rest ceiling and `GLOW_REST_PEAK`. The outline and the dot are line-work: moving them needs a ruling. | |
+| The fill-tilt axis wording | `Focus`: the map's features and terminator against the screen's horizontal. The fill tilts about world x, while `src/derive/appearance.ts:18` documents tilt as about the Billboard's horizontal; the two differ with the camera's heading. | `deferred-work.md:1408`; `mapFromWorld` in `src/render-scene/realism/fill-model.ts`. | The tilt values (`TILT_MIN`, `TILT_MAX`) and spin rates. Correcting the wording changes a comment, not the look. Changing the axis itself is not a tunable value and needs a ruling. | |
+| Jupiter worn by no Planet | No pose shows it. The Colophon (`/colophon/`) lists `jupiter.webp` with its credit, and the build requests only `io.webp`, `mars.webp` and `moon.webp` (checked on this build). | `deferred-work.md:1375`: moon 5, io 2, mars 1, jupiter 0, in `generated/layout.generated.json`. | The map choice: the library (`src/derive/map-library.ts`) or the salt in `src/derive/appearance.ts`. AD-21 forbids a per-Body override. | |
+| The band between the plate and the keyboard outline | `Client stop`, by keyboard: from a fresh load at Client stop 1 with no click, Tab until the index entry "Store labelling generation" shows bottom-left (three Tabs: overview, Decathlon, Store labelling generation). The affordance rises on the Planet with its surface-base plate and the keyboard outline 3 px off it; look at the band of scene between the two. | `deferred-work.md:1564` (`realism-labels-7-9.md`, After the ruling); `affordance-model.ts:70-73`. | Glow values, for what shows through the band. The outline and its offset are line-work: moving them needs a ruling. | |
+| Overlapping rest glows | Where two Stars' rest glows meet: the opening frame's central cluster, and along the Rail. | `deferred-work.md:1498-1500`: at most two overlap on the committed layout, 0.4536 against the ceiling 0.47119; nothing in the code limits how many may. | `GLOW_REST_PEAK`, lowered (a glow value). A layout check in `scripts/` would guard a re-solve but changes no look. | |
+
+### If a pose is rejected
+
+The change goes to Epic 7's tunable values, inside AD-23's budgets: the map choice, the ambient floor, the glow and fade values, and the spin rates. Then the build is made again and the judgement is taken again, at every pose, against the new build commit and chunk names written here.
+
+Moving line-work, changing Focus framing, adding a post pass or changing a budget needs a new ruling recorded in the memlog (spine, Deferred) before it is made.
+
+### The verdict
+
+Thomas writes these. Each field stays on its own line, its value after the label. A verdict is given by replacing `Not yet given.`; from then on `npm test` requires the date (as `YYYY-MM-DD`), the machine and the browser written, the Commit field holding the judged build's full 40-hex commit, the Poses field written, and the Screenshots field naming at least one screenshot, each stored beside this record as `judgement-8-4-<pose>.png`: `judgement-8-4-opening-frame.png`, `judgement-8-4-client-stop.png`, `judgement-8-4-focus.png`, `judgement-8-4-rail-2.8333.png`, and `judgement-8-4-keyboard-band.png` for the band. If another build is judged, its commit and chunk names replace those under The build too. The machine is named with its model, CPU, GPU and display, and is not the target profile.
+
+- **Date:** To be written by Thomas.
+- **Machine:** To be written by Thomas.
+- **Browser:** To be written by Thomas.
+- **Commit:** `2adeaa5c20f9602250f5aed4c251b0927a301457`, the build above, unless another build was judged.
+- **Poses:** the four above: `opening frame`, `Client stop` (stop 1, Decathlon), `Focus` (Store labelling generation), `rail(p=2.8333)`.
+- **Verdict:** Not yet given.
+- **Screenshots:** None yet.
 
 ## Live (8.5)
 
