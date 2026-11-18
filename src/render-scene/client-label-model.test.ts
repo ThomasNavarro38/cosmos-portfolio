@@ -1,9 +1,10 @@
 /**
  * The Client names on the Stars (9.3), executed: the pool, the ink by subject,
  * the place below the Star, the hides (frame edge, panel edge, behind the
- * camera, the affordance, a stronger name), the plate, the obstacles the Motes
- * yield to, the write onto the handles, the committed artifact at every Rail
- * stop at 16:9 and 32:9, and the module's purity — the spec's matrix, row by row.
+ * camera, another Body's disc, the affordance, a stronger name), the plate, the
+ * obstacles the Motes yield to, the write onto the handles, the committed
+ * artifact at every Rail stop at 16:9, 32:9 and 16:10 (no plate over another
+ * Body), and the module's purity — the spec's matrix, row by row.
  */
 
 import { strict as assert } from 'node:assert';
@@ -18,6 +19,7 @@ import {
   PLATE_PAD_PX,
   affordanceObstacles,
   labelBounds,
+  markPx,
   projectToScreen,
   radiusPx,
   type AffordanceArtifact,
@@ -42,7 +44,7 @@ import {
   type ClientLabelHandle,
   type ClientLabelState,
 } from './client-label-model.ts';
-import { moteLabelPass } from './mote-label.ts';
+import { MOTE_LABEL_LIMIT, moteLabelPass } from './mote-label.ts';
 import { MOON_OFFSET_RATIO, MOON_RADIUS_RATIO, RING_RADIUS_RATIO } from './notable-model.ts';
 import { buildRail, railFarPlane, railPose, railStopCount, type Rail, type RailKeyframe } from './rail-model.ts';
 import { DEFAULT_FOV, DEFAULT_NEAR, buildScene, frameBodies, type Body, type SceneArtifact } from './scene-model.ts';
@@ -151,6 +153,7 @@ test('the pool is one label per Client, in artifact order, its name published as
     (artifact.clients as readonly CommittedClient[]).map((client) => ({ id: client.id, name: client.name })),
   );
   assert.equal(clientLabels(artifact).length, 6);
+  assert.ok(clientLabels(artifact).length < MOTE_LABEL_LIMIT, 'the names carry no cap because the Stars stay fewer than the Motes’ cap');
   assert.ok(clientLabels(artifact).some((label) => label.name === 'SIMSU'), 'an all-capital name stays as written');
   assert.ok(clientLabels(artifact).some((label) => label.name === 'SNCF Connect & Tech'), 'a mixed-case name is not transformed');
 });
@@ -243,7 +246,8 @@ test('a name whose box enters the outer 12% on any side is hidden, never moved',
   for (let x = -18; x <= 18; x += 0.25) {
     for (let y = -10; y <= 10; y += 0.25) {
       const body = star('client:a', { x, y, z: 0 });
-      const [draw] = frame(flying(null), [body, star('client:b', { x: 0, y: 0, z: -200 })], HD, camera);
+      // The other Star sits behind the camera, so no disc of its own hides the swept name.
+      const [draw] = frame(flying(null), [body, star('client:b', { x: 0, y: 0, z: 30 })], HD, camera);
       const centre = projectToScreen(body.position, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, HD);
       assert.ok(centre !== null && draw !== undefined);
       const size = clientLabelSize('Alpha');
@@ -297,9 +301,15 @@ test('a name whose box meets the affordance’s block or leader is hidden while 
     for (let y = -3; y <= 0; y += 0.25) {
       const bodies = [starA, starB, planet('project:p', { x, y, z: 0 })];
       const hover: ClientLabelState = { ...flying(null), hoveredProjectId: 'project:p' };
-      const rest = shown(frame(flying(null), bodies, HD, camera)[0]);
-      const obstacles = affordanceObstacles(hover, TWO, bodies, view, projection, HD);
+      const [atRest] = frame(flying(null), bodies, HD, camera);
       const [draw] = frame(hover, bodies, HD, camera);
+      if (atRest?.visible === false) {
+        // The Planet's own disc already hides the name; the affordance cannot show it.
+        assert.equal(draw?.visible, false, `with the Planet at (${x}, ${y}) a name its disc hides stays hidden`);
+        continue;
+      }
+      const rest = shown(atRest);
+      const obstacles = affordanceObstacles(hover, TWO, bodies, view, projection, HD);
       const meets = obstacles.some((obstacle) => within4(rest.box, obstacle));
       assert.equal(draw?.visible, !meets, `with the Planet at (${x}, ${y}) the name yields exactly when it meets the affordance`);
       if (meets) met += 1;
@@ -322,10 +332,83 @@ test('when two names meet, the subject’s wins, then the nearer, then artifact 
   assert.deepEqual(visible(frame(flying('client:b'), [a, evenB])), [false, true], 'the subject wins over artifact order');
   assert.deepEqual(visible(frame(flying(null), [a, nearB])), [false, true], 'with no subject, the nearer wins');
   assert.deepEqual(visible(frame(flying(null), [a, evenB])), [true, false], 'at one depth, artifact order');
-  // A name hidden by the edge does not block another.
-  const edgeA = star('client:a', { x: 14, y: 0, z: 0 });
-  assert.deepEqual(visible(frame(flying('client:a'), [edgeA, star('client:b', { x: 14.2, y: 0, z: 0 })])), [false, false]);
   assert.deepEqual(visible(frame(flying('client:a'), [star('client:a', { x: 0, y: 0, z: 30 }), evenB])), [false, true], 'a name behind the camera blocks nothing');
+});
+
+test('a stronger name hidden by the edge blocks nothing: its in-bounds neighbour stays shown', () => {
+  const camera = cameraAt(HD);
+  const view = camera.matrixWorldInverse.elements;
+  const projection = camera.projectionMatrix.elements;
+  const bounds = labelBounds(HD, false);
+  /** The box `clientLabelFrame` would give `body`'s name, before any hide. */
+  const wouldBe = (body: Body, name: string): ScreenRect => {
+    const centre = projectToScreen(body.position, view, projection, HD);
+    assert.ok(centre !== null);
+    const size = clientLabelSize(name);
+    const top = centre.y + radiusPx(STAR_RADIUS, centre.depth, projection, HD.height) + CLIENT_LABEL_GAP_PX;
+    return { left: centre.x - size.width / 2, right: centre.x + size.width / 2, top, bottom: top + size.height };
+  };
+  let cases = 0;
+  for (let x = 8; x <= 16; x += 0.05) {
+    const a = star('client:a', { x, y: 0, z: 0 });
+    // The subject, one unit right: its wider name reaches past the edge first.
+    const b = star('client:b', { x: x + 1, y: 0, z: 0 });
+    const boxA = wouldBe(a, 'Alpha');
+    const boxB = wouldBe(b, 'Beta & Co');
+    if (!within(boxA, bounds) || within(boxB, bounds) || !within4(boxA, boxB)) continue;
+    cases += 1;
+    assert.deepEqual(frame(flying('client:b'), [a, b], HD, camera).map((draw) => draw.visible), [true, false], `at x=${x.toFixed(2)} the edge-hidden subject leaves its neighbour shown`);
+  }
+  assert.ok(cases > 0, 'some placement put an edge-hidden subject on an in-bounds neighbour');
+});
+
+// --- Yielding to the Bodies ------------------------------------------------------------------
+
+test('a name whose opaque plate meets another Body’s disc, a Deep Planet’s Ring or Moon included, is hidden while it does', () => {
+  const camera = cameraAt(HD);
+  const view = camera.matrixWorldInverse.elements;
+  const projection = camera.projectionMatrix.elements;
+  const starA = star('client:a', { x: 0, y: 0, z: 0 });
+  const starB = star('client:b', { x: -12, y: 6, z: -40 });
+  const plate = shown(frame(flying(null), [starA, starB], HD, camera)[0]).box;
+  const covers = (body: Body) => {
+    const screen = projectToScreen(body.position, view, projection, HD);
+    assert.ok(screen !== null);
+    const r = markPx(body, radiusPx(bodyRadius(body), screen.depth, projection, HD.height));
+    const cx = Math.max(plate.left, Math.min(screen.x, plate.right));
+    const cy = Math.max(plate.top, Math.min(screen.y, plate.bottom));
+    return Math.hypot(cx - screen.x, cy - screen.y) < r;
+  };
+  const seen = { covered: 0, clear: 0, deepOnly: 0 };
+  for (const isDeep of [false, true]) {
+    for (let y = -4; y <= 0.5; y += 0.05) {
+      // Behind the Star as well as before it: the plate is DOM, over every depth.
+      for (const z of [-6, 0, 3]) {
+        const body: Body = { ...planet('project:p', { x: 0.2, y, z }), isDeep };
+        const [draw] = frame(flying(null), [starA, starB, body], HD, camera);
+        const hidden = covers(body);
+        assert.equal(draw?.visible, !hidden, `a ${isDeep ? 'Deep' : 'Shallow'} Planet at (0.2, ${y.toFixed(2)}, ${z}): hidden exactly when the plate meets its marks`);
+        if (hidden) seen.covered += 1;
+        else seen.clear += 1;
+        if (isDeep && hidden && !covers({ ...body, isDeep: false })) seen.deepOnly += 1;
+      }
+    }
+  }
+  assert.ok(seen.covered > 0 && seen.clear > 0, 'the sweep crossed the plate');
+  assert.ok(seen.deepOnly > 0, 'a Ring or Moon alone hid the name somewhere');
+  // Another Star covers as a Planet does; a Star's own disc never hides its name.
+  assert.equal(frame(flying(null), [starA, star('client:b', { x: 0.1, y: -1.6, z: 0 })], HD, camera)[0]?.visible, false, 'another Star’s disc hides the name');
+  assert.equal(frame(flying(null), [starA, starB], HD, camera)[0]?.visible, true, 'its own Star does not');
+});
+
+test('while a Project is Focused, a receded name over the Focused Planet is hidden', () => {
+  const focused: ClientLabelState = { ...REST, scrollProgress: 1, focusedProjectId: 'project:p' };
+  const starA = star('client:a', { x: -3, y: 0, z: 0 });
+  const starB = star('client:b', { x: -10, y: 5, z: -30 });
+  const free = frame(focused, [starA, starB, planet('project:p', { x: 6, y: 4, z: 0 })]);
+  assert.equal(free[0]?.visible, true, 'clear of the Planet, the name is shown');
+  const under = frame(focused, [starA, starB, planet('project:p', { x: -3, y: -1.6, z: 2 })]);
+  assert.equal(under[0]?.visible, false, 'on the Focused Planet, the name is hidden');
 });
 
 // --- The Motes yield to a shown name ---------------------------------------------------------

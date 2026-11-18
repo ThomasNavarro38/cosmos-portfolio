@@ -137,8 +137,9 @@ deferred:
 | Focused | `focusedProjectId` set | no name is `ink-lift`; a name whose box crosses `labelBounds(…, true).right` is hidden |
 | Edge | box enters the outer 12% on any side | hidden, not moved or faded |
 | Behind / off-frame | `projectToScreen` null | hidden |
-| Affordance | box meets an `affordanceObstacles` rect | hidden |
-| Two names meet | boxes overlap | the subject's wins, then the nearer (smaller depth); the other is hidden |
+| Another Body | the opaque plate meets another Body's disc (a Deep Planet's out to its Ring or Moon, by `markPx`), at any depth | hidden (follow-up review, Thomas 2026-11-18) |
+| Affordance | box comes within `CLIENT_LABEL_CLEARANCE_PX` (4) of an `affordanceObstacles` rect | hidden |
+| Two names meet | boxes come within `CLIENT_LABEL_CLEARANCE_PX` (4) | the subject's wins, then the nearer (smaller depth); the other is hidden |
 | Motes | a shown name's box | in `sceneLabelObstacles`, so the Mote pass hides a Mote label near it |
 
 **Acceptance Criteria:**
@@ -148,6 +149,25 @@ deferred:
 - Given `npm test`, when the identity audit runs, then both Client name roles are read off `client-label-model.ts` and pass 4.5:1 on `surface-base-dark`. A mutation to `ink-quiet-dark` fails, naming the role.
 - Given the committed artifact at every Rail stop at 16:9 and 32:9, when the frame is computed, then no shown name's box lies outside `labelBounds` and no two shown names' boxes overlap. No Star has a second label.
 - Given `npm run build`, when the bundle assertion runs, then `scene` ≤ 960,000 B and `realism` is unchanged. `git diff` over `src/render-scene/realism/`, `src/render-fallback/`, `generated/` and the DESIGN.md frontmatter is empty.
+
+### Review Findings
+
+Code review of 1da2e53 against aa0d93d, 2026-11-18 (follow-up review). All patches applied: `npm test` 2206 pass, 0 fail, 1 skipped; typecheck clean; `scene` 956,505 of 960,000 B (3,495 B left), `realism` 8,560 B unchanged. The edge-hidden test was mutation-checked: moving the bounds hide after the collision pass fails it.
+
+- [x] [Review][Patch] Opaque name plates are not kept off Bodies away from the Rail stops. Resolved by Thomas (2026-11-18): a name whose plate meets another Body's disc (its Ring and Moon included) is hidden, and DESIGN §7.1 records the hide [src/render-scene/client-label-model.ts:245-254]
+- [x] [Review][Patch] The "a hidden name blocks nothing" check for the edge proves nothing: both Stars at x=14 and x=14.2 are past the edge, so `[false, false]` holds whatever the rule. Replace it with a stronger name hidden by the edge (and one by the affordance) whose box overlaps an in-bounds neighbour, and assert the neighbour shows [src/render-scene/client-label-model.test.ts:325]
+- [x] [Review][Patch] The model header still gives the width as `chars × fontPx × (LABEL_CHAR_EM + letterSpacing)`, without `CLIENT_LABEL_CAPITAL_EM` [src/render-scene/client-label-model.ts:16]
+- [x] [Review][Patch] The model header and the README model row name only `cssNumber` from `mote-label.ts`; the model also imports `MOTE_LABEL_CLEARANCE_PX` [src/render-scene/client-label-model.ts:50, src/render-scene/README.md:47]
+- [x] [Review][Patch] The README test row and the test header list the committed sweep at 1920×1080 and 3840×1080 (16:9, 32:9) only; they omit 1440×900 and the plate-over-Body guard [src/render-scene/README.md:48, src/render-scene/client-label-model.test.ts:6]
+- [x] [Review][Patch] "No cap, because there are fewer Stars than 12" is unguarded. Add a test asserting that the committed artifact's Client count stays below the Motes' cap of 12 [src/render-scene/client-label-model.test.ts]
+- [x] [Review][Patch] The spec's Design Notes still give the width as `chars × fontPx × (LABEL_CHAR_EM + 0.36)`, and the matrix rows say "meets" and "overlap" where the code hides within the 4px `CLIENT_LABEL_CLEARANCE_PX` [spec-9-3-client-names-on-the-stars.md: Design Notes "Placement", matrix rows "Affordance" and "Two names meet"]
+- [x] [Review][Patch] The third run's Files changed list says "`affordance-model.ts` -- exports for reuse", but the diff there only changes a header comment; every reused symbol was already exported at aa0d93d [spec-9-3-client-names-on-the-stars.md: Third run]
+- [x] [Review][Defer] Names have no hysteresis at the edge, at the clearance or at a depth tie, unlike the Mote pass (incumbent 0px, newcomer 4 + 8px) [src/render-scene/client-label-model.ts:245-254] — deferred, design follow-up
+- [x] [Review][Defer] The width estimate is narrow for wide glyphs (`m`, `w`, CJK, emoji at 0.6em); the committed names are capitals or mean-width text [src/render-scene/client-label-model.ts:151] — deferred, no committed name triggers it
+- [x] [Review][Defer] CSS adds the 0.36em tracking after the last glyph, so under `translateX(-50%)` the glyphs sit about 2px left of the Star's centre [src/render-scene/client-label-model.ts:263,337] — deferred, cosmetic
+- [x] [Review][Defer] The name bounds switch on `focusedProjectId !== null`, not on the panel's slide, as the affordance's do [src/render-scene/client-label-model.ts:232] — deferred, pre-existing pattern (affordance-model.ts:453)
+- [x] [Review][Defer] 9.3 spent about 3.2 KB of the `scene` headroom; 3,791 B is left, and 9.10 and the scene-side exports of 9.6–9.8 share it with no re-plan recorded [spec-9-3-client-names-on-the-stars.md: Verification] — deferred, sprint planning
+- [x] [Review][Defer] The matrix tests run at 1920×1080 only; Task 1 asked for 1920×1080 and 3840×1080 (only the committed sweeps loop over viewports) [src/render-scene/client-label-model.test.ts] — deferred, low
 
 ## Spec Change Log
 
@@ -183,7 +203,7 @@ deferred:
 
 **Why the plate is the contrast proof.** The plate is opaque `surface-base-dark` and covers the text box by 1px (7.9's D1). So the ground under every glyph is the plate in every session, whatever is behind it: fill, glow or nebula. The flat-token audit on the `page` ground is therefore exact, not an approximation, and needs no real-pixel driver. The plate test pins opacity, so a later alpha would fail here first.
 
-**Placement.** The label goes below the Star, centred on x. Its top is `centre.y + starRadiusPx + CLIENT_LABEL_GAP_PX` (a tunable 8px). `starRadiusPx` is `bodyRadius(star) × projection[5] × h / 2 / depth`, from the matrices already handed in. The estimated width is `chars × fontPx × (LABEL_CHAR_EM + 0.36) + 2 × PLATE_PAD_PX`, and the height is `fontPx × 1.3 + 2 × PLATE_PAD_PX`. It is estimated and never measured from the DOM, the same as every scene label.
+**Placement.** The label goes below the Star, centred on x. Its top is `centre.y + starRadiusPx + CLIENT_LABEL_GAP_PX` (a tunable 8px). `starRadiusPx` is `bodyRadius(star) × projection[5] × h / 2 / depth`, from the matrices already handed in. The estimated width is, per code point, `fontPx × (advance + 0.36)` with the advance `CLIENT_LABEL_CAPITAL_EM` 0.72 for a capital or digit and `LABEL_CHAR_EM` 0.6 otherwise, plus `2 × PLATE_PAD_PX`, and the height is `fontPx × 1.3 + 2 × PLATE_PAD_PX`. It is estimated and never measured from the DOM, the same as every scene label.
 
 ## Verification
 
@@ -267,7 +287,7 @@ Thomas ruled option (a), recorded in the Spec Change Log. The Mote wiring is app
 - `src/render-scene/client-label-field.tsx` (new) -- the binding: one `<Html fullscreen>` overlay at `zIndexRange [1, 1]` and one plate per Client.
 - `src/render-scene/scene.tsx` -- mounts `<ClientLabelField>` after the affordance and passes `rail` to `<MoteField>`. `SceneProps` is widened.
 - `src/render-scene/mote-field.tsx` -- passes `sceneLabelObstacles` and takes `rail`.
-- `src/render-scene/affordance-model.ts` -- exports for reuse.
+- `src/render-scene/affordance-model.ts` -- header comment only; every reused symbol was already exported.
 - `src/shell/scene-host.tsx` -- `clients[].name` in its artifact type.
 - `src/render-scene/scene-model.test.ts` -- `auditClientLabelField`, the mount pins, and the Mote field and mount audits rewired.
 - `src/identity-audit.test.ts` -- two Client name contrast roles.

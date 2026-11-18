@@ -13,18 +13,21 @@
  * **Below the Star, centred on it.** The block's top is the Star's projected
  * centre plus its outline's radius on screen (`radiusPx(bodyRadius(star), …)`)
  * plus `CLIENT_LABEL_GAP_PX`. Its box is estimated, never measured from the DOM:
- * `chars × fontPx × (LABEL_CHAR_EM + letterSpacing)` wide and `fontPx ×
- * lineHeight` tall, in `scene-label-client`, grown by `PLATE_PAD_PX` on every
- * side for the plate.
+ * each code point `fontPx × (advance + letterSpacing)` wide, the advance
+ * `CLIENT_LABEL_CAPITAL_EM` for a capital or digit and `LABEL_CHAR_EM`
+ * otherwise, and `fontPx × lineHeight` tall, in `scene-label-client`, grown by
+ * `PLATE_PAD_PX` on every side for the plate.
  *
  * **Hidden, never faded or moved** (Thomas, 2026-11-18, Q3 reading (a)). A name
  * whose box leaves `labelBounds` — the inner 76% of the frame, the outer
  * `EDGE_SHARE` off every side, with the panel's edge as the right bound while a
  * Project is Focused — is hidden, so every name shown is readable at its floor.
- * So is a name whose Star is behind the camera, a name whose box meets the
- * affordance's block or leader (the affordance wins), and a name whose box meets
- * a stronger name: the subject's first, then the nearer Star, then artifact
- * order. There is no cap: there are fewer Stars than the Motes' 12.
+ * So is a name whose Star is behind the camera, a name whose opaque plate meets
+ * another Body's disc (a Deep Planet's reaching its Ring and its Moon, as
+ * `markPx` measures them), a name whose box meets the affordance's block or
+ * leader (the affordance wins), and a name whose box meets a stronger name: the
+ * subject's first, then the nearer Star, then artifact order. There is no cap:
+ * there are fewer Stars than the Motes' 12.
  *
  * **The ink tells subject from receded, and nothing else does** (Q1, Q2). The
  * subject's name — `sceneSubject`'s Star — is `ink-lift`; every other name is
@@ -47,7 +50,8 @@
  * for the affordance's own boxes.
  *
  * **Pure**: it imports the tokens, the affordance model (projection, bounds,
- * plate padding, its obstacles), the Mote label's token parser, the stroke model
+ * plate padding, a Body's marks, its obstacles), the Mote label's token parser
+ * and clearance, the stroke model
  * (the subject and the Star's radius) and the scene and Rail models' types —
  * no Three, no React, no store — so every rule runs under `node --test`, which
  * cannot load the `.tsx` binding (`client-label-field.tsx`).
@@ -59,6 +63,7 @@ import {
   PLATE_PAD_PX,
   affordanceObstacles,
   labelBounds,
+  markPx,
   projectToScreen,
   radiusPx,
   type AffordanceArtifact,
@@ -166,6 +171,24 @@ function meets(a: ScreenRect, b: ScreenRect): boolean {
   return !(a.left >= b.right + gap || b.left >= a.right + gap || a.top >= b.bottom + gap || b.top >= a.bottom + gap);
 }
 
+/** A Body's disc on screen: its projected centre and the radius its marks reach. */
+interface Disc {
+  readonly id: string;
+  readonly x: number;
+  readonly y: number;
+  readonly r: number;
+}
+
+/**
+ * Whether `box` covers any part of `disc`: the box's nearest point to the
+ * centre lies inside the radius. A plate tangent to a disc covers nothing.
+ */
+function coversDisc(box: ScreenRect, disc: Disc): boolean {
+  const nearestX = Math.max(box.left, Math.min(disc.x, box.right));
+  const nearestY = Math.max(box.top, Math.min(disc.y, box.bottom));
+  return Math.hypot(nearestX - disc.x, nearestY - disc.y) < disc.r;
+}
+
 /** Whether `box` lies inside `bounds` on all four sides, every side finite. */
 function inside(box: ScreenRect, bounds: ScreenRect): boolean {
   return (
@@ -232,6 +255,12 @@ function clientLabelPlacement(
   const bounds = labelBounds(viewport, nav.focusedProjectId !== null);
   const affordance = affordanceObstacles(nav, artifact, bodies, view, projection, viewport);
   const labels = clientLabels(artifact);
+  // The plate is opaque DOM over the canvas, so it hides whatever it lies on, at any depth.
+  const discs = bodies.flatMap((body): Disc[] => {
+    const screen = projectToScreen(body.position, view, projection, viewport);
+    if (screen === null) return [];
+    return [{ id: body.id, x: screen.x, y: screen.y, r: markPx(body, radiusPx(bodyRadius(body), screen.depth, projection, viewport.height)) }];
+  });
   const placed: Placed[] = [];
   labels.forEach((label, index) => {
     const star = bodies.find((body) => body.kind === 'star' && body.id === label.id);
@@ -243,6 +272,7 @@ function clientLabelPlacement(
     const left = screen.x - size.width / 2;
     const box = { left, right: left + size.width, top, bottom: top + size.height };
     if (!inside(box, bounds)) return;
+    if (discs.some((disc) => disc.id !== star.id && coversDisc(box, disc))) return;
     if (affordance.some((obstacle) => meets(box, obstacle))) return;
     placed.push({ index, id: label.id, subject: label.id === subject, depth: screen.depth, box });
   });
@@ -269,8 +299,9 @@ function clientLabelPlacement(
 
 /**
  * This frame's names, one draw per `clientLabels(artifact)` entry in its order:
- * each hidden behind the camera, outside `labelBounds`, over the affordance or
- * under a stronger name; otherwise placed below its Star in its ink.
+ * each hidden behind the camera, outside `labelBounds`, over another Body's
+ * disc, over the affordance or under a stronger name; otherwise placed below its
+ * Star in its ink.
  *
  * @throws naming the ID when a Client has no Star, and as `affordanceObstacles`
  * does.

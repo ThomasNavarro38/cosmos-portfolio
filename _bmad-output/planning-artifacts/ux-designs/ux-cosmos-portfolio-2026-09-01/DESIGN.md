@@ -823,7 +823,9 @@ plate is opaque `surface-base`, 1px past the text, with no edge, radius, shadow 
 fade. A name is hidden, never faded or moved, while its estimated box enters the
 outer 12% of the frame on any side or, while a Project is Focused, crosses the
 panel's edge, so every name shown is readable at its floor (Q3, reading (a)). It is
-also hidden while its Star is behind the camera, while it meets the affordance's
+also hidden while its Star is behind the camera, while its opaque plate meets another
+Body's disc (a Deep Planet's out to its Ring or Moon, at any depth: Thomas,
+follow-up review of 2026-11-18), while it meets the affordance's
 label or leader, and while it meets a stronger name (the subject's, then the
 nearer Star's), keeping a 4px gap from both; the Motes' labels yield to a shown
 name. The name-against-name order is story 9.3's own rule, not a ruling. No cap:
