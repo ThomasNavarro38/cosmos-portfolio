@@ -69,6 +69,7 @@ const STROKE_MODEL_TS = fileURLToPath(new URL('./stroke-model.ts', import.meta.u
 const BODY_FIELD_TSX = fileURLToPath(new URL('./body-field.tsx', import.meta.url));
 const MOON_FIELD_TSX = fileURLToPath(new URL('./moon-field.tsx', import.meta.url));
 const AFFORDANCE_FIELD_TSX = fileURLToPath(new URL('./affordance-field.tsx', import.meta.url));
+const CLIENT_LABEL_FIELD_TSX = fileURLToPath(new URL('./client-label-field.tsx', import.meta.url));
 const SRC_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SCENE_HOST_TSX = fileURLToPath(new URL('../shell/scene-host.tsx', import.meta.url));
 const APP_TSX = fileURLToPath(new URL('../App.tsx', import.meta.url));
@@ -1975,17 +1976,29 @@ function auditDrawOrder(source: string): string[] {
   if (!/import\s*\{\s*MoonField\s*\}\s*from\s*'\.\/moon-field\.tsx'/.test(stripComments(source))) failures.push('MoonField is not imported');
   // The affordance (3.4) is `<AffordanceField>`'s, held by `auditAffordanceField`:
   // a DOM overlay drawing no scene object. Here: mounted exactly once, inside the
-  // Canvas (its frame loop needs one), with the artifact and the Bodies, last — after
-  // the rig, so it projects this frame's camera.
+  // Canvas (its frame loop needs one), with the artifact and the Bodies, after the rig
+  // and the Moons, so it projects this frame's camera.
   if (!/<AffordanceField\s+artifact=\{\s*artifact\s*\}\s+bodies=\{\s*bodies\s*\}\s*\/>/.test(inside)) {
     failures.push('the affordance is not mounted — <AffordanceField artifact={artifact} bodies={bodies} /> is not inside the Canvas');
   }
   if ((code.match(/<AffordanceField\b/g) ?? []).length !== 1) failures.push('the affordance is mounted other than once');
   const affordanceMount = inside.search(/<AffordanceField\b/);
   if (affordanceMount < 0 || affordanceMount < moonMount || affordanceMount < inside.search(/<RailCamera\b/)) {
-    failures.push('the affordance is not mounted last, after the rig and the Moons');
+    failures.push('the affordance is not mounted after the rig and the Moons');
   }
   if (!/import\s*\{\s*AffordanceField\s*\}\s*from\s*'\.\/affordance-field\.tsx'/.test(stripComments(source))) failures.push('AffordanceField is not imported');
+  // The Client names (9.3) are `<ClientLabelField>`'s, held by
+  // `auditClientLabelField`: a DOM overlay drawing no scene object. Here: mounted
+  // exactly once, inside the Canvas, with the artifact, the Bodies and the Rail,
+  // right after the affordance — so after the rig, projecting this frame's camera.
+  if (!/<ClientLabelField\s+artifact=\{\s*artifact\s*\}\s+bodies=\{\s*bodies\s*\}\s+rail=\{\s*rail\s*\}\s*\/>/.test(inside)) {
+    failures.push('the Client names are not mounted — <ClientLabelField artifact={artifact} bodies={bodies} rail={rail} /> is not inside the Canvas');
+  }
+  if ((code.match(/<ClientLabelField\b/g) ?? []).length !== 1) failures.push('the Client names are mounted other than once');
+  if (!/<AffordanceField\b[^>]*\/>\s*(?:\{\s*\}\s*)*<ClientLabelField\b/.test(inside)) {
+    failures.push('the Client names are not mounted right after the affordance');
+  }
+  if (!/import\s*\{\s*ClientLabelField\s*\}\s*from\s*'\.\/client-label-field\.tsx'/.test(stripComments(source))) failures.push('ClientLabelField is not imported');
 
   // The medium is drawn at the model's radius through the model's own scale, so the
   // non-overlap and ceiling proofs over `radius` are proofs about the screen too.
@@ -2106,6 +2119,15 @@ test('the draw-order audit rejects the real renderer with any one of its guarant
     ['the affordance before the rig', (s) => s.replace('<AffordanceField artifact={artifact} bodies={bodies} />', '').replace('<RailCamera rail', '<AffordanceField artifact={artifact} bodies={bodies} />\n        <RailCamera rail')],
     ['the affordance without the Bodies', (s) => s.replace('<AffordanceField artifact={artifact} bodies={bodies} />', '<AffordanceField artifact={artifact} bodies={[]} />')],
     ['the affordance given an order', (s) => s.replace('<AffordanceField artifact', '<AffordanceField renderOrder={BODY_RENDER_ORDER} artifact')],
+    // The Client names (9.3).
+    ['the Client names unmounted', (s) => s.replace('<ClientLabelField artifact={artifact} bodies={bodies} rail={rail} />', '')],
+    ['the Client names mounted twice', (s) => s.replace('<ClientLabelField artifact={artifact} bodies={bodies} rail={rail} />', '<ClientLabelField artifact={artifact} bodies={bodies} rail={rail} />\n        <ClientLabelField artifact={artifact} bodies={bodies} rail={rail} />')],
+    ['the Client names outside the Canvas', (s) => s.replace('<ClientLabelField artifact={artifact} bodies={bodies} rail={rail} />', '').replace('</Canvas>', '</Canvas>\n      <ClientLabelField artifact={artifact} bodies={bodies} rail={rail} />')],
+    ['the Client names before the rig', (s) => s.replace('<ClientLabelField artifact={artifact} bodies={bodies} rail={rail} />', '').replace('<RailCamera rail', '<ClientLabelField artifact={artifact} bodies={bodies} rail={rail} />\n        <RailCamera rail')],
+    ['the Client names without the Bodies', (s) => s.replace('<ClientLabelField artifact={artifact} bodies={bodies} rail={rail} />', '<ClientLabelField artifact={artifact} bodies={[]} rail={rail} />')],
+    ['the Client names without the Rail', (s) => s.replace('<ClientLabelField artifact={artifact} bodies={bodies} rail={rail} />', '<ClientLabelField artifact={artifact} bodies={bodies} rail={buildRail(artifact, [])} />')],
+    ['the Client names given an order', (s) => s.replace('<ClientLabelField artifact', '<ClientLabelField renderOrder={BODY_RENDER_ORDER} artifact')],
+    ['the Client names not imported', (s) => s.replace("import { ClientLabelField } from './client-label-field.tsx';", '')],
     [
       'a second, unaudited bodies block',
       (s) =>
@@ -3154,8 +3176,8 @@ test('the Rail-importer scan rejects every edge form from outside, and ignores p
  * *exactly* — update the camera's matrices, one `getState()` read, `moteFrame`
  * handed the carried field, the artifact, the Bodies, the media, the focused ID,
  * both matrices, the canvas width and height, the frame delta, the reduced-motion
- * preference and (3.18) `affordanceObstacles` over the same `getState()`
- * snapshot, the artifact, the Bodies, both matrices and `size`, and written back, each draw
+ * preference and (3.18, 9.3) `sceneLabelObstacles` over the same `getState()`
+ * snapshot, the artifact, the Bodies, the Rail, both matrices and `size`, and written back, each draw
  * applied with `applyMoteDraw` to its own pooled handles and each orbit draw with
  * `applyMoteOrbitDraw` to its own line; one mesh per `motePool` entry keyed by
  * Skill, filled by `moteDotColor`, drawn at `BODY_RENDER_ORDER` in the
@@ -3218,7 +3240,7 @@ function auditMoteField(source: string): string[] {
     const expected = [
       'camera.updateMatrixWorld()',
       'conststate=navigationStore.getState()',
-      'field.current=moteFrame(field.current,artifact,bodies,media,state.focusedProjectId,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size.width,size.height,delta,reducedMotion(),affordanceObstacles(state,artifact,bodies,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size))',
+      'field.current=moteFrame(field.current,artifact,bodies,media,state.focusedProjectId,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size.width,size.height,delta,reducedMotion(),sceneLabelObstacles(state,artifact,bodies,rail,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size))',
       'field.current.draws.forEach((draw,index)=>applyMoteDraw(dots.current[index],labels.current[index],draw))',
       'field.current.orbits.forEach((draw)=>applyMoteOrbitDraw(orbits.current[draw.orbit],draw))',
     ];
@@ -3226,7 +3248,7 @@ function auditMoteField(source: string): string[] {
       failures.push(
         'the frame loop is not exactly: camera.updateMatrixWorld(), one getState() read, moteFrame(field.current, artifact, ' +
           'bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, ' +
-          'size.width, size.height, delta, reducedMotion(), affordanceObstacles(state, artifact, bodies, camera.matrixWorldInverse.elements, ' +
+          'size.width, size.height, delta, reducedMotion(), sceneLabelObstacles(state, artifact, bodies, rail, camera.matrixWorldInverse.elements, ' +
           'camera.projectionMatrix.elements, size)) written back, every draw applied to its own handles and every orbit draw to its own line',
       );
     }
@@ -3296,8 +3318,8 @@ test('the Mote audit rejects the real renderer with any one guarantee broken', (
   const real = readFileSync(MOTE_FIELD_TSX, 'utf8');
   const CALL =
     'moteFrame(field.current, artifact, bodies, media, state.focusedProjectId, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.width, size.height, delta, reducedMotion(), ' +
-    'affordanceObstacles(state, artifact, bodies, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size))';
-  const OBSTACLES = ', affordanceObstacles(state, artifact, bodies, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size))';
+    'sceneLabelObstacles(state, artifact, bodies, rail, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size))';
+  const OBSTACLES = ', sceneLabelObstacles(state, artifact, bodies, rail, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size))';
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
     ['a store write', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    navigationStore.setState({ focusedProjectId: null });')],
     ['a named event', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    releaseFocus();')],
@@ -3318,10 +3340,13 @@ test('the Mote audit rejects the real renderer with any one guarantee broken', (
     // 3.18: the affordance's boxes, which the label pass yields to.
     ['the 3.5 call shape, with no obstacles', (s) => s.replace(OBSTACLES, ')')],
     ['no obstacles at all', (s) => s.replace(OBSTACLES, ', [])')],
-    ['the obstacles from a second store read', (s) => s.replace('affordanceObstacles(state,', 'affordanceObstacles(navigationStore.getState(),')],
-    ['the obstacles through swapped matrices', (s) => s.replace('affordanceObstacles(state, artifact, bodies, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements', 'affordanceObstacles(state, artifact, bodies, camera.projectionMatrix.elements, camera.matrixWorldInverse.elements')],
+    ['the obstacles from a second store read', (s) => s.replace('sceneLabelObstacles(state,', 'sceneLabelObstacles(navigationStore.getState(),')],
+    ['the obstacles through swapped matrices', (s) => s.replace('sceneLabelObstacles(state, artifact, bodies, rail, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements', 'sceneLabelObstacles(state, artifact, bodies, rail, camera.projectionMatrix.elements, camera.matrixWorldInverse.elements')],
     ['the obstacles on a constant canvas', (s) => s.replace('camera.projectionMatrix.elements, size))', 'camera.projectionMatrix.elements, { width: 1600, height: 900 }))')],
-    ['the obstacles of nothing approached', (s) => s.replace('affordanceObstacles(state,', 'affordanceObstacles({ ...state, hoveredProjectId: null, keyboardProjectId: null },')],
+    // 9.3: the shown Client names join the obstacles, read through the Rail's subject.
+    ['the affordance’s boxes alone', (s) => s.replace('sceneLabelObstacles(state, artifact, bodies, rail,', 'affordanceObstacles(state, artifact, bodies,')],
+    ['the obstacles without the Rail', (s) => s.replace('sceneLabelObstacles(state, artifact, bodies, rail,', 'sceneLabelObstacles(state, artifact, bodies, null,')],
+    ['the obstacles of nothing approached', (s) => s.replace('sceneLabelObstacles(state,', 'sceneLabelObstacles({ ...state, hoveredProjectId: null, keyboardProjectId: null },')],
     ['the preference subscribed', (s) => s.replace('const field = useRef', 'const reduced = useSyncExternalStore(subscribeReducedMotion, reducedMotion);\n  const field = useRef')],
     ['Focus ignored', (s) => s.replace('state.focusedProjectId', 'null')],
     ['no Dust to condense from', (s) => s.replace('artifact, bodies, media, state', 'artifact, bodies, [], state')],
@@ -3382,8 +3407,8 @@ function auditMoteMount(source: string): string[] {
   const code = stripCommentsAndStrings(source);
   const failures: string[] = [];
   const inside = /<Canvas\b[\s\S]*<\/Canvas>/.exec(code)?.[0] ?? '';
-  const mount = /<MoteField\s+artifact=\{\s*artifact\s*\}\s+bodies=\{\s*bodies\s*\}\s+media=\{\s*media\s*\}\s*\/>/;
-  if (!mount.test(inside)) failures.push('the Motes are not mounted inside the Canvas with the artifact, the Bodies and the media');
+  const mount = /<MoteField\s+artifact=\{\s*artifact\s*\}\s+bodies=\{\s*bodies\s*\}\s+media=\{\s*media\s*\}\s+rail=\{\s*rail\s*\}\s*\/>/;
+  if (!mount.test(inside)) failures.push('the Motes are not mounted inside the Canvas with the artifact, the Bodies, the media and the Rail');
   if ((code.match(/<MoteField\b/g) ?? []).length !== 1) failures.push('the Motes are mounted other than once');
   const rig = inside.search(/<RailCamera\b/);
   const motes = inside.search(/<MoteField\b/);
@@ -3399,13 +3424,14 @@ test('the scene mounts the Motes inside the Canvas, after the rig', () => {
 
 test('the Mote mount audit rejects the real scene with any one guarantee removed', () => {
   const real = readFileSync(SCENE_TSX, 'utf8');
-  const MOUNT = '<MoteField artifact={artifact} bodies={bodies} media={media} />';
+  const MOUNT = '<MoteField artifact={artifact} bodies={bodies} media={media} rail={rail} />';
   const mutations: readonly (readonly [string, (source: string) => string])[] = [
     ['unmounted', (s) => s.replace(MOUNT, '')],
     ['before the rig', (s) => s.replace(MOUNT, '').replace('<RailCamera rail={rail} bodies={bodies} />', `${MOUNT}\n      <RailCamera rail={rail} bodies={bodies} />`)],
     ['outside the Canvas', (s) => s.replace(MOUNT, '').replace('</Canvas>', `</Canvas>\n      ${MOUNT}`)],
-    ['no Dust', (s) => s.replace(MOUNT, '<MoteField artifact={artifact} bodies={bodies} media={[]} />')],
-    ['no Bodies', (s) => s.replace(MOUNT, '<MoteField artifact={artifact} bodies={[]} media={media} />')],
+    ['no Dust', (s) => s.replace(MOUNT, '<MoteField artifact={artifact} bodies={bodies} media={[]} rail={rail} />')],
+    ['no Bodies', (s) => s.replace(MOUNT, '<MoteField artifact={artifact} bodies={[]} media={media} rail={rail} />')],
+    ['no Rail', (s) => s.replace(MOUNT, '<MoteField artifact={artifact} bodies={bodies} media={media} />')],
     ['mounted twice', (s) => s.replace(MOUNT, `${MOUNT}\n      ${MOUNT}`)],
   ];
   for (const [name, mutate] of mutations) {
@@ -4182,6 +4208,190 @@ test('the affordance audit rejects the real binding with any one guarantee broke
   }
 });
 
+// --- The Client names (9.3) ---------------------------------------------------------
+
+/**
+ * `client-label-field.tsx`'s contract, as a pure function over its source.
+ *
+ * Every rule of the names — what each says, where it sits, its ink, when it is
+ * hidden, the plate — is executed in `client-label-model.test.ts`; this holds the
+ * binding. Negatively: no store write and no named event, no subscription or
+ * reactive hook, no DOM read, no interaction, no ordering or selection, no line
+ * or connector, no shape or geometry, no fade or scale, no token read directly,
+ * no copy of its own, no tooltip or live region, no coordinate literal, no
+ * realism. Positively: a frame loop that is *exactly* — update the camera's
+ * matrices, `clientLabelFrame` handed one `getState()` read, the artifact, the
+ * Bodies, the Rail, both matrices and R3F's `size`, and the draws written with
+ * `applyClientLabels` onto the plates; one drei `<Html fullscreen>` pinned by
+ * `overlayOrigin`, kept by `keepOverlay`, at `zIndexRange={[1, 1]}` with no
+ * pointer events; in it an `aria-hidden` overlay holding one plate per
+ * `clientLabels(artifact)` entry, keyed by its ID, stored at its pool index, in
+ * the model's style, holding `{label.name}`.
+ */
+function auditClientLabelField(source: string): string[] {
+  const code = stripCommentsAndStrings(source);
+  const quoted = stripComments(source);
+  const squash = (text: string) => text.replace(/\s+/g, ' ');
+  const failures: string[] = [];
+
+  if (/\.setState\b|\bsetState\b\s*[:,)}]/.test(code)) failures.push('writes the store with setState');
+  if (/\b(?:advanceScroll|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation|hoverProject|keyboardApproach|activate\w*|hoverBody|leaveBody|repickPointer)\b/.test(code)) {
+    failures.push('names a navigation event or a door — the names read the store and write only their own plates');
+  }
+  if (/\buseStore\b|\bsubscribe\b|\buseSyncExternalStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {
+    failures.push('subscribes to the store — a frame loop reads getState()');
+  }
+  if (/\buseThree\b|\buseState\b|\buseReducer\b|\buseEffect\b|\buseLayoutEffect\b|\buseMemo\b/.test(code)) {
+    failures.push('holds reactive state or an effect — the plates are refs, the loop is useFrame');
+  }
+  if (/\bwindow\b|\bdocument\b|innerWidth|innerHeight|getBoundingClientRect|offsetWidth|clientWidth|addEventListener|matchMedia|\.matches\s*\(/.test(code)) {
+    failures.push('reads the DOM — the box is estimated and the size arrives as R3F’s');
+  }
+  if (/\braycast\w*|\bonClick\b|\bonPointer\w+|\bonWheel\b|\bonScroll\b|\bonDoubleClick\b|\bonContextMenu\b|\bonFocus\b|\bonBlur\b|\bonKey\w+/i.test(code)) {
+    failures.push('handles an interaction — a name is read, never hovered or clicked');
+  }
+  if (/\.sort\s*\(|\.filter\s*\(|\.reverse\s*\(|\.slice\s*\(|\.find\s*\(/.test(code)) {
+    failures.push('orders or selects — which names show is the model’s');
+  }
+  if (/aria-live|role\s*=\s*["'](?:status|alert|log|marquee|timer|tooltip)["']|\btitle\s*=\s*["{]|<\s*title\b/.test(quoted)) {
+    failures.push('announces or explains — no live region and no tooltip');
+  }
+  if (/<\s*(?:svg|path|circle|ellipse|rect|polygon|polyline|line|mesh|sprite|\w+Geometry|\w+Material)\b/i.test(code)) {
+    failures.push('draws a shape — a name is a plate of text, never a mark around a Star');
+  }
+  if (/\bscale\b|\bopacity\b|\bfilter\b|\btoUpperCase\b|\btoLowerCase\b|\btextTransform\b|\bposition\b/.test(code)) {
+    failures.push('scales, fades, transforms the name or reads a position — every value comes from clientLabelFrame');
+  }
+  if (/\btokens\b|\bink-|\bstroke-|\bsurface-|\bstrokeColor\b|\bcolor\s*:/.test(quoted)) failures.push('reads a token directly — every style is the model’s');
+  if (/\brealism\w*/i.test(code) || /from\s*'[^']*realism/i.test(quoted)) failures.push('waits on realism — the names are drawn in every session');
+  if (jsxTexts(source.slice(Math.max(0, source.indexOf('return (')))).length > 0) failures.push('carries copy of its own — each name is the artifact’s');
+  failures.push(...auditConnectors(source));
+  failures.push(...coordinateLiterals(code));
+
+  const loop = /\buseFrame\s*\(\s*\(\s*\{\s*camera\s*,\s*size\s*\}\s*\)\s*=>\s*\{([\s\S]*?)\}\s*\)\s*;/.exec(quoted);
+  if (loop === null) {
+    failures.push('runs no frame loop taking ({ camera, size })');
+  } else {
+    const statements = (loop[1] ?? '')
+      .split(';')
+      .map((statement) => statement.replace(/\s+/g, ''))
+      .filter((statement) => statement !== '');
+    const expected = [
+      'camera.updateMatrixWorld()',
+      'constdraws=clientLabelFrame(navigationStore.getState(),artifact,bodies,rail,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size)',
+      'applyClientLabels(plates.current,draws)',
+    ];
+    if (JSON.stringify(statements) !== JSON.stringify(expected)) {
+      failures.push(
+        'the frame loop is not exactly: camera.updateMatrixWorld(), clientLabelFrame(navigationStore.getState(), artifact, bodies, rail, ' +
+          'camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size), and the draws applied to the plates',
+      );
+    }
+  }
+  if ((code.match(/\buseFrame\s*\(/g) ?? []).length !== 1) failures.push('runs other than one frame loop');
+  if (!/const\s+plates\s*=\s*useRef<\(\s*HTMLDivElement\s*\|\s*null\s*\)\[\]>\(\s*\[\s*\]\s*\)/.test(code)) failures.push('the plates are not one ref of HTMLDivElement handles, starting empty');
+  if ((code.match(/\buseRef\s*</g) ?? []).length !== 1) failures.push('a ref other than the plates');
+  if ((code.match(/\.current\s*=(?!=)/g) ?? []).length !== 0) failures.push('replaces the plates ref — each plate is stored at its pool index');
+  if ((code.match(/\bgetState\s*\(/g) ?? []).length !== 1) failures.push('reads the store other than once per frame');
+
+  // The pool: one plate per Client, keyed by its ID.
+  const pools = mapBlocks(quoted, 'clientLabels\\(\\s*artifact\\s*\\)');
+  if (pools.length !== 1 || (code.match(/\bclientLabels\s*\(/g) ?? []).length !== 1) failures.push('maps clientLabels(artifact) other than once — one plate per Client');
+  const pool = squash(pools[0] ?? '');
+  const plate =
+    /^clientLabels\(artifact\)\.map\(\(label, index\) => \( <div key=\{label\.id\} ref=\{\(plate\) => \{ plates\.current\[index\] = plate; \}\} style=\{clientLabelPlateStyle\(\)\} > \{label\.name\} <\/div> \)\)$/;
+  if (!plate.test(pool)) failures.push('a plate is not exactly: keyed by its Client’s ID, stored at its pool index, in the model’s style, holding {label.name}');
+
+  const htmls = quoted.match(/<Html\b[^>]*>/g) ?? [];
+  if (htmls.length !== 1) failures.push('not exactly one drei <Html> overlay');
+  const html = squash(htmls[0] ?? '');
+  for (const [name, pattern] of [
+    ['fullscreen', /\sfullscreen(?=[\s>])/],
+    ['calculatePosition={overlayOrigin}', /\scalculatePosition=\{\s*overlayOrigin\s*\}/],
+    ['onOcclude={keepOverlay}', /\sonOcclude=\{\s*keepOverlay\s*\}/],
+    ['zIndexRange={[1, 1]}', /\szIndexRange=\{\s*\[\s*1\s*,\s*1\s*\]\s*\}/],
+    ['pointerEvents="none"', /\spointerEvents="none"/],
+  ] as const) {
+    if (!pattern.test(html)) failures.push(`the overlay is not <Html ${name}> — it would stack, hide or take the pointer wrongly`);
+  }
+  if ((quoted.match(/<\w[\w.-]*\b[^>]*\bonOcclude=/g) ?? []).length !== 1) failures.push('onOcclude is bound other than once, on the overlay');
+  if (!/<Html\b[^>]*>\s*<div aria-hidden="true" style=\{clientLabelOverlayStyle\(\)\}>\s*\{\s*clientLabels\(artifact\)\.map\(/.test(quoted)) {
+    failures.push('the overlay is not exactly an aria-hidden layer in the model’s style holding the plates');
+  }
+  if ((quoted.match(/<div\b/g) ?? []).length !== 2) failures.push('other than one overlay layer and one plate per Client');
+  if (!/import\s*\{\s*Html\s*\}\s*from\s*'@react-three\/drei'/.test(quoted)) failures.push('the overlay is not drei’s Html');
+  if (!/import\s*\{\s*keepOverlay\s*,\s*overlayOrigin\s*,\s*type AffordanceArtifact\s*\}\s*from\s*'\.\/affordance-model\.ts'/.test(quoted)) {
+    failures.push('the overlay’s anchoring is not the affordance’s overlayOrigin and keepOverlay');
+  }
+  return failures;
+}
+
+test('the Client names’ binding draws the model and holds no rule of its own', () => {
+  assert.deepEqual(auditClientLabelField(readFileSync(CLIENT_LABEL_FIELD_TSX, 'utf8')), []);
+});
+
+test('the Client name audit rejects the real binding with any one guarantee broken', () => {
+  const real = readFileSync(CLIENT_LABEL_FIELD_TSX, 'utf8');
+  const CALL =
+    'clientLabelFrame(navigationStore.getState(), artifact, bodies, rail, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size)';
+  const mutations: readonly (readonly [string, (source: string) => string])[] = [
+    ['a store write', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    navigationStore.setState({ hoveredProjectId: null });')],
+    ['a named event', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    hoverProject(null);')],
+    ['a door', (s) => s.replace('camera.updateMatrixWorld();', "camera.updateMatrixWorld();\n    activateClient('c');")],
+    ['a subscription', (s) => s.replace('return (', 'navigationStore.subscribe(() => {});\n  return (')],
+    ['a hook binding', (s) => s.replace('clientLabelFrame(navigationStore.getState(),', 'clientLabelFrame(useStore(navigationStore, (value) => value),')],
+    ['reactive state', (s) => s.replace('const plates = useRef', 'const [, force] = useState(0);\n  const plates = useRef')],
+    ['useThree', (s) => s.replace('const plates = useRef', 'const { size: canvas } = useThree();\n  const plates = useRef')],
+    ['a DOM read', (s) => s.replace('projectionMatrix.elements, size)', 'projectionMatrix.elements, { width: window.innerWidth, height: window.innerHeight })')],
+    ['a measured box', (s) => s.replace('applyClientLabels(plates.current, draws);', 'applyClientLabels(plates.current, draws);\n    void plates.current[0]?.getBoundingClientRect();')],
+    ['stale matrices', (s) => s.replace('camera.updateMatrixWorld();', '')],
+    ['the matrices swapped', (s) => s.replace('camera.matrixWorldInverse.elements, camera.projectionMatrix.elements', 'camera.projectionMatrix.elements, camera.matrixWorldInverse.elements')],
+    ['a constant size', (s) => s.replace('projectionMatrix.elements, size)', 'projectionMatrix.elements, { width: 1920, height: 1080 })')],
+    ['no Bodies', (s) => s.replace('artifact, bodies, rail, camera', 'artifact, [], rail, camera')],
+    ['no Rail', (s) => s.replace('artifact, bodies, rail, camera', 'artifact, bodies, { keyframes: [] }, camera')],
+    ['nothing applied', (s) => s.replace(/\n\s*applyClientLabels\([^\n]*\n/, '\n')],
+    ['the draws dropped', (s) => s.replace(`const draws = ${CALL};`, `void ${CALL};\n    const draws = [] as const;`)],
+    ['a second store read', (s) => s.replace('const draws =', 'void navigationStore.getState();\n    const draws =')],
+    ['a click', (s) => s.replace('style={clientLabelPlateStyle()}', 'onClick={() => undefined}\n            style={clientLabelPlateStyle()}')],
+    ['a hover', (s) => s.replace('style={clientLabelPlateStyle()}', 'onPointerOver={() => undefined}\n            style={clientLabelPlateStyle()}')],
+    ['a ring around a Star', (s) => s.replace('<div aria-hidden="true" style={clientLabelOverlayStyle()}>', '<div aria-hidden="true" style={clientLabelOverlayStyle()}>\n        <svg><circle r="8" /></svg>')],
+    ['a mesh', (s) => s.replace('return (\n    <Html', 'return (\n    <>\n    <mesh><ringGeometry /></mesh>\n    <Html').replace('</Html>\n  );', '</Html>\n    </>\n  );')],
+    ['a drei line', (s) => s.replace("import { Html } from '@react-three/drei';", "import { Html, Line } from '@react-three/drei';")],
+    ['a fade', (s) => s.replace('style={clientLabelPlateStyle()}', 'style={{ ...clientLabelPlateStyle(), opacity: 0.5 }}')],
+    ['a transformed name', (s) => s.replace('{label.name}', '{label.name.toUpperCase()}')],
+    ['a token read directly', (s) => s.replace('style={clientLabelPlateStyle()}', "style={{ ...clientLabelPlateStyle(), color: tokens.colors['ink-lift-dark'] }}")],
+    ['the plate unstyled', (s) => s.replace('\n            style={clientLabelPlateStyle()}', '')],
+    ['a tooltip', (s) => s.replace('key={label.id}', 'key={label.id}\n            title="Client"')],
+    ['a live region', (s) => s.replace('key={label.id}', 'key={label.id}\n            aria-live="polite"')],
+    ['copy of its own', (s) => s.replace('{label.name}', 'Client {label.name}')],
+    ['the wrong text', (s) => s.replace('{label.name}', '{label.id}')],
+    ['the pool keyed by index', (s) => s.replace('key={label.id}', 'key={index}')],
+    ['a plate stored at the wrong index', (s) => s.replace('plates.current[index] = plate;', 'plates.current[0] = plate;')],
+    ['a plate not stored', (s) => s.replace('plates.current[index] = plate;', 'void plate;')],
+    ['a selection of Clients', (s) => s.replace('clientLabels(artifact).map(', 'clientLabels(artifact).filter((label) => label.name !== "").map(')],
+    ['a sort of Clients', (s) => s.replace('clientLabels(artifact).map(', 'clientLabels(artifact).sort().map(')],
+    ['a second pool', (s) => s.replace('</div>\n    </Html>', '  {clientLabels(artifact).map((label) => <span key={label.id} />)}\n      </div>\n    </Html>')],
+    ['a wait on realism', (s) => s.replace("import { useRef } from 'react';", "import { useRef } from 'react';\nimport { realismStatus } from './realism-status.ts';")],
+    ['a gate on realism', (s) => s.replace('applyClientLabels(plates.current, draws);', 'if (arrived) applyClientLabels(plates.current, draws);').replace('const plates = useRef', 'const arrived = realismArrived;\n  const plates = useRef')],
+    ['the overlay narrated', (s) => s.replace('<div aria-hidden="true" style={clientLabelOverlayStyle()}>', '<div style={clientLabelOverlayStyle()}>')],
+    ['the overlay over the panel', (s) => s.replace('zIndexRange={[1, 1]} pointerEvents', 'zIndexRange={[16777271, 0]} pointerEvents')],
+    ['the overlay under the vignette', (s) => s.replace('zIndexRange={[1, 1]} pointerEvents', 'zIndexRange={[0, 0]} pointerEvents')],
+    ['the overlay takes the pointer', (s) => s.replace('pointerEvents="none" style', 'pointerEvents="auto" style')],
+    ['the overlay follows a world point', (s) => s.replace(' calculatePosition={overlayOrigin}', '')],
+    ['the overlay hidden by drei', (s) => s.replace(' onOcclude={keepOverlay}', '')],
+    ['the overlay not fullscreen', (s) => s.replace('<Html fullscreen calculatePosition', '<Html calculatePosition')],
+    ['a second frame loop', (s) => s.replace('return (', 'useFrame(() => undefined);\n  return (')],
+    ['the plates ref replaced', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    plates.current = [];')],
+    ['a second ref', (s) => s.replace('const plates = useRef', 'const extra = useRef<HTMLDivElement>(null);\n  const plates = useRef')],
+    ['a coordinate literal', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    camera.position.set(0, 5, 40);')],
+  ];
+  for (const [name, mutate] of mutations) {
+    const mutated = mutate(real);
+    assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped binding`);
+    assert.notDeepEqual(auditClientLabelField(mutated), [], `"${name}" must be rejected`);
+  }
+});
+
 // --- The Ring means a Notable, and nothing else (3.3) ------------------------------
 
 /** Every string literal in a source, comments blanked first. */
@@ -4264,7 +4474,7 @@ test('the renderer scans walk the whole directory, and every exemption names a f
   for (const name of [...Object.keys(CONNECTOR_EXEMPT), ...Object.keys(COORDINATE_EXEMPT)]) {
     assert.ok(walked.includes(name), `${name} is walked`);
   }
-  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, SCENE_PICK_TS, RAIL_CAMERA_TSX, AFFORDANCE_FIELD_TSX]) {
+  for (const path of [MODEL_TS, DUST_TS, SCENE_TSX, SCENE_PICK_TS, RAIL_CAMERA_TSX, AFFORDANCE_FIELD_TSX, CLIENT_LABEL_FIELD_TSX]) {
     assert.ok(sceneModules().includes(path), `${path} is walked`);
   }
   assert.ok(walked.every((name) => !isTestFile(name)), 'and no test file is scanned');

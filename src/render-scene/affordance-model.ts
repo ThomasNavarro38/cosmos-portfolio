@@ -39,7 +39,9 @@
  * `zIndexRange [1, 1]`, so `affordanceObstacles` hands the Mote label pass the
  * block's rectangle (its keyboard outline included) and the leader's bounding
  * box, from the same placement `affordanceFrame` draws, and the pass hides any
- * Mote label near them.
+ * Mote label near them. A Client name (9.3) yields to them too, and
+ * `sceneLabelObstacles` (`client-label-model.ts`) appends every shown Client
+ * name's plate after them, for the Mote pass to read.
  *
  * **It reads and never derives** (AD-3). The title, role and team size are the
  * authored content the artifact carries; the depth word is the artifact's

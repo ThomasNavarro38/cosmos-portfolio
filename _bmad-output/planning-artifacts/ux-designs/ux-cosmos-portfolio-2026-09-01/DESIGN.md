@@ -814,6 +814,21 @@ limb-darkened, granulating, pulsing core in its tint, fading into its glow.
 Luminance is recency; only the subject's core reaches white. The label is built
 in every session, on a `surface-base` plate, as story 7.9 built the Project label's.]*
 
+*[amended 2026-11-18 for story 9.3 (Thomas's rulings Q1–Q3): the receded name is
+`ink-label`, never `ink-quiet` or `ink-faint`, which fall below the 4.5:1 floor;
+the "`ink-quiet` or `ink-faint`" above is stale, superseded by the 2026-09 fix and
+`star-client-receded.labelColor` (Q1). Every name, subject or receded, is
+`scene-label-client`; the subject's `ink-lift` is the only difference (Q2). The
+plate is opaque `surface-base`, 1px past the text, with no edge, radius, shadow or
+fade. A name is hidden, never faded or moved, while its estimated box enters the
+outer 12% of the frame on any side or, while a Project is Focused, crosses the
+panel's edge, so every name shown is readable at its floor (Q3, reading (a)). It is
+also hidden while its Star is behind the camera, while it meets the affordance's
+label or leader, and while it meets a stronger name (the subject's, then the
+nearer Star's), keeping a 4px gap from both; the Motes' labels yield to a shown
+name. The name-against-name order is story 9.3's own rule, not a ruling. No cap:
+there are fewer Stars than twelve.]*
+
 ### 7.2 Project Planet — the Deep/Shallow signal
 
 This is the most consequential component in the system, because it carries the

@@ -132,6 +132,8 @@ export interface SceneHostArtifact {
   }[];
   readonly clients: readonly {
     readonly id: string;
+    // The Client's name, published as-is on its Star (9.3, FR-11).
+    readonly name: string;
     readonly position: { readonly x: number; readonly y: number; readonly z: number };
     readonly projects: readonly {
       readonly id: string;

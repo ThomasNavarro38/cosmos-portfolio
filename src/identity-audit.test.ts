@@ -311,6 +311,7 @@ const COLOPHON_CSS = 'colophon/colophon.css';
 const CONTACT_CSS = 'shell/contact-route.css';
 const AFFORDANCE_TS = 'render-scene/affordance-model.ts';
 const MOTE_TS = 'render-scene/mote-model.ts';
+const CLIENT_LABEL_TS = 'render-scene/client-label-model.ts';
 
 /** Each text role, its floor and its ground. The ink is read off the shipping source. */
 const ROLES: readonly Role[] = [
@@ -346,6 +347,10 @@ const ROLES: readonly Role[] = [
     ink: { model: AFFORDANCE_TS, pattern: /export function affordanceSecondaryLabelStyle\(\) \{\s*return \{[^}]*\bcolor: tokens\.colors\['([\w-]+)'\]/ },
     ground: 'page',
   },
+  // The Client names on the Stars (9.3), each on an opaque surface-base plate, so the
+  // page ground is exact under every glyph: the subject's lifted, every other receded.
+  { role: 'Client name, subject', floor: 4.5, ink: { model: CLIENT_LABEL_TS, pattern: /export const CLIENT_LABEL_SUBJECT_INK = tokens\.colors\['([\w-]+)'\];/ }, ground: 'page' },
+  { role: 'Client name, receded', floor: 4.5, ink: { model: CLIENT_LABEL_TS, pattern: /export const CLIENT_LABEL_RECEDED_INK = tokens\.colors\['([\w-]+)'\];/ }, ground: 'page' },
   { role: 'index reveal', floor: 4.5, ink: { css: INDEX_CSS, selector: '.index-nav button' }, ground: 'page' },
   // The document's own text: the `<noscript>` line, inheriting `body`'s ink.
   { role: 'noscript line', floor: 4.5, ink: { css: PAGE_CSS, selector: 'body' }, ground: 'page' },
@@ -534,7 +539,7 @@ function auditContrast(sources: Readonly<Record<string, string>>, panelBackgroun
 }
 
 function contrastSources(): Record<string, string> {
-  return Object.fromEntries([PANEL_CSS, CHROME_CSS, INDEX_CSS, PAGE_CSS, CHART_CSS, COLOPHON_CSS, CONTACT_CSS, AFFORDANCE_TS, MOTE_TS].map((path) => [path, read(`./${path}`)]));
+  return Object.fromEntries([PANEL_CSS, CHROME_CSS, INDEX_CSS, PAGE_CSS, CHART_CSS, COLOPHON_CSS, CONTACT_CSS, AFFORDANCE_TS, MOTE_TS, CLIENT_LABEL_TS].map((path) => [path, read(`./${path}`)]));
 }
 
 test('contrast: every text role clears its floor on its ground, read from the shipping source', () => {
@@ -562,6 +567,19 @@ test('contrast: a role moved to a dimmer ink, or one whose ink cannot be read, f
   assert.match(
     failing(MOTE_TS, (s) => s.replace("MOTE_LABEL_COLOR = tokens.colors['ink-label-dark']", "MOTE_LABEL_COLOR = tokens.colors['ink-faint-dark']")),
     /^contrast: Mote label is ink-faint-dark/,
+  );
+  // 9.3: either Client name at the quiet step fails naming its role, and an unreadable ink fails as unreadable.
+  assert.match(
+    failing(CLIENT_LABEL_TS, (s) => s.replace("CLIENT_LABEL_SUBJECT_INK = tokens.colors['ink-lift-dark']", "CLIENT_LABEL_SUBJECT_INK = tokens.colors['ink-quiet-dark']")),
+    /^contrast: Client name, subject is ink-quiet-dark on surface-base-dark, \d\.\d\d:1 — below its 4\.5:1 floor$/,
+  );
+  assert.match(
+    failing(CLIENT_LABEL_TS, (s) => s.replace("CLIENT_LABEL_RECEDED_INK = tokens.colors['ink-label-dark']", "CLIENT_LABEL_RECEDED_INK = tokens.colors['ink-quiet-dark']")),
+    /^contrast: Client name, receded is ink-quiet-dark on surface-base-dark, \d\.\d\d:1 — below its 4\.5:1 floor$/,
+  );
+  assert.match(
+    failing(CLIENT_LABEL_TS, (s) => s.replace("CLIENT_LABEL_RECEDED_INK = tokens.colors['ink-label-dark'];", 'CLIENT_LABEL_RECEDED_INK = RECEDED;')),
+    /^contrast: Client name, receded's ink could not be read off render-scene\/client-label-model\.ts as a colour token$/,
   );
   assert.match(
     failing(INDEX_CSS, (s) => s.replace(/(\.index-nav button \{[^}]*)color: var\(--color-ink-label-dark\);/, '$1')),

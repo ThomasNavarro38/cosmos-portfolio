@@ -468,7 +468,11 @@ const M2_REVISION = '4669784b7e3832be40a25e4b00fd508034d89f9f';
 const HAS_M2 = spawnSync('git', ['cat-file', '-e', `${M2_REVISION}^{commit}`], { cwd: REPO_ROOT, encoding: 'utf8' }).status === 0;
 const needsM2 = { skip: HAS_M2 ? false : `git, or revision ${M2_REVISION} (absent from a shallow clone), is not available` };
 
-/** AD-20 and AD-24's must-stay-unchanged paths: the preview, the camera, the Rail, Focus and the Motes. */
+/**
+ * AD-20 and AD-24's must-stay-unchanged paths: the preview, the camera, the Rail, Focus and the Motes' layout.
+ * `mote-field.tsx` left the list by Thomas's ruling of 2026-11-18 (AD-20 amended): its labels yield to the
+ * shown Client names too, and its frame stays pinned statement by statement by `auditMoteField`.
+ */
 const UNCHANGED = [
   'public/preview.png',
   'scripts/preview*.ts',
@@ -477,7 +481,6 @@ const UNCHANGED = [
   'src/render-scene/rail-model*',
   'src/render-scene/focus-model*',
   'src/render-scene/mote-model*',
-  'src/render-scene/mote-field.tsx',
   'src/render-scene/mote-label.ts',
 ];
 

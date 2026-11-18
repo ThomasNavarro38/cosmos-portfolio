@@ -40,12 +40,14 @@
  * after the rig so it projects through the camera the rig has just moved. Each
  * Deep Planet's Ring is `<BodyField>`'s, and its Moon `<MoonField>`'s (3.3),
  * mounted after `<BodyField>` — every rule in `notable-model.ts`. The
- * approached Project's leader and label are `<AffordanceField>`'s (3.4), mounted
- * last, an overlay over the vignette — every rule in `affordance-model.ts`. The
+ * approached Project's leader and label are `<AffordanceField>`'s (3.4), an
+ * overlay over the vignette — every rule in `affordance-model.ts` — and right
+ * after it each Star's Client name is `<ClientLabelField>`'s (9.3), an overlay of
+ * its own, in every session — every rule in `client-label-model.ts`. The
  * `camera` prop stays keyframe 0; the rig's frame callback runs before the
  * first draw and seeds at the store's progress (4.2), so a scene remounted
  * after a return through history opens at the stop it was left at. The
- * frame-time sampler (`<FrameSampler>`, 4.6) is mounted after the affordance: it
+ * frame-time sampler (`<FrameSampler>`, 4.6) is mounted after the names: it
  * hands each frame's delta to the chart offer's monitor and draws nothing — the
  * `<Canvas>` and every child are the same on any machine at any framerate. After
  * the sampler come, in order, `<WorstWindowMark>` (8.1), `<FirstFrameMark>` (6.4)
@@ -110,6 +112,8 @@ import {
 } from './dust-model.ts';
 import { AffordanceField } from './affordance-field.tsx';
 import type { AffordanceArtifact } from './affordance-model.ts';
+import { ClientLabelField } from './client-label-field.tsx';
+import type { ClientLabelArtifact } from './client-label-model.ts';
 import { FrameSampler } from './frame-sampler.tsx';
 import { FirstFrameMark } from './first-frame-mark.tsx';
 import { WorstWindowMark } from './worst-window-mark.tsx';
@@ -143,9 +147,9 @@ MEDIUM_TEXTURE.magFilter = LinearFilter;
 MEDIUM_TEXTURE.minFilter = LinearFilter;
 MEDIUM_TEXTURE.needsUpdate = true;
 
-/** What the scene needs: the artifact, and nothing else — the Bodies' slice, the Motes', the affordance's and realism's. */
+/** What the scene needs: the artifact, and nothing else — the Bodies' slice, the Motes', the affordance's, the Client names' and realism's. */
 export interface SceneProps {
-  readonly artifact: SceneArtifact & MoteArtifact & AffordanceArtifact & RealismArtifact;
+  readonly artifact: SceneArtifact & MoteArtifact & AffordanceArtifact & ClientLabelArtifact & RealismArtifact;
 }
 
 /**
@@ -198,7 +202,7 @@ export function Scene({ artifact }: SceneProps) {
         {/* The rig: the one thing that moves the camera, along the Rail and into Focus. It reads, it never writes the store. */}
         <RailCamera rail={rail} bodies={bodies} />
         {/* The Motes: after the rig, so they project through this frame's camera. They read, they never write the store. */}
-        <MoteField artifact={artifact} bodies={bodies} media={media} />
+        <MoteField artifact={artifact} bodies={bodies} media={media} rail={rail} />
         {/*
           The medium: one billboard per Client system, scaled by the model so it fades
           out exactly at its radius. Drawn before every Body and writing no depth, so
@@ -237,6 +241,8 @@ export function Scene({ artifact }: SceneProps) {
         <MoonField bodies={bodies} />
         {/* The affordance (3.4): the approached Project's leader and label, in an overlay over the vignette. It writes no store field itself; its per-frame re-pick reaches the hover only through `hoverBody` / `leaveBody`. */}
         <AffordanceField artifact={artifact} bodies={bodies} />
+        {/* The Client names (9.3): one plate below each Star, in an overlay over the vignette, in every session. They read the store and write no field. */}
+        <ClientLabelField artifact={artifact} bodies={bodies} rail={rail} />
         {/* The frame-time sampler (4.6): counts frames for the chart offer, draws nothing, changes nothing. */}
         <FrameSampler />
         {/* The worst window's binding (8.1): binds the monitor's sink to the visitor's own timeline while mounted. Draws nothing, sends nothing. */}
