@@ -75,11 +75,14 @@ export const STAR_REST_CEILING_LUMINANCE = 0.4711868614730459;
  * this module imports no value; a test pins the two lists equal. `star-layer.ts` resolves
  * each to its `realism-star-<tint>-dark` token through an explicit record. Written
  * as keys, not quoted strings, as derive writes them: the literal-colour ban reads a
- * whole quoted colour word as paint, and a tint name is not paint.
+ * whole quoted colour word as paint, and a tint name is not paint. The list is sorted
+ * on each key's value, so the numbers state the order.
  */
 export const TINT_ORDER = { blue: 0, white: 1, yellow: 2, orange: 3, red: 4 } as const;
 export type StarTint = keyof typeof TINT_ORDER;
-export const STAR_TINT_NAMES: readonly [StarTint, ...StarTint[]] = Object.freeze(Object.keys(TINT_ORDER) as [StarTint, ...StarTint[]]);
+export const STAR_TINT_NAMES: readonly [StarTint, ...StarTint[]] = Object.freeze(
+  (Object.keys(TINT_ORDER) as StarTint[]).sort((a, b) => TINT_ORDER[a] - TINT_ORDER[b]) as [StarTint, ...StarTint[]],
+);
 
 /** The bands a Star may carry: `RESTING_BANDS`, dimmest first, restated structurally. */
 export type StarBand = 'stroke-rest' | 'stroke-near';

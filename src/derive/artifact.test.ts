@@ -2619,6 +2619,18 @@ test('checkAppearance holds each Star’s tint (9.5): the committed artifact wit
   assert.ok(gate.some((line) => line.includes(client.id) && line.includes('appearance.tint')), gate.join('\n'));
 });
 
+test('the gate rejects a tint that is none of the five, naming the Client and appearance.tint, in checkAppearance and checkArtifact', () => {
+  for (const bad of ['green', 'realism-star-blue', 'Blue', '']) {
+    const doc = stripBanner(JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8'))) as Artifact;
+    const client = doc.clients[0] as (typeof doc.clients)[number];
+    (client.appearance as { tint: string }).tint = bad;
+    const lines = checkAppearance(doc);
+    assert.ok(lines.some((line) => line.includes(client.id) && line.includes('appearance.tint')), `${JSON.stringify(bad)}: ${lines.join('\n')}`);
+    const gate = checkArtifact(writeTemp(serializeArtifact(doc)));
+    assert.ok(gate.some((line) => line.includes('tint')), `${JSON.stringify(bad)}: ${gate.join('\n')}`);
+  }
+});
+
 test('checkAppearance names the Project and the map when the map has no library entry', () => {
   const { doc, project } = appearanceFixture();
   project.appearance.map = 'pluto';

@@ -587,8 +587,8 @@ test('the realism family is exactly twelve keys, the floor and the five Star tin
   }
   assert.deepEqual(
     tints.map((tint) => colors[`realism-star-${tint}-dark`]),
-    ['#A9BFFF', '#F4F1EA', '#FFE6B0', '#FFC27A', '#FF9A5C'],
-    'the five tints are the epic’s placeholders, hot to cool',
+    ['#A9BFFF', '#F8EDD8', '#FFE6B0', '#FFC27A', '#FF9A5C'],
+    'the five tints are the placeholders, hot to cool, white warmed to a pale cream',
   );
   assert.equal(colors['realism-ambient-floor'], colors['realism-ambient-floor-dark'], 'the bare value is a placeholder, not a designed light theme');
   const committedCss = readFileSync(join(TOKENS_DIR, CSS_FILE), 'utf8');

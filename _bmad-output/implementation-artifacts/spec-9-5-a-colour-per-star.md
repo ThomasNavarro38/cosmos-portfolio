@@ -119,6 +119,24 @@ deferred: []
 - **The Colophon:** given `/colophon` with the library loaded, then copy place 4 shows `what a Star and a Planet look like` and Proposal 7's statement verbatim, pinned by `credits.test.ts` and the identity audit.
 - **Budgets:** given `npm run build`, then `addedDraws` is still `planets + 2 × stars`, `scene` ≤ 960,000 B and `realism` ≤ 24,000 B.
 
+### Review Findings
+
+- [x] [Review][Patch] Warm the `white` tint so a resting Star cannot read as the subject's white (decided 1a, Thomas, 2026-11-18): give `realism-star-white` a pale-cream hex with a visible warm hue, and re-pin its audit chroma [src/tokens/tokens.ts, src/tokens/tokens.css, DESIGN.md, src/identity-audit.test.ts]
+- [x] [Review][Patch] Ratify the short tint names, and give `TINT_ORDER`'s numbers a job (decided 2b, Thomas, 2026-11-18): build `STAR_TINTS` by sorting the keys on their values, in both modules, so the numbers are the order; record the ruling in AD-21 and the memlog [src/derive/appearance.ts:50, src/render-scene/realism/star-model.ts]
+- [x] [Review][Patch] `epic-9-context.md` lost the downstream guidance 9.6–9.11 need: the 9.11 carried-over list, "Tests to update" (render-order pins, draw-call counts), the crossfade-touches-`scene` note, the 8.5 live-site check for names and tints, and the depth first-channel rule [_bmad-output/implementation-artifacts/epic-9-context.md]
+- [x] [Review][Patch] `epic-9-context.md` still quotes the 9.4 budget figures (`realism` 10,018 B, `scene` 957,069 B, ≈2.9 KB headroom); 9.5 measured 10,705 B / 957,337 B, leaving 2,663 B [_bmad-output/implementation-artifacts/epic-9-context.md:35]
+- [x] [Review][Patch] Epic order still starts at the finished 9.5; it should start at 9.6 [_bmad-output/implementation-artifacts/epic-9-context.md:65]
+- [x] [Review][Patch] The `swapped` assertion checks a literal written inside the test and can never fail; remove it [src/render-scene/realism/star-model.test.ts:152]
+- [x] [Review][Patch] `deriveTints()` spawns a child process at module load, so a spawn failure takes down the whole file rather than one named test; call it lazily or in a `before` hook [src/render-scene/realism/star-model.test.ts:138]
+- [x] [Review][Patch] The per-tint ceiling tests halved their sampling against 9.4 (`% 20` → `% 40`, `% 10` → `% 20`), and no band-ordering assertion iterates over the tints [src/render-scene/realism/star-model.test.ts:422,528]
+- [x] [Review][Patch] No gate-level test covers an invalid tint value: the 9.4 case that injected `tint` now injects `hue`. Add a `checkAppearance`/`checkArtifact` case for `tint: 'green'` [src/derive/artifact.test.ts]
+- [x] [Review][Patch] The tint spread test checks only that each tint is present, not how evenly IDs spread; add a loose per-tint bound over the 1,000 IDs [src/derive/appearance.test.ts:250]
+- [x] [Review][Patch] DESIGN.md §2 still says "the frontmatter keeps the two tokens it declares today", which the appended note contradicts, and the retired `realism-star-glow` row is still in the live token table [_bmad-output/planning-artifacts/ux-designs/ux-cosmos-portfolio-2026-09-01/DESIGN.md:501,505]
+- [x] [Review][Patch] "each Star's one of five colours" does not parse; reword [src/colophon/README.md:16, src/colophon/colophon.tsx:69]
+- [x] [Review][Defer] The Colophon statement is ahead of the build: the rim (9.9) and ring/moon (9.8) are not shipped yet, and outside realism no Star has a colour. Re-verify it in 9.8–9.10 [src/colophon/credits.ts] — deferred, ruled upstream (Proposal 7 verbatim)
+- [x] [Review][Defer] Three of the statement's claims have no test tying them to the copy: recency = brightness, the subject alone turns white, colour/texture encode nothing [src/derive/colophon-claims.test.ts] — deferred, pre-existing
+- [x] [Review][Defer] AD-21 in `ARCHITECTURE-SPINE.md` reads as a base rule followed by three amendment blocks that partly contradict it; fold them into one current rule [ARCHITECTURE-SPINE.md] — deferred, pre-existing
+
 ## Spec Change Log
 
 ## Review Triage Log

@@ -170,15 +170,12 @@ test('achromatic: a hue in any -dark token outside the realism family fails, nam
 test('achromatic: the realism exemption does work — the shipped tokens are hued, and pass only under their own names', () => {
   // The shipped tints (9.5; `realism-star-glow` is retired). `glow` is orange, plainly hued, for the swaps below.
   const glow = tokens.colors['realism-star-orange-dark'];
-  for (const tint of ['blue', 'yellow', 'orange', 'red'] as const) {
+  // All five are hued, white too: it is a pale cream, not the subject's white core, so a resting Star
+  // never spends white. Each is exempt by its name alone.
+  for (const tint of ['blue', 'white', 'yellow', 'orange', 'red'] as const) {
     const hex = tokens.colors[`realism-star-${tint}-dark`];
     assert.ok(oklch(hex).chroma >= ACHROMATIC_CHROMA, `the shipped ${tint} tint ${hex} carries a hue, or the exemption exempts nothing`);
   }
-  // White is outside the loop: #F4F1EA is a warm near-white, OKLCH chroma about 0.0098, under the 0.02 line,
-  // so it would pass the audit even unexempted. It is exempt by its name alone, like the other four.
-  const white = tokens.colors['realism-star-white-dark'];
-  assert.ok(oklch(white).chroma < ACHROMATIC_CHROMA, `the white tint ${white} reads as achromatic: ${oklch(white).chroma}`);
-  assert.ok(Math.abs(oklch(white).chroma - 0.0098) < 0.0005, `the white tint's chroma is the one stated here: ${oklch(white).chroma}`);
   const floor = tokens.colors['realism-ambient-floor-dark'];
   assert.ok(oklch(floor).chroma >= ACHROMATIC_CHROMA, `the shipped floor ${floor} carries a hue, as DESIGN.md says it does`);
   assert.deepEqual(auditAchromatic(tokens.colors), []);

@@ -1658,3 +1658,9 @@ Still open after 3.5:
 - source_spec: spec-9-3-client-names-on-the-stars.md / summary: The name bounds switch on focusedProjectId !== null, not on the panel's slide, as the affordance's do. A name near the right edge appears or disappears at once while the panel moves. / location: src/render-scene/client-label-model.ts:232; affordance-model.ts:453 / severity: low
 - source_spec: spec-9-3-client-names-on-the-stars.md / summary: 9.3 spent about 3.2 KB of the scene headroom, leaving 3,791 B. 9.10 and the scene-side exports of 9.6–9.8 share it, and no re-plan is recorded. / location: spec-9-3 Verification; 9.1 memlog / severity: medium
 - source_spec: spec-9-3-client-names-on-the-stars.md / summary: The hand-built matrix tests run at 1920×1080 only; Task 1 asked for 1920×1080 and 3840×1080. Only the committed sweeps loop over viewports. / location: src/render-scene/client-label-model.test.ts / severity: low
+
+## Deferred from: code review of spec-9-5-a-colour-per-star.md (2026-11-18)
+
+- source_spec: spec-9-5-a-colour-per-star.md / summary: The Colophon statement is ahead of the build. "A Planet's rim glows" ships in 9.9, and the ring and moon in 9.8. Outside realism (First Paint, the Fallback, phones) no Star has a colour. Re-verify the statement in 9.8–9.10. / location: src/colophon/credits.ts / severity: low
+- source_spec: spec-9-5-a-colour-per-star.md / summary: colophon-claims.test.ts pins only "one of five colours" and "from its ID alone". Three claims have no test tying them to the copy: recency is brightness, only the subject turns white, and colour and texture encode nothing. / location: src/derive/colophon-claims.test.ts / severity: low
+- source_spec: spec-9-5-a-colour-per-star.md / summary: AD-21 is a base rule ("A Star has no appearance") followed by three amendment blocks (2026-11-17, 9.4, 9.5) that partly repeat and contradict it. Fold them into one current rule. / location: ARCHITECTURE-SPINE.md AD-21 / severity: low

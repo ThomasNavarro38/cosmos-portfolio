@@ -135,22 +135,19 @@ function deriveTints(): { readonly tints: string[]; readonly order: Record<strin
   assert.equal(run.status, 0, `reading derive's tints exited ${String(run.status)}:\n${run.stderr}`);
   return JSON.parse(run.stdout) as { tints: string[]; order: Record<string, number>; frozen: boolean };
 }
-const DERIVE = deriveTints();
-const STAR_TINTS = DERIVE.tints;
-const DERIVE_TINT_ORDER = DERIVE.order;
 
-test('the tint names are derive\'s STAR_TINTS, in order: blue, white, yellow, orange, red, and both lists are frozen', () => {
+test("the tint names are derive's STAR_TINTS, in order: blue, white, yellow, orange, red, and both lists are frozen", () => {
+  const derive = deriveTints();
   assert.deepEqual([...STAR_TINT_NAMES], ['blue', 'white', 'yellow', 'orange', 'red']);
-  assert.deepEqual([...STAR_TINT_NAMES], [...STAR_TINTS]);
-  assert.ok(Object.isFrozen(STAR_TINT_NAMES) && DERIVE.frozen, 'neither list can be reordered at run time');
+  assert.deepEqual([...STAR_TINT_NAMES], derive.tints);
+  assert.ok(Object.isFrozen(STAR_TINT_NAMES) && derive.frozen, 'neither list can be reordered at run time');
 });
 
-test('each TINT_ORDER value is its key\'s index, here and in derive, so the numbers cannot read as an order they are not', () => {
-  for (const [name, order] of [['realism', TINT_ORDER], ['derive', DERIVE_TINT_ORDER]] as const) {
-    Object.entries(order).forEach(([tint, value], index) => assert.equal(value, index, `${name}: ${tint} is at ${index}`));
-  }
-  const swapped = { blue: 1, white: 0, yellow: 2, orange: 3, red: 4 };
-  assert.ok(Object.entries(swapped).some(([, value], index) => value !== index), 'a swap of the numbers is caught');
+test("TINT_ORDER is derive's, and its numbers are the order: the list is its keys sorted on them, no two sharing a place", () => {
+  assert.deepEqual({ ...TINT_ORDER }, deriveTints().order);
+  const byValue = (Object.keys(TINT_ORDER) as StarTint[]).sort((a, b) => TINT_ORDER[a] - TINT_ORDER[b]);
+  assert.deepEqual([...STAR_TINT_NAMES], byValue);
+  assert.equal(new Set(Object.values(TINT_ORDER)).size, STAR_TINT_NAMES.length, 'each tint has its own place');
 });
 
 test('the layer throws naming the Star on a plan whose tint has no token, before it adds a draw (9.5)', () => {
@@ -419,7 +416,7 @@ test('for every tint, no resting fragment passes stroke-active, and no subject f
     for (const band of BANDS) {
       const [low, high] = STAR_BAND_LUMINANCE[band];
       for (const rise of [0, 0.25, 0.5, 0.75, 1]) {
-        for (const clock of CLOCKS.filter((_, at) => at % 40 === 0)) {
+        for (const clock of CLOCKS.filter((_, at) => at % 20 === 0)) {
           const pulse = starPulse(clock, 1.5);
           const limit = STAR_REST_CEILING_LUMINANCE + (STAR_SUBJECT_CEILING_LUMINANCE - STAR_REST_CEILING_LUMINANCE) * rise;
           for (const disc of DISC) {
@@ -433,6 +430,16 @@ test('for every tint, no resting fragment passes stroke-active, and no subject f
       }
     }
   }
+});
+
+test('for every tint, the bands stay disjoint and ordered as drawn: a near Star\'s dimmest centre is above a rest Star\'s brightest, whatever either tint', () => {
+  const centres = (band: StarBand): number[] => TINT_COLORS.flatMap(([, color]) => {
+    const [low, high] = STAR_BAND_LUMINANCE[band];
+    return CLOCKS.filter((_, at) => at % 10 === 0).flatMap((clock) => PHASES.map((phase) => coreFragment([0, 0], { low, high, pulse: starPulse(clock, phase), rise: 0, time: clock }, color).luminance));
+  });
+  const restHighest = Math.max(...centres('stroke-rest'));
+  const nearLowest = Math.min(...centres('stroke-near'));
+  assert.ok(restHighest < nearLowest, `rest reaches ${restHighest}, near falls to ${nearLowest}`);
 });
 
 /** The worst share of a core's centre luminance the channel clamp takes, over every tint, band, pulse and rise, measured on the grid below. */
@@ -525,7 +532,7 @@ test('a saturated tint never clips past 1 and never passes either ceiling: each 
 test('only the centre reaches stroke-focus, in linear terms, for every tint: the limb and the granulation dim everywhere else, and their darkening is 0 at the centre', () => {
   const [low, high] = STAR_BAND_LUMINANCE['stroke-near'];
   for (const [tint, color] of TINT_COLORS) {
-    for (const clock of CLOCKS.filter((_, at) => at % 20 === 0)) {
+    for (const clock of CLOCKS.filter((_, at) => at % 10 === 0)) {
       const uniforms = { low, high, pulse: 1, rise: 1, time: clock };
       const centre = coreFragment([0, 0], uniforms, color);
       assert.ok(Math.abs(centre.luminance - STAR_SUBJECT_CEILING_LUMINANCE) < 1e-9, `${tint}: the centre is the ceiling at ${clock}, white whatever the tint`);

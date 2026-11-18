@@ -43,16 +43,18 @@ export const PULSE_PHASE_MAX = 6.2832;
  * The names are written as the keys of `TINT_ORDER`, not as quoted strings: the
  * literal-colour ban (AD-12, `scripts/colour-literals.ts`) reads any whole quoted
  * colour word in `src/` as paint, and a tint name is not paint. It only names one
- * of five tokens, and no colour value is written here. `Object.keys` keeps a
- * string key's insertion order, so the list is the record's order. Each value is
- * its key's index, which a test pins, so the numbers cannot drift from the order.
+ * of five tokens, and no colour value is written here. Each value is the tint's
+ * place in `STAR_TINTS`, which is built by sorting on it, so the order is stated
+ * by the numbers and not by how the keys happen to be written.
  */
 export const TINT_ORDER = { blue: 0, white: 1, yellow: 2, orange: 3, red: 4 } as const;
 
 export type StarTint = keyof typeof TINT_ORDER;
 
-/** The five names, frozen, in `TINT_ORDER`'s order. */
-export const STAR_TINTS: readonly [StarTint, ...StarTint[]] = Object.freeze(Object.keys(TINT_ORDER) as [StarTint, ...StarTint[]]);
+/** The five names, frozen, sorted on their `TINT_ORDER` value. */
+export const STAR_TINTS: readonly [StarTint, ...StarTint[]] = Object.freeze(
+  (Object.keys(TINT_ORDER) as StarTint[]).sort((a, b) => TINT_ORDER[a] - TINT_ORDER[b]) as [StarTint, ...StarTint[]],
+);
 
 /**
  * The tint at this index of `STAR_TINTS`.

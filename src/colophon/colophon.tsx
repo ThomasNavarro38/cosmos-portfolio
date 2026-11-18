@@ -66,7 +66,7 @@
  * live re-solve, drawn only once both the exhibits and the map library have
  * arrived: an `h2.colophon-heading` (`APPEARANCE.heading`), one
  * `p.colophon-prose` stating that a Body's colour is not data, each Planet's
- * map and each Star's one of five colours assigned from its ID alone, so they
+ * map and each Star's colour, one of five, assigned from its ID alone, so they
  * encode nothing
  * (`APPEARANCE.statement`), one `p.colophon-prose` lead-in (`APPEARANCE.lead`),
  * and one `ul.colophon-credits` holding one `<li>` per library entry, in

@@ -237,8 +237,9 @@ test('a Star’s pulse phase is salted `pulsePhase` from its ID alone, and sprea
 test('the five tints are blackbody-like, hot to cool, in that order (9.5)', () => {
   assert.deepEqual([...STAR_TINTS], ['blue', 'white', 'yellow', 'orange', 'red']);
   assert.ok(Object.isFrozen(STAR_TINTS), 'the list cannot be reordered at run time');
-  // Each value is its key's index, so swapping two numbers cannot pass for a reorder that changes nothing.
-  Object.entries(TINT_ORDER).forEach(([tint, value], index) => assert.equal(value, index, `${tint} is at ${index}`));
+  // The numbers are the order: the list is the keys sorted on them, and no two share a place.
+  assert.deepEqual([...STAR_TINTS], Object.keys(TINT_ORDER).sort((a, b) => TINT_ORDER[a as keyof typeof TINT_ORDER] - TINT_ORDER[b as keyof typeof TINT_ORDER]));
+  assert.equal(new Set(Object.values(TINT_ORDER)).size, STAR_TINTS.length, 'each tint has its own place');
 });
 
 test('the committed tints are pinned for fixed IDs, so a change to unit, the hash or the salt fails (9.5)', () => {
@@ -247,7 +248,7 @@ test('the committed tints are pinned for fixed IDs, so a change to unit, the has
   assert.equal(starAppearanceOf('client:transilien').tint, 'yellow');
 });
 
-test('a Star’s tint is salted `tint` from its ID alone, deterministic, and every tint occurs over 1,000 IDs (9.5)', () => {
+test('a Star’s tint is salted `tint` from its ID alone, deterministic, and every tint occurs over 1,000 IDs in roughly equal shares (9.5)', () => {
   const id = 'client:simsu';
   assert.equal(starAppearanceOf(id).tint, STAR_TINTS[Math.floor((hash(`tint\0${id}`) / 2 ** 32) * STAR_TINTS.length)]);
   assert.equal(starAppearanceOf(id).tint, starAppearanceOf(id).tint);
@@ -256,7 +257,11 @@ test('a Star’s tint is salted `tint` from its ID alone, deterministic, and eve
     const { tint } = starAppearanceOf(`client:synthetic-${index}`);
     counts.set(tint, (counts.get(tint) ?? 0) + 1);
   }
-  for (const tint of STAR_TINTS) assert.ok((counts.get(tint) ?? 0) > 0, `${tint} occurs: ${String(counts.get(tint))}`);
+  // A fair split is 200 each; a loose band around it catches a skewed salt or hash without pinning the draw.
+  for (const tint of STAR_TINTS) {
+    const count = counts.get(tint) ?? 0;
+    assert.ok(count >= 140 && count <= 260, `${tint} occurs ${count} times in 1,000, outside 140–260`);
+  }
   assert.deepEqual([...counts.keys()].sort(), [...STAR_TINTS].sort(), 'no other value occurs');
 });
 
