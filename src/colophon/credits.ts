@@ -1,12 +1,14 @@
 /**
- * What a Planet looks like (8.2, AD-21): the Colophon's statement that a
- * Planet's appearance is assigned and encodes nothing, and the credit for every
- * map the site serves.
+ * What a Star and a Planet look like (8.2, 9.5, AD-21): the Colophon's
+ * statement that a Body's appearance, a Planet's map and a Star's colour, is
+ * assigned and encodes nothing, and the credit for every map the site serves.
  *
  * **The copy** is Thomas's ruling (2026-11-16, Q1, architecture memlog entry
  * 97), verbatim: the `<h2>`, the one statement, the lead-in, and the text of
- * each entry's link. It sits in the Colophon's existing copy place
- * (EXPERIENCE.md §3, place 4), not a new one.
+ * each entry's link. The heading and the statement are superseded, verbatim, by
+ * Proposal 7 (sprint-change-proposal-2026-11-17.md), shipped in 9.5. It sits
+ * in the Colophon's existing copy place (EXPERIENCE.md §3, place 4), not a new
+ * one.
  *
  * **The entries** are the map library's, one per entry, in library order, worn
  * by a Planet or not: every committed map is publicly served. Each reads
@@ -27,8 +29,8 @@
  * the solver or the library, and nothing here touches the DOM or React.
  */
 
-/** The ruled copy: the heading, the statement, the lead-in and each entry's link text. */
-export const APPEARANCE = { heading: 'what a Planet looks like', statement: "A Planet's surface is not data. Each Planet is assigned one of the maps below from its ID alone, by a fixed rule in the solver, so its colour and texture encode nothing: recency is the outline's brightness, the subject is the white stroke, and Deep or Shallow is the Ring and the Moon.", lead: 'Every map this site serves, worn or not:', source: 'source' } as const;
+/** The ruled copy: the heading, the statement, the lead-in and each entry's link text. The heading and the statement are Proposal 7's (sprint-change-proposal-2026-11-17.md), shipped in 9.5. */
+export const APPEARANCE = { heading: 'what a Star and a Planet look like', statement: "A Body's colour is not data. Each Planet is assigned one of the maps below, and each Star one of five colours, from its ID alone, by a fixed rule in the solver, so colour and texture encode nothing: recency is how brightly a Star shines and a Planet's rim glows, the subject is the one that turns white, and Deep or Shallow is the ring and the moon.", lead: 'Every map this site serves, worn or not:', source: 'source' } as const;
 
 /** The slice of a map library entry the credits read, declared structurally. */
 export interface CreditEntry {

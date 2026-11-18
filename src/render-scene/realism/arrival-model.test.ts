@@ -23,8 +23,8 @@ const DELTA = 1 / 60;
 const APPEARANCE = { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.05, spinPhase: 1.5 };
 const ARTIFACT: RealismArtifact = {
   clients: [
-    { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, appearance: APPEARANCE }, { id: 'project:a/two', clientId: 'client:a', position: { x: -10, y: 0, z: 0 }, appearance: { ...APPEARANCE, map: 'mars' } }] },
-    { id: 'client:b', position: { x: 100, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { pulsePhase: 0 }, projects: [] },
+    { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, appearance: APPEARANCE }, { id: 'project:a/two', clientId: 'client:a', position: { x: -10, y: 0, z: 0 }, appearance: { ...APPEARANCE, map: 'mars' } }] },
+    { id: 'client:b', position: { x: 100, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [] },
   ],
 };
 const IMAGES: ReadonlyMap<string, ImageBitmap> = new Map([['moon', {} as ImageBitmap], ['mars', {} as ImageBitmap]]);

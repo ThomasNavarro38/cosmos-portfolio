@@ -227,7 +227,7 @@ This is bound **by test, not by comment.** An earlier implementation of this sto
 
 ### A Planet's appearance
 
-Each Project carries `appearance`: `{ map, meanLuminance, tilt, spinRate, spinPhase }`, from `appearanceOf` in `appearance.ts`, emitted by `artifact.ts` and required by the schema (since `SCHEMA_VERSION` 10, as of 7.4; the version is now 11, for 9.4's Client fields). A Client carries its Star's own (9.4, below), and the closed schema refuses a Planet's fields on it. The entity ID and the map library are the only inputs, so adding a Project stays one JSON entry and one `weight`, with no art decision. `career.json` gains no field and no override. Colour and surface encode nothing: this is not a mapping rule, and the derivation table stays three rows (AD-21).
+Each Project carries `appearance`: `{ map, meanLuminance, tilt, spinRate, spinPhase }`, from `appearanceOf` in `appearance.ts`, emitted by `artifact.ts` and required by the schema (since `SCHEMA_VERSION` 10, as of 7.4; the version is now 12, for 9.4's Client fields and 9.5's Star tint). A Client carries its Star's own (9.4, below), and the closed schema refuses a Planet's fields on it. The entity ID and the map library are the only inputs, so adding a Project stays one JSON entry and one `weight`, with no art decision. `career.json` gains no field and no override. Colour and surface encode nothing: this is not a mapping rule, and the derivation table stays three rows (AD-21).
 
 **The hash.** A 32-bit FNV-1a over the string's UTF-16 code units with `Math.imul`, then the MurmurHash3 finaliser, since IDs share long prefixes and bare FNV-1a mixes the last characters poorly into the high bits. `crypto.subtle` is asynchronous and `solveArtifact` is not, so a small pure hash is what keeps one code path. It is not a security boundary.
 
@@ -249,13 +249,14 @@ These are starting values, unjudged: nothing has been seen lit. Epic 8's judgeme
 
 **The gate.** `checkAppearance` (pre-write and at the gate) holds each Project's `appearance` against a re-derivation, naming the Project and either the map with no entry or the field that differs, so a hand edit fails and so does a library changed with no re-solve. AD-1 forbids solving in the gate; `appearanceOf` runs no force solve and reads no authored field, and AD-21 asks for this re-derivation by name. It reads no file: `checkAppearance` holds map to entry and `check-maps` holds entry to file and file to entry, so "every `appearance.map` has a library entry and a file" holds by composition in one `npm run gate`.
 
-### A Star's band and appearance (9.4)
+### A Star's band and appearance (9.4, 9.5)
 
-Each Client carries `luminanceBand` and `appearance: { pulsePhase }`, emitted by `artifact.ts` after its `span` and required by the schema (`SCHEMA_VERSION` 11), so a Star's light under realism carries recency and its pulse needs no derivation at runtime.
+Each Client carries `luminanceBand` and `appearance: { tint, pulsePhase }`, emitted by `artifact.ts` after its `span` and required by the schema (`SCHEMA_VERSION` 12; 11 was 9.4's, before the tint), so a Star's light under realism carries recency, and its colour and pulse need no derivation at runtime.
 
 - **The band** is rule 2 again, for the Star: `clientLuminanceBands` in `entities.ts` takes each Client's latest `recencyOf` among its Projects, ranks the Clients by it (oldest `0`, equal recency sharing a rank), and maps the rank through `deriveLuminanceBand`. So six Clients split three `stroke-rest` and three `stroke-near`, and a lone Client is `stroke-near` by `normalize`'s zero-width rule. The schematic Star outline does not read it and stays `stroke-rest` (ruling Q1, 2026-11-18).
-- **The pulse phase** is `starAppearanceOf(id)` in `appearance.ts`: `unit("pulsePhase", ID)` across `PULSE_PHASE_MIN` to `PULSE_PHASE_MAX` (0 to 6.2832), rounded to four places, from the ID alone. 9.5 adds `tint`.
-- **The gate.** `checkAppearance` re-derives both for every Client, the band from the document's own Project dates and `asOf` through `clientLuminanceBands`, naming the Client and the field that differs.
+- **The pulse phase** is `starAppearanceOf(id)` in `appearance.ts`: `unit("pulsePhase", ID)` across `PULSE_PHASE_MIN` to `PULSE_PHASE_MAX` (0 to 6.2832), rounded to four places, from the ID alone.
+- **The tint** (9.5) is `STAR_TINTS[floor(unit("tint", ID) × 5)]`, one of `blue`, `white`, `yellow`, `orange`, `red` (blackbody-like, hot to cool), from the ID alone, with no authored field and no per-Body override. It never changes in time and encodes nothing. It is a short name, not a token key: `auditRealismReach` refuses any quoted `realism-` string outside `render-scene/realism/`, so `realism/` alone makes it `realism-star-<tint>-dark`.
+- **The gate.** `checkAppearance` re-derives the band and every appearance field (tint and pulse phase) for every Client, the band from the document's own Project dates and `asOf` through `clientLuminanceBands`, naming the Client and the field that differs.
 
 **Who reads it.** `artifact.ts` calls `appearanceOf`, `index.ts` re-derives through it, and `artifact-schema.ts` takes its range constants and nothing else. `appearance.test.ts` fails on any other shipped importer and on the solve, the entities or the rules reaching it. The Fallback reads no appearance, and that test scans each of its files for the word.
 

@@ -1,5 +1,5 @@
 { "$banner": "GENERATED FILE — do not edit by hand. Produced by src/derive/index.ts from src/data/career.json; run `npm run solve` to regenerate. Hand edits are overwritten by the next solve. The build gate rejects an artifact that breaks its invariants or was solved from a different career.json, but not a hand edit that keeps both.",
-  "schemaVersion": 11,
+  "schemaVersion": 12,
   "asOf": "2026-09",
   "sourceDigest": "7495d150d1bff922fbc94a7f7ec261df2bfd1ab1643948f4510c9fb573aec253",
   "clients": [
@@ -13,6 +13,7 @@
       },
       "luminanceBand": "stroke-rest",
       "appearance": {
+        "tint": "blue",
         "pulsePhase": 5.3998
       },
       "position": {
@@ -83,6 +84,7 @@
       },
       "luminanceBand": "stroke-rest",
       "appearance": {
+        "tint": "yellow",
         "pulsePhase": 4.9916
       },
       "position": {
@@ -210,6 +212,7 @@
       },
       "luminanceBand": "stroke-rest",
       "appearance": {
+        "tint": "white",
         "pulsePhase": 1.3929
       },
       "position": {
@@ -287,6 +290,7 @@
       },
       "luminanceBand": "stroke-near",
       "appearance": {
+        "tint": "white",
         "pulsePhase": 1.5431
       },
       "position": {
@@ -365,6 +369,7 @@
       },
       "luminanceBand": "stroke-near",
       "appearance": {
+        "tint": "red",
         "pulsePhase": 4.9518
       },
       "position": {
@@ -502,6 +507,7 @@
       },
       "luminanceBand": "stroke-near",
       "appearance": {
+        "tint": "red",
         "pulsePhase": 5.062
       },
       "position": {

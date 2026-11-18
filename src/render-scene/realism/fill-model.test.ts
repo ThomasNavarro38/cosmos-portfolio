@@ -61,8 +61,8 @@ function planet(id: string, clientId: string, x: number, map = 'moon') {
 /** Two Clients, each with its own Star: the first at the origin, the second far along x. */
 const ARTIFACT: RealismArtifact = {
   clients: [
-    { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { pulsePhase: 0 }, projects: [planet('project:a/one', 'client:a', 10), planet('project:a/two', 'client:a', -10, 'mars')] },
-    { id: 'client:b', position: { x: 100, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { pulsePhase: 0 }, projects: [planet('project:b/one', 'client:b', 110)] },
+    { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [planet('project:a/one', 'client:a', 10), planet('project:a/two', 'client:a', -10, 'mars')] },
+    { id: 'client:b', position: { x: 100, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [planet('project:b/one', 'client:b', 110)] },
   ],
 };
 const IMAGES: ReadonlyMap<string, ImageBitmap> = new Map([
@@ -311,7 +311,7 @@ const DIFFERING: RealismArtifact = {
     id: 'client:a',
     position: { x: 0, y: 0, z: 0 },
     luminanceBand: 'stroke-rest',
-    appearance: { pulsePhase: 0 },
+    appearance: { tint: 'white', pulsePhase: 0 },
     projects: [
       { id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, appearance: { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.05, spinPhase: 1.5 } },
       { id: 'project:a/two', clientId: 'client:a', position: { x: 0, y: 10, z: 0 }, appearance: { map: 'mars', meanLuminance: 0.123, tilt: -0.4, spinRate: 0.09, spinPhase: 4.2 } },

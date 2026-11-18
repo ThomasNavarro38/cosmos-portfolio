@@ -17,7 +17,7 @@ function artifactWearing(...maps: readonly string[]): RealismArtifact {
       id: 'client:a',
       position,
       luminanceBand: 'stroke-rest',
-      appearance: { pulsePhase: 0 },
+      appearance: { tint: 'white', pulsePhase: 0 },
       projects: maps.map((map, at) => ({ id: `project:a/${at}`, clientId: 'client:a', position, appearance: { map, meanLuminance: 0.3, tilt: 0, spinRate: 0.05, spinPhase: 0 } })),
     }],
   };

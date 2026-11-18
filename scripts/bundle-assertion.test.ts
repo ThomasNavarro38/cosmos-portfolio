@@ -1141,7 +1141,7 @@ test('the shipped reach audit rejects every form, and a comment or a near name d
     ['a block comment in the page', 'index.html', '<!-- /src/render-scene/realism/index.ts --><p></p>'],
     ['the status module', 'src/render-scene/x.ts', "import { x } from './realism-status.ts';"],
     ['the mount itself', 'src/render-scene/x.tsx', "import { RealismMount } from './realism-mount.tsx';"],
-    ['a token name', 'src/tokens/x.ts', "const t = 'realism-star-glow';"],
+    ['a token name', 'src/tokens/x.ts', "const t = 'realism-star-orange';"],
     ['surrealism', 'src/shell/x.ts', "const t = 'surrealism';"],
     ['a literal import outside the scene', 'src/shell/x.ts', "const m = await import('./colophon.tsx');"],
     ['a narrow glob outside the scene', 'src/shell/x.ts', "const m = import.meta.glob('./shaders/*.glsl');"],

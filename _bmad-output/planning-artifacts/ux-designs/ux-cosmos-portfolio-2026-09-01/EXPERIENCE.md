@@ -232,6 +232,7 @@ Copy exists in exactly five places. There is no sixth.
    - *[amended 2026-11-17 for Epic 9, after the 8.4 rejection (sprint-change-proposal-2026-11-17.md, Proposal 7; recorded by story 9.2): the heading and the statement above are superseded, verbatim, by the following. They ship in 9.5, with `src/colophon/credits.ts`, `credits.test.ts` and the identity audit; until then the page carries the wording above. The lead-in and the credits are unchanged.]*
      - *Heading:* `what a Star and a Planet look like`
      - *Statement:* `A Body's colour is not data. Each Planet is assigned one of the maps below, and each Star one of five colours, from its ID alone, by a fixed rule in the solver, so colour and texture encode nothing: recency is how brightly a Star shines and a Planet's rim glows, the subject is the one that turns white, and Deep or Shallow is the ring and the moon.`
+   - *[shipped in 9.5, 2026-11-18: `src/colophon/credits.ts` now carries the heading and the statement above, verbatim, pinned by `credits.test.ts` and the identity audit; the page no longer carries the 8.2 wording.]*
 5. The contact route.
 
 Page metadata — the document's title, its description and the preview image's alt text — is never drawn on any surface; it is not a sixth place, and it is held to the same voice.

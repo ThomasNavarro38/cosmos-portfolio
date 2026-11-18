@@ -19,7 +19,7 @@ import { createRealismOwner, moveStatus, type DocumentStatus, type RealismArtifa
 
 const ORIGIN = { x: 0, y: 0, z: 0 };
 const ARTIFACT: RealismArtifact = {
-  clients: [{ id: 'client:a', position: ORIGIN, luminanceBand: 'stroke-rest', appearance: { pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, appearance: { map: 'moon', meanLuminance: 0.3, tilt: 0, spinRate: 0.05, spinPhase: 0 } }] }],
+  clients: [{ id: 'client:a', position: ORIGIN, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, appearance: { map: 'moon', meanLuminance: 0.3, tilt: 0, spinRate: 0.05, spinPhase: 0 } }] }],
 };
 const DRAW: RealismDraw = { scene: 'scene', camera: 'camera', renderer: 'renderer', delta: 0.5, reduced: false, pace: 1, subject: () => null };
 const BASE = '/base/';

@@ -82,13 +82,14 @@ interface RealismPoint {
   readonly z: number;
 }
 
-/** The artifact as far as realism is concerned: each Planet's map and turn, each Star's band and pulse phase (9.4), and where each stands. Structural, so nothing here imports `src/derive/`. The band is a string here, so the Star model's check of it is a real one. */
+/** The artifact as far as realism is concerned: each Planet's map and turn, each Star's band, tint (9.5) and pulse phase (9.4), and where each stands. Structural, so nothing here imports `src/derive/`. The band is a string here, so the Star model's check of it is a real one. */
 export interface RealismArtifact {
   readonly clients: readonly {
     readonly id: string;
     readonly position: RealismPoint;
     readonly luminanceBand: string;
     readonly appearance: {
+      readonly tint: string;
       readonly pulsePhase: number;
     };
     readonly projects: readonly {

@@ -1,5 +1,5 @@
 /**
- * A Star's two draws, as GLSL (7.7, 9.4). Strings only, so a test reads them as written.
+ * A Star's two draws, as GLSL (7.7, 9.4, 9.5). Strings only, so a test reads them as written.
  *
  * **The core's vertex stage is the Planet fill's own,** the 7.1 mechanism, so a Star's
  * disc holds by the same measured bias. The fragment is procedural and emissive: no map
@@ -16,10 +16,14 @@
  *   the shared `uTime`. The limb's and the granulation's darkening is 0 at the centre alone
  *   (their factor is 1 there), so only the subject's centre reaches `stroke-focus`, in
  *   linear terms; the near-ceiling floor keeps the output at or one 8-bit step under it.
- * - **The hue** is the token's at rest, and goes toward white as the subject rises, at the
- *   same luminance. Provisional: whether the subject's core turns white or keeps its tint
- *   is 9.5's open ruling (9.2's deferred finding). Each channel is then clamped to 1, which
- *   only lowers luminance, so a saturated tint cannot clip past 1 and the ceilings hold.
+ * - **The hue** is the Star's own tint at rest (9.5), divided by its luminance so the tint
+ *   is hue alone, and goes toward white as the subject rises, at the same luminance:
+ *   only the subject's core turns white (Proposal 7, "the subject is the one that turns
+ *   white"), which resolves 9.4's provisional note. Each channel is then clamped to 1,
+ *   which only lowers luminance, so a saturated tint cannot clip past 1 and the ceilings
+ *   hold. No channel clamps at rest or on the risen subject, so the tint is exactly hue
+ *   there; only mid-rise (at most `RISE_SECONDS`) can one clamp, lowering the centre by at
+ *   most 0.24% (`WORST_CLAMP_LOSS`, pinned by test), a transient.
  * - **The alpha** falls toward 0 over the outer `EDGE` of the radius, so the core melts into
  *   the additive glow beneath it (8.4's "dark ring"). No fragment under `ALPHA_FLOOR` (0.5)
  *   draws or writes depth: it is discarded, so a faint rim cannot cut later draws out.
@@ -29,8 +33,11 @@
  *
  * **The glow is the same sphere flattened, with no bias.** The disc's size comes from
  * the mesh's scale, so three culls it by what it covers. The falloff reaches 0 with no
- * slope at its edge, and no shape is cut out. Its peak is the uniform `uPeak`, the band's
- * at rest mixing toward `GLOW_SUBJECT_PEAK` with the rise, written by the layer. Additive
+ * slope at its edge, and no shape is cut out. Its colour is the Star's tint divided by its
+ * own luminance (9.5), so `uPeak` is the glow's absolute linear luminance at its centre,
+ * whatever the tint: the band's at rest mixing toward `GLOW_SUBJECT_PEAK` with the rise,
+ * written by the layer. A glow keeps its tint as the subject; only the core goes white.
+ * Each channel is clamped to 1, which only lowers luminance. Additive
  * blending happens on encoded values in the framebuffer, and a shader cannot read the
  * destination, so a test bounds only this draw's own peak: what overlapping glows and
  * Dust add up to is on real pixels.
@@ -123,10 +130,12 @@ export const GLOW_FRAGMENT_SHADER = /* glsl */ `
   uniform float uPeak;
   uniform float uFade;
   varying vec2 vDisc;
+  const vec3 WEIGHTS = vec3(0.2126, 0.7152, 0.0722);
   void main() {
     float edge = max(1.0 - dot(vDisc, vDisc), 0.0);
     float falloff = edge * edge;
-    gl_FragColor = vec4(uColor * uPeak * falloff * uFade, 1.0);
+    vec3 glow = uColor / dot(uColor, WEIGHTS) * uPeak * falloff * uFade;
+    gl_FragColor = vec4(min(glow, vec3(1.0)), 1.0);
     #include <colorspace_fragment>
   }
 `;

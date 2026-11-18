@@ -16,7 +16,7 @@
 
 import { z } from 'zod';
 import { ProjectSchema } from '../data/schema.ts';
-import { PULSE_PHASE_MAX, PULSE_PHASE_MIN, SPIN_PHASE_MAX, SPIN_PHASE_MIN, SPIN_RATE_MAX, SPIN_RATE_MIN, TILT_MAX, TILT_MIN } from './appearance.ts';
+import { PULSE_PHASE_MAX, PULSE_PHASE_MIN, SPIN_PHASE_MAX, SPIN_PHASE_MIN, SPIN_RATE_MAX, SPIN_RATE_MIN, STAR_TINTS, TILT_MAX, TILT_MIN } from './appearance.ts';
 import { DWELL_TEMPOS } from './dwell.ts';
 import { MOTE_TIERS, RESTING_BANDS, SKILL_TIERS } from './rules.ts';
 import { SHOT_FRAMINGS } from './shots.ts';
@@ -40,7 +40,9 @@ import { SHOT_FRAMINGS } from './shots.ts';
  * `appearance`: an artifact carrying `9` names no map, so a renderer would have
  * to import the library or pick one itself. **11** is Story 9.4's each Client's
  * `luminanceBand` and `appearance` (`pulsePhase`): an artifact carrying `10` gives
- * a Star's light no recency, so a renderer would have to rank Clients itself. An artifact carrying `7` names no source, so the gate could
+ * a Star's light no recency, so a renderer would have to rank Clients itself. **12** is
+ * Story 9.5's each Client's `appearance.tint`: an artifact carrying `11` gives a
+ * Star no colour of its own, so a renderer would have to pick one itself. An artifact carrying `7` names no source, so the gate could
  * not tell whether it was solved from the `career.json` beside it. An artifact
  * still carrying `5` publishes no Skill tiers, and must fail rather than be read
  * by a scene that seats Motes by them — it would have to count shares itself,
@@ -52,7 +54,7 @@ import { SHOT_FRAMINGS } from './shots.ts';
  * the artifact fail its own gate, which is precisely what the gate exists to
  * prevent, and is why each was deliberately absent until the story that emits it.
  */
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 /** ISO 8601 year-month, matching the authored form exactly. */
 const IsoYearMonth = z
@@ -143,10 +145,12 @@ const AppearanceSchema = z.strictObject({
 });
 
 /**
- * A Star's appearance (Story 9.4), closed at one field until 9.5 adds `tint`. Its
- * agreement with the ID is the gate's (`checkAppearance`).
+ * A Star's appearance (Stories 9.4, 9.5), closed at two fields: its tint, one of
+ * the five short names, and its pulse phase. Its agreement with the ID is the
+ * gate's (`checkAppearance`).
  */
 const StarAppearanceSchema = z.strictObject({
+  tint: z.enum(STAR_TINTS),
   pulsePhase: z.number().finite().min(PULSE_PHASE_MIN).max(PULSE_PHASE_MAX),
 });
 

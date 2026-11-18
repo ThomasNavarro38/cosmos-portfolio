@@ -96,8 +96,8 @@ test('SCHEMA_VERSION is a literal in the schema, so a mismatch fails', () => {
   }
 });
 
-test('the version is 11 now that each Client carries its band and appearance, and changing the shape means changing it', () => {
-  assert.equal(SCHEMA_VERSION, 11, 'Story 9.4 added each Client’s `luminanceBand` and `appearance`, so the shape version is 11');
+test('the version is 12 now that each Client’s appearance carries its tint, and changing the shape means changing it', () => {
+  assert.equal(SCHEMA_VERSION, 12, 'Story 9.5 added each Client’s `appearance.tint`, so the shape version is 12');
   assert.equal(valid().schemaVersion, SCHEMA_VERSION, 'the emitter declares it');
 
   // Read off the source: the literal must be in the schema, not merely compared
@@ -704,6 +704,12 @@ test('an artifact still declaring schemaVersion 10 is rejected', () => {
   assertFails(validateArtifact(old), /schemaVersion/, 'an artifact with no Star band must not be read on a guess');
 });
 
+test('an artifact still declaring schemaVersion 11 is rejected', () => {
+  const old = copy(valid());
+  old['schemaVersion'] = 11;
+  assertFails(validateArtifact(old), /schemaVersion/, 'an artifact with no Star tint must not be read on a guess');
+});
+
 test('a Client’s band and appearance are required and closed (9.4): a Planet’s appearance on a Star fails', () => {
   const planetLook = withAppearance();
   planetLook.client['appearance'] = planetLook.look;
@@ -718,9 +724,22 @@ test('a Client’s band and appearance are required and closed (9.4): a Planet�
   const noPhase = withAppearance();
   delete (noPhase.client['appearance'] as Record<string, unknown>)['pulsePhase'];
   assertFails(validateArtifact(noPhase.doc), /clients\.0\.appearance\.pulsePhase/, 'no pulsePhase');
-  const tinted = withAppearance();
-  (tinted.client['appearance'] as Record<string, unknown>)['tint'] = 'realism-star-blue';
-  assertFails(validateArtifact(tinted.doc), /clients\.0\.appearance/, 'no tint before 9.5');
+  const noTint = withAppearance();
+  delete (noTint.client['appearance'] as Record<string, unknown>)['tint'];
+  assertFails(validateArtifact(noTint.doc), /clients\.0\.appearance\.tint/, 'no tint (9.5)');
+  for (const tint of ['green', 'realism-star-blue', 'Blue', '', 0]) {
+    const tinted = withAppearance();
+    (tinted.client['appearance'] as Record<string, unknown>)['tint'] = tint;
+    assertFails(validateArtifact(tinted.doc), /clients\.0\.appearance\.tint/, `tint ${String(tint)} is not one of the five`);
+  }
+  for (const tint of ['blue', 'white', 'yellow', 'orange', 'red']) {
+    const tinted = withAppearance();
+    (tinted.client['appearance'] as Record<string, unknown>)['tint'] = tint;
+    assert.deepEqual(validateArtifact(tinted.doc), [], `tint ${tint} is admitted`);
+  }
+  const extra = withAppearance();
+  (extra.client['appearance'] as Record<string, unknown>)['hue'] = 0.5;
+  assertFails(validateArtifact(extra.doc), /clients\.0\.appearance/, 'the Star appearance stays closed');
   for (const band of ['stroke-active', 'stroke-focus', 'stroke-dust', 'bright', 1]) {
     const banded = withAppearance();
     banded.client['luminanceBand'] = band;

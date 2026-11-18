@@ -6,9 +6,10 @@
  */
 
 import { strict as assert } from 'node:assert';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { AdditiveBlending, Color, FrontSide, Group, type Mesh, NormalBlending, type Object3D, PerspectiveCamera, Quaternion, Scene, type ShaderMaterial, SphereGeometry, type WebGLRenderer } from 'three';
 import { filesUnder, isTestFile, SOURCE_MODULE, stripComments, stripCommentsAndStrings } from '../../../scripts/source-scan.ts';
 import { REDUCED_MOTION_PACE } from '../../shell/motion-preference.ts';
@@ -20,7 +21,7 @@ import { DUST_DRAWS_BUDGET, PLANET_DRAWS_BUDGET, STAR_DRAWS_BUDGET } from './bud
 import { createFillLayer } from './fill-layer.ts';
 import { addedDraws, FILL_CEILING_LUMINANCE, FILL_RADIUS_RATIO, fillPlans } from './fill-model.ts';
 import { FILL_VERTEX_SHADER } from './fill-shader.ts';
-import { createStarRows } from './star-layer.ts';
+import { createStarRows, STAR_TINT_TOKENS } from './star-layer.ts';
 import {
   bandPeak,
   coreCentreLuminance,
@@ -45,18 +46,25 @@ import {
   STAR_REST_CEILING_LUMINANCE,
   STAR_SUBJECT_CEILING_LUMINANCE,
   STAR_SUBJECT_DIP,
+  STAR_TINT_NAMES,
   starPlans,
   starPulse,
   type StarBand,
+  type StarTint,
+  GLOW_94_LUMINANCE,
+  TINT_ORDER,
 } from './star-model.ts';
 import { GLOW_FRAGMENT_SHADER, GLOW_VERTEX_SHADER, glslFloat, STAR_FILL_FRAGMENT_SHADER, STAR_FILL_VERTEX_SHADER } from './star-shader.ts';
 
-const GLOW_TOKEN = 'realism-star-glow-dark';
+/** Each tint's token (9.5), as the layer's record must name it. */
+const TINT_TOKEN = (tint: StarTint): keyof typeof tokens.colors => `realism-star-${tint}-dark` as keyof typeof tokens.colors;
+/** 9.4's one glow colour, retired in 9.5: the glow peaks are its shares, times its luminance. */
+const GLOW_94_HEX = '#B09468';
 const APPEARANCE = { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.05, spinPhase: 1.5 };
 const ARTIFACT: RealismArtifact = {
   clients: [
-    { id: 'client:a', position: { x: 1, y: 2, z: 3 }, luminanceBand: 'stroke-near', appearance: { pulsePhase: 1.5 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 11, y: 2, z: 3 }, appearance: APPEARANCE }] },
-    { id: 'client:b', position: { x: 100, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { pulsePhase: 0 }, projects: [] },
+    { id: 'client:a', position: { x: 1, y: 2, z: 3 }, luminanceBand: 'stroke-near', appearance: { tint: 'red', pulsePhase: 1.5 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 11, y: 2, z: 3 }, appearance: APPEARANCE }] },
+    { id: 'client:b', position: { x: 100, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'blue', pulsePhase: 0 }, projects: [] },
   ],
 };
 const IMAGES: ReadonlyMap<string, ImageBitmap> = new Map([['moon', {} as ImageBitmap]]);
@@ -74,10 +82,10 @@ const linearLuminance = (hex: string): number => luminanceOf(channels(hex));
 
 // --- The model -----------------------------------------------------------------------------------
 
-test('the plans are one per Client, by id, position, band and pulse phase, in the artifact\'s order', () => {
+test('the plans are one per Client, by id, position, band, tint and pulse phase, in the artifact\'s order', () => {
   assert.deepEqual(starPlans(ARTIFACT), [
-    { id: 'client:a', position: { x: 1, y: 2, z: 3 }, band: 'stroke-near', pulsePhase: 1.5 },
-    { id: 'client:b', position: { x: 100, y: 0, z: 0 }, band: 'stroke-rest', pulsePhase: 0 },
+    { id: 'client:a', position: { x: 1, y: 2, z: 3 }, band: 'stroke-near', tint: 'red', pulsePhase: 1.5 },
+    { id: 'client:b', position: { x: 100, y: 0, z: 0 }, band: 'stroke-rest', tint: 'blue', pulsePhase: 0 },
   ]);
   assert.deepEqual(starPlans({ clients: [] }), [], 'no Clients, no Stars');
 });
@@ -85,14 +93,14 @@ test('the plans are one per Client, by id, position, band and pulse phase, in th
 test('a Star with a non-finite position throws, naming it', () => {
   for (const value of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
     for (const axis of ['x', 'y', 'z'] as const) {
-      const bad: RealismArtifact = { clients: [{ id: 'client:bad', position: { x: 0, y: 0, z: 0, [axis]: value }, luminanceBand: 'stroke-rest', appearance: { pulsePhase: 0 }, projects: [] }] };
+      const bad: RealismArtifact = { clients: [{ id: 'client:bad', position: { x: 0, y: 0, z: 0, [axis]: value }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [] }] };
       assert.throws(() => starPlans(bad), /client:bad/, `${axis} ${value}`);
     }
   }
 });
 
 test('an unknown band, or a pulse phase that is not finite, throws naming the Client (9.4)', () => {
-  const star = (luminanceBand: string, pulsePhase: number): RealismArtifact => ({ clients: [{ id: 'client:bad', position: { x: 0, y: 0, z: 0 }, luminanceBand, appearance: { pulsePhase }, projects: [] }] });
+  const star = (luminanceBand: string, pulsePhase: number): RealismArtifact => ({ clients: [{ id: 'client:bad', position: { x: 0, y: 0, z: 0 }, luminanceBand, appearance: { tint: 'white', pulsePhase }, projects: [] }] });
   for (const band of ['stroke-active', 'stroke-focus', 'stroke-dust', '', 'toString', 'constructor', '__proto__']) {
     assert.throws(() => starPlans(star(band, 0)), /client:bad has no usable band/, band);
   }
@@ -102,6 +110,67 @@ test('an unknown band, or a pulse phase that is not finite, throws naming the Cl
   assert.doesNotThrow(() => starPlans(star('stroke-near', 6.2832)));
   const bare = { clients: [{ id: 'client:bare', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-rest', projects: [] }] } as unknown as RealismArtifact;
   assert.throws(() => starPlans(bare), /client:bare has no usable pulsePhase/, 'a missing appearance names the Client');
+});
+
+test('a tint that is unknown or missing throws naming the Client (9.5)', () => {
+  const star = (appearance: unknown): RealismArtifact => ({ clients: [{ id: 'client:hue', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance, projects: [] }] } as unknown as RealismArtifact);
+  for (const tint of ['green', 'realism-star-blue', 'realism-star-blue-dark', 'Blue', '', 'toString', '__proto__', 0, null]) {
+    assert.throws(() => starPlans(star({ tint, pulsePhase: 0 })), /client:hue has no usable tint/, String(tint));
+  }
+  assert.throws(() => starPlans(star({ pulsePhase: 0 })), /client:hue has no usable tint: undefined/, 'a missing tint names the Client');
+  for (const tint of STAR_TINT_NAMES) assert.equal(starPlans(star({ tint, pulsePhase: 0 }))[0]?.tint, tint);
+});
+
+// --- The tints (9.5) -------------------------------------------------------------------------------
+
+/**
+ * derive's `STAR_TINTS`, `TINT_ORDER` and whether the list is frozen, read from the module itself in a
+ * child process: `src/render-scene/` imports nothing of `src/derive/`, its tests included (the boundary
+ * scan holds them too), so this is the `done.test.ts` idiom rather than an import or a source scrape.
+ */
+function deriveTints(): { readonly tints: string[]; readonly order: Record<string, number>; readonly frozen: boolean } {
+  const script = 'const m = await import(process.env.APPEARANCE_URL); process.stdout.write(JSON.stringify({ tints: m.STAR_TINTS, order: m.TINT_ORDER, frozen: Object.isFrozen(m.STAR_TINTS) }));';
+  const url = pathToFileURL(fileURLToPath(new URL('../../derive/appearance.ts', import.meta.url))).href;
+  const run = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', env: { ...process.env, APPEARANCE_URL: url }, timeout: 60_000 });
+  assert.equal(run.status, 0, `reading derive's tints exited ${String(run.status)}:\n${run.stderr}`);
+  return JSON.parse(run.stdout) as { tints: string[]; order: Record<string, number>; frozen: boolean };
+}
+const DERIVE = deriveTints();
+const STAR_TINTS = DERIVE.tints;
+const DERIVE_TINT_ORDER = DERIVE.order;
+
+test('the tint names are derive\'s STAR_TINTS, in order: blue, white, yellow, orange, red, and both lists are frozen', () => {
+  assert.deepEqual([...STAR_TINT_NAMES], ['blue', 'white', 'yellow', 'orange', 'red']);
+  assert.deepEqual([...STAR_TINT_NAMES], [...STAR_TINTS]);
+  assert.ok(Object.isFrozen(STAR_TINT_NAMES) && DERIVE.frozen, 'neither list can be reordered at run time');
+});
+
+test('each TINT_ORDER value is its key\'s index, here and in derive, so the numbers cannot read as an order they are not', () => {
+  for (const [name, order] of [['realism', TINT_ORDER], ['derive', DERIVE_TINT_ORDER]] as const) {
+    Object.entries(order).forEach(([tint, value], index) => assert.equal(value, index, `${name}: ${tint} is at ${index}`));
+  }
+  const swapped = { blue: 1, white: 0, yellow: 2, orange: 3, red: 4 };
+  assert.ok(Object.entries(swapped).some(([, value], index) => value !== index), 'a swap of the numbers is caught');
+});
+
+test('the layer throws naming the Star on a plan whose tint has no token, before it adds a draw (9.5)', () => {
+  const group = new Group();
+  const plans = starPlans(ARTIFACT);
+  for (const tint of ['green', 'realism-star-blue-dark', '__proto__', 'toString', undefined]) {
+    const bad = [...plans, { ...plans[0]!, id: 'client:off', tint: tint as unknown as StarTint }];
+    assert.throws(() => createStarRows(bad, new SphereGeometry(1, 8, 4), { value: 0 }, group), /client:off has no usable tint/, String(tint));
+    assert.equal(group.children.length, 0, `${String(tint)}: nothing was added`);
+  }
+});
+
+test('the layer\'s record maps exactly the five tints, each to its own realism-star-<tint>-dark token, which is declared', () => {
+  assert.deepEqual(Object.keys(STAR_TINT_TOKENS).sort(), [...STAR_TINT_NAMES].sort());
+  for (const tint of STAR_TINT_NAMES) {
+    assert.equal(STAR_TINT_TOKENS[tint], TINT_TOKEN(tint), tint);
+    assert.match(tokens.colors[STAR_TINT_TOKENS[tint]], /^#[0-9A-F]{6}$/i, `${tint} is a declared token`);
+  }
+  assert.equal(new Set(Object.values(STAR_TINT_TOKENS)).size, 5, 'five distinct tokens');
+  assert.ok(!Object.keys(tokens.colors).some((key) => key.startsWith('realism-star-glow')), 'realism-star-glow is retired');
 });
 
 // --- The pulse, the clock and the bands (9.4) ------------------------------------------------------
@@ -185,6 +254,13 @@ test('as the subject the centre is in [ceiling × (1 − dip), ceiling], its pea
     assert.equal(coreCentreLuminance(band, 1, 1), ceiling, 'the pulse only dims: at its peak, the ceiling');
     assert.ok(Math.abs(coreCentreLuminance(band, 0, 1) - ceiling * (1 - STAR_SUBJECT_DIP)) < 1e-12);
   }
+});
+
+test('the glow peaks are absolute luminance: 9.4\'s shares × the linear luminance of #B09468 (9.5)', () => {
+  assert.ok(Math.abs(GLOW_94_LUMINANCE - linearLuminance(GLOW_94_HEX)) < 1e-12, `GLOW_94_LUMINANCE is L(${GLOW_94_HEX})`);
+  assert.ok(Math.abs(GLOW_BAND_PEAK['stroke-rest'] - 0.16 * linearLuminance(GLOW_94_HEX)) < 1e-12);
+  assert.ok(Math.abs(GLOW_BAND_PEAK['stroke-near'] - 0.22 * linearLuminance(GLOW_94_HEX)) < 1e-12);
+  assert.ok(Math.abs(GLOW_SUBJECT_PEAK - 0.6 * linearLuminance(GLOW_94_HEX)) < 1e-12);
 });
 
 test('the glow\'s peak is its band\'s at rest and the subject\'s risen, between them as it rises', () => {
@@ -301,15 +377,17 @@ test('the ceiling check rejects a rest ceiling and a subject ceiling that are no
   assert.match(auditCeilings(STAR_SUBJECT_CEILING_LUMINANCE, FILL_CEILING_LUMINANCE).join(), /rest ceiling.*subject ceiling/);
 });
 
-test('the token has a luminance to divide by', () => {
-  assert.ok(luminanceOf(channels(tokens.colors[GLOW_TOKEN])) > 0, 'the shader divides by this');
+test('every tint has a luminance to divide by', () => {
+  for (const tint of STAR_TINT_NAMES) assert.ok(luminanceOf(channels(tokens.colors[TINT_TOKEN(tint)])) > 0, `${tint}: the shaders divide by this`);
 });
+
+const TINT_COLORS: readonly (readonly [StarTint, number[]])[] = STAR_TINT_NAMES.map((tint) => [tint, channels(tokens.colors[TINT_TOKEN(tint)])] as const);
 
 /**
  * The core's fragment, mirrored in numbers, line for line, so the matrix's luminance rows
  * run without a GPU. `auditStarFill` holds the shader to these same lines.
  */
-function coreFragment(disc: readonly [number, number], uniforms: { low: number; high: number; pulse: number; rise: number; time: number }, color: readonly number[] = channels(tokens.colors[GLOW_TOKEN])): { alpha: number | null; luminance: number; rgb: number[] } {
+function coreFragment(disc: readonly [number, number], uniforms: { low: number; high: number; pulse: number; rise: number; time: number }, color: readonly number[] = channels(tokens.colors[TINT_TOKEN('white')])): { alpha: number | null; luminance: number; rgb: number[]; clamped: boolean } {
   const smoothstep = (edge0: number, edge1: number, x: number): number => {
     const t = Math.min(Math.max((x - edge0) / (edge1 - edge0), 0), 1);
     return t * t * (3 - 2 * t);
@@ -328,29 +406,95 @@ function coreFragment(disc: readonly [number, number], uniforms: { low: number; 
   const hue = color.map((value) => mix(value / luminanceOf(color), 1, uniforms.rise));
   const lit = hue.map((value) => Math.min(value * target, 1));
   const y = luminanceOf(lit);
+  const clamped = hue.some((value) => value * target > 1);
   const limit = mix(STAR_REST_CEILING_LUMINANCE, STAR_SUBJECT_CEILING_LUMINANCE, uniforms.rise);
   const rgb = y > limit ? lit.map((value) => value * (limit / y)) : lit;
-  return { alpha: edge < STAR_CORE_ALPHA_FLOOR ? null : edge, luminance: luminanceOf(rgb), rgb };
+  return { alpha: edge < STAR_CORE_ALPHA_FLOOR ? null : edge, luminance: luminanceOf(rgb), rgb, clamped };
 }
 
 const DISC = Array.from({ length: 21 }, (_, i) => Array.from({ length: 21 }, (_, j) => [(i - 10) / 10, (j - 10) / 10] as const)).flat();
 
-test('no resting fragment passes stroke-active, and no subject fragment passes stroke-focus, at any clock; no channel passes 1', () => {
-  for (const band of BANDS) {
-    const [low, high] = STAR_BAND_LUMINANCE[band];
-    for (const rise of [0, 0.25, 0.5, 0.75, 1]) {
-      for (const clock of CLOCKS.filter((_, at) => at % 20 === 0)) {
-        const pulse = starPulse(clock, 1.5);
-        const limit = STAR_REST_CEILING_LUMINANCE + (STAR_SUBJECT_CEILING_LUMINANCE - STAR_REST_CEILING_LUMINANCE) * rise;
-        for (const disc of DISC) {
-          const fragment = coreFragment(disc, { low, high, pulse, rise, time: clock });
-          if (fragment.alpha === null) continue;
-          assert.ok(fragment.luminance <= limit + 1e-12, `${band} rise ${rise} at ${disc}: ${fragment.luminance}`);
-          assert.ok(fragment.rgb.every((value) => value <= 1), `${band} rise ${rise} at ${disc}: a channel passes 1`);
-          if (rise === 0) assert.ok(fragment.luminance <= STAR_REST_CEILING_LUMINANCE);
+test('for every tint, no resting fragment passes stroke-active, and no subject fragment passes stroke-focus, at any clock; no channel passes 1', () => {
+  for (const [tint, color] of TINT_COLORS) {
+    for (const band of BANDS) {
+      const [low, high] = STAR_BAND_LUMINANCE[band];
+      for (const rise of [0, 0.25, 0.5, 0.75, 1]) {
+        for (const clock of CLOCKS.filter((_, at) => at % 40 === 0)) {
+          const pulse = starPulse(clock, 1.5);
+          const limit = STAR_REST_CEILING_LUMINANCE + (STAR_SUBJECT_CEILING_LUMINANCE - STAR_REST_CEILING_LUMINANCE) * rise;
+          for (const disc of DISC) {
+            const fragment = coreFragment(disc, { low, high, pulse, rise, time: clock }, color);
+            if (fragment.alpha === null) continue;
+            assert.ok(fragment.luminance <= limit + 1e-12, `${tint} ${band} rise ${rise} at ${disc}: ${fragment.luminance}`);
+            assert.ok(fragment.rgb.every((value) => value <= 1), `${tint} ${band} rise ${rise} at ${disc}: a channel passes 1`);
+            if (rise === 0) assert.ok(fragment.luminance <= STAR_REST_CEILING_LUMINANCE, `${tint} ${band} at rest`);
+          }
         }
       }
     }
+  }
+});
+
+/** The worst share of a core's centre luminance the channel clamp takes, over every tint, band, pulse and rise, measured on the grid below. */
+const WORST_CLAMP_LOSS = 0.0024;
+
+test('at rest no channel clamps, for any tint, band, pulse or fragment, so "colour encodes nothing" is exact at rest; nor as the risen subject (9.5)', () => {
+  for (const [tint, color] of TINT_COLORS) {
+    for (const band of BANDS) {
+      const [low, high] = STAR_BAND_LUMINANCE[band];
+      for (let step = 0; step <= 20; step += 1) {
+        const pulse = step / 20;
+        for (const rise of [0, 1]) {
+          for (const disc of DISC) {
+            const fragment = coreFragment(disc, { low, high, pulse, rise, time: 3 }, color);
+            if (fragment.alpha !== null) assert.equal(fragment.clamped, false, `${tint} ${band} pulse ${pulse} rise ${rise} at ${disc}`);
+          }
+        }
+      }
+    }
+  }
+});
+
+test('mid-rise, the clamp takes at most WORST_CLAMP_LOSS of the centre luminance: a transient, only while a subject rises or falls (≤ RISE_SECONDS)', () => {
+  let worst = 0;
+  for (const [, color] of TINT_COLORS) {
+    for (const band of BANDS) {
+      const [low, high] = STAR_BAND_LUMINANCE[band];
+      for (let p = 0; p <= 40; p += 1) {
+        for (let r = 0; r <= 400; r += 1) {
+          const pulse = p / 40;
+          const rise = r / 400;
+          const expected = coreCentreLuminance(band, pulse, rise);
+          const centre = coreFragment([0, 0], { low, high, pulse, rise, time: 0 }, color);
+          worst = Math.max(worst, (expected - centre.luminance) / expected);
+        }
+      }
+    }
+  }
+  assert.ok(worst > 0, 'some tint clamps mid-rise, or the bound measures nothing');
+  assert.ok(worst <= WORST_CLAMP_LOSS, `the worst loss is ${worst}, over the stated ${WORST_CLAMP_LOSS}`);
+  assert.ok(worst > WORST_CLAMP_LOSS / 2, `the bound is tight: ${worst} of ${WORST_CLAMP_LOSS}`);
+  assert.ok(RISE_SECONDS <= 1, 'the window is short');
+});
+
+test('colour encodes nothing (9.5): at the same band, pulse and rise every tint\'s centre luminance is the same, wherever no channel clamps, and a clamp only lowers it', () => {
+  for (const band of BANDS) {
+    const [low, high] = STAR_BAND_LUMINANCE[band];
+    for (const rise of [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1]) {
+      for (const pulse of [0, 0.3, 0.5, 0.8, 1]) {
+        const expected = coreCentreLuminance(band, pulse, rise);
+        for (const [tint, color] of TINT_COLORS) {
+          const centre = coreFragment([0, 0], { low, high, pulse, rise, time: 0 }, color);
+          if (centre.clamped) assert.ok(centre.luminance <= expected + 1e-9, `${tint} ${band} pulse ${pulse} rise ${rise}: a clamp only lowers`);
+          else assert.ok(Math.abs(centre.luminance - expected) < 1e-9, `${tint} ${band} pulse ${pulse} rise ${rise}: ${centre.luminance} vs ${expected}`);
+        }
+      }
+    }
+  }
+  // At rest no tint clamps at its centre, so there the luminance is exactly the same for all five.
+  for (const band of BANDS) {
+    const [low, high] = STAR_BAND_LUMINANCE[band];
+    for (const [tint, color] of TINT_COLORS) assert.equal(coreFragment([0, 0], { low, high, pulse: 1, rise: 0, time: 0 }, color).clamped, false, `${tint} ${band} at rest does not clamp`);
   }
 });
 
@@ -378,17 +522,19 @@ test('a saturated tint never clips past 1 and never passes either ceiling: each 
   }
 });
 
-test('only the centre reaches stroke-focus, in linear terms: the limb and the granulation dim everywhere else, and their darkening is 0 at the centre', () => {
+test('only the centre reaches stroke-focus, in linear terms, for every tint: the limb and the granulation dim everywhere else, and their darkening is 0 at the centre', () => {
   const [low, high] = STAR_BAND_LUMINANCE['stroke-near'];
-  for (const clock of CLOCKS.filter((_, at) => at % 10 === 0)) {
-    const uniforms = { low, high, pulse: 1, rise: 1, time: clock };
-    const centre = coreFragment([0, 0], uniforms);
-    assert.ok(Math.abs(centre.luminance - STAR_SUBJECT_CEILING_LUMINANCE) < 1e-9, `the centre is the ceiling at ${clock}`);
-    assert.ok(Math.abs(coreFragment([0, 0], { ...uniforms, rise: 0, pulse: 0.3 }).luminance - coreCentreLuminance('stroke-near', 0.3, 0)) < 1e-9, 'the centre pixel is the model\'s centre');
-    for (const disc of DISC) {
-      if (disc[0] === 0 && disc[1] === 0) continue;
-      const fragment = coreFragment(disc, uniforms);
-      if (fragment.alpha !== null) assert.ok(fragment.luminance < STAR_SUBJECT_CEILING_LUMINANCE, `${disc} at ${clock}`);
+  for (const [tint, color] of TINT_COLORS) {
+    for (const clock of CLOCKS.filter((_, at) => at % 20 === 0)) {
+      const uniforms = { low, high, pulse: 1, rise: 1, time: clock };
+      const centre = coreFragment([0, 0], uniforms, color);
+      assert.ok(Math.abs(centre.luminance - STAR_SUBJECT_CEILING_LUMINANCE) < 1e-9, `${tint}: the centre is the ceiling at ${clock}, white whatever the tint`);
+      assert.ok(Math.abs(coreFragment([0, 0], { ...uniforms, rise: 0, pulse: 0.3 }, color).luminance - coreCentreLuminance('stroke-near', 0.3, 0)) < 1e-9, `${tint}: the centre pixel is the model\'s centre`);
+      for (const disc of DISC) {
+        if (disc[0] === 0 && disc[1] === 0) continue;
+        const fragment = coreFragment(disc, uniforms, color);
+        if (fragment.alpha !== null) assert.ok(fragment.luminance < STAR_SUBJECT_CEILING_LUMINANCE, `${tint} ${disc} at ${clock}`);
+      }
     }
   }
 });
@@ -436,18 +582,35 @@ test('the granulation drifts with the clock, and holds with it', () => {
   assert.equal(at(held), at(10), 'and holds while the clock holds');
 });
 
-test("a glow's own peak is well under each ceiling, and at rest two near ones summed on encoded values still are", () => {
+/** The glow's centre, mirrored: the tint divided by its own luminance, by the peak, each channel clamped to 1. */
+const glowCentre = (color: readonly number[], peak: number): number[] => color.map((value) => Math.min((value / luminanceOf(color)) * peak, 1));
+
+test("for every tint, a glow's own peak is well under each ceiling, and at rest two near ones summed on encoded values still are", () => {
   // Additive blending is on encoded values and a shader cannot read the destination, so this bounds the glow alone. The rest is on real pixels.
-  const color = channels(tokens.colors[GLOW_TOKEN]);
-  const encoded = (peak: number): number[] => color.map((value) => toSrgb(value * peak));
   const decoded = (values: readonly number[]): number => luminanceOf(values.map((value) => toLinear(Math.min(value, 1))));
   const near = GLOW_BAND_PEAK['stroke-near'];
   assert.ok(GLOW_BAND_PEAK['stroke-rest'] > 0 && near < GLOW_SUBJECT_PEAK);
-  assert.ok(decoded(encoded(near)) < FILL_CEILING_LUMINANCE / 2);
-  const two = encoded(near).map((value) => value * 2);
-  assert.ok(decoded(two) < FILL_CEILING_LUMINANCE, `two near peaks read ${decoded(two)}`);
-  const withSubject = encoded(GLOW_SUBJECT_PEAK).map((value, at) => value + encoded(near)[at]!);
-  assert.ok(decoded(withSubject) < STAR_SUBJECT_CEILING_LUMINANCE, `a subject's peak over a near peak reads ${decoded(withSubject)}`);
+  for (const [tint, color] of TINT_COLORS) {
+    const encoded = (peak: number): number[] => glowCentre(color, peak).map(toSrgb);
+    assert.ok(decoded(encoded(near)) < FILL_CEILING_LUMINANCE / 2, `${tint}: one near peak`);
+    const two = encoded(near).map((value) => value * 2);
+    assert.ok(decoded(two) < FILL_CEILING_LUMINANCE, `${tint}: two near peaks read ${decoded(two)}`);
+    const withSubject = encoded(GLOW_SUBJECT_PEAK).map((value, at) => value + encoded(near)[at]!);
+    assert.ok(decoded(withSubject) < STAR_SUBJECT_CEILING_LUMINANCE, `${tint}: a subject's peak over a near peak reads ${decoded(withSubject)}`);
+    assert.ok(glowCentre(color, GLOW_SUBJECT_PEAK).every((value) => value < 1), `${tint}: no channel clamps even at the subject's peak`);
+  }
+});
+
+test("colour encodes nothing (9.5): every tint's glow peak has the same luminance, and is exactly 9.4's glow", () => {
+  const glow94 = channels(GLOW_94_HEX);
+  for (const peak of [GLOW_BAND_PEAK['stroke-rest'], GLOW_BAND_PEAK['stroke-near'], GLOW_SUBJECT_PEAK]) {
+    const share = peak / GLOW_94_LUMINANCE;
+    const was = luminanceOf(glow94.map((value) => value * share));
+    for (const [tint, color] of TINT_COLORS) {
+      assert.ok(Math.abs(luminanceOf(glowCentre(color, peak)) - peak) < 1e-12, `${tint}: the peak is its luminance`);
+      assert.ok(Math.abs(luminanceOf(glowCentre(color, peak)) - was) < 1e-12, `${tint}: as bright as 9.4's glow at ${share}`);
+    }
+  }
 });
 
 // --- The shaders, by their source ----------------------------------------------------------------
@@ -559,7 +722,9 @@ function auditGlow(vertex: string, fragment: string): string[] {
   if (/\bposition\.z\b|position\.xyz|vec4\(\s*position\s*,/.test(vertex)) failures.push('the sphere keeps its relief');
   if (!fragment.includes('float edge = max(1.0 - dot(vDisc, vDisc), 0.0);')) failures.push('the falloff does not reach 0 at the edge');
   if (!fragment.includes('float falloff = edge * edge;')) failures.push('the falloff has a slope at the edge');
-  if (!fragment.includes('vec4(uColor * uPeak * falloff * uFade, 1.0)')) failures.push('the colour is not the token, by the peak, the falloff and the fade');
+  if (!fragment.includes('vec3 glow = uColor / dot(uColor, WEIGHTS) * uPeak * falloff * uFade;')) failures.push('the colour is not the tint by its own luminance, by the peak, the falloff and the fade');
+  if (!fragment.includes('const vec3 WEIGHTS = vec3(0.2126, 0.7152, 0.0722);')) failures.push('the glow does not weigh by Rec. 709');
+  if (!fragment.includes('gl_FragColor = vec4(min(glow, vec3(1.0)), 1.0);')) failures.push('a glow channel is not clamped to 1, or the fade is the alpha');
   if (!fragment.includes('uniform float uPeak;')) failures.push('no peak uniform');
   if (!fragment.includes('uniform float uFade;')) failures.push('no fade uniform');
   if (!fragment.includes('#include <colorspace_fragment>')) failures.push('no colorspace_fragment');
@@ -581,19 +746,22 @@ test('the glow shader audit rejects each departure', () => {
   const V = GLOW_VERTEX_SHADER;
   const F = GLOW_FRAGMENT_SHADER;
   const FLAT = 'vec4(position.xy, 0, 1)';
-  const MAIN = 'vec4(uColor * uPeak * falloff * uFade, 1.0)';
+  const MAIN = 'uColor / dot(uColor, WEIGHTS) * uPeak * falloff * uFade;';
   for (const [name, vertex, fragment, message] of [
     ['relief', V.replace(FLAT, 'vec4(position, 1)'), F, /flattened/],
     ['a bias', V.replace(/\}\s*$/, 'gl_Position.z += 1e-6 * gl_Position.w; }'), F, /has a bias/],
     ['a renamed varying', V.replaceAll('vDisc', 'vDisk'), F, /different varyings/],
     ['a floor at the edge', V, F.replace('max(1.0 - dot(vDisc, vDisc), 0.0)', 'max(1.0 - dot(vDisc, vDisc), 0.1)'), /reach 0/],
     ['a linear falloff, with a slope at the edge', V, F.replace('edge * edge', 'edge'), /slope/],
-    ['no falloff', V, F.replace(MAIN, 'vec4(uColor * uPeak * uFade, 1.0)'), /by the peak, the falloff/],
-    ['another colour', V, F.replace(MAIN, MAIN.replace('uColor', 'vec3(1.0)')), /by the peak, the falloff/],
-    ['no peak', V, F.replace(MAIN, MAIN.replace('uPeak', '0.22')), /by the peak, the falloff/],
+    ['no falloff', V, F.replace(MAIN, MAIN.replace(' * falloff', '')), /by the peak, the falloff/],
+    ['no normalisation, so a tint carries brightness', V, F.replace(MAIN, 'uColor * uPeak * falloff * uFade;'), /by its own luminance/],
+    ['other weights', V, F.replace('const vec3 WEIGHTS = vec3(0.2126, 0.7152, 0.0722);', 'const vec3 WEIGHTS = vec3(0.3, 0.6, 0.1);'), /Rec\. 709/],
+    ['no clamp', V, F.replace('vec4(min(glow, vec3(1.0)), 1.0)', 'vec4(glow, 1.0)'), /not clamped/],
+    ['another colour', V, F.replace(MAIN, MAIN.replaceAll('uColor', 'vec3(1.0)')), /by its own luminance/],
+    ['no peak', V, F.replace(MAIN, MAIN.replace('uPeak', '0.22')), /by its own luminance, by the peak/],
     ['no peak uniform', V, F.replace('uniform float uPeak;', ''), /no peak uniform/],
     ['no fade, so a glow pops in', V, F.replace(MAIN, MAIN.replace(' * uFade', '')), /the falloff and the fade/],
-    ['the fade as the alpha, which additive blending would ignore at 1', V, F.replace(MAIN, 'vec4(uColor * uPeak * falloff, uFade)'), /the falloff and the fade/],
+    ['the fade as the alpha, which additive blending would ignore at 1', V, F.replace(MAIN, MAIN.replace(' * uFade', '')).replace('vec4(min(glow, vec3(1.0)), 1.0)', 'vec4(min(glow, vec3(1.0)), uFade)'), /the falloff and the fade/],
     ['no fade uniform', V, F.replace('uniform float uFade;', ''), /no fade uniform/],
     ['a removed colorspace_fragment', V, F.replace('#include <colorspace_fragment>', ''), /no colorspace_fragment/],
     ['encoding before assigning', V, F.replace('    #include <colorspace_fragment>\n', '').replace('void main() {', 'void main() {\n    #include <colorspace_fragment>'), /encoded before/],
@@ -693,16 +861,32 @@ test("a Star's fill is the 7.6 mechanism, at the ratio of its own radius, with n
   assert.ok(FILL_RADIUS_RATIO * STAR_RADIUS <= 1, `a Star's fill of radius ${FILL_RADIUS_RATIO * STAR_RADIUS} would be culled at the frame's edge`);
 });
 
-test('a glow is additive, tests depth, writes none, draws at its own step, and is coloured by the token alone', () => {
+test('a glow is additive, tests depth, writes none, draws at its own step, and is coloured by its own Star\'s tint alone', () => {
   const { glows } = rowsOver();
-  for (const mesh of glows) {
+  const plans = planOf();
+  glows.forEach((mesh, index) => {
     const material = materialOf(mesh);
     assert.equal(mesh.renderOrder, GLOW_RENDER_ORDER);
     assert.deepEqual([material.transparent, material.blending, material.depthTest, material.depthWrite, material.side], [true, AdditiveBlending, true, false, FrontSide]);
-    assert.ok((material.uniforms.uColor!.value as Color).equals(new Color(tokens.colors[GLOW_TOKEN])));
+    assert.ok((material.uniforms.uColor!.value as Color).equals(new Color(tokens.colors[TINT_TOKEN(plans[index]!.tint)])), plans[index]!.tint);
     assert.deepEqual(Object.keys(material.uniforms).sort(), ['uColor', 'uFade', 'uPeak']);
-  }
+  });
   assert.ok(GLOW_RENDER_ORDER < FILL_RENDER_ORDER, 'a glow is beneath every fill');
+});
+
+test('each Star\'s core and glow read its own tint, and the tint never changes in time or with the rise (9.5)', () => {
+  const { rows, fills, glows } = rowsOver();
+  const plans = planOf();
+  assert.notEqual(plans[0]!.tint, plans[1]!.tint, 'the fixture has two tints');
+  const colorOf = (mesh: Mesh): Color => materialOf(mesh).uniforms.uColor!.value as Color;
+  const before = [...fills, ...glows].map((mesh) => colorOf(mesh).getHex());
+  fills.forEach((mesh, index) => {
+    assert.ok(colorOf(mesh).equals(new Color(tokens.colors[TINT_TOKEN(plans[index]!.tint)])), `core ${index}`);
+    assert.equal(colorOf(mesh), colorOf(glows[index]!), 'core and glow share one colour');
+  });
+  assert.ok(!colorOf(fills[0]!).equals(colorOf(fills[1]!)), 'two tints, two colours');
+  for (let at = 0; at < 40; at += 1) rows.frame(FACING, at < 20 ? 'client:a' : 'client:b', DELTA, 1, false);
+  assert.deepEqual([...fills, ...glows].map((mesh) => colorOf(mesh).getHex()), before, 'no frame writes a colour');
 });
 
 test('a glow reaches GLOW_RADIUS_RATIO × the Star by its scale, so three culls it by what it covers', () => {
@@ -910,7 +1094,7 @@ function linkingRenderer(): WebGLRenderer {
 }
 
 for (const [name, artifact] of [
-  ['a Star with a non-finite position', { clients: [{ id: 'client:bad', position: { x: Number.NaN, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { pulsePhase: 0 }, projects: [] }, ...ARTIFACT.clients] }],
+  ['a Star with a non-finite position', { clients: [{ id: 'client:bad', position: { x: Number.NaN, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [] }, ...ARTIFACT.clients] }],
 ] as const) {
   test(`under the real owner, ${name} fails the document with nothing added`, async () => {
     const scene = new Scene();
@@ -990,7 +1174,14 @@ function auditStarLayer(source: string): string[] {
   if ((code.match(/\buFade:\s*fade\b/g) ?? []).length !== 2 || /\buFade:\s*\{/.test(code)) failures.push('not every draw reads the fade it is handed');
   if (/\bscene\b|\bScene\b/.test(code)) failures.push('the rows reach a scene, not the group they are handed');
   const names = [...kept.matchAll(/\btokens\.colors\[\s*'([^']+)'\s*\]/g)].map((match) => match[1]);
-  if (names.join() !== GLOW_TOKEN) failures.push(`the colour is not ${GLOW_TOKEN} alone: ${names.join() || 'none'}`);
+  if (names.length > 0) failures.push(`a colour is not a tint alone: ${names.join()}`);
+  const reads = [...code.matchAll(/\btokens\.colors\[([^\]]*\]?)\]/g)].map((match) => match[1]);
+  if (reads.join() !== 'STAR_TINT_TOKENS[plan.tint]') failures.push(`the colour is not each plan's tint alone: ${reads.join() || 'none'}`);
+  const record = /STAR_TINT_TOKENS:[^=]*=\s*\{([^}]*)\}/.exec(kept)?.[1] ?? '';
+  const entries = [...record.matchAll(/(\w+):\s*'([^']+)'/g)].map((match) => `${match[1]}=${match[2]}`).sort();
+  const expected = STAR_TINT_NAMES.map((tint) => `${tint}=realism-star-${tint}-dark`).sort();
+  if (entries.join() !== expected.join()) failures.push(`the tint record is not the five realism-star-<tint>-dark tokens: ${entries.join() || 'none'}`);
+  if (/\.tint\b/.test(code.replace('STAR_TINT_TOKENS[plan.tint]', ''))) failures.push('a tint is read other than for its colour');
   if (/\bappearance\b|\bTexture\b|\buMap\b/.test(code)) failures.push("a Star reads a Planet's surface");
   return failures;
 }
@@ -1019,7 +1210,11 @@ test('the Star layer audit rejects a third draw, a new geometry, a map and each 
     ['a draw with no fade', real.replace('uColor: { value: color }, uFade: fade, uLow:', 'uColor: { value: color }, uLow:'), /reads the fade it is handed/],
     ['the rows added to a scene', real.replace('group.add(fill, glow);', 'scene.add(fill, glow);'), /reach a scene/],
     ['the wrong step', real.replace(STEP, 'glow.renderOrder = FILL_RENDER_ORDER;'), /not at its own step/],
-    ['another token', real.replace(`tokens.colors['${GLOW_TOKEN}']`, "tokens.colors['realism-ambient-floor-dark']"), /alone/],
+    ['another token', real.replace('tokens.colors[STAR_TINT_TOKENS[plan.tint]]', "tokens.colors['realism-ambient-floor-dark']"), /alone/],
+    ['one colour for every Star', real.replace('STAR_TINT_TOKENS[plan.tint]', "STAR_TINT_TOKENS['white']"), /tint alone/],
+    ['a record missing a tint', real.replace("  red: 'realism-star-red-dark',\n", ''), /tint record/],
+    ['a record naming the wrong token', real.replace("orange: 'realism-star-orange-dark'", "orange: 'realism-star-red-dark'"), /tint record/],
+    ['a tint read for something else', real.replace(STEP, `glow.visible = plan.tint !== 'red';\n    ${STEP}`), /other than for its colour/],
     ['a second token', real.replace(STEP, `const other = new Color(tokens.colors['stroke-focus-dark']);\n    ${STEP}`), /alone/],
     ['a map', real.replace(STEP, `const t = new Texture();\n    ${STEP}`), /surface/],
     ['the appearance', real.replace(STEP, `const a = plan.appearance;\n    ${STEP}`), /surface/],
@@ -1043,11 +1238,11 @@ test('no module of the chunk names the Dust, and the row fails on one that does'
   assert.deepEqual(dustNames([{ path: 'x.ts', text: '// no Dust here' }]), []);
 });
 
-test('the Star model imports types only, and reads its band and its pulse phase, and nothing else derived', () => {
+test('the Star model imports types only, and reads its band, its pulse phase and its tint, and nothing else derived', () => {
   const code = stripCommentsAndStrings(readFileSync(new URL('./star-model.ts', import.meta.url), 'utf8'));
   assert.deepEqual([...code.matchAll(/^\s*import\b(?!\s+type\b)/gm)].map((match) => match[0]), []);
   assert.doesNotMatch(code, /\bimport\s*\(/);
   assert.doesNotMatch(code, /\bexport\s+(?:\*|\{)/);
-  assert.deepEqual([...code.matchAll(/\bappearance\??\.\w+/g)].map((match) => match[0]), ['appearance?.pulsePhase'], 'of a Star\'s appearance, its phase alone');
+  assert.deepEqual([...code.matchAll(/\bappearance\??\.\w+/g)].map((match) => match[0]), ['appearance?.pulsePhase', 'appearance?.tint'], 'of a Star\'s appearance, its phase and its tint alone');
   assert.doesNotMatch(code, /\b(?:meanLuminance|tilt|spinRate|spinPhase|mass|isDeep|moteTier)\b/);
 });

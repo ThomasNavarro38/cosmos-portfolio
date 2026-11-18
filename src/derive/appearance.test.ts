@@ -24,6 +24,8 @@ import {
   SPIN_PHASE_MIN,
   SPIN_RATE_MAX,
   SPIN_RATE_MIN,
+  STAR_TINTS,
+  TINT_ORDER,
   starAppearanceOf,
   TILT_MAX,
   TILT_MIN,
@@ -38,6 +40,9 @@ const README = readFileSync(fileURLToPath(new URL('./README.md', import.meta.url
 const COMMITTED = JSON.parse(readFileSync(new URL('../../generated/layout.generated.json', import.meta.url), 'utf8')) as {
   clients: ({ id: string; projects: { id: string; appearance: unknown }[] } & Record<string, unknown>)[];
 };
+
+/** `client:simsu`'s pulse phase in the 9.4 artifact (`SCHEMA_VERSION` 11), before the tint existed. */
+const PINNED_SIMSU_PULSE_PHASE = 5.3998;
 
 /** IDs sharing long prefixes, as real ones do. */
 const IDS: readonly string[] = Array.from({ length: 400 }, (_, index) => `project:simsu/engagement-${index}`);
@@ -206,11 +211,12 @@ test('an empty library throws naming the ID', () => {
 
 // --- A Star's appearance (9.4) ---------------------------------------------------------------------
 
-test('a Star’s appearance is one pulse phase in its range, rounded to four places, with no -0', () => {
+test('a Star’s appearance is a tint and one pulse phase in its range, rounded to four places, with no -0', () => {
   assert.deepEqual([PULSE_PHASE_MIN, PULSE_PHASE_MAX], [0, 6.2832]);
   for (const id of IDS.map((value) => value.replace('project:', 'client:'))) {
     const look = starAppearanceOf(id);
-    assert.deepEqual(Object.keys(look), ['pulsePhase'], id);
+    assert.deepEqual(Object.keys(look), ['tint', 'pulsePhase'], id);
+    assert.ok((STAR_TINTS as readonly string[]).includes(look.tint), `${id} tint ${look.tint}`);
     assert.ok(look.pulsePhase >= PULSE_PHASE_MIN && look.pulsePhase <= PULSE_PHASE_MAX, `${id} pulsePhase ${look.pulsePhase}`);
     assert.equal(look.pulsePhase, Number(look.pulsePhase.toFixed(4)), id);
     assert.ok(!Object.is(look.pulsePhase, -0), id);
@@ -226,6 +232,39 @@ test('a Star’s pulse phase is salted `pulsePhase` from its ID alone, and sprea
   for (const quarter of [0, 1, 2, 3]) {
     assert.ok(phases.some((phase) => phase >= (quarter * PULSE_PHASE_MAX) / 4 && phase < ((quarter + 1) * PULSE_PHASE_MAX) / 4), `quarter ${quarter}`);
   }
+});
+
+test('the five tints are blackbody-like, hot to cool, in that order (9.5)', () => {
+  assert.deepEqual([...STAR_TINTS], ['blue', 'white', 'yellow', 'orange', 'red']);
+  assert.ok(Object.isFrozen(STAR_TINTS), 'the list cannot be reordered at run time');
+  // Each value is its key's index, so swapping two numbers cannot pass for a reorder that changes nothing.
+  Object.entries(TINT_ORDER).forEach(([tint, value], index) => assert.equal(value, index, `${tint} is at ${index}`));
+});
+
+test('the committed tints are pinned for fixed IDs, so a change to unit, the hash or the salt fails (9.5)', () => {
+  assert.equal(starAppearanceOf('client:simsu').tint, 'blue');
+  assert.equal(starAppearanceOf('client:sncf').tint, 'red');
+  assert.equal(starAppearanceOf('client:transilien').tint, 'yellow');
+});
+
+test('a Star’s tint is salted `tint` from its ID alone, deterministic, and every tint occurs over 1,000 IDs (9.5)', () => {
+  const id = 'client:simsu';
+  assert.equal(starAppearanceOf(id).tint, STAR_TINTS[Math.floor((hash(`tint\0${id}`) / 2 ** 32) * STAR_TINTS.length)]);
+  assert.equal(starAppearanceOf(id).tint, starAppearanceOf(id).tint);
+  const counts = new Map<string, number>();
+  for (let index = 0; index < 1000; index += 1) {
+    const { tint } = starAppearanceOf(`client:synthetic-${index}`);
+    counts.set(tint, (counts.get(tint) ?? 0) + 1);
+  }
+  for (const tint of STAR_TINTS) assert.ok((counts.get(tint) ?? 0) > 0, `${tint} occurs: ${String(counts.get(tint))}`);
+  assert.deepEqual([...counts.keys()].sort(), [...STAR_TINTS].sort(), 'no other value occurs');
+});
+
+test('adding the tint left 9.4’s pulse phase unchanged for a fixed ID (9.5)', () => {
+  // Pinned from the 9.4 artifact: the pulse phase's salt and formula did not move.
+  const id = 'client:simsu';
+  assert.equal(starAppearanceOf(id).pulsePhase, Math.round((hash(`pulsePhase\0${id}`) / 2 ** 32) * PULSE_PHASE_MAX * 1e4) / 1e4 + 0);
+  assert.equal(starAppearanceOf(id).pulsePhase, PINNED_SIMSU_PULSE_PHASE);
 });
 
 // --- The committed artifact -----------------------------------------------------------------------
@@ -316,8 +355,8 @@ test('the assignment’s rounding is the solve’s four places, and each keeps i
  */
 const APPEARANCE_READERS: readonly string[] = ['src/derive/artifact-schema.ts', 'src/derive/artifact.ts', 'src/derive/index.ts'];
 
-/** What the schema may take from the module: bounds, and never the assignment. */
-const SCHEMA_TAKES = /^(?:TILT|SPIN_RATE|SPIN_PHASE|PULSE_PHASE)_(?:MIN|MAX)$/;
+/** What the schema may take from the module: bounds and the tint names (9.5), and never the assignment. */
+const SCHEMA_TAKES = /^(?:(?:TILT|SPIN_RATE|SPIN_PHASE|PULSE_PHASE)_(?:MIN|MAX)|STAR_TINTS)$/;
 
 interface Module {
   readonly path: string;
@@ -428,7 +467,7 @@ function schemaTakesBeyondBounds(source: string): string[] {
   ];
 }
 
-test('the schema takes the bounds from the assignment and nothing else', () => {
+test('the schema takes the bounds and the tint names from the assignment and nothing else', () => {
   const source = readFileSync(fileURLToPath(new URL('./artifact-schema.ts', import.meta.url)), 'utf8');
   assert.deepEqual(schemaTakesBeyondBounds(source), []);
   for (const line of [

@@ -17,6 +17,11 @@
  * true, and writes it to the one `uTime` every core shares, and each Star's pulse from
  * it and its own phase. So under reduced motion the granulation and the pulse hold.
  *
+ * **A colour per Star (9.5).** Each Star's core and glow read one `Color`, its tint's
+ * `realism-star-<tint>-dark` token through `STAR_TINT_TOKENS`, the one record naming the
+ * five. Both shaders divide it by its own luminance, so the tint is hue alone. Nothing
+ * else here reads a tint.
+ *
  * **The arrival is the layer's (7.8).** The fade uniform and the group come from
  * `fill-layer.ts`: every draw here reads that one fade, the rows go straight into that
  * group, which is not in any scene until the layer attaches it, and a Star's core starts
@@ -28,7 +33,7 @@ import { tokens } from '../../tokens/tokens.ts';
 import { FILL_RENDER_ORDER, GLOW_RENDER_ORDER } from '../scene-model.ts';
 import { STAR_RADIUS } from '../stroke-model.ts';
 import { FILL_RADIUS_RATIO } from './fill-model.ts';
-import { GLOW_RADIUS_RATIO, STAR_BAND_LUMINANCE, bandPeak, nextClock, nextRise, riseShape, seedRise, starPulse, type StarPlan } from './star-model.ts';
+import { GLOW_RADIUS_RATIO, STAR_BAND_LUMINANCE, bandPeak, nextClock, nextRise, riseShape, seedRise, starPulse, type StarPlan, type StarTint } from './star-model.ts';
 import { GLOW_FRAGMENT_SHADER, GLOW_VERTEX_SHADER, STAR_FILL_FRAGMENT_SHADER, STAR_FILL_VERTEX_SHADER } from './star-shader.ts';
 
 export interface StarRows {
@@ -42,16 +47,33 @@ export interface StarRows {
   dispose(): void;
 }
 
+/** Each tint's token (9.5): the one place a short tint name becomes a `realism-star-*` key. */
+export const STAR_TINT_TOKENS: Readonly<Record<StarTint, keyof typeof tokens.colors>> = {
+  blue: 'realism-star-blue-dark',
+  white: 'realism-star-white-dark',
+  yellow: 'realism-star-yellow-dark',
+  orange: 'realism-star-orange-dark',
+  red: 'realism-star-red-dark',
+};
+
 /** A uniform object, as three reads one. */
 interface Uniform {
   value: number;
 }
 
-/** Two draws per plan, added to the group it is handed, over the geometry it is handed, reading the fade it is handed. */
+/**
+ * Two draws per plan, added to the group it is handed, over the geometry it is handed, reading the fade it is handed.
+ *
+ * @throws on a plan whose tint has no token, naming the Star, before anything is added.
+ */
 export function createStarRows(plans: readonly StarPlan[], geometry: BufferGeometry, fade: Uniform, group: Group): StarRows {
-  const color = new Color(tokens.colors['realism-star-glow-dark']);
+  // A plan not from `starPlans` could carry any tint, and `new Color(undefined)` would draw white in silence.
+  for (const { id, tint } of plans) {
+    if (!Object.hasOwn(STAR_TINT_TOKENS, tint)) throw new Error(`${id} has no usable tint: ${String(tint)}`);
+  }
   const time = { value: 0 };
   const rows = plans.map((plan) => {
+    const color = new Color(tokens.colors[STAR_TINT_TOKENS[plan.tint]]);
     const rise = { value: 0 };
     const pulse = { value: starPulse(0, plan.pulsePhase) };
     const peak = { value: bandPeak(plan.band, 0) };

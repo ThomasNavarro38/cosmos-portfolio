@@ -33,7 +33,7 @@
  * given `disabled`, its label altered, the result misnamed, altered or drawn when
  * none is solved, and the new elements drawn before the absences.
  *
- * What a Planet looks like (8.2, ruling Q1 of 2026-11-16): after the
+ * What a Star and a Planet look like (8.2, 9.5, ruling Q1 of 2026-11-16): after the
  * absences and before the live re-solve, once both the exhibits and the map
  * library have arrived, `<h2 class="colophon-heading">` reading
  * `APPEARANCE.heading`, two `<p class="colophon-prose">` reading the statement
@@ -322,7 +322,7 @@ function liveSolve(heading: MarkupElement, framing: MarkupElement, button: Marku
 }
 
 /**
- * What a Planet looks like (8.2): `<h2 class="colophon-heading">` reading
+ * What a Star and a Planet look like (8.2, 9.5): `<h2 class="colophon-heading">` reading
  * `APPEARANCE.heading`; `<p class="colophon-prose">` reading the statement,
  * then one reading the lead-in, neither holding markup; then
  * `<ul class="colophon-credits">` holding one bare `<li>` per entry of
@@ -429,7 +429,7 @@ function pageOf(root: MarkupElement): MarkupElement | string {
  * whether or not the files have arrived, then, when `expected` is given,
  * the career exhibit, the derivation table worked on its layout's first
  * Project, the layout exhibit, what is not there — the `<h2>` and five `<p>` —
- * what a Planet looks like (8.2) when `library` has arrived — the `<h2>`, two
+ * what a Star and a Planet look like (8.2, 9.5) when `library` has arrived — the `<h2>`, two
  * `<p>` and the `<ul>` — and the live re-solve (5.5) — the `<h2>`, the `<p>`,
  * the `<button>`, and the result `<pre>` when one is solved — and nothing else.
  */
@@ -756,9 +756,9 @@ test('the live re-solve check is red against broken markup', async () => {
   }
 });
 
-// --- What a Planet looks like (8.2) ----------------------------------------------------------------
+// --- What a Star and a Planet look like (8.2, 9.5) ---------------------------------------------
 
-test('what a Planet looks like: after the absences and before the live re-solve, one entry per library map, each linked to its source', async () => {
+test('what a Star and a Planet look like: after the absences and before the live re-solve, one entry per library map, each linked to its source', async () => {
   const html = await renderPage(EXHIBITS);
   assert.deepEqual(colophonPage(html, EXHIBITS), []);
   const root = parseMarkup(html);
@@ -769,7 +769,7 @@ test('what a Planet looks like: after the absences and before the live re-solve,
   assert.ok(MAP_LIBRARY.some((entry) => entry.id === 'jupiter') && textOf(queryAll(root, 'ul.colophon-credits')[0] as MarkupElement).includes('jupiter.webp: '), 'the unworn map is listed like the others');
 });
 
-test('what a Planet looks like is drawn only once both the exhibits and the library have arrived', async () => {
+test('what a Star and a Planet look like is drawn only once both the exhibits and the library have arrived', async () => {
   // The library first: nothing of the page past the chrome row until the files arrive.
   assert.deepEqual(colophonPage(await renderPage(null, IDLE, 'scene', MAP_LIBRARY), null), []);
   // The files first: the page as before, with no section.
@@ -823,7 +823,7 @@ test('the appearance check is red against broken markup', async () => {
     ['the link opening a new tab', full.replace(`href="${firstHref}"`, `href="${firstHref}" target="_blank"`)],
     ['the credit altered', full.replace(firstItem, firstItem.replace('.webp: ', '.png: '))],
     ['the licence’s . doubled', full.replace(firstItem, firstItem.replace(/\.((?:<!-- -->)?\s*<a )/, '..$1'))],
-    ['the statement altered', full.replace('so its colour and texture encode nothing', 'so its colour encodes nothing')],
+    ['the statement altered', full.replace('so colour and texture encode nothing', 'so colour encodes nothing')],
     ['the lead-in altered', full.replace(APPEARANCE.lead, 'Maps used:')],
     ['the heading made an <h3>', full.replace(headingMarkup, `<h3 class="colophon-heading">${APPEARANCE.heading}</h3>`)],
     ['the heading renamed', full.replace(headingMarkup, '<h2 class="colophon-heading">credits</h2>')],

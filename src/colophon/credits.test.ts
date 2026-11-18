@@ -34,11 +34,11 @@ const LAYOUT = readFileSync(new URL('../../generated/layout.generated.json', imp
 
 // --- The copy -----------------------------------------------------------------------------------------
 
-test('the copy is the ruling’s, verbatim (Thomas, 2026-11-16, Q1)', () => {
+test('the copy is the ruling’s, verbatim (Thomas, 2026-11-16, Q1; the heading and statement Proposal 7’s, shipped in 9.5)', () => {
   assert.deepEqual(APPEARANCE, {
-    heading: 'what a Planet looks like',
+    heading: 'what a Star and a Planet look like',
     statement:
-      "A Planet's surface is not data. Each Planet is assigned one of the maps below from its ID alone, by a fixed rule in the solver, so its colour and texture encode nothing: recency is the outline's brightness, the subject is the white stroke, and Deep or Shallow is the Ring and the Moon.",
+      "A Body's colour is not data. Each Planet is assigned one of the maps below, and each Star one of five colours, from its ID alone, by a fixed rule in the solver, so colour and texture encode nothing: recency is how brightly a Star shines and a Planet's rim glows, the subject is the one that turns white, and Deep or Shallow is the ring and the moon.",
     lead: 'Every map this site serves, worn or not:',
     source: 'source',
   });

@@ -31,8 +31,12 @@
  * wrap; the granulation, whose drift is not a whole number of turns in that period, jumps
  * once per wrap (once an hour), which is accepted.
  *
- * **Colour encodes nothing.** A Star reads its ID, its position, its band and its
- * pulse phase, which comes from its ID (AD-21 as amended). 9.5 adds its tint.
+ * **Colour encodes nothing (9.5).** A Star reads its ID, its position, its band, and its
+ * tint and pulse phase, which both come from its ID (AD-21 as amended). The tint is one
+ * of `STAR_TINT_NAMES` and never changes in time; the core and the glow each divide its
+ * colour by its own linear luminance, so a tint changes hue and never brightness. Only
+ * the subject's core goes to white as it rises ("the subject is the one that turns
+ * white", Proposal 7); its glow keeps its tint.
  *
  * All the brightness, pulse and grain values are starting values for 9.11.
  */
@@ -65,6 +69,17 @@ export const STAR_SUBJECT_CEILING_LUMINANCE = 0.8891316055619293;
  * a test pins both against the token.
  */
 export const STAR_REST_CEILING_LUMINANCE = 0.4711868614730459;
+
+/**
+ * A Star's five tints (9.5): derive's `STAR_TINTS`, hot to cool, restated structurally so
+ * this module imports no value; a test pins the two lists equal. `star-layer.ts` resolves
+ * each to its `realism-star-<tint>-dark` token through an explicit record. Written
+ * as keys, not quoted strings, as derive writes them: the literal-colour ban reads a
+ * whole quoted colour word as paint, and a tint name is not paint.
+ */
+export const TINT_ORDER = { blue: 0, white: 1, yellow: 2, orange: 3, red: 4 } as const;
+export type StarTint = keyof typeof TINT_ORDER;
+export const STAR_TINT_NAMES: readonly [StarTint, ...StarTint[]] = Object.freeze(Object.keys(TINT_ORDER) as [StarTint, ...StarTint[]]);
 
 /** The bands a Star may carry: `RESTING_BANDS`, dimmest first, restated structurally. */
 export type StarBand = 'stroke-rest' | 'stroke-near';
@@ -111,15 +126,24 @@ export const STAR_CORE_EDGE = 0.35;
 export const STAR_CORE_ALPHA_FLOOR = 0.5;
 
 /**
- * A glow's peak, as a share of the token's own value in linear light: by band at rest,
- * and as the subject. Well under the ceilings, since a glow blends on encoded values and
- * two Stars' glows may sum on screen.
+ * The linear relative luminance of `#B09468`, 9.4's one glow colour (`realism-star-glow`,
+ * retired in 9.5): sRGB-decoded, weighted by Rec. 709. A test pins it against the hex.
+ */
+export const GLOW_94_LUMINANCE = 0.3140939169310539;
+
+/**
+ * A glow's peak, in absolute linear luminance (9.5): by band at rest, and as the subject.
+ * The glow divides its tint by the tint's own luminance, so its peak is its luminance
+ * whatever the tint, and colour carries no brightness. Each is 9.4's share of the token
+ * (0.16, 0.22, 0.6) × `GLOW_94_LUMINANCE`, so every glow is exactly as bright as in 9.4.
+ * Well under the ceilings, since a glow blends on encoded values and two Stars' glows may
+ * sum on screen.
  */
 export const GLOW_BAND_PEAK: Readonly<Record<StarBand, number>> = {
-  'stroke-rest': 0.16,
-  'stroke-near': 0.22,
+  'stroke-rest': 0.16 * GLOW_94_LUMINANCE,
+  'stroke-near': 0.22 * GLOW_94_LUMINANCE,
 };
-export const GLOW_SUBJECT_PEAK = 0.6;
+export const GLOW_SUBJECT_PEAK = 0.6 * GLOW_94_LUMINANCE;
 
 interface Point {
   readonly x: number;
@@ -132,17 +156,19 @@ export interface StarPlan {
   readonly id: string;
   readonly position: Point;
   readonly band: StarBand;
+  readonly tint: StarTint;
   readonly pulsePhase: number;
 }
 
 const isBand = (band: string): band is StarBand => Object.hasOwn(STAR_BAND_LUMINANCE, band);
+const isTint = (tint: unknown): tint is StarTint => typeof tint === 'string' && Object.hasOwn(TINT_ORDER, tint);
 
 /**
  * One plan per Client, in the artifact's order.
  *
- * @throws on a position that is not finite, a band that is not a resting band, or a
- * pulse phase that is not finite, each naming the Client: each would draw nothing, or
- * a wrong brightness, in silence.
+ * @throws on a position that is not finite, a band that is not a resting band, a pulse
+ * phase that is not finite, or a tint that is missing or not one of the five, each naming
+ * the Client: each would draw nothing, or a wrong brightness or colour, in silence.
  */
 export function starPlans(artifact: RealismArtifact): StarPlan[] {
   return artifact.clients.map(({ id, position, luminanceBand, appearance }) => {
@@ -150,7 +176,9 @@ export function starPlans(artifact: RealismArtifact): StarPlan[] {
     if (!isBand(luminanceBand)) throw new Error(`${id} has no usable band: ${String(luminanceBand)}`);
     const pulsePhase = appearance?.pulsePhase;
     if (pulsePhase === undefined || !Number.isFinite(pulsePhase)) throw new Error(`${id} has no usable pulsePhase: ${String(pulsePhase)}`);
-    return { id, position, band: luminanceBand, pulsePhase };
+    const tint = appearance?.tint;
+    if (!isTint(tint)) throw new Error(`${id} has no usable tint: ${String(tint)}`);
+    return { id, position, band: luminanceBand, tint, pulsePhase };
   });
 }
 

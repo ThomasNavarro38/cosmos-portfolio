@@ -40,6 +40,7 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { CareerSchema } from '../data/schema.ts';
+import { STAR_TINTS, starAppearanceOf } from './appearance.ts';
 import { deriveEntities } from './entities.ts';
 import { solveLive } from './live.ts';
 import { MAP_LIBRARY, type MapEntry } from './map-library.ts';
@@ -311,4 +312,82 @@ test('a reworded thesis or positions paragraph is caught here, before its relati
     assert.notEqual(source, ABSENCES_SOURCE, `the rewording "${name}" must apply`);
     assert.ok(!(source.includes(`thesis: '${THESIS}'`) && source.includes(`positions: '${POSITIONS}'`)), `"${name}" must be caught`);
   }
+});
+
+// --- What a Star and a Planet look like (9.5, Proposal 7) ----------------------------------------------
+
+/*
+ * `APPEARANCE.statement` (`src/colophon/credits.ts`, read as text: `src/derive/` never
+ * imports the Colophon) claims two things this directory can hold: "each Star one of
+ * five colours", against `STAR_TINTS.length`, and "from its ID alone", against
+ * `starAppearanceOf` taking an ID and nothing else, with no state, and the committed
+ * layout holding exactly its re-derivation.
+ */
+const CREDITS_SOURCE = readFileSync(new URL('../colophon/credits.ts', import.meta.url), 'utf8');
+const STATEMENT =
+  "A Body's colour is not data. Each Planet is assigned one of the maps below, and each Star one of five colours, from its ID alone, by a fixed rule in the solver, so colour and texture encode nothing: recency is how brightly a Star shines and a Planet's rim glows, the subject is the one that turns white, and Deep or Shallow is the ring and the moon.";
+
+/** The number words a palette count may be written in. */
+const NUMBER_WORDS: Readonly<Record<string, number>> = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+
+/** "each Star one of five colours": the count the statement writes is the palette's length. */
+function paletteClaim(statement: string, tints: readonly string[]): string[] {
+  const word = /each Star one of (\w+) colours/.exec(statement)?.[1];
+  if (word === undefined) return ['the statement names no count of Star colours'];
+  const count = NUMBER_WORDS[word];
+  if (count === undefined) return [`the statement's count "${word}" is not a number word`];
+  return count === tints.length ? [] : [`the statement says ${word} colours; STAR_TINTS holds ${tints.length}`];
+}
+
+type StarLook = (id: string) => object;
+type StarLayout = { readonly clients?: readonly { readonly id?: Json; readonly appearance?: Json }[] };
+
+/** "from its ID alone": the assignment takes one argument, keeps no state, and the committed layout is its re-derivation. */
+function idAloneClaim(look: StarLook, layout: StarLayout): string[] {
+  const failures: string[] = [];
+  if (look.length !== 1) failures.push(`starAppearanceOf takes ${look.length} parameters, not the ID alone`);
+  const ids = ['client:a', 'client:b', 'client:a'];
+  const first = ids.map((id) => JSON.stringify(look(id)));
+  const again = ids.map((id) => JSON.stringify(look(id)));
+  if (first[0] !== first[2] || first.join() !== again.join()) failures.push('starAppearanceOf gives one ID two appearances: it keeps state');
+  const clients = layout.clients ?? [];
+  if (clients.length === 0) failures.push('the layout has no Star to hold');
+  for (const client of clients) {
+    if (JSON.stringify(client.appearance) !== JSON.stringify(look(String(client.id)))) failures.push(`${JSON.stringify(client.id ?? null)} carries an appearance its ID does not derive`);
+  }
+  return failures;
+}
+
+test('the statement is Proposal 7’s, verbatim, in credits.ts', () => {
+  assert.ok(CREDITS_SOURCE.includes(`statement: "${STATEMENT}"`), 'APPEARANCE.statement is the ruled statement');
+});
+
+test('"each Star one of five colours": the count is STAR_TINTS.length', () => {
+  assert.deepEqual(paletteClaim(STATEMENT, STAR_TINTS), []);
+});
+
+test('"from its ID alone": starAppearanceOf takes the ID alone, keeps no state, and every committed Star is its re-derivation', () => {
+  assert.deepEqual(idAloneClaim(starAppearanceOf, JSON.parse(COMMITTED) as StarLayout), []);
+});
+
+test('a palette of four, a reworded count or no count falsifies "each Star one of five colours"', () => {
+  assert.match(paletteClaim(STATEMENT, STAR_TINTS.slice(0, 4)).join('\n'), /says five colours; STAR_TINTS holds 4/, 'a palette of 4');
+  assert.match(paletteClaim(STATEMENT, [...STAR_TINTS, 'green']).join('\n'), /holds 6/, 'a palette of 6');
+  assert.match(paletteClaim(STATEMENT.replace('one of five colours', 'one of four colours'), STAR_TINTS).join('\n'), /says four colours/, 'a statement saying four');
+  assert.match(paletteClaim(STATEMENT.replace('one of five colours', 'one of 5 colours'), STAR_TINTS).join('\n'), /not a number word/, 'a numeral');
+  assert.match(paletteClaim(STATEMENT.replace('and each Star one of five colours, ', ''), STAR_TINTS).join('\n'), /names no count/, 'no count');
+});
+
+test('a second parameter, a kept state or a hand-edited Star falsifies "from its ID alone"', () => {
+  const layout = (): { clients: { id: string; appearance: { tint: string; pulsePhase: number } }[] } => JSON.parse(COMMITTED) as never;
+  const twoArgs = (id: string, salt?: string): object => ({ ...starAppearanceOf(id), salt });
+  assert.match(idAloneClaim(twoArgs as StarLook, layout()).join('\n'), /takes 2 parameters/);
+  let calls = 0;
+  const stateful: StarLook = (id) => ({ ...starAppearanceOf(id), pulsePhase: (calls += 1) });
+  assert.match(idAloneClaim(stateful, layout()).join('\n'), /keeps state/);
+  const edited = layout();
+  const first = edited.clients[0] as (typeof edited.clients)[number];
+  first.appearance.tint = STAR_TINTS.find((tint) => tint !== first.appearance.tint) as string;
+  assert.match(idAloneClaim(starAppearanceOf, edited).join('\n'), /does not derive/);
+  assert.match(idAloneClaim(starAppearanceOf, { clients: [] }).join('\n'), /no Star to hold/);
 });

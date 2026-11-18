@@ -28,8 +28,16 @@
   --color-ink-lift-dark: #F2F2F4;
   --color-vignette: #F2EFE9;
   --color-vignette-dark: #08080A;
-  --color-realism-star-glow: #B09468;
-  --color-realism-star-glow-dark: #B09468;
+  --color-realism-star-blue: #A9BFFF;
+  --color-realism-star-blue-dark: #A9BFFF;
+  --color-realism-star-white: #F4F1EA;
+  --color-realism-star-white-dark: #F4F1EA;
+  --color-realism-star-yellow: #FFE6B0;
+  --color-realism-star-yellow-dark: #FFE6B0;
+  --color-realism-star-orange: #FFC27A;
+  --color-realism-star-orange-dark: #FFC27A;
+  --color-realism-star-red: #FF9A5C;
+  --color-realism-star-red-dark: #FF9A5C;
   --color-realism-ambient-floor: #0E1626;
   --color-realism-ambient-floor-dark: #0E1626;
 

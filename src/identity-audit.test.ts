@@ -167,9 +167,18 @@ test('achromatic: a hue in any -dark token outside the realism family fails, nam
   assert.deepEqual(auditAchromatic({}), ['achromatic: no -dark colour token to inspect']);
 });
 
-test('achromatic: the realism exemption does work — both shipped tokens are hued, and pass only under their own names', () => {
-  const glow = tokens.colors['realism-star-glow-dark'];
-  assert.ok(oklch(glow).chroma >= ACHROMATIC_CHROMA, `the shipped glow ${glow} carries a hue, or the exemption exempts nothing`);
+test('achromatic: the realism exemption does work — the shipped tokens are hued, and pass only under their own names', () => {
+  // The shipped tints (9.5; `realism-star-glow` is retired). `glow` is orange, plainly hued, for the swaps below.
+  const glow = tokens.colors['realism-star-orange-dark'];
+  for (const tint of ['blue', 'yellow', 'orange', 'red'] as const) {
+    const hex = tokens.colors[`realism-star-${tint}-dark`];
+    assert.ok(oklch(hex).chroma >= ACHROMATIC_CHROMA, `the shipped ${tint} tint ${hex} carries a hue, or the exemption exempts nothing`);
+  }
+  // White is outside the loop: #F4F1EA is a warm near-white, OKLCH chroma about 0.0098, under the 0.02 line,
+  // so it would pass the audit even unexempted. It is exempt by its name alone, like the other four.
+  const white = tokens.colors['realism-star-white-dark'];
+  assert.ok(oklch(white).chroma < ACHROMATIC_CHROMA, `the white tint ${white} reads as achromatic: ${oklch(white).chroma}`);
+  assert.ok(Math.abs(oklch(white).chroma - 0.0098) < 0.0005, `the white tint's chroma is the one stated here: ${oklch(white).chroma}`);
   const floor = tokens.colors['realism-ambient-floor-dark'];
   assert.ok(oklch(floor).chroma >= ACHROMATIC_CHROMA, `the shipped floor ${floor} carries a hue, as DESIGN.md says it does`);
   assert.deepEqual(auditAchromatic(tokens.colors), []);
@@ -177,11 +186,11 @@ test('achromatic: the realism exemption does work — both shipped tokens are hu
   // The same hex under a non-realism key, in the shipped table, is what the exemption spares it from.
   assert.match(auditAchromatic({ ...tokens.colors, 'ink-label-dark': glow }).join('\n'), /^achromatic: ink-label-dark /);
   assert.match(auditCast({ ...tokens.colors, 'ink-label-dark': glow }).join('\n'), /^cast: ink-label-dark /);
-  assert.deepEqual(auditAchromatic({ 'realism-star-glow-dark': glow }), ['achromatic: no -dark colour token to inspect'], 'an exempt key is not an inspected one');
+  assert.deepEqual(auditAchromatic({ 'realism-star-orange-dark': glow }), ['achromatic: no -dark colour token to inspect'], 'an exempt key is not an inspected one');
 });
 
 test('achromatic: a hued key that merely contains realism fails both audits, naming it', () => {
-  const hue = tokens.colors['realism-star-glow-dark'];
+  const hue = tokens.colors['realism-star-orange-dark'];
   for (const key of ['stroke-realism-dark', 'xrealism-a-dark', 'realism-dark', 'realism--dark', 'realism---dark', 'realism--x-dark', 'Realism-a-dark', 'surface-realism-a-dark']) {
     const colors = { ...tokens.colors, [key]: hue };
     assert.ok(auditAchromatic(colors).some((line) => line.startsWith(`achromatic: ${key} (`)), `achromatic must name ${key}`);
@@ -821,12 +830,13 @@ const VISIBLE_COPY: ReadonlySet<string> = new Set([
   'There are no position overrides. career.json holds no coordinate, and no entry can pin its own place: every position in layout.generated.json is computed by the solver from career.json, never written by hand.',
   'Shots name entities, never coordinates. Each shot gives a subject, an angle and a distance, so when a solve moves a Client, its shot moves with it.',
   'There is no per-entry camera work. Every shot’s subject is a Client; a Project is framed at its Client’s stop, never on its own.',
-  // What a Planet looks like (8.2, ruling Q1 of 2026-11-16, memlog entry 97):
+  // What a Star and a Planet look like (8.2, ruling Q1 of 2026-11-16, memlog entry 97;
+  // the heading and statement superseded verbatim by Proposal 7, shipped in 9.5):
   // its heading, the one statement, the lead-in and each credit's link text,
   // verbatim, in the same copy place (EXPERIENCE.md §3, place 4). Each entry's
   // own line is library data, drawn as an expression.
-  'what a Planet looks like',
-  "A Planet's surface is not data. Each Planet is assigned one of the maps below from its ID alone, by a fixed rule in the solver, so its colour and texture encode nothing: recency is the outline's brightness, the subject is the white stroke, and Deep or Shallow is the Ring and the Moon.",
+  'what a Star and a Planet look like',
+  "A Body's colour is not data. Each Planet is assigned one of the maps below, and each Star one of five colours, from its ID alone, by a fixed rule in the solver, so colour and texture encode nothing: recency is how brightly a Star shines and a Planet's rim glows, the subject is the one that turns white, and Deep or Shallow is the ring and the moon.",
   'Every map this site serves, worn or not:',
   'source',
   // The live re-solve (5.5, rulings Q2 (a), Q3 (a); the framing re-ruled
@@ -934,31 +944,31 @@ test('realism reach: no shipped file outside render-scene/realism/, nor index.ht
 
 test('realism reach: a reference outside the family\'s home fails naming the file; one inside it, a module name or a comment does not', () => {
   const rejected: readonly (readonly [string, string])[] = [
-    ['shell/x.css', '.a { color: var(--color-realism-star-glow-dark); }'],
+    ['shell/x.css', '.a { color: var(--color-realism-star-orange-dark); }'],
     ['shell/x.css', '.a { --realism-x: 1; }'],
-    ['shell/x.tsx', "const a = tokens.colors['realism-star-glow-dark'];"],
-    ['shell/x.tsx', 'const a = tokens.colors["realism-star-glow-dark"];'],
+    ['shell/x.tsx', "const a = tokens.colors['realism-star-orange-dark'];"],
+    ['shell/x.tsx', 'const a = tokens.colors["realism-star-orange-dark"];'],
     ['shell/x.tsx', "const prefix = 'realism-';"],
     ['shell/x.tsx', 'const a = `realism-${name}-dark`;'],
-    ['shell/x.tsx', "const a = tokens.colors['realism' + '-star-glow-dark'];"],
-    ['shell/x.tsx', 'const a = `${prefix}realism-star-glow-dark`;'],
+    ['shell/x.tsx', "const a = tokens.colors['realism' + '-star-orange-dark'];"],
+    ['shell/x.tsx', 'const a = `${prefix}realism-star-orange-dark`;'],
     ['shell/x.tsx', "const a = key.startsWith('realism');"],
     ['index.html', '<style>.a { color: var(--realism-x); }</style>'],
-    ['scripts/preview.ts', "const a = tokens.colors['realism-star-glow-dark'];"],
-    ['render-scene/realism-mount.tsx', "const a = tokens.colors['realism-star-glow-dark'];"],
-    ['render-scene/realismx/x.ts', "const a = 'realism-star-glow-dark';"],
-    ['shell/render-scene/realism/x.ts', "const a = 'realism-star-glow-dark';"],
+    ['scripts/preview.ts', "const a = tokens.colors['realism-star-orange-dark'];"],
+    ['render-scene/realism-mount.tsx', "const a = tokens.colors['realism-star-orange-dark'];"],
+    ['render-scene/realismx/x.ts', "const a = 'realism-star-orange-dark';"],
+    ['shell/render-scene/realism/x.ts', "const a = 'realism-star-orange-dark';"],
   ];
   for (const [path, source] of rejected) {
     assert.ok(auditRealismReach({ [path]: source }).some((line) => line.startsWith(`realism reach: ${path}:1 holds `)), `${path}: ${source} must be rejected`);
   }
   const admitted: readonly (readonly [string, string])[] = [
-    ['render-scene/realism/x.ts', "const a = tokens.colors['realism-star-glow-dark'];"],
-    ['render-scene/realism/x.ts', "const prefix = 'realism-'; const b = 'var(--color-realism-star-glow-dark)';"],
+    ['render-scene/realism/x.ts', "const a = tokens.colors['realism-star-orange-dark'];"],
+    ['render-scene/realism/x.ts', "const prefix = 'realism-'; const b = 'var(--color-realism-star-orange-dark)';"],
     ['render-scene/scene.tsx', "import { RealismMount } from './realism-mount.tsx';"],
     ['render-scene/scene.tsx', "const a = import('./realism/index.ts');"],
-    ['render-scene/scene.tsx', "// the realism-* tokens, and --color-realism-star-glow-dark\n/* 'realism-x' */"],
-    ['shell/x.css', '/* var(--color-realism-star-glow-dark) */'],
+    ['render-scene/scene.tsx', "// the realism-* tokens, and --color-realism-star-orange-dark\n/* 'realism-x' */"],
+    ['shell/x.css', '/* var(--color-realism-star-orange-dark) */'],
     ['shell/x.css', '.card--realism-on { top: 0; }'],
     ['shell/x.tsx', 'const a = <p className="card--realism-on" />;'],
     ['index.html', '<!-- --realism-x -->'],
@@ -971,7 +981,7 @@ test('realism reach: a reference outside the family\'s home fails naming the fil
   // A real shipped file, mutated, is caught.
   const files = shippedFiles();
   assert.match(
-    auditRealismReach({ ...files, 'shell/page.css': `${files['shell/page.css'] as string}\n.a { color: var(--color-realism-star-glow-dark); }` }).join('\n'),
+    auditRealismReach({ ...files, 'shell/page.css': `${files['shell/page.css'] as string}\n.a { color: var(--color-realism-star-orange-dark); }` }).join('\n'),
     /^realism reach: shell\/page\.css:\d+ holds --color-realism-$/,
   );
 });
@@ -1374,6 +1384,9 @@ test('copy: the copy constants are each in the closed allowlist', () => {
   for (const [name, value] of [
     ['APPEARANCE.heading', 'What a Planet looks like'],
     ['APPEARANCE.statement', 'A Planet’s surface is not data.'],
+    // 9.5: the superseded 8.2 heading and statement are no longer copy.
+    ['APPEARANCE.heading', 'what a Planet looks like'],
+    ['APPEARANCE.statement', "A Planet's surface is not data. Each Planet is assigned one of the maps below from its ID alone, by a fixed rule in the solver, so its colour and texture encode nothing: recency is the outline's brightness, the subject is the white stroke, and Deep or Shallow is the Ring and the Moon."],
     ['APPEARANCE.lead', 'Textures are illustrative and may not be accurate.'],
     ['APPEARANCE.source', 'view source'],
     ['APPEARANCE.framerate', 'Runs at 60fps on most machines.'],

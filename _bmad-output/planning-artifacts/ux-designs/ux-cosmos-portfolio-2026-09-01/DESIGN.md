@@ -67,12 +67,22 @@ colors:
   vignette: "#F2EFE9"
   vignette-dark: "#08080A"
 
-  # --- realism: M3's Star glow and ambient floor, the only hued -dark tokens. By ruling,
-  # the exception to the note above: realism is dark-only, so each bare value is a
-  # placeholder, the same hex as its -dark value, held only because the generator
-  # requires a pair. Starting values, tuned by on-screen judgement in Epic 8. ---
-  realism-star-glow: "#B09468"
-  realism-star-glow-dark: "#B09468"
+  # --- realism: M3's five Star tints (9.5, blackbody-like, hot to cool, each Star's from
+  # its ID; they replace the retired realism-star-glow) and the ambient floor, the only
+  # hued -dark tokens. By ruling, the exception to the note above: realism is dark-only,
+  # so each bare value is a placeholder, the same hex as its -dark value, held only
+  # because the generator requires a pair. Starting values, tuned by on-screen judgement
+  # in Epic 9; the shaders normalise each tint to unit luminance, so a tint is hue alone. ---
+  realism-star-blue: "#A9BFFF"
+  realism-star-blue-dark: "#A9BFFF"
+  realism-star-white: "#F4F1EA"
+  realism-star-white-dark: "#F4F1EA"
+  realism-star-yellow: "#FFE6B0"
+  realism-star-yellow-dark: "#FFE6B0"
+  realism-star-orange: "#FFC27A"
+  realism-star-orange-dark: "#FFC27A"
+  realism-star-red: "#FF9A5C"
+  realism-star-red-dark: "#FF9A5C"
   realism-ambient-floor: "#0E1626"
   realism-ambient-floor-dark: "#0E1626"
 
@@ -488,17 +498,17 @@ beneath it (§1). This amends this prose and the table below only. By Thomas's
 ruling of 2026-11-18, each token is declared in the frontmatter by its own
 story: the five `realism-star-*` tokens and the retirement of
 `realism-star-glow` in 9.5, `realism-belt` in 9.6, and `realism-nebula` in 9.7.
-Until each story lands, the frontmatter keeps the two tokens it declares today.]*
+Until each story lands, the frontmatter keeps the two tokens it declares today.]* *[declared by 9.5, 2026-11-18: the frontmatter now holds the five `realism-star-*` tints and `realism-ambient-floor`; `realism-star-glow` is retired.]*
 
 | Token | Dark | Light | Story |
 |---|---|---|---|
-| `realism-star-glow` | `#B09468` | `#B09468` (placeholder) | The colour of a Star's additive glow. A starting value, tuned by on-screen judgement in Epic 8. The bare value is a placeholder by ruling, the dark hex repeated so it cannot be mistaken for a designed light theme. *[amended 2026-11-17 for Epic 9: replaced by the five `realism-star-*` tokens below, and retired from the frontmatter in 9.5.]* |
+| `realism-star-glow` | `#B09468` | `#B09468` (placeholder) | The colour of a Star's additive glow. A starting value, tuned by on-screen judgement in Epic 8. The bare value is a placeholder by ruling, the dark hex repeated so it cannot be mistaken for a designed light theme. *[amended 2026-11-17 for Epic 9: replaced by the five `realism-star-*` tokens below, and retired from the frontmatter in 9.5.]* *[declared by 9.5, 2026-11-18: retired; the frontmatter no longer holds it.]* |
 | `realism-ambient-floor` | `#0E1626` | `#0E1626` (placeholder) | The constant floor under a Planet's lighting, so its dark side is not the void. A starting value, tuned by on-screen judgement in Epic 8. The bare value is a placeholder by ruling, as above. |
-| `realism-star-blue` | `#A9BFFF` | `#A9BFFF` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* |
-| `realism-star-white` | `#F4F1EA` | `#F4F1EA` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* |
-| `realism-star-yellow` | `#FFE6B0` | `#FFE6B0` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* |
-| `realism-star-orange` | `#FFC27A` | `#FFC27A` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* |
-| `realism-star-red` | `#FF9A5C` | `#FF9A5C` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* |
+| `realism-star-blue` | `#A9BFFF` | `#A9BFFF` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* *[declared by 9.5, 2026-11-18: the Star's core takes it too, not only its glow, each normalised to the same luminance, so it is hue alone.]* |
+| `realism-star-white` | `#F4F1EA` | `#F4F1EA` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* *[declared by 9.5, 2026-11-18: the Star's core takes it too, not only its glow, each normalised to the same luminance, so it is hue alone.]* |
+| `realism-star-yellow` | `#FFE6B0` | `#FFE6B0` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* *[declared by 9.5, 2026-11-18: the Star's core takes it too, not only its glow, each normalised to the same luminance, so it is hue alone.]* |
+| `realism-star-orange` | `#FFC27A` | `#FFC27A` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* *[declared by 9.5, 2026-11-18: the Star's core takes it too, not only its glow, each normalised to the same luminance, so it is hue alone.]* |
+| `realism-star-red` | `#FF9A5C` | `#FF9A5C` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* *[declared by 9.5, 2026-11-18: the Star's core takes it too, not only its glow, each normalised to the same luminance, so it is hue alone.]* |
 | `realism-nebula` | `#4A5A7A` | `#4A5A7A` (placeholder) | *[amended 2026-11-17 for Epic 9: the colour of the Rail's nebula ribbon. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.7.]* |
 | `realism-belt` | `#6E6A62` | `#6E6A62` (placeholder) | *[amended 2026-11-17 for Epic 9: the colour of an orbit's debris belt. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.6.]* |
 

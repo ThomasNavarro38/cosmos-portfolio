@@ -575,11 +575,21 @@ test('tokens.css: every colour key as --color-<key>, and the spacing ramp withou
   }
 });
 
-test('the realism family is exactly four keys, the bare value a placeholder of the dark one, emitted to both files by the unchanged generator (7.2)', () => {
-  const family = ['realism-ambient-floor', 'realism-ambient-floor-dark', 'realism-star-glow', 'realism-star-glow-dark'];
+test('the realism family is exactly twelve keys, the floor and the five Star tints (9.5), each bare value a placeholder of the dark one, emitted to both files by the unchanged generator (7.2)', () => {
+  const tints = ['blue', 'white', 'yellow', 'orange', 'red'];
+  const family = ['realism-ambient-floor', 'realism-ambient-floor-dark', ...tints.flatMap((tint) => [`realism-star-${tint}`, `realism-star-${tint}-dark`])].sort();
   const colors: Readonly<Record<string, string>> = tokens.colors;
+  assert.equal(family.length, 12);
   assert.deepEqual(Object.keys(colors).filter((key) => key.includes('realism')).sort(), family);
-  assert.equal(colors['realism-star-glow'], colors['realism-star-glow-dark'], 'the bare value is a placeholder, not a designed light theme');
+  assert.ok(!Object.keys(colors).some((key) => key.startsWith('realism-star-glow')), 'realism-star-glow is retired (9.5)');
+  for (const tint of tints) {
+    assert.equal(colors[`realism-star-${tint}`], colors[`realism-star-${tint}-dark`], `${tint}: the bare value is a placeholder, not a designed light theme`);
+  }
+  assert.deepEqual(
+    tints.map((tint) => colors[`realism-star-${tint}-dark`]),
+    ['#A9BFFF', '#F4F1EA', '#FFE6B0', '#FFC27A', '#FF9A5C'],
+    'the five tints are the epic’s placeholders, hot to cool',
+  );
   assert.equal(colors['realism-ambient-floor'], colors['realism-ambient-floor-dark'], 'the bare value is a placeholder, not a designed light theme');
   const committedCss = readFileSync(join(TOKENS_DIR, CSS_FILE), 'utf8');
   const committedTs = readFileSync(join(TOKENS_DIR, TS_FILE), 'utf8');

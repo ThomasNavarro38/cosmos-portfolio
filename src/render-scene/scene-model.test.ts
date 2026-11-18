@@ -1594,7 +1594,7 @@ test('the glow allowance is the one identifier in the one file and the word unde
   assert.match(stripComments(readFileSync(MODEL_TS, 'utf8')), /\bGLOW_RENDER_ORDER = 1\.25\b/, 'the allowance has something to admit');
   assert.deepEqual(effectsIn([{ path: MODEL, source: 'export const GLOW_RENDER_ORDER = 1.25;' }]), []);
   assert.match(stripComments(sourceFiles().find((file) => file.path === 'src/render-scene/realism/star-layer.ts')?.source ?? ''), /\bGLOW_RENDER_ORDER\b/, 'the chunk has a glow for it to admit');
-  for (const source of ['const a = GLOW_RENDER_ORDER;', 'const glow = 1;', "const color = tokens.colors['realism-star-glow-dark'];", 'const GLOW_SUBJECT_PEAK = 0.6;', 'const glows = 2;']) {
+  for (const source of ['const a = GLOW_RENDER_ORDER;', 'const glow = 1;', "const color = tokens.colors['realism-star-orange-dark'];", 'const GLOW_SUBJECT_PEAK = 0.6;', 'const glows = 2;']) {
     assert.deepEqual(effectsIn([{ path: CHUNK, source }]), [], `${source} is admitted under realism/`);
   }
   assert.deepEqual(effectsIn([{ path: 'src/render-scene/realism/scene-model.ts', source: 'const a = GLOW_RENDER_ORDER;' }]), [], 'the row that moved to the admitted side');

@@ -61,11 +61,13 @@
  * them: every sentence points at "the files above". No `<section>`, no
  * landmark beyond the host's `<main>`.
  *
- * **What a Planet looks like** (8.2, AD-21, ruling Q1 of 2026-11-16). After the
- * absences and before the live re-solve, drawn only once both the exhibits
- * and the map library have arrived: an `h2.colophon-heading`
- * (`APPEARANCE.heading`), one `p.colophon-prose` stating that a Planet's
- * appearance is assigned from its ID and encodes nothing
+ * **What a Star and a Planet look like** (8.2, 9.5, AD-21, ruling Q1 of
+ * 2026-11-16; worded by Proposal 7 in 9.5). After the absences and before the
+ * live re-solve, drawn only once both the exhibits and the map library have
+ * arrived: an `h2.colophon-heading` (`APPEARANCE.heading`), one
+ * `p.colophon-prose` stating that a Body's colour is not data, each Planet's
+ * map and each Star's one of five colours assigned from its ID alone, so they
+ * encode nothing
  * (`APPEARANCE.statement`), one `p.colophon-prose` lead-in (`APPEARANCE.lead`),
  * and one `ul.colophon-credits` holding one `<li>` per library entry, in
  * library order: `creditLine(entry)` (`credits.ts`), then an `<a>` reading
@@ -210,7 +212,7 @@ export interface LiveSolveState {
  * `.chart` mirrored (D-G6, Epic 5 item 39) — holding the chrome row — the
  * heading, the contact route and the route line — and, once the files have
  * arrived, the two files with the derivations between them, what is not there,
- * what a Planet looks like once the map library has arrived too, the live
+ * what a Star and a Planet look like once the map library has arrived too, the live
  * re-solve's heading, framing and button, and its result once a run has
  * succeeded.
  */

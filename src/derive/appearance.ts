@@ -12,8 +12,8 @@
  *
  * The ranges are starting values, unjudged: nothing has been seen lit yet.
  *
- * A Star's appearance (9.4) is `starAppearanceOf`: its pulse phase, from its ID by
- * the same hash and rounding, under its own salt.
+ * A Star's appearance (9.4, 9.5) is `starAppearanceOf`: its tint and its pulse
+ * phase, from its ID by the same hash, each under its own salt.
  */
 
 import { MAP_LIBRARY, type MapEntry } from './map-library.ts';
@@ -34,8 +34,40 @@ export const SPIN_PHASE_MAX = 6.2832;
 export const PULSE_PHASE_MIN = 0;
 export const PULSE_PHASE_MAX = 6.2832;
 
-/** A Star's appearance (9.4): where its slow pulse starts. 9.5 adds `tint`. */
+/**
+ * A Star's five tints (9.5), blackbody-like, hot to cool. A short name, never a
+ * token key: `realism/` alone turns it into `realism-star-<tint>-dark`, so no
+ * `realism-` string reaches `src/derive/` (`auditRealismReach`). The order is part
+ * of the assignment, so reordering it moves every Star.
+ *
+ * The names are written as the keys of `TINT_ORDER`, not as quoted strings: the
+ * literal-colour ban (AD-12, `scripts/colour-literals.ts`) reads any whole quoted
+ * colour word in `src/` as paint, and a tint name is not paint. It only names one
+ * of five tokens, and no colour value is written here. `Object.keys` keeps a
+ * string key's insertion order, so the list is the record's order. Each value is
+ * its key's index, which a test pins, so the numbers cannot drift from the order.
+ */
+export const TINT_ORDER = { blue: 0, white: 1, yellow: 2, orange: 3, red: 4 } as const;
+
+export type StarTint = keyof typeof TINT_ORDER;
+
+/** The five names, frozen, in `TINT_ORDER`'s order. */
+export const STAR_TINTS: readonly [StarTint, ...StarTint[]] = Object.freeze(Object.keys(TINT_ORDER) as [StarTint, ...StarTint[]]);
+
+/**
+ * The tint at this index of `STAR_TINTS`.
+ *
+ * @throws on an index outside the list, naming it: `unit` is in `[0, 1)`, so this cannot happen unless the list or the scaling changes.
+ */
+function tintAt(index: number): StarTint {
+  const tint = STAR_TINTS[index];
+  if (tint === undefined) throw new Error(`there is no tint at index ${index} of ${STAR_TINTS.length}.`);
+  return tint;
+}
+
+/** A Star's appearance (9.4, 9.5): its tint, which never changes in time, and where its slow pulse starts. */
 export interface StarAppearance {
+  readonly tint: StarTint;
   readonly pulsePhase: number;
 }
 
@@ -114,12 +146,14 @@ export function appearanceOf(id: string, library: readonly MapEntry[] = MAP_LIBR
 }
 
 /**
- * The appearance of the Star with this entity ID (9.4, AD-21 as amended): from the
- * ID alone, with its own salt, so it is independent of every Planet field and
- * nothing authored or solved reaches it. Colour and phase encode nothing.
+ * The appearance of the Star with this entity ID (9.4, 9.5, AD-21 as amended):
+ * from the ID alone, each field with its own salt, so it is independent of every
+ * Planet field and nothing authored or solved reaches it. Colour and phase encode
+ * nothing.
  */
 export function starAppearanceOf(id: string): StarAppearance {
   return {
+    tint: tintAt(Math.floor(unit('tint', id) * STAR_TINTS.length)),
     pulsePhase: round(PULSE_PHASE_MIN + unit('pulsePhase', id) * (PULSE_PHASE_MAX - PULSE_PHASE_MIN)),
   };
 }

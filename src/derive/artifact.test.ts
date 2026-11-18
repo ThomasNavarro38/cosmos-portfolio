@@ -30,7 +30,7 @@ import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { validateCareer } from '../data/validate.ts';
-import { appearanceOf, starAppearanceOf } from './appearance.ts';
+import { appearanceOf, STAR_TINTS, starAppearanceOf } from './appearance.ts';
 import { BANNER, buildArtifact, serializeArtifact, stripBanner } from './artifact.ts';
 import { SCHEMA_VERSION, validateArtifact, type Artifact } from './artifact-schema.ts';
 import { DWELL_TEMPOS } from './dwell.ts';
@@ -2587,9 +2587,9 @@ test('checkAppearance holds each Star (9.4): a hand-edited band, pulse phase or 
   assert.ok((phaseLines[0] as string).includes(client.id) && (phaseLines[0] as string).includes('appearance.pulsePhase'), phaseLines.join('\n'));
 
   const extra = appearanceFixture();
-  ((extra.doc.clients[0] as (typeof extra.doc.clients)[number]).appearance as Record<string, unknown>)['tint'] = 'realism-star-blue';
+  ((extra.doc.clients[0] as (typeof extra.doc.clients)[number]).appearance as Record<string, unknown>)['hue'] = 0.5;
   const extraLines = checkAppearance(extra.doc);
-  assert.ok(extraLines.some((line) => line.includes(client.id) && line.includes('appearance.tint')), extraLines.join('\n'));
+  assert.ok(extraLines.some((line) => line.includes(client.id) && line.includes('appearance.hue')), extraLines.join('\n'));
 
   // A Project's dates edited without a re-solve move the Star's band, so the gate sees it.
   const redated = appearanceFixture();
@@ -2604,6 +2604,19 @@ test('checkAppearance holds each Star (9.4): a hand-edited band, pulse phase or 
   const gate = checkArtifact(banded.write());
   assert.match(gate[0] as string, /committed layout artifact.*appearance/, gate.join('\n'));
   assert.ok(gate.some((line) => line.includes(client.id)), gate.join('\n'));
+});
+
+test('checkAppearance holds each Star’s tint (9.5): the committed artifact with one Client’s tint edited fails naming the Client and appearance.tint', () => {
+  const doc = stripBanner(JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8'))) as Artifact;
+  assert.deepEqual(checkAppearance(doc), [], 'the committed artifact passes as it stands');
+  const client = doc.clients[0] as (typeof doc.clients)[number];
+  const held = client.appearance.tint;
+  (client.appearance as { tint: string }).tint = STAR_TINTS.find((tint) => tint !== held) as string;
+  const lines = checkAppearance(doc);
+  assert.equal(lines.length, 1, lines.join('\n'));
+  assert.ok((lines[0] as string).includes(client.id) && (lines[0] as string).includes('appearance.tint'), lines.join('\n'));
+  const gate = checkArtifact(writeTemp(serializeArtifact(doc)));
+  assert.ok(gate.some((line) => line.includes(client.id) && line.includes('appearance.tint')), gate.join('\n'));
 });
 
 test('checkAppearance names the Project and the map when the map has no library entry', () => {
