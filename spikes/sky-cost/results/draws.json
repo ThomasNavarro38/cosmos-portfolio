@@ -1,0 +1,3052 @@
+{
+ "label": "spike, not a judgement",
+ "story": "9.1",
+ "measured": "2026-11-18T07:23:23.043Z",
+ "browser": "Chrome/157.0.8103.79",
+ "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+ "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+ "screen": {
+  "width": 3072,
+  "height": 1728,
+  "availWidth": 3072,
+  "availHeight": 1680,
+  "devicePixelRatio": 1.25
+ },
+ "devicePixelRatio": 1,
+ "limits": {
+  "belt": 1,
+  "nebula": 1,
+  "ring": 2,
+  "belt+nebula+ring": 4
+ },
+ "deepPlanets": 1,
+ "table": {
+  "belt": {
+   "1920x1080": {
+    "opening": {
+     "none": 99,
+     "withObject": 100,
+     "withObjectLineWorkHidden": 92,
+     "gross": 1,
+     "lineWorkReplaced": 8,
+     "net": -7,
+     "limit": 1,
+     "withinLimit": true
+    },
+    "client-stop": {
+     "none": 15,
+     "withObject": 16,
+     "withObjectLineWorkHidden": 14,
+     "gross": 1,
+     "lineWorkReplaced": 2,
+     "net": -1,
+     "limit": 1,
+     "withinLimit": true
+    },
+    "focus": {
+     "none": 36,
+     "withObject": 37,
+     "withObjectLineWorkHidden": 35,
+     "gross": 1,
+     "lineWorkReplaced": 2,
+     "net": -1,
+     "limit": 1,
+     "withinLimit": true
+    }
+   },
+   "3840x1080": {
+    "opening": {
+     "none": 99,
+     "withObject": 100,
+     "withObjectLineWorkHidden": 92,
+     "gross": 1,
+     "lineWorkReplaced": 8,
+     "net": -7,
+     "limit": 1,
+     "withinLimit": true
+    },
+    "client-stop": {
+     "none": 15,
+     "withObject": 16,
+     "withObjectLineWorkHidden": 14,
+     "gross": 1,
+     "lineWorkReplaced": 2,
+     "net": -1,
+     "limit": 1,
+     "withinLimit": true
+    },
+    "focus": {
+     "none": 40,
+     "withObject": 41,
+     "withObjectLineWorkHidden": 39,
+     "gross": 1,
+     "lineWorkReplaced": 2,
+     "net": -1,
+     "limit": 1,
+     "withinLimit": true
+    }
+   }
+  },
+  "nebula": {
+   "1920x1080": {
+    "opening": {
+     "none": 99,
+     "withObject": 100,
+     "withObjectLineWorkHidden": 99,
+     "gross": 1,
+     "lineWorkReplaced": 1,
+     "net": 0,
+     "limit": 1,
+     "withinLimit": true
+    },
+    "client-stop": {
+     "none": 15,
+     "withObject": 16,
+     "withObjectLineWorkHidden": 15,
+     "gross": 1,
+     "lineWorkReplaced": 1,
+     "net": 0,
+     "limit": 1,
+     "withinLimit": true
+    },
+    "focus": {
+     "none": 36,
+     "withObject": 37,
+     "withObjectLineWorkHidden": 36,
+     "gross": 1,
+     "lineWorkReplaced": 1,
+     "net": 0,
+     "limit": 1,
+     "withinLimit": true
+    }
+   },
+   "3840x1080": {
+    "opening": {
+     "none": 99,
+     "withObject": 100,
+     "withObjectLineWorkHidden": 99,
+     "gross": 1,
+     "lineWorkReplaced": 1,
+     "net": 0,
+     "limit": 1,
+     "withinLimit": true
+    },
+    "client-stop": {
+     "none": 15,
+     "withObject": 16,
+     "withObjectLineWorkHidden": 15,
+     "gross": 1,
+     "lineWorkReplaced": 1,
+     "net": 0,
+     "limit": 1,
+     "withinLimit": true
+    },
+    "focus": {
+     "none": 40,
+     "withObject": 41,
+     "withObjectLineWorkHidden": 40,
+     "gross": 1,
+     "lineWorkReplaced": 1,
+     "net": 0,
+     "limit": 1,
+     "withinLimit": true
+    }
+   }
+  },
+  "ring": {
+   "1920x1080": {
+    "opening": {
+     "none": 99,
+     "withObject": 100,
+     "withObjectLineWorkHidden": 99,
+     "gross": 1,
+     "lineWorkReplaced": 1,
+     "net": 0,
+     "limit": 2,
+     "withinLimit": true
+    },
+    "client-stop": {
+     "none": 15,
+     "withObject": 16,
+     "withObjectLineWorkHidden": 15,
+     "gross": 1,
+     "lineWorkReplaced": 1,
+     "net": 0,
+     "limit": 2,
+     "withinLimit": true
+    },
+    "focus": {
+     "none": 36,
+     "withObject": 37,
+     "withObjectLineWorkHidden": 36,
+     "gross": 1,
+     "lineWorkReplaced": 1,
+     "net": 0,
+     "limit": 2,
+     "withinLimit": true
+    }
+   },
+   "3840x1080": {
+    "opening": {
+     "none": 99,
+     "withObject": 100,
+     "withObjectLineWorkHidden": 99,
+     "gross": 1,
+     "lineWorkReplaced": 1,
+     "net": 0,
+     "limit": 2,
+     "withinLimit": true
+    },
+    "client-stop": {
+     "none": 15,
+     "withObject": 16,
+     "withObjectLineWorkHidden": 15,
+     "gross": 1,
+     "lineWorkReplaced": 1,
+     "net": 0,
+     "limit": 2,
+     "withinLimit": true
+    },
+    "focus": {
+     "none": 40,
+     "withObject": 41,
+     "withObjectLineWorkHidden": 40,
+     "gross": 1,
+     "lineWorkReplaced": 1,
+     "net": 0,
+     "limit": 2,
+     "withinLimit": true
+    }
+   }
+  },
+  "belt+nebula+ring": {
+   "1920x1080": {
+    "opening": {
+     "none": 99,
+     "withObject": 102,
+     "withObjectLineWorkHidden": 92,
+     "gross": 3,
+     "lineWorkReplaced": 10,
+     "net": -7,
+     "limit": 4,
+     "withinLimit": true
+    },
+    "client-stop": {
+     "none": 15,
+     "withObject": 18,
+     "withObjectLineWorkHidden": 14,
+     "gross": 3,
+     "lineWorkReplaced": 4,
+     "net": -1,
+     "limit": 4,
+     "withinLimit": true
+    },
+    "focus": {
+     "none": 36,
+     "withObject": 39,
+     "withObjectLineWorkHidden": 35,
+     "gross": 3,
+     "lineWorkReplaced": 4,
+     "net": -1,
+     "limit": 4,
+     "withinLimit": true
+    }
+   },
+   "3840x1080": {
+    "opening": {
+     "none": 99,
+     "withObject": 102,
+     "withObjectLineWorkHidden": 92,
+     "gross": 3,
+     "lineWorkReplaced": 10,
+     "net": -7,
+     "limit": 4,
+     "withinLimit": true
+    },
+    "client-stop": {
+     "none": 15,
+     "withObject": 18,
+     "withObjectLineWorkHidden": 14,
+     "gross": 3,
+     "lineWorkReplaced": 4,
+     "net": -1,
+     "limit": 4,
+     "withinLimit": true
+    },
+    "focus": {
+     "none": 40,
+     "withObject": 43,
+     "withObjectLineWorkHidden": 39,
+     "gross": 3,
+     "lineWorkReplaced": 4,
+     "net": -1,
+     "limit": 4,
+     "withinLimit": true
+    }
+   }
+  }
+ },
+ "captures": [
+  {
+   "object": "belt",
+   "pose": "client-stop",
+   "frame": "1920x1080",
+   "file": "sky-cost-9-1-belt-1920x1080.png"
+  },
+  {
+   "object": "belt",
+   "pose": "client-stop",
+   "frame": "3840x1080",
+   "file": "sky-cost-9-1-belt-3840x1080.png"
+  },
+  {
+   "object": "nebula",
+   "pose": "client-stop",
+   "frame": "1920x1080",
+   "file": "sky-cost-9-1-nebula-1920x1080.png"
+  },
+  {
+   "object": "nebula",
+   "pose": "client-stop",
+   "frame": "3840x1080",
+   "file": "sky-cost-9-1-nebula-3840x1080.png"
+  },
+  {
+   "object": "ring",
+   "pose": "focus",
+   "frame": "1920x1080",
+   "file": "sky-cost-9-1-ring-1920x1080.png"
+  },
+  {
+   "object": "ring",
+   "pose": "focus",
+   "frame": "3840x1080",
+   "file": "sky-cost-9-1-ring-3840x1080.png"
+  }
+ ],
+ "sessions": {
+  "none": {
+   "variant": "none",
+   "hide": false,
+   "browser": "Chrome/157.0.8103.79",
+   "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+   "frames": {
+    "1920x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       1920,
+       1080
+      ]
+     },
+     "hidden": {},
+     "poses": {
+      "opening": {
+       "calls": 99,
+       "min": 99,
+       "max": 99,
+       "stable": true,
+       "values": [
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 15,
+       "min": 15,
+       "max": 15,
+       "stable": true,
+       "values": [
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.82399989278354,
+        -16.47380946616489,
+        16.384462121060743,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 36,
+       "min": 36,
+       "max": 36,
+       "stable": true,
+       "values": [
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 1569.474671718003,
+      "y": 652.5011195393793,
+      "inView": true
+     }
+    },
+    "3840x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 3840,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       3840,
+       1080
+      ]
+     },
+     "hidden": {},
+     "poses": {
+      "opening": {
+       "calls": 99,
+       "min": 99,
+       "max": 99,
+       "stable": true,
+       "values": [
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 15,
+       "min": 15,
+       "max": 15,
+       "stable": true,
+       "values": [
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.8239998602848,
+        -17.74419997386518,
+        14.184081250897435,
+        -0.25881904510252074,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 40,
+       "min": 40,
+       "max": 40,
+       "stable": true,
+       "values": [
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 2626.003325629376,
+      "y": 670.3190564923688,
+      "inView": true
+     }
+    }
+   },
+   "captures": [],
+   "screen": {
+    "width": 3072,
+    "height": 1728,
+    "availWidth": 3072,
+    "availHeight": 1680,
+    "devicePixelRatio": 1.25
+   },
+   "console": [
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    },
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    }
+   ]
+  },
+  "belt": {
+   "variant": "belt",
+   "hide": false,
+   "browser": "Chrome/157.0.8103.79",
+   "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+   "frames": {
+    "1920x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       1920,
+       1080
+      ]
+     },
+     "hidden": {},
+     "poses": {
+      "opening": {
+       "calls": 100,
+       "min": 100,
+       "max": 100,
+       "stable": true,
+       "values": [
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 16,
+       "min": 16,
+       "max": 16,
+       "stable": true,
+       "values": [
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.823999889237726,
+        -16.473809465501628,
+        16.384462125987547,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 37,
+       "min": 37,
+       "max": 37,
+       "stable": true,
+       "values": [
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 1569.4746714532776,
+      "y": 652.5011194357347,
+      "inView": true
+     }
+    },
+    "3840x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 3840,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       3840,
+       1080
+      ]
+     },
+     "hidden": {},
+     "poses": {
+      "opening": {
+       "calls": 100,
+       "min": 100,
+       "max": 100,
+       "stable": true,
+       "values": [
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 16,
+       "min": 16,
+       "max": 16,
+       "stable": true,
+       "values": [
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.823999862558075,
+        -17.744199974290424,
+        14.184081247738774,
+        -0.25881904510252074,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 41,
+       "min": 41,
+       "max": 41,
+       "stable": true,
+       "values": [
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 2626.0033260515384,
+      "y": 670.3190566523746,
+      "inView": true
+     }
+    }
+   },
+   "captures": [],
+   "screen": {
+    "width": 3072,
+    "height": 1728,
+    "availWidth": 3072,
+    "availHeight": 1680,
+    "devicePixelRatio": 1.25
+   },
+   "console": [
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    },
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    }
+   ]
+  },
+  "belt (hidden)": {
+   "variant": "belt",
+   "hide": true,
+   "browser": "Chrome/157.0.8103.79",
+   "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+   "frames": {
+    "1920x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       1920,
+       1080
+      ]
+     },
+     "hidden": {
+      "belt": 8
+     },
+     "poses": {
+      "opening": {
+       "calls": 92,
+       "min": 92,
+       "max": 92,
+       "stable": true,
+       "values": [
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 14,
+       "min": 14,
+       "max": 14,
+       "stable": true,
+       "values": [
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.823999894461192,
+        -16.47380946647871,
+        16.38446211872968,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 35,
+       "min": 35,
+       "max": 35,
+       "stable": true,
+       "values": [
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 1569.4746766773926,
+      "y": 652.5011214810263,
+      "inView": true
+     }
+    },
+    "3840x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 3840,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       3840,
+       1080
+      ]
+     },
+     "hidden": {
+      "belt": 8
+     },
+     "poses": {
+      "opening": {
+       "calls": 92,
+       "min": 92,
+       "max": 92,
+       "stable": true,
+       "values": [
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 14,
+       "min": 14,
+       "max": 14,
+       "stable": true,
+       "values": [
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.823999860202612,
+        -17.74419997384979,
+        14.18408125101162,
+        -0.25881904510252074,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 39,
+       "min": 39,
+       "max": 39,
+       "stable": true,
+       "values": [
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 2626.00333343015,
+      "y": 670.319059448998,
+      "inView": true
+     }
+    }
+   },
+   "captures": [
+    {
+     "object": "belt",
+     "pose": "client-stop",
+     "frame": "1920x1080",
+     "file": "sky-cost-9-1-belt-1920x1080.png"
+    },
+    {
+     "object": "belt",
+     "pose": "client-stop",
+     "frame": "3840x1080",
+     "file": "sky-cost-9-1-belt-3840x1080.png"
+    }
+   ],
+   "screen": {
+    "width": 3072,
+    "height": 1728,
+    "availWidth": 3072,
+    "availHeight": 1680,
+    "devicePixelRatio": 1.25
+   },
+   "console": [
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    },
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    }
+   ]
+  },
+  "nebula": {
+   "variant": "nebula",
+   "hide": false,
+   "browser": "Chrome/157.0.8103.79",
+   "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+   "frames": {
+    "1920x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       1920,
+       1080
+      ]
+     },
+     "hidden": {},
+     "poses": {
+      "opening": {
+       "calls": 100,
+       "min": 100,
+       "max": 100,
+       "stable": true,
+       "values": [
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 16,
+       "min": 16,
+       "max": 16,
+       "stable": true,
+       "values": [
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.823999887368103,
+        -16.4738094651519,
+        16.384462128585362,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 37,
+       "min": 37,
+       "max": 37,
+       "stable": true,
+       "values": [
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 1569.4746713102077,
+      "y": 652.5011193797221,
+      "inView": true
+     }
+    },
+    "3840x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 3840,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       3840,
+       1080
+      ]
+     },
+     "hidden": {},
+     "poses": {
+      "opening": {
+       "calls": 100,
+       "min": 100,
+       "max": 100,
+       "stable": true,
+       "values": [
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 16,
+       "min": 16,
+       "max": 16,
+       "stable": true,
+       "values": [
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.823999862557965,
+        -17.744199974290396,
+        14.18408124773893,
+        -0.25881904510252074,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 41,
+       "min": 41,
+       "max": 41,
+       "stable": true,
+       "values": [
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 2626.0033258439316,
+      "y": 670.3190565736872,
+      "inView": true
+     }
+    }
+   },
+   "captures": [],
+   "screen": {
+    "width": 3072,
+    "height": 1728,
+    "availWidth": 3072,
+    "availHeight": 1680,
+    "devicePixelRatio": 1.25
+   },
+   "console": [
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    },
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    }
+   ]
+  },
+  "nebula (hidden)": {
+   "variant": "nebula",
+   "hide": true,
+   "browser": "Chrome/157.0.8103.79",
+   "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+   "frames": {
+    "1920x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       1920,
+       1080
+      ]
+     },
+     "hidden": {
+      "nebula": 1
+     },
+     "poses": {
+      "opening": {
+       "calls": 99,
+       "min": 99,
+       "max": 99,
+       "stable": true,
+       "values": [
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 15,
+       "min": 15,
+       "max": 15,
+       "stable": true,
+       "values": [
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.82399989274824,
+        -16.473809466158283,
+        16.384462121109785,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 36,
+       "min": 36,
+       "max": 36,
+       "stable": true,
+       "values": [
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 1569.474676268275,
+      "y": 652.5011213208527,
+      "inView": true
+     }
+    },
+    "3840x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 3840,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       3840,
+       1080
+      ]
+     },
+     "hidden": {
+      "nebula": 1
+     },
+     "poses": {
+      "opening": {
+       "calls": 99,
+       "min": 99,
+       "max": 99,
+       "stable": true,
+       "values": [
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 15,
+       "min": 15,
+       "max": 15,
+       "stable": true,
+       "values": [
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.823999864749467,
+        -17.744199974700322,
+        14.184081244693914,
+        -0.25881904510252074,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 40,
+       "min": 40,
+       "max": 40,
+       "stable": true,
+       "values": [
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 2626.0033334300406,
+      "y": 670.3190594489577,
+      "inView": true
+     }
+    }
+   },
+   "captures": [
+    {
+     "object": "nebula",
+     "pose": "client-stop",
+     "frame": "1920x1080",
+     "file": "sky-cost-9-1-nebula-1920x1080.png"
+    },
+    {
+     "object": "nebula",
+     "pose": "client-stop",
+     "frame": "3840x1080",
+     "file": "sky-cost-9-1-nebula-3840x1080.png"
+    }
+   ],
+   "screen": {
+    "width": 3072,
+    "height": 1728,
+    "availWidth": 3072,
+    "availHeight": 1680,
+    "devicePixelRatio": 1.25
+   },
+   "console": [
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    },
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    }
+   ]
+  },
+  "ring": {
+   "variant": "ring",
+   "hide": false,
+   "browser": "Chrome/157.0.8103.79",
+   "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+   "frames": {
+    "1920x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       1920,
+       1080
+      ]
+     },
+     "hidden": {},
+     "poses": {
+      "opening": {
+       "calls": 100,
+       "min": 100,
+       "max": 100,
+       "stable": true,
+       "values": [
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 16,
+       "min": 16,
+       "max": 16,
+       "stable": true,
+       "values": [
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.823999857973856,
+        -16.47380945965349,
+        16.38446216942794,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 37,
+       "min": 37,
+       "max": 37,
+       "stable": true,
+       "values": [
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37,
+        37
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 1569.474669096499,
+      "y": 652.501118513034,
+      "inView": true
+     }
+    },
+    "3840x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 3840,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       3840,
+       1080
+      ]
+     },
+     "hidden": {},
+     "poses": {
+      "opening": {
+       "calls": 100,
+       "min": 100,
+       "max": 100,
+       "stable": true,
+       "values": [
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 16,
+       "min": 16,
+       "max": 16,
+       "stable": true,
+       "values": [
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16,
+        16
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.823999862311148,
+        -17.74419997424421,
+        14.184081248081867,
+        -0.25881904510252074,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 41,
+       "min": 41,
+       "max": 41,
+       "stable": true,
+       "values": [
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 2626.0033258175667,
+      "y": 670.3190565636954,
+      "inView": true
+     }
+    }
+   },
+   "captures": [],
+   "screen": {
+    "width": 3072,
+    "height": 1728,
+    "availWidth": 3072,
+    "availHeight": 1680,
+    "devicePixelRatio": 1.25
+   },
+   "console": [
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    },
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    }
+   ]
+  },
+  "ring (hidden)": {
+   "variant": "ring",
+   "hide": true,
+   "browser": "Chrome/157.0.8103.79",
+   "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+   "frames": {
+    "1920x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       1920,
+       1080
+      ]
+     },
+     "hidden": {
+      "ring": 1
+     },
+     "poses": {
+      "opening": {
+       "calls": 99,
+       "min": 99,
+       "max": 99,
+       "stable": true,
+       "values": [
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 15,
+       "min": 15,
+       "max": 15,
+       "stable": true,
+       "values": [
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.823999889202817,
+        -16.473809465495076,
+        16.384462126036077,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 36,
+       "min": 36,
+       "max": 36,
+       "stable": true,
+       "values": [
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36,
+        36
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 1569.4746715886795,
+      "y": 652.5011194887459,
+      "inView": true
+     }
+    },
+    "3840x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 3840,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       3840,
+       1080
+      ]
+     },
+     "hidden": {
+      "ring": 1
+     },
+     "poses": {
+      "opening": {
+       "calls": 99,
+       "min": 99,
+       "max": 99,
+       "stable": true,
+       "values": [
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99,
+        99
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 15,
+       "min": 15,
+       "max": 15,
+       "stable": true,
+       "values": [
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15,
+        15
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.82399986259721,
+        -17.744199974297743,
+        14.184081247684418,
+        -0.25881904510252074,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 40,
+       "min": 40,
+       "max": 40,
+       "stable": true,
+       "values": [
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40,
+        40
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 2626.00332584408,
+      "y": 670.319056573746,
+      "inView": true
+     }
+    }
+   },
+   "captures": [
+    {
+     "object": "ring",
+     "pose": "focus",
+     "frame": "1920x1080",
+     "file": "sky-cost-9-1-ring-1920x1080.png"
+    },
+    {
+     "object": "ring",
+     "pose": "focus",
+     "frame": "3840x1080",
+     "file": "sky-cost-9-1-ring-3840x1080.png"
+    }
+   ],
+   "screen": {
+    "width": 3072,
+    "height": 1728,
+    "availWidth": 3072,
+    "availHeight": 1680,
+    "devicePixelRatio": 1.25
+   },
+   "console": [
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    },
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    }
+   ]
+  },
+  "belt+nebula+ring": {
+   "variant": "belt+nebula+ring",
+   "hide": false,
+   "browser": "Chrome/157.0.8103.79",
+   "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+   "frames": {
+    "1920x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       1920,
+       1080
+      ]
+     },
+     "hidden": {},
+     "poses": {
+      "opening": {
+       "calls": 102,
+       "min": 102,
+       "max": 102,
+       "stable": true,
+       "values": [
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 18,
+       "min": 18,
+       "max": 18,
+       "stable": true,
+       "values": [
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.823999862516352,
+        -16.4738094605032,
+        16.384462163116233,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 39,
+       "min": 39,
+       "max": 39,
+       "stable": true,
+       "values": [
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 1569.4746694386342,
+      "y": 652.5011186469849,
+      "inView": true
+     }
+    },
+    "3840x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 3840,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       3840,
+       1080
+      ]
+     },
+     "hidden": {},
+     "poses": {
+      "opening": {
+       "calls": 102,
+       "min": 102,
+       "max": 102,
+       "stable": true,
+       "values": [
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102,
+        102
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 18,
+       "min": 18,
+       "max": 18,
+       "stable": true,
+       "values": [
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18,
+        18
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.823999864707666,
+        -17.744199974692506,
+        14.18408124475198,
+        -0.25881904510252074,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 43,
+       "min": 43,
+       "max": 43,
+       "stable": true,
+       "values": [
+        43,
+        43,
+        43,
+        43,
+        43,
+        43,
+        43,
+        43,
+        43,
+        43,
+        43,
+        43,
+        43,
+        43,
+        43,
+        43,
+        43,
+        43,
+        43,
+        43
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 2626.0033260434866,
+      "y": 670.3190566493236,
+      "inView": true
+     }
+    }
+   },
+   "captures": [],
+   "screen": {
+    "width": 3072,
+    "height": 1728,
+    "availWidth": 3072,
+    "availHeight": 1680,
+    "devicePixelRatio": 1.25
+   },
+   "console": [
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    },
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    }
+   ]
+  },
+  "belt+nebula+ring (hidden)": {
+   "variant": "belt+nebula+ring",
+   "hide": true,
+   "browser": "Chrome/157.0.8103.79",
+   "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+   "frames": {
+    "1920x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       1920,
+       1080
+      ]
+     },
+     "hidden": {
+      "belt": 8,
+      "nebula": 1,
+      "ring": 1
+     },
+     "poses": {
+      "opening": {
+       "calls": 92,
+       "min": 92,
+       "max": 92,
+       "stable": true,
+       "values": [
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 14,
+       "min": 14,
+       "max": 14,
+       "stable": true,
+       "values": [
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.823999857767802,
+        -16.473809459614923,
+        16.384462169714247,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 35,
+       "min": 35,
+       "max": 35,
+       "stable": true,
+       "values": [
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35,
+        35
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 1569.4746690810048,
+      "y": 652.5011185069689,
+      "inView": true
+     }
+    },
+    "3840x1080": {
+     "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 SUPER (0x00002702) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+     "deepCount": 1,
+     "viewport": {
+      "innerWidth": 3840,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1.0000000149011612,
+      "canvas": [
+       3840,
+       1080
+      ]
+     },
+     "hidden": {
+      "belt": 8,
+      "nebula": 1,
+      "ring": 1
+     },
+     "poses": {
+      "opening": {
+       "calls": 92,
+       "min": 92,
+       "max": 92,
+       "stable": true,
+       "values": [
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92,
+        92
+       ],
+       "subject": "client:decathlon",
+       "camera": [
+        5.149850000000001,
+        -1.3249000000000013,
+        806.7472332906357,
+        0,
+        0,
+        0,
+        1
+       ]
+      },
+      "client-stop": {
+       "calls": 14,
+       "min": 14,
+       "max": 14,
+       "stable": true,
+       "values": [
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14,
+        14
+       ],
+       "subject": "client:sncf",
+       "camera": [
+        -29.823999869190878,
+        -17.74419997553113,
+        14.184081238522666,
+        -0.25881904510252074,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      },
+      "focus": {
+       "calls": 39,
+       "min": 39,
+       "max": 39,
+       "stable": true,
+       "values": [
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39,
+        39
+       ],
+       "subject": "project:sncf/client-referential",
+       "camera": [
+        -18.32733434828057,
+        -23.779497625271254,
+        7.341272044455061,
+        -0.2588190451025207,
+        0,
+        0,
+        0.9659258262890684
+       ]
+      }
+     },
+     "focusClick": {
+      "x": 2626.0033264563035,
+      "y": 670.3190568057887,
+      "inView": true
+     }
+    }
+   },
+   "captures": [],
+   "screen": {
+    "width": 3072,
+    "height": 1728,
+    "availWidth": 3072,
+    "availHeight": 1680,
+    "devicePixelRatio": 1.25
+   },
+   "console": [
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    },
+    {
+     "level": "warning",
+     "text": "THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+    }
+   ]
+  }
+ }
+}
