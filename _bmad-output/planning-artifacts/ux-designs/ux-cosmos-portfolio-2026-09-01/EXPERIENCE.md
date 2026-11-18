@@ -229,6 +229,9 @@ Copy exists in exactly five places. There is no sixth.
    - Lead-in: `Every map this site serves, worn or not:`
    - One entry per library map, in library order: `<id>.webp: <credit>, <licence>.` (each licence already ends in `.`), then a link reading `source` to the entry's source page. Each entry's credit and licence are the map library's data, not copy.
    - The statement of what is not there, re-ruled the same day: its thesis reads `Of the two files above, only career.json is authored: layout.generated.json is solved from it and from the map list below, shots included.`, and its data paragraph reads `The two files above are all the career data there is` where it read `all the data there is`.
+   - *[amended 2026-11-17 for Epic 9, after the 8.4 rejection (sprint-change-proposal-2026-11-17.md, Proposal 7; recorded by story 9.2): the heading and the statement above are superseded, verbatim, by the following. They ship in 9.5, with `src/colophon/credits.ts`, `credits.test.ts` and the identity audit; until then the page carries the wording above. The lead-in and the credits are unchanged.]*
+     - *Heading:* `what a Star and a Planet look like`
+     - *Statement:* `A Body's colour is not data. Each Planet is assigned one of the maps below, and each Star one of five colours, from its ID alone, by a fixed rule in the solver, so colour and texture encode nothing: recency is how brightly a Star shines and a Planet's rim glows, the subject is the one that turns white, and Deep or Shallow is the ring and the moon.`
 5. The contact route.
 
 Page metadata — the document's title, its description and the preview image's alt text — is never drawn on any surface; it is not a sixth place, and it is held to the same voice.

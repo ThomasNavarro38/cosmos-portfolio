@@ -119,9 +119,11 @@ Data reaches Body appearance through exactly three rules: mass from duration, br
 
 **Consequences (testable):**
 - A longer engagement yields a more massive Body than a shorter one.
-- A more recent entry's outline renders brighter than an older one's.
+- A more recent entry renders brighter than an older one's. Before realism arrives (and wherever it does not), the carrier is the Body's outline; under realism it is a Star's light, a Planet's atmosphere rim and an orbit's debris belt. Each carrier keeps the same order, so the rule is one rule.
 - A higher `weight` places a Body nearer the Rail.
-- No fourth mapping rule exists. M3's map, tilt and spin are assigned from the entity ID and encode nothing, so they are not a mapping rule (AD-21).
+- No fourth mapping rule exists. M3's map, tilt and spin, and a Star's colour, are assigned from the entity ID and encode nothing, so they are not a mapping rule (AD-21).
+
+*[amended 2026-11-17 for Epic 9, after the 8.4 rejection (sprint-change-proposal-2026-11-17.md, Proposal 2; recorded by story 9.2): the recency and no-fourth-rule consequences above replace "A more recent entry's outline renders brighter than an older one's." and "M3's map, tilt and spin are assigned from the entity ID and encode nothing, so they are not a mapping rule (AD-21)." One rule, with a different carrier per layer; a Star's colour is explicitly not data. No MVP impact.]*
 
 #### FR-4: Single `weight` knob per entry
 

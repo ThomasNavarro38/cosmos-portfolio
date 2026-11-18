@@ -424,6 +424,21 @@ vignette stays the CSS overlay.
 Everything else in this file — the stroke ladder, the ink ladder, the type
 ramp, the label system, the panel — is the identity and survives M3 intact.
 
+*[amended 2026-11-17 for Epic 9, after the 8.4 rejection (sprint-change-proposal-2026-11-17.md, Proposal 6): realism
+attaches at Body fill and Star light, and once arrived it replaces the line-work
+it carries the meaning of:*
+
+- *outline and dot → core light;*
+- *Planet outline → atmosphere rim;*
+- *orbit → debris belt;*
+- *Rail → nebula;*
+- *Ring and Moon → ring disc and moon sphere.*
+
+*The stroke ladder remains the identity of the schematic frame, First Paint, the
+Fallback and the preview. Under realism its order survives in the carriers'
+luminance. Labels, leaders, plates, the affordance, Mote orbits and Dust are
+unaffected (AD-19 as amended).]*
+
 ---
 
 ## 2. Colors
@@ -463,10 +478,29 @@ would need its own decision for the scene, not a token swap.
 
 The family has two tokens. Only `render-scene/realism/` may read them, and what the shader outputs from them stays under the luminance ceiling (AD-20).
 
+*[amended 2026-11-17 for Epic 9 (sprint-change-proposal-2026-11-17.md, Proposal 6): `realism-star-glow` is replaced by
+`realism-star-blue #A9BFFF`, `-white #F4F1EA`, `-yellow #FFE6B0`, `-orange
+#FFC27A` and `-red #FF9A5C`. `realism-nebula #4A5A7A` and `realism-belt
+#6E6A62` are added. All are placeholders tuned on screen, normalised under the
+ceiling. A Star's glow takes its tint. The ring disc and the moon stay
+achromatic. Under realism these tokens replace the line-work rather than sit
+beneath it (§1). This amends this prose and the table below only. By Thomas's
+ruling of 2026-11-18, each token is declared in the frontmatter by its own
+story: the five `realism-star-*` tokens and the retirement of
+`realism-star-glow` in 9.5, `realism-belt` in 9.6, and `realism-nebula` in 9.7.
+Until each story lands, the frontmatter keeps the two tokens it declares today.]*
+
 | Token | Dark | Light | Story |
 |---|---|---|---|
-| `realism-star-glow` | `#B09468` | `#B09468` (placeholder) | The colour of a Star's additive glow. A starting value, tuned by on-screen judgement in Epic 8. The bare value is a placeholder by ruling, the dark hex repeated so it cannot be mistaken for a designed light theme. |
+| `realism-star-glow` | `#B09468` | `#B09468` (placeholder) | The colour of a Star's additive glow. A starting value, tuned by on-screen judgement in Epic 8. The bare value is a placeholder by ruling, the dark hex repeated so it cannot be mistaken for a designed light theme. *[amended 2026-11-17 for Epic 9: replaced by the five `realism-star-*` tokens below, and retired from the frontmatter in 9.5.]* |
 | `realism-ambient-floor` | `#0E1626` | `#0E1626` (placeholder) | The constant floor under a Planet's lighting, so its dark side is not the void. A starting value, tuned by on-screen judgement in Epic 8. The bare value is a placeholder by ruling, as above. |
+| `realism-star-blue` | `#A9BFFF` | `#A9BFFF` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* |
+| `realism-star-white` | `#F4F1EA` | `#F4F1EA` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* |
+| `realism-star-yellow` | `#FFE6B0` | `#FFE6B0` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* |
+| `realism-star-orange` | `#FFC27A` | `#FFC27A` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* |
+| `realism-star-red` | `#FF9A5C` | `#FF9A5C` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* |
+| `realism-nebula` | `#4A5A7A` | `#4A5A7A` (placeholder) | *[amended 2026-11-17 for Epic 9: the colour of the Rail's nebula ribbon. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.7.]* |
+| `realism-belt` | `#6E6A62` | `#6E6A62` (placeholder) | *[amended 2026-11-17 for Epic 9: the colour of an orbit's debris belt. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.6.]* |
 
 `[NOTE FOR UX] Direction 02 pairs its palette with an editorial serif and a
 graded (not uniform) line weight. The colour swap alone will not reproduce
@@ -722,6 +756,10 @@ any form of glow. Glow in particular is forbidden: it is the single most common
 way a schematic space scene degrades into a screensaver. The one exception is
 M3's Star glow sprite, held under the luminance ceiling (§1, AD-20).
 
+*[amended 2026-11-17 for Epic 9 (sprint-change-proposal-2026-11-17.md, Proposal 6): under realism, depth's first channel
+is the replacing carriers' luminance, in ladder order. Glow is forbidden except
+the Star sprite and the Rail's nebula, both under the ceiling.]*
+
 ---
 
 ## 6. Shapes
@@ -732,6 +770,8 @@ The shape vocabulary is four items and nothing else.
   ellipse. Bodies are drawn `fill: none` at M2 (the M3 texture attachment
   point) with a small filled core dot at ~15% of body radius on Client Stars
   only, which is what makes a Star read as emitting rather than as an outline.
+  *[amended 2026-11-17 for Epic 9: under realism the core dot is gone; the
+  limb-darkened core makes the Star read as emitting.]*
 - **The ellipse.** Every orbit, and only orbits. An orbit is a circle seen at
   an angle; that is the only reason an ellipse exists in this system. Orbit
   ellipses are drawn at `stroke-rest` on the same hairline as everything else —
@@ -769,6 +809,11 @@ function of its Projects, not a design decision.
 
 **One Star is white per frame. Never two.**
 
+*[amended 2026-11-17 for Epic 9 (sprint-change-proposal-2026-11-17.md, Proposal 6): under realism, no circle or dot. A
+limb-darkened, granulating, pulsing core in its tint, fading into its glow.
+Luminance is recency; only the subject's core reaches white. The label is built
+in every session, on a `surface-base` plate, as story 7.9 built the Project label's.]*
+
 ### 7.2 Project Planet — the Deep/Shallow signal
 
 This is the most consequential component in the system, because it carries the
@@ -791,6 +836,11 @@ across a poor screen, a compressed screenshot pasted into Slack (FR-24), and a
 low-DPI corporate laptop (NFR-4). The redundancy is deliberate and is what
 makes the signal greyscale-safe and colour-blind-safe by construction — both
 channels are structural, neither is chromatic.
+
+*[amended 2026-11-17 for Epic 9 (sprint-change-proposal-2026-11-17.md, Proposal 6): under realism the Moon is a small lit
+sphere and the Ring a thin, tilted, semi-transparent ring disc, both
+achromatic. Two structural channels, redundant and colour-blind safe, with no
+size or brightness.]*
 
 **Size and brightness are NOT available for this signal.** FR-3 binds mass to
 duration and brightness to recency. A long-ago Shallow Project can legitimately
@@ -1159,6 +1209,8 @@ describing what it shows. Page metadata is outside the five copy places
 - **No glow at M2, and no bloom or lens flare at M2 or M3.** M3's one glow is the
   Star sprite (§1). Reaching for more is the fastest route from schematic to
   screensaver.
+  *[amended 2026-11-17 for Epic 9: no bloom or lens flare at M2 or M3. M3's
+  luminous objects are the Star sprite and the Rail's nebula, nothing more.]*
 - **No ring on hover.** The collision rule in §7.3 is absolute.
 - **No bold.** Weight never exceeds 400.
 - **No rounded corners.**
