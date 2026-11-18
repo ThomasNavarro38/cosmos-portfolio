@@ -61,8 +61,8 @@ function planet(id: string, clientId: string, x: number, map = 'moon') {
 /** Two Clients, each with its own Star: the first at the origin, the second far along x. */
 const ARTIFACT: RealismArtifact = {
   clients: [
-    { id: 'client:a', position: { x: 0, y: 0, z: 0 }, projects: [planet('project:a/one', 'client:a', 10), planet('project:a/two', 'client:a', -10, 'mars')] },
-    { id: 'client:b', position: { x: 100, y: 0, z: 0 }, projects: [planet('project:b/one', 'client:b', 110)] },
+    { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { pulsePhase: 0 }, projects: [planet('project:a/one', 'client:a', 10), planet('project:a/two', 'client:a', -10, 'mars')] },
+    { id: 'client:b', position: { x: 100, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { pulsePhase: 0 }, projects: [planet('project:b/one', 'client:b', 110)] },
   ],
 };
 const IMAGES: ReadonlyMap<string, ImageBitmap> = new Map([
@@ -310,6 +310,8 @@ const DIFFERING: RealismArtifact = {
   clients: [{
     id: 'client:a',
     position: { x: 0, y: 0, z: 0 },
+    luminanceBand: 'stroke-rest',
+    appearance: { pulsePhase: 0 },
     projects: [
       { id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, appearance: { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.05, spinPhase: 1.5 } },
       { id: 'project:a/two', clientId: 'client:a', position: { x: 0, y: 10, z: 0 }, appearance: { map: 'mars', meanLuminance: 0.123, tilt: -0.4, spinRate: 0.09, spinPhase: 4.2 } },
@@ -508,6 +510,7 @@ const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const LAYER_PATH = 'src/render-scene/realism/fill-layer.ts';
 const MODEL_PATH = 'src/render-scene/realism/fill-model.ts';
 const MOUNT_PATH = 'src/render-scene/realism-mount.tsx';
+const STAR_MODEL_PATH = 'src/render-scene/realism/star-model.ts';
 
 /** Realism's own modules and the mount, by the shared walk, so a new file is read too. */
 function realismModules(): Module[] {
@@ -542,6 +545,9 @@ function auditRealismSource(modules: readonly Module[]): string[] {
   for (const { path, text } of modules) {
     const code = stripComments(text);
     for (const [name, pattern] of NO_DATA_SHADING) {
+      // 9.4: a Star's light carries its band (AD-20 as amended). The field is read by name in star-model.ts only;
+      // star-layer.ts takes it through the plan, as `plan.band`, and never names it.
+      if (name === 'luminanceBand' && path === STAR_MODEL_PATH) continue;
       if (pattern.test(code)) failures.push(`${path} reads ${name}`);
     }
     const banned = [...NO_PIPELINE, ...(path === LAYER_PATH ? [] : WARM_UP), ...(path === MOUNT_PATH ? [] : CHUNK_ONLY)];
@@ -587,6 +593,12 @@ test('the realism source audit rejects each form, in any module, and a comment i
     assert.match(auditRealismSource(adding(line)).join('\n'), message, line);
   }
   assert.match(auditRealismSource(adding('const a = artifact.isDeep;', MOUNT_PATH)).join('\n'), /realism-mount\.tsx reads isDeep/);
+  // 9.4: the band's one allowance is the Star model's.
+  assert.deepEqual(auditRealismSource(adding('const a = client.luminanceBand;', STAR_MODEL_PATH)), [], 'the Star model alone may read a band');
+  assert.match(auditRealismSource(adding('const a = plan.luminanceBand;', 'src/render-scene/realism/star-layer.ts')).join('\n'), /star-layer\.ts reads luminanceBand/);
+  assert.match(auditRealismSource(adding('const a = project.luminanceBand;', MODEL_PATH)).join('\n'), /fill-model\.ts reads luminanceBand/);
+  assert.match(auditRealismSource(adding('const a = client.luminanceBand;', MOUNT_PATH)).join('\n'), /realism-mount\.tsx reads luminanceBand/);
+  assert.match(auditRealismSource(adding('const a = plan.mass;', STAR_MODEL_PATH)).join('\n'), /star-model\.ts reads mass/, 'and nothing else derived');
   assert.deepEqual(auditRealismSource(adding('const pace = motionPace(reduced);', MOUNT_PATH)), [], 'the mount alone may name the pace');
   assert.match(auditRealismSource(adding('const pace = motionPace(reduced);', 'src/render-scene/realism/star-layer.ts')).join('\n'), /star-layer\.ts holds motionPace/);
   assert.deepEqual(auditRealismSource(adding('resetFrameSampling();', MOUNT_PATH)), [], 'the mount alone may name the reset');

@@ -26,11 +26,11 @@ import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { readCareerFile, validateCareer } from '../data/validate.ts';
-import { appearanceOf } from './appearance.ts';
+import { appearanceOf, starAppearanceOf } from './appearance.ts';
 import { BANNER, serializeArtifact, stripBanner } from './artifact.ts';
 import { parseArtifact, validateArtifact, type Artifact } from './artifact-schema.ts';
 import { SRC_ROOT, checkImportBoundaries } from './boundaries.ts';
-import { clientFoldWarnings, isDeepProject } from './entities.ts';
+import { clientFoldWarnings, clientLuminanceBands, isDeepProject } from './entities.ts';
 import { MAP_LIBRARY, type MapEntry } from './map-library.ts';
 import { normaliseLineEndings, solveArtifact } from './pipeline.ts';
 import { compareRailKeys, earliestStart } from './rail.ts';
@@ -592,7 +592,8 @@ export function checkContent(artifact: Artifact): string[] {
 }
 
 /**
- * Asserts each Planet's `appearance` against the library and its own ID (AD-21).
+ * Asserts each Star's `luminanceBand` and `appearance` against a re-derivation
+ * (9.4), and each Planet's `appearance` against the library and its own ID (AD-21).
  * Returns the failure lines, empty on success, each naming the Project and either
  * the map no entry holds or the field that differs. So a hand edit fails, and so
  * does a library changed with no re-solve.
@@ -609,6 +610,35 @@ export function checkContent(artifact: Artifact): string[] {
 export function checkAppearance(artifact: Artifact, library: readonly MapEntry[] = MAP_LIBRARY): string[] {
   const failures: string[] = [];
   const known = new Set(library.map((entry) => entry.id));
+  // Each Star (9.4): its band against the recency rule over its Projects' own
+  // dates and the document's `asOf`, and its appearance against its ID. Read off
+  // the document, with no solve (AD-1), through `entities.ts`'s own function.
+  const bands = clientLuminanceBands(
+    artifact.clients.map((client) => ({ id: client.id, durations: client.projects.map((project) => project.content.duration) })),
+    artifact.asOf,
+  );
+  for (const client of artifact.clients) {
+    const band = bands.get(client.id);
+    if (client.luminanceBand !== band) {
+      failures.push(
+        `"${client.id}" has luminanceBand ${JSON.stringify(client.luminanceBand)}, ` +
+          `but its Projects' recency among the Clients derives ${JSON.stringify(band)}.`,
+      );
+    }
+    const held: Readonly<Record<string, unknown>> = client.appearance;
+    const expected: Readonly<Record<string, unknown>> = { ...starAppearanceOf(client.id) };
+    for (const field of Object.keys(expected)) {
+      if (held[field] !== expected[field]) {
+        failures.push(
+          `"${client.id}" has appearance.${field} ${String(JSON.stringify(held[field]))}, ` +
+            `but its ID derives ${JSON.stringify(expected[field])}.`,
+        );
+      }
+    }
+    for (const field of Object.keys(held)) {
+      if (!(field in expected)) failures.push(`"${client.id}" has appearance.${field}, which its ID does not derive.`);
+    }
+  }
   for (const client of artifact.clients) {
     for (const project of client.projects) {
       if (!known.has(project.appearance.map)) {

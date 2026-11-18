@@ -24,6 +24,9 @@
  * `corner-chrome.tsx` compute it, so nothing in the realism directory names either.
  * The effect's cleanup leaves the Canvas, and the owner disposes the layer.
  *
+ * **The line-work's fade (9.4)** is read through this module's `lineWorkFade`, by
+ * `body-field.tsx` each frame, so the owner stays bound once and is never exported.
+ *
  * **The subject is a thunk,** resolved inside the owner's `try`, so a store read that
  * throws cannot reach R3F, and nothing is read before a layer exists. It writes nothing.
  */
@@ -39,6 +42,11 @@ import { createRealismOwner, type RealismArtifact } from './realism-status.ts';
 import { sceneSubject } from './stroke-model.ts';
 
 const owner = createRealismOwner(() => import('./realism/index.ts'), () => resetFrameSampling());
+
+/** What a Star's outline and core dot are drawn at this frame (9.4): the owner's `lineWorkFade`, 1 unless realism has arrived. */
+export function lineWorkFade(): number {
+  return owner.lineWorkFade();
+}
 
 export interface RealismMountProps {
   readonly artifact: RealismArtifact;

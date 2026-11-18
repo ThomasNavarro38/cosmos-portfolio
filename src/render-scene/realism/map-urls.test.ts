@@ -18,6 +18,8 @@ function artifactWearing(...perClient: readonly (readonly string[])[]): RealismA
     clients: perClient.map((maps, client) => ({
       id: `client:${client}`,
       position,
+      luminanceBand: 'stroke-rest',
+      appearance: { pulsePhase: 0 },
       projects: maps.map((map, at) => ({ id: `project:${client}/${at}`, clientId: `client:${client}`, position, appearance: { map, meanLuminance: 0.3, tilt: 0, spinRate: 0.05, spinPhase: 0 } })),
     })),
   };

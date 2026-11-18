@@ -1024,9 +1024,9 @@ test('every Body’s hit sphere hands its click to activateBody and its pointer 
     ['the leave dropped', (source) => source.replace('onPointerOut={(event) => leaveBody(body, event)}', '')],
     ['the leave wired to the hover', (source) => source.replace('onPointerOut={(event) => leaveBody(body, event)}', 'onPointerOut={(event) => hoverBody(body, event)}')],
     ['the hover handed no event', (source) => source.replace('hoverBody(body, event)', 'hoverBody(body)')],
-    ['a hover on the outline', (source) => source.replace('<Billboard>', '<Billboard onPointerOver={(event) => hoverBody(body, event)}>')],
+    ['a hover on the outline', (source) => source.replace(BILLBOARD_OPEN, '<Billboard onPointerOver={(event) => hoverBody(body, event)}>')],
     ['the hit sphere drawn', (source) => source.replace(/<mesh\s+visible=\{false\}/, '<mesh')],
-    ['a click on the outline', (source) => source.replace('<Billboard>', '<Billboard onClick={(event) => activateBody(body, event)}>')],
+    ['a click on the outline', (source) => source.replace(BILLBOARD_OPEN, '<Billboard onClick={(event) => activateBody(body, event)}>')],
     ['a click on a line', (source) => source.replace('key={line.id}', 'key={line.id}\n          onPointerMissed={() => undefined}')],
   ];
   for (const [name, mutate] of mutations) {
@@ -1118,7 +1118,33 @@ test('the drawn radius discriminates on kind, never on a missing mass', () => {
  *     alone, never the subject, so it is at rest and always.
  *   - **Draw order**: every visible draw at `BODY_RENDER_ORDER`, `transparent` at
  *     opacity 1 — after the Dust — and nothing else carries a `renderOrder`.
+ *   - **The Star marks' fade (9.4), the one allowance**: exactly one `useRef` map of
+ *     billboards, held through `holdStarMarks` by each Body's billboard ref, and one
+ *     `useFrame` handing them to `fadeStarMarks` with `lineWorkFade()` from the mount;
+ *     no other frame loop, ref, fade source or hand-set opacity, and a closed import set.
  */
+/** A Body's billboard, as it opens (9.4): its ref holds a Star's marks for the fade, and nothing else. */
+const BILLBOARD_OPEN = '<Billboard ref={(group) => holdStarMarks(starMarks.current, body, group)}>';
+
+/** The one frame loop the binding holds (9.4): the Star marks at the owner's line-work fade. */
+const STAR_MARKS_FRAME = 'useFrame(() => fadeStarMarks(starMarks.current.values(), lineWorkFade()));';
+
+/** The binding's imports, exactly (9.4 added the frame loop, the ref, the fade and its rule). */
+const BODY_FIELD_IMPORTS: readonly string[] = [
+  "import { Billboard, Line } from '@react-three/drei';",
+  "import { useFrame } from '@react-three/fiber';",
+  "import { useRef, useSyncExternalStore } from 'react';",
+  "import { navigationStore } from '../shell/state.ts';",
+  "import { fadeStarMarks, holdStarMarks, type StarMarks } from './line-fade.ts';",
+  "import { lineWorkFade } from './realism-mount.tsx';",
+  "import { RAIL_LINE_SAMPLES_PER_SEGMENT, railLine, type Rail } from './rail-model.ts';",
+  "import { notableRings } from './notable-model.ts';",
+  "import { activateBody, hoverBody, leaveBody } from './scene-pick.ts';",
+  "import { approachedId } from './affordance-model.ts';",
+  "import { BODY_RENDER_ORDER, type Body } from './scene-model.ts';",
+  "import { CIRCLE_SEGMENTS, bodyRadius, bodyStroke, circlePoints, coreDots, sceneLines, sceneSubject } from './stroke-model.ts';",
+];
+
 function auditBodyField(source: string): string[] {
   const code = stripCommentsAndStrings(source);
   const quoted = stripComments(source);
@@ -1129,9 +1155,23 @@ function auditBodyField(source: string): string[] {
   if (/\b(?:advanceScroll|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation|activateClient|activateProject|hoverProject|keyboardApproach)\b/.test(code)) {
     failures.push('names a navigation event — a Body reaches the store through activateBody, hoverBody and leaveBody alone');
   }
-  if (/\buseFrame\b|\buseThree\b|\buseState\b|\buseReducer\b|\buseEffect\b|\buseLayoutEffect\b|\buseMemo\b|\buseRef\b|\buseStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {
+  if (/\buseThree\b|\buseState\b|\buseReducer\b|\buseEffect\b|\buseLayoutEffect\b|\buseMemo\b|\buseStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {
     failures.push('holds a frame loop, reactive state, an effect or a zustand binding — one selector subscription only');
   }
+  // 9.4, the one allowance: one ref map of the Stars' billboards, and one frame loop
+  // handing them the owner's line-work fade. No other frame loop, ref or fade.
+  if ((code.match(/\buseFrame\b/g) ?? []).length !== 2 || !squash(code).includes(STAR_MARKS_FRAME)) {
+    failures.push('holds a frame loop other than the one fading the Star marks by lineWorkFade()');
+  }
+  if ((code.match(/\buseRef\b/g) ?? []).length !== 2 || !squash(code).includes('const starMarks = useRef(new Map<string, StarMarks>());')) {
+    failures.push('holds a ref other than the one map of Star marks');
+  }
+  if ((code.match(/\bholdStarMarks\s*\(/g) ?? []).length !== 1 || (code.match(/\bfadeStarMarks\s*\(/g) ?? []).length !== 1 || (code.match(/\blineWorkFade\b/g) ?? []).length !== 2 || (code.match(/\bstarMarks\b/g) ?? []).length !== 3) {
+    failures.push('the Star marks are held, faded or read other than by the one ref, the one frame loop and lineWorkFade()');
+  }
+  if (/\.(?:opacity|visible)\s*=(?!=)/.test(code)) failures.push('sets an opacity or a visibility itself — the fade is line-fade.ts’s');
+  const imports = quoted.split('\n').map((line) => line.trim()).filter((line) => /^import\b/.test(line));
+  if (imports.join('\n') !== BODY_FIELD_IMPORTS.join('\n')) failures.push(`imports other than its own set: ${imports.filter((line) => !BODY_FIELD_IMPORTS.includes(line)).join(' ') || 'one missing'}`);
   const subscriptions = code.match(/\buseSyncExternalStore\s*\(/g) ?? [];
   if (
     subscriptions.length !== 2 ||
@@ -1184,7 +1224,8 @@ function auditBodyField(source: string): string[] {
     }
   }
   const bodyBlock = mapBlocks(code, 'bodies')[0] ?? '';
-  const billboard = /<Billboard>([\s\S]*?)<\/Billboard>/.exec(bodyBlock)?.[1] ?? '';
+  const opened = bodyBlock.indexOf(BILLBOARD_OPEN);
+  const billboard = opened === -1 || bodyBlock.split('<Billboard').length !== 2 ? '' : bodyBlock.slice(opened + BILLBOARD_OPEN.length, bodyBlock.indexOf('</Billboard>', opened));
   const outline = squash(billboard.match(/<Line\b[\s\S]*?\/>/)?.[0] ?? '');
   if (outline === '') failures.push('a Body outline is not a <Line> inside a camera-facing <Billboard>');
   for (const [attribute, expected] of [
@@ -1287,7 +1328,7 @@ test('the Bodies’ binding audit rejects the real binding with any one guarante
     ['the subject from nowhere', (s) => s.replace(SUB, 'useSyncExternalStore(navigationStore.subscribe, () => null)')],
     ['a DOM read', (s) => s.replace('return (', 'const w = window.innerWidth;\n  return (')],
     ['a selection of Bodies', (s) => s.replace('{bodies.map(', '{bodies.filter((body) => body.kind === "star").map(')],
-    ['a light', (s) => s.replace('<Billboard>', '<ambientLight />\n          <Billboard>')],
+    ['a light', (s) => s.replace(BILLBOARD_OPEN, `<ambientLight />\n          ${BILLBOARD_OPEN}`)],
     ['a lit dot', (s) => s.replace('<meshBasicMaterial', '<meshStandardMaterial')],
     ['a literal-coloured outline', (s) => s.replace('color={bodyStroke(body, subject, approached).color}', 'color={WHITE}')],
     ['the outline weight invented', (s) => s.replace('lineWidth={bodyStroke(body, subject, approached).widthPx}', 'lineWidth={2}')],
@@ -1301,11 +1342,23 @@ test('the Bodies’ binding audit rejects the real binding with any one guarante
     ['a hairline colour invented', (s) => s.replace('color={line.color}', 'color={RAIL}')],
     ['a hairline weight invented', (s) => s.replace('lineWidth={line.widthPx}', 'lineWidth={1}')],
     ['a token read directly', (s) => s.replace('color={dot.color}', "color={tokens.colors['ink-lift-dark']}")],
-    ['the outline not facing the camera', (s) => s.replace('<Billboard>', '<group>').replace('</Billboard>', '</group>')],
+    ['the outline not facing the camera', (s) => s.replace(BILLBOARD_OPEN, '<group>').replace('</Billboard>', '</group>')],
     ['the outline off its radius', (s) => s.replace('circlePoints(CIRCLE_SEGMENTS, bodyRadius(body))', 'circlePoints(CIRCLE_SEGMENTS, 3)')],
     ['the orbits not drawn', (s) => s.replace('sceneLines(bodies, railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT))', 'sceneLines(bodies, [])')],
-    ['a third line', (s) => s.replace('<Billboard>', '<Line points={[]} transparent opacity={1} renderOrder={BODY_RENDER_ORDER} />\n          <Billboard>')],
-    ['a drei connector', (s) => s.replace('<Billboard>', '<QuadraticBezierLine start={a} end={b} />\n          <Billboard>')],
+    ['a third line', (s) => s.replace(BILLBOARD_OPEN, `<Line points={[]} transparent opacity={1} renderOrder={BODY_RENDER_ORDER} />\n          ${BILLBOARD_OPEN}`)],
+    ['a drei connector', (s) => s.replace(BILLBOARD_OPEN, `<QuadraticBezierLine start={a} end={b} />\n          ${BILLBOARD_OPEN}`)],
+    // The Star marks' fade (9.4).
+    ['a second frame loop', (s) => s.replace(STAR_MARKS_FRAME, `${STAR_MARKS_FRAME}\n  useFrame(() => undefined);`)],
+    ['the frame loop dropped', (s) => s.replace(`  ${STAR_MARKS_FRAME}\n`, '')],
+    ['a fade on the Planets', (s) => s.replace('holdStarMarks(starMarks.current, body, group)', "holdStarMarks(starMarks.current, { ...body, kind: 'star' }, group)")],
+    ['a fade on every Body, held by hand', (s) => s.replace('ref={(group) => holdStarMarks(starMarks.current, body, group)}', 'ref={(group) => starMarks.current.set(body.id, group)}')],
+    ['a fade from elsewhere', (s) => s.replace('fadeStarMarks(starMarks.current.values(), lineWorkFade())', 'fadeStarMarks(starMarks.current.values(), navigationStore.getState().scrollProgress)')],
+    ['a fixed fade', (s) => s.replace('fadeStarMarks(starMarks.current.values(), lineWorkFade())', 'fadeStarMarks(starMarks.current.values(), 0.5)')],
+    ['the fade from the status module', (s) => s.replace("import { lineWorkFade } from './realism-mount.tsx';", "import { lineWorkFade } from './realism-status.ts';")],
+    ['an import added', (s) => s.replace("import { lineWorkFade } from './realism-mount.tsx';", "import { lineWorkFade } from './realism-mount.tsx';\nimport { tokens } from '../tokens/tokens.ts';")],
+    ['an opacity set by hand', (s) => s.replace(STAR_MARKS_FRAME, 'useFrame(() => { for (const group of starMarks.current.values()) group.visible = lineWorkFade() > 0; });')],
+    ['a second ref', (s) => s.replace("const starMarks = useRef(new Map<string, StarMarks>());", "const starMarks = useRef(new Map<string, StarMarks>());\n  const other = useRef(null);")],
+    ['the marks on a second billboard', (s) => s.replace('</Billboard>', `</Billboard>\n          <Billboard ref={(group) => holdStarMarks(starMarks.current, body, group)}></Billboard>`)],
     ['a line loses its order', (s) => s.replace('renderOrder={BODY_RENDER_ORDER}', '')],
     ['a line goes opaque', (s) => s.replace(/(<Line\b[^/]*?)\s*transparent\b/, '$1')],
     ['a line fades', (s) => s.replace('opacity={1}', 'opacity={0.5}')],

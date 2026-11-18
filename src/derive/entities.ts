@@ -11,7 +11,7 @@
  * company-to-client relation resolves as a field lookup on the Project.
  */
 
-import type { Career, Project } from '../data/schema.ts';
+import type { Career, Duration, Project } from '../data/schema.ts';
 import {
   deriveLuminanceBand,
   deriveMass,
@@ -92,6 +92,13 @@ export interface ClientEntity {
    * rank, not a calendar, so this is the only place a Client's years live.
    */
   readonly span: ClientSpan;
+  /**
+   * Rule 2 of 3 again, for the Client's Star (9.4): the same `deriveLuminanceBand`,
+   * over the Client's rank among Clients by its latest Project recency. So a Star's
+   * light, under realism, carries recency in the ladder's order. The schematic Star
+   * outline does not read it, and stays `stroke-rest` (ruling Q1, 2026-11-18).
+   */
+  readonly luminanceBand: LuminanceBand;
   /** In authored order within this Client. Never empty. */
   readonly projects: readonly ProjectEntity[];
 }
@@ -162,6 +169,37 @@ export function recencyRanks(
     rankOf: new Map(distinct.map((month, index) => [month, index])),
     range: { min: 0, max: distinct.length - 1 },
   };
+}
+
+/**
+ * Each Client's luminance band (9.4), by its ID: its recency is the latest
+ * `recencyOf` among its Projects, ranked among the Clients' recencies (oldest `0`,
+ * equal recency sharing a rank, as `recencyRanks` does for Projects), and mapped by
+ * `deriveLuminanceBand`. A lone Client is `stroke-near`, by `normalize`'s
+ * zero-width rule.
+ *
+ * Exported because the gate re-derives it from the artifact's own content, and a
+ * second implementation there would drift from this one.
+ *
+ * @throws on a Client with no engagement, naming it.
+ */
+export function clientLuminanceBands(
+  clients: readonly { readonly id: string; readonly durations: readonly Duration[] }[],
+  asOf: string,
+): Map<string, LuminanceBand> {
+  const latest = clients.map(({ id, durations }) => {
+    if (durations.length === 0) throw new Error(`the Client "${id}" has no engagement to rank`);
+    return [id, durations.map((duration) => recencyOf(duration, asOf)).sort().at(-1) as string] as const;
+  });
+  const distinct = [...new Set(latest.map(([, month]) => month))].sort();
+  const range = { min: 0, max: distinct.length - 1 };
+  return new Map(latest.map(([id, month]) => [id, deriveLuminanceBand(distinct.indexOf(month), range)]));
+}
+
+function bandOf(bands: ReadonlyMap<string, LuminanceBand>, id: string): LuminanceBand {
+  const band = bands.get(id);
+  if (band === undefined) throw new Error(`no luminance band derived for the Client "${id}"`);
+  return band;
 }
 
 /**
@@ -372,6 +410,11 @@ export function deriveEntities(career: Career, options: DeriveOptions): EntityGr
     }
   });
 
+  const clientBands = clientLuminanceBands(
+    [...byClient].map(([id, { projects: owned }]) => ({ id, durations: owned.map((entity) => entity.project.duration) })),
+    asOf,
+  );
+
   const clients: ClientEntity[] = [...byClient].map(([id, { name, projects: owned }]) => ({
     id,
     name,
@@ -381,6 +424,9 @@ export function deriveEntities(career: Career, options: DeriveOptions): EntityGr
     // Fallback — and `artifact.test.ts` fixes a set where exactly that differs.
     timeAxis: Math.max(...owned.map((entity) => entity.timeAxis)),
     span: clientSpanOf(owned.map((entity) => entity.project.duration)),
+    // Total by construction, as the Project lookups above are: a fallback here
+    // would render a desync as the dimmest band rather than as a bug.
+    luminanceBand: bandOf(clientBands, id),
     projects: owned,
   }));
 

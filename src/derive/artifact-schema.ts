@@ -16,7 +16,7 @@
 
 import { z } from 'zod';
 import { ProjectSchema } from '../data/schema.ts';
-import { SPIN_PHASE_MAX, SPIN_PHASE_MIN, SPIN_RATE_MAX, SPIN_RATE_MIN, TILT_MAX, TILT_MIN } from './appearance.ts';
+import { PULSE_PHASE_MAX, PULSE_PHASE_MIN, SPIN_PHASE_MAX, SPIN_PHASE_MIN, SPIN_RATE_MAX, SPIN_RATE_MIN, TILT_MAX, TILT_MIN } from './appearance.ts';
 import { DWELL_TEMPOS } from './dwell.ts';
 import { MOTE_TIERS, RESTING_BANDS, SKILL_TIERS } from './rules.ts';
 import { SHOT_FRAMINGS } from './shots.ts';
@@ -38,7 +38,9 @@ import { SHOT_FRAMINGS } from './shots.ts';
  * dates, so it would have to aggregate its Projects' `duration`s itself — the
  * derivation AD-3 keeps out of a renderer. **10** is Story 7.4's each Project's
  * `appearance`: an artifact carrying `9` names no map, so a renderer would have
- * to import the library or pick one itself. An artifact carrying `7` names no source, so the gate could
+ * to import the library or pick one itself. **11** is Story 9.4's each Client's
+ * `luminanceBand` and `appearance` (`pulsePhase`): an artifact carrying `10` gives
+ * a Star's light no recency, so a renderer would have to rank Clients itself. An artifact carrying `7` names no source, so the gate could
  * not tell whether it was solved from the `career.json` beside it. An artifact
  * still carrying `5` publishes no Skill tiers, and must fail rather than be read
  * by a scene that seats Motes by them — it would have to count shares itself,
@@ -50,7 +52,7 @@ import { SHOT_FRAMINGS } from './shots.ts';
  * the artifact fail its own gate, which is precisely what the gate exists to
  * prevent, and is why each was deliberately absent until the story that emits it.
  */
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 /** ISO 8601 year-month, matching the authored form exactly. */
 const IsoYearMonth = z
@@ -125,7 +127,7 @@ const ClientSpanSchema = z.strictObject({
 });
 
 /**
- * A Planet's appearance (Story 7.4), closed at five fields; a Star has none.
+ * A Planet's appearance (Story 7.4), closed at five fields. A Star's is its own (9.4).
  * Its agreement with the library and the ID is the gate's (`checkAppearance`).
  *
  * The bounds are inclusive and come from `appearance.ts`, because a rounded value
@@ -138,6 +140,14 @@ const AppearanceSchema = z.strictObject({
   tilt: z.number().finite().min(TILT_MIN).max(TILT_MAX),
   spinRate: z.number().finite().min(SPIN_RATE_MIN).max(SPIN_RATE_MAX),
   spinPhase: z.number().finite().min(SPIN_PHASE_MIN).max(SPIN_PHASE_MAX),
+});
+
+/**
+ * A Star's appearance (Story 9.4), closed at one field until 9.5 adds `tint`. Its
+ * agreement with the ID is the gate's (`checkAppearance`).
+ */
+const StarAppearanceSchema = z.strictObject({
+  pulsePhase: z.number().finite().min(PULSE_PHASE_MIN).max(PULSE_PHASE_MAX),
 });
 
 /**
@@ -270,6 +280,11 @@ const ArtifactClientSchema = z
     name: z.string().min(1),
     timeAxis: TimeAxisSchema,
     span: ClientSpanSchema,
+    // The Star's own band (9.4), over the Clients' latest recency: what its light
+    // carries under realism. The schematic outline does not read it.
+    luminanceBand: z.enum(RESTING_BANDS),
+    // From the ID alone (9.4), so the Star's pulse needs no derivation at runtime.
+    appearance: StarAppearanceSchema,
     position: PositionSchema,
     // An empty Client is a Star with no Planet: no orbit to frame, no start month
     // to place it on the Rail. Named, because "too small" against a document

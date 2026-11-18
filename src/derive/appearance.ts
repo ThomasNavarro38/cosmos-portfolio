@@ -11,6 +11,9 @@
  * with the same result in every engine; the value is then rounded.
  *
  * The ranges are starting values, unjudged: nothing has been seen lit yet.
+ *
+ * A Star's appearance (9.4) is `starAppearanceOf`: its pulse phase, from its ID by
+ * the same hash and rounding, under its own salt.
  */
 
 import { MAP_LIBRARY, type MapEntry } from './map-library.ts';
@@ -26,6 +29,15 @@ export const SPIN_RATE_MAX = 0.1;
 /** Radians: a full turn, the upper bound being 2π rounded to four places, as the value itself is. */
 export const SPIN_PHASE_MIN = 0;
 export const SPIN_PHASE_MAX = 6.2832;
+
+/** Radians: a Star's pulse phase (9.4), over the same full turn as the spin phase. */
+export const PULSE_PHASE_MIN = 0;
+export const PULSE_PHASE_MAX = 6.2832;
+
+/** A Star's appearance (9.4): where its slow pulse starts. 9.5 adds `tint`. */
+export interface StarAppearance {
+  readonly pulsePhase: number;
+}
 
 export interface Appearance {
   /** A library entry's bare id, so also the file's name. */
@@ -98,5 +110,16 @@ export function appearanceOf(id: string, library: readonly MapEntry[] = MAP_LIBR
     tilt: round(TILT_MIN + unit('tilt', id) * (TILT_MAX - TILT_MIN)),
     spinRate: round(SPIN_RATE_MIN + unit('spinRate', id) * (SPIN_RATE_MAX - SPIN_RATE_MIN)),
     spinPhase: round(SPIN_PHASE_MIN + unit('spinPhase', id) * (SPIN_PHASE_MAX - SPIN_PHASE_MIN)),
+  };
+}
+
+/**
+ * The appearance of the Star with this entity ID (9.4, AD-21 as amended): from the
+ * ID alone, with its own salt, so it is independent of every Planet field and
+ * nothing authored or solved reaches it. Colour and phase encode nothing.
+ */
+export function starAppearanceOf(id: string): StarAppearance {
+  return {
+    pulsePhase: round(PULSE_PHASE_MIN + unit('pulsePhase', id) * (PULSE_PHASE_MAX - PULSE_PHASE_MIN)),
   };
 }

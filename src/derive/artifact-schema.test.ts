@@ -96,8 +96,8 @@ test('SCHEMA_VERSION is a literal in the schema, so a mismatch fails', () => {
   }
 });
 
-test('the version is 10 now that each Project carries its appearance, and changing the shape means changing it', () => {
-  assert.equal(SCHEMA_VERSION, 10, 'Story 7.4 added each Project’s `appearance`, so the shape version is 10');
+test('the version is 11 now that each Client carries its band and appearance, and changing the shape means changing it', () => {
+  assert.equal(SCHEMA_VERSION, 11, 'Story 9.4 added each Client’s `luminanceBand` and `appearance`, so the shape version is 11');
   assert.equal(valid().schemaVersion, SCHEMA_VERSION, 'the emitter declares it');
 
   // Read off the source: the literal must be in the schema, not merely compared
@@ -698,11 +698,44 @@ test('a Project’s appearance is required, closed, and sits after orbitNormal',
   assert.equal(keys[keys.indexOf('orbitNormal') + 1], 'appearance', 'the key follows orbitNormal');
 });
 
-test('a Client carrying an appearance fails, since a Star has none', () => {
-  const broken = withAppearance();
-  broken.client['appearance'] = broken.look;
-  assertFails(validateArtifact(broken.doc), /clients\.0/, 'the closed schema refuses it');
-  assert.ok(ArtifactSchema.safeParse(copy(valid())).success, 'and the unbroken document has no such key');
+test('an artifact still declaring schemaVersion 10 is rejected', () => {
+  const old = copy(valid());
+  old['schemaVersion'] = 10;
+  assertFails(validateArtifact(old), /schemaVersion/, 'an artifact with no Star band must not be read on a guess');
+});
+
+test('a Client’s band and appearance are required and closed (9.4): a Planet’s appearance on a Star fails', () => {
+  const planetLook = withAppearance();
+  planetLook.client['appearance'] = planetLook.look;
+  assertFails(validateArtifact(planetLook.doc), /clients\.0\.appearance/, 'the closed schema refuses a Planet’s fields on a Star');
+  assert.ok(ArtifactSchema.safeParse(copy(valid())).success, 'and the unbroken document passes');
+
+  for (const field of ['luminanceBand', 'appearance']) {
+    const missing = withAppearance();
+    delete missing.client[field];
+    assertFails(validateArtifact(missing.doc), new RegExp(`clients\\.0\\.${field}`), `a Client with no ${field} is rejected`);
+  }
+  const noPhase = withAppearance();
+  delete (noPhase.client['appearance'] as Record<string, unknown>)['pulsePhase'];
+  assertFails(validateArtifact(noPhase.doc), /clients\.0\.appearance\.pulsePhase/, 'no pulsePhase');
+  const tinted = withAppearance();
+  (tinted.client['appearance'] as Record<string, unknown>)['tint'] = 'realism-star-blue';
+  assertFails(validateArtifact(tinted.doc), /clients\.0\.appearance/, 'no tint before 9.5');
+  for (const band of ['stroke-active', 'stroke-focus', 'stroke-dust', 'bright', 1]) {
+    const banded = withAppearance();
+    banded.client['luminanceBand'] = band;
+    assertFails(validateArtifact(banded.doc), /clients\.0\.luminanceBand/, `band ${String(band)}`);
+  }
+  for (const phase of [-0.0001, 6.2833, Number.NaN, Number.POSITIVE_INFINITY, '1']) {
+    const phased = withAppearance();
+    (phased.client['appearance'] as Record<string, unknown>)['pulsePhase'] = phase;
+    assertFails(validateArtifact(phased.doc), /clients\.0\.appearance\.pulsePhase/, `phase ${String(phase)}`);
+  }
+  for (const phase of [0, 6.2832]) {
+    const phased = withAppearance();
+    (phased.client['appearance'] as Record<string, unknown>)['pulsePhase'] = phase;
+    assert.deepEqual(validateArtifact(phased.doc), [], `phase ${phase} is inclusive`);
+  }
 });
 
 test('each appearance number outside its range, or not finite, fails naming the path; its bounds are inclusive', () => {

@@ -30,7 +30,7 @@ import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { validateCareer } from '../data/validate.ts';
-import { appearanceOf } from './appearance.ts';
+import { appearanceOf, starAppearanceOf } from './appearance.ts';
 import { BANNER, buildArtifact, serializeArtifact, stripBanner } from './artifact.ts';
 import { SCHEMA_VERSION, validateArtifact, type Artifact } from './artifact-schema.ts';
 import { DWELL_TEMPOS } from './dwell.ts';
@@ -2521,10 +2521,12 @@ function appearanceFixture(): {
   return { doc, project, write: () => writeTemp(serializeArtifact(doc)) };
 }
 
-test('the assembler emits each Project’s appearanceOf its ID, after orbitNormal, and a Star none', () => {
+test('the assembler emits each Project’s appearanceOf its ID, after orbitNormal, and each Star its starAppearanceOf after its band', () => {
   const artifact = artifactOf(...opposedEntries());
   for (const client of artifact.clients) {
-    assert.ok(!('appearance' in client), client.id);
+    assert.deepEqual(client.appearance, starAppearanceOf(client.id), client.id);
+    const clientKeys = Object.keys(client);
+    assert.deepEqual(clientKeys.slice(clientKeys.indexOf('span') + 1, clientKeys.indexOf('span') + 3), ['luminanceBand', 'appearance'], client.id);
     for (const project of client.projects) {
       assert.deepEqual(project.appearance, appearanceOf(project.id), project.id);
       const keys = Object.keys(project);
@@ -2562,6 +2564,46 @@ test('checkAppearance compares every key either side holds: a key lost, and a ke
   const extraLines = checkAppearance(extra.doc);
   assert.equal(extraLines.length, 1, extraLines.join('\n'));
   assert.ok((extraLines[0] as string).includes(extra.project.id) && (extraLines[0] as string).includes('appearance.hue'), extraLines.join('\n'));
+});
+
+test('checkAppearance holds each Star (9.4): a hand-edited band, pulse phase or extra key fails naming the Client and the field', () => {
+  const sound = appearanceFixture();
+  const client = sound.doc.clients[0];
+  assert.ok(client !== undefined);
+  assert.deepEqual(checkAppearance(sound.doc), []);
+
+  const banded = appearanceFixture();
+  const bandedClient = banded.doc.clients[0] as (typeof banded.doc.clients)[number];
+  bandedClient.luminanceBand = bandedClient.luminanceBand === 'stroke-rest' ? 'stroke-near' : 'stroke-rest';
+  const bandLines = checkAppearance(banded.doc);
+  assert.equal(bandLines.length, 1, bandLines.join('\n'));
+  assert.ok((bandLines[0] as string).includes(client.id) && (bandLines[0] as string).includes('luminanceBand'), bandLines.join('\n'));
+
+  const phased = appearanceFixture();
+  const phasedClient = phased.doc.clients[0] as (typeof phased.doc.clients)[number];
+  (phasedClient.appearance as { pulsePhase: number }).pulsePhase = phasedClient.appearance.pulsePhase === 1 ? 2 : 1;
+  const phaseLines = checkAppearance(phased.doc);
+  assert.equal(phaseLines.length, 1, phaseLines.join('\n'));
+  assert.ok((phaseLines[0] as string).includes(client.id) && (phaseLines[0] as string).includes('appearance.pulsePhase'), phaseLines.join('\n'));
+
+  const extra = appearanceFixture();
+  ((extra.doc.clients[0] as (typeof extra.doc.clients)[number]).appearance as Record<string, unknown>)['tint'] = 'realism-star-blue';
+  const extraLines = checkAppearance(extra.doc);
+  assert.ok(extraLines.some((line) => line.includes(client.id) && line.includes('appearance.tint')), extraLines.join('\n'));
+
+  // A Project's dates edited without a re-solve move the Star's band, so the gate sees it.
+  const redated = appearanceFixture();
+  const last = redated.doc.clients.at(-1) as (typeof redated.doc.clients)[number];
+  const first = redated.doc.clients[0] as (typeof redated.doc.clients)[number];
+  // The fixture's oldest and newest Clients sit in different bands, so moving the newest's dates before every other must move its band.
+  assert.equal(first.luminanceBand, 'stroke-rest', 'the precondition: the oldest Client is stroke-rest');
+  assert.equal(last.luminanceBand, 'stroke-near', 'the precondition: the newest Client is stroke-near');
+  for (const project of last.projects) (project.content.duration as { start: string; end: string | null }) = { start: '1990-01', end: '1990-02' };
+  assert.ok(checkAppearance(redated.doc).some((line) => line.includes(last.id) && line.includes('luminanceBand')), checkAppearance(redated.doc).join('\n'));
+
+  const gate = checkArtifact(banded.write());
+  assert.match(gate[0] as string, /committed layout artifact.*appearance/, gate.join('\n'));
+  assert.ok(gate.some((line) => line.includes(client.id)), gate.join('\n'));
 });
 
 test('checkAppearance names the Project and the map when the map has no library entry', () => {
@@ -2633,6 +2675,8 @@ test('the gate re-derives appearance only: the check solves nothing and reads no
   assert.ok(start >= 0 && end > start);
   const check = body.slice(start, end);
   assert.match(check, /appearanceOf\(project\.id, library\)/, 'it reads the ID in the document and the library');
+  assert.match(check, /starAppearanceOf\(client\.id\)/, 'a Star’s from its ID alone');
+  assert.match(check, /clientLuminanceBands\(/, 'and its band through the entities’ own function');
   assert.doesNotMatch(check, /solveArtifact|solveLayout|deriveEntities|runPipeline|readFileSync|existsSync/, 'and solves nothing');
 });
 

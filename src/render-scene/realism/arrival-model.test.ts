@@ -23,8 +23,8 @@ const DELTA = 1 / 60;
 const APPEARANCE = { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.05, spinPhase: 1.5 };
 const ARTIFACT: RealismArtifact = {
   clients: [
-    { id: 'client:a', position: { x: 0, y: 0, z: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, appearance: APPEARANCE }, { id: 'project:a/two', clientId: 'client:a', position: { x: -10, y: 0, z: 0 }, appearance: { ...APPEARANCE, map: 'mars' } }] },
-    { id: 'client:b', position: { x: 100, y: 0, z: 0 }, projects: [] },
+    { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, appearance: APPEARANCE }, { id: 'project:a/two', clientId: 'client:a', position: { x: -10, y: 0, z: 0 }, appearance: { ...APPEARANCE, map: 'mars' } }] },
+    { id: 'client:b', position: { x: 100, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { pulsePhase: 0 }, projects: [] },
   ],
 };
 const IMAGES: ReadonlyMap<string, ImageBitmap> = new Map([['moon', {} as ImageBitmap], ['mars', {} as ImageBitmap]]);
@@ -305,10 +305,10 @@ test('an upload that throws throws from warm synchronously', () => {
 });
 
 /** The real owner over the real layer, with the maps decoded. */
-async function realOwner(renderer: WebGLRenderer) {
+async function realOwner(renderer: WebGLRenderer, build: typeof createFillLayer = createFillLayer) {
   const scene = new Scene();
   let resets = 0;
-  const owner = createRealismOwner<ImageBitmap, Scene, Camera, WebGLRenderer>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(IMAGES), createFillLayer }), () => { resets += 1; });
+  const owner = createRealismOwner<ImageBitmap, Scene, Camera, WebGLRenderer>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(IMAGES), createFillLayer: build }), () => { resets += 1; });
   const draw = { scene, camera: new PerspectiveCamera(), renderer, delta: DELTA, reduced: false, pace: 1, subject: (): string | null => null };
   owner.frame(ARTIFACT, '/', draw);
   owner.frame(ARTIFACT, '/', draw);
@@ -379,4 +379,76 @@ test('under the real owner, a remount warms again before its first realism frame
   assert.equal(fadeOf(second), 1, 'whole on its first visible frame');
   assert.ok(fillsOf(second).every((mesh) => materialOf(mesh).depthWrite));
   assert.deepEqual(scene.children, [], 'the first scene is left empty');
+});
+
+// --- The fade read back, for the line-work it replaces (9.4) -------------------------------------
+
+/** What `fade()` must read on the real layer: 0 at build, the stepped fade after `arrive(true)`, 1 at once after `arrive(false)`. */
+function auditLayerFade(build: typeof createFillLayer): string[] {
+  const failures: string[] = [];
+  const layer = build(ARTIFACT, IMAGES);
+  if (layer.fade() !== 0) failures.push(`fade() reads ${layer.fade()} at build`);
+  layer.arrive(true);
+  let expected = 0;
+  const camera = new PerspectiveCamera();
+  for (let at = 0; at < 80; at += 1) {
+    layer.frame(camera, DELTA, false, 1, null);
+    expected = nextFade(expected, DELTA, 1);
+    if (layer.fade() !== expected) {
+      failures.push(`fade() reads ${layer.fade()} on frame ${at}, not ${expected}`);
+      break;
+    }
+  }
+  if (expected !== 1) failures.push('the fade never arrived');
+  const whole = build(ARTIFACT, IMAGES);
+  whole.arrive(false);
+  if (whole.fade() !== 1) failures.push(`fade() reads ${whole.fade()} after arrive(false)`);
+  return failures;
+}
+
+/** What the real owner's `lineWorkFade()` must read over this layer: 1 while warming and on the warm draw, `1 - fade` once arrived, 0 once whole. */
+async function auditOwnerLineWork(build: typeof createFillLayer): Promise<string[]> {
+  const failures: string[] = [];
+  const fake = fakeRenderer({ pending: true });
+  const { owner, scene, draw } = await realOwner(fake.renderer, build);
+  owner.frame(ARTIFACT, '/', draw);
+  if (owner.lineWorkFade() !== 1) failures.push(`warming reads ${owner.lineWorkFade()}`);
+  fake.finish();
+  await new Promise((resolve) => setImmediate(resolve));
+  owner.frame(ARTIFACT, '/', draw);
+  if (owner.lineWorkFade() !== 1) failures.push(`the warm draw reads ${owner.lineWorkFade()}`);
+  let arrivedFrames = 0;
+  for (let at = 0; at < 80; at += 1) {
+    owner.frame(ARTIFACT, '/', draw);
+    const uniform = fadeOf(scene);
+    if (owner.lineWorkFade() !== 1 - uniform) {
+      failures.push(`an arrived frame reads ${owner.lineWorkFade()} at fade ${uniform}`);
+      break;
+    }
+    if (uniform > 0 && uniform < 1) arrivedFrames += 1;
+  }
+  if (arrivedFrames < 2) failures.push(`only ${arrivedFrames} frames between 0 and 1`);
+  if (owner.lineWorkFade() !== 0) failures.push(`whole, it reads ${owner.lineWorkFade()}`);
+  return failures;
+}
+
+/** The real layer with its `fade()` replaced, as a mutation of the read. */
+const withFade = (read: (real: () => number) => number): typeof createFillLayer => (artifact, images) => {
+  const real = createFillLayer(artifact, images);
+  return { ...real, fade: () => read(real.fade) };
+};
+
+test('the real layer\'s fade() is 0 at build, steps by nextFade after arrive(true), and is 1 at once after arrive(false)', () => {
+  assert.deepEqual(auditLayerFade(createFillLayer), []);
+});
+
+test('over the real owner and layer, lineWorkFade() is 1 while warming and on the warm draw, then 1 - fade, and 0 once whole', async () => {
+  assert.deepEqual(await auditOwnerLineWork(createFillLayer), []);
+});
+
+test('the fade-read audits reject a fade() fixed at 0, and one reading 1 - fade', async () => {
+  for (const [name, build] of [['fade() { return 0; }', withFade(() => 0)], ['return 1 - fade.value', withFade((real) => 1 - real())]] as const) {
+    assert.notDeepEqual(auditLayerFade(build), [], `${name}: the layer audit`);
+    assert.notDeepEqual(await auditOwnerLineWork(build), [], `${name}: the owner audit`);
+  }
 });

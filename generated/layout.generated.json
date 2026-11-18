@@ -1,5 +1,5 @@
 { "$banner": "GENERATED FILE — do not edit by hand. Produced by src/derive/index.ts from src/data/career.json; run `npm run solve` to regenerate. Hand edits are overwritten by the next solve. The build gate rejects an artifact that breaks its invariants or was solved from a different career.json, but not a hand edit that keeps both.",
-  "schemaVersion": 10,
+  "schemaVersion": 11,
   "asOf": "2026-09",
   "sourceDigest": "7495d150d1bff922fbc94a7f7ec261df2bfd1ab1643948f4510c9fb573aec253",
   "clients": [
@@ -10,6 +10,10 @@
       "span": {
         "start": "2016-05",
         "end": "2017-07"
+      },
+      "luminanceBand": "stroke-rest",
+      "appearance": {
+        "pulsePhase": 5.3998
       },
       "position": {
         "x": -132.0502,
@@ -76,6 +80,10 @@
       "span": {
         "start": "2017-09",
         "end": "2019-03"
+      },
+      "luminanceBand": "stroke-rest",
+      "appearance": {
+        "pulsePhase": 4.9916
       },
       "position": {
         "x": -79.5469,
@@ -200,6 +208,10 @@
         "start": "2019-05",
         "end": "2020-11"
       },
+      "luminanceBand": "stroke-rest",
+      "appearance": {
+        "pulsePhase": 1.3929
+      },
       "position": {
         "x": 26.145,
         "y": 24.679,
@@ -272,6 +284,10 @@
       "span": {
         "start": "2020-11",
         "end": "2022-08"
+      },
+      "luminanceBand": "stroke-near",
+      "appearance": {
+        "pulsePhase": 1.5431
       },
       "position": {
         "x": 68.1233,
@@ -346,6 +362,10 @@
       "span": {
         "start": "2019-03",
         "end": "2024-02"
+      },
+      "luminanceBand": "stroke-near",
+      "appearance": {
+        "pulsePhase": 4.9518
       },
       "position": {
         "x": -29.824,
@@ -479,6 +499,10 @@
       "span": {
         "start": "2024-02",
         "end": null
+      },
+      "luminanceBand": "stroke-near",
+      "appearance": {
+        "pulsePhase": 5.062
       },
       "position": {
         "x": 132.3499,

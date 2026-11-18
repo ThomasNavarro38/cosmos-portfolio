@@ -62,6 +62,11 @@
  *
  * `markUploaded`, `markShown` and `markFailed` stay public.
  *
+ * **The line-work it replaces (9.4).** `lineWorkFade()` is `1 - fade` once the arrival is
+ * `arrived`, and 1 at every other point and after failure, so a Star's outline and core
+ * dot fall on the layer's one fade and return, whole, when the layer goes. Read by
+ * `body-field.tsx` through the mount, each frame.
+ *
  * **Pure.** It imports nothing and is not in `navigationStore`. The import and the
  * sampling reset arrive as arguments and the layer behind a port typed here, so
  * `realism-mount.tsx` stays the only shipped module naming the chunk, and every rule
@@ -77,11 +82,15 @@ interface RealismPoint {
   readonly z: number;
 }
 
-/** The artifact as far as realism is concerned: each Planet's map and turn, and where it and its Star stand. Structural, so nothing here imports `src/derive/`. */
+/** The artifact as far as realism is concerned: each Planet's map and turn, each Star's band and pulse phase (9.4), and where each stands. Structural, so nothing here imports `src/derive/`. The band is a string here, so the Star model's check of it is a real one. */
 export interface RealismArtifact {
   readonly clients: readonly {
     readonly id: string;
     readonly position: RealismPoint;
+    readonly luminanceBand: string;
+    readonly appearance: {
+      readonly pulsePhase: number;
+    };
     readonly projects: readonly {
       readonly id: string;
       readonly clientId: string;
@@ -120,6 +129,8 @@ export interface RealismLayer<Scene = unknown, Camera = unknown, Renderer = unkn
   /** The first visible frame: with `fade`, the layer fades in from 0; without, it is whole at once. */
   arrive(fade: boolean): void;
   frame(camera: Camera, delta: number, reduced: boolean, pace: number, subject: string | null): void;
+  /** The one fade's value, 0 to 1 (9.4). */
+  fade(): number;
   dispose(): void;
 }
 
@@ -149,6 +160,13 @@ export interface RealismOwner<Image, Scene = unknown, Camera = unknown, Renderer
   status(): RealismStatus;
   /** The decoded images by map id, or `null` while the document holds none. */
   images(): ReadonlyMap<string, Image> | null;
+  /**
+   * What a Star's outline and core dot are drawn at (9.4, AD-22 as amended): `1 - fade`
+   * once this Canvas's layer has arrived, so they fall as it rises; 1 with no layer, while
+   * it warms and on its hidden warm draw, and after failure. A fade read that throws, or
+   * reads no finite number, is 1. Never throws.
+   */
+  lineWorkFade(): number;
 }
 
 const MOVES: Readonly<Record<DocumentStatus, readonly DocumentStatus[]>> = {
@@ -309,6 +327,17 @@ export function createRealismOwner<Image, Scene = unknown, Camera = unknown, Ren
     },
     images() {
       return document === 'decoded' || document === 'shown' ? held : null;
+    },
+    lineWorkFade() {
+      if (layer === null || arrival !== 'arrived') return 1;
+      try {
+        const fade = layer.fade();
+        if (!Number.isFinite(fade)) return 1;
+        return 1 - Math.min(Math.max(fade, 0), 1);
+      } catch {
+        // A read is not a stage: the line-work stays whole, and nothing else changes.
+        return 1;
+      }
     },
   };
 }

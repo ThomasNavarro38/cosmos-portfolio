@@ -22,7 +22,8 @@
  * **One fade, shared.** One uniform object is created here and handed to every Planet
  * fill, Star fill and glow. It sits at 0 from the build, until `arrive(true)` starts it
  * stepping each frame over `FADE_SECONDS × pace`, or `arrive(false)` sets it whole. No
- * fill writes depth until it reaches 1; on that frame every fill does.
+ * fill writes depth until it reaches 1; on that frame every fill does. `fade()` reads it
+ * back (9.4), so the owner can lower a Star's outline and core dot as it rises.
  *
  * **The images stay.** `dispose` frees the GPU's copies and never closes a bitmap:
  * a later Canvas builds again from them, and after a lost context three uploads
@@ -76,8 +77,10 @@ export interface FillLayer {
   attach(scene: Scene): void;
   /** Begins the arrival: with `fade`, every later `frame` steps the fade up from 0, the first of them in the same tick as this call, so the first visible frame is already one clamped step in; without, the layer is whole at once and every fill writes depth. */
   arrive(fade: boolean): void;
-  /** One frame: the fade's step, each disc to the camera, each map to its turn, each Star's rise toward the subject. The spin takes `reduced`, and the rise and the fade take `pace`. */
+  /** One frame: the fade's step, each disc to the camera, each map to its turn, each Star's rise toward the subject and its pulse. The spin and the Stars' clock take `reduced`, and the rise and the fade take `pace`. */
   frame(camera: Camera, delta: number, reduced: boolean, pace: number, subject: string | null): void;
+  /** The one fade's value, 0 to 1 (9.4): what the owner reads for the line-work it replaces. */
+  fade(): number;
   /** Removes the fills and glows and frees the GPU's copies. Safe twice. The images are kept. */
   dispose(): void;
 }
@@ -189,7 +192,10 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
         mesh.quaternion.copy(facing);
         turn.fromArray(mapFromWorld(plan.tilt, spinAngle(plan.spinPhase, plan.spinRate, seconds)));
       }
-      starRows.frame(facing, subject, delta, pace);
+      starRows.frame(facing, subject, delta, pace, reduced);
+    },
+    fade() {
+      return fade.value;
     },
     dispose() {
       if (disposed) return;

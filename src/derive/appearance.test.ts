@@ -18,10 +18,13 @@ import { filesUnder, isTestFile, SOURCE_MODULE, stripComments, stripCommentsAndS
 import {
   appearanceOf,
   hash,
+  PULSE_PHASE_MAX,
+  PULSE_PHASE_MIN,
   SPIN_PHASE_MAX,
   SPIN_PHASE_MIN,
   SPIN_RATE_MAX,
   SPIN_RATE_MIN,
+  starAppearanceOf,
   TILT_MAX,
   TILT_MIN,
 } from './appearance.ts';
@@ -201,12 +204,36 @@ test('an empty library throws naming the ID', () => {
   assert.throws(() => appearanceOf('project:simsu/named', []), /project:simsu\/named/);
 });
 
+// --- A Star's appearance (9.4) ---------------------------------------------------------------------
+
+test('a Star’s appearance is one pulse phase in its range, rounded to four places, with no -0', () => {
+  assert.deepEqual([PULSE_PHASE_MIN, PULSE_PHASE_MAX], [0, 6.2832]);
+  for (const id of IDS.map((value) => value.replace('project:', 'client:'))) {
+    const look = starAppearanceOf(id);
+    assert.deepEqual(Object.keys(look), ['pulsePhase'], id);
+    assert.ok(look.pulsePhase >= PULSE_PHASE_MIN && look.pulsePhase <= PULSE_PHASE_MAX, `${id} pulsePhase ${look.pulsePhase}`);
+    assert.equal(look.pulsePhase, Number(look.pulsePhase.toFixed(4)), id);
+    assert.ok(!Object.is(look.pulsePhase, -0), id);
+  }
+});
+
+test('a Star’s pulse phase is salted `pulsePhase` from its ID alone, and spreads', () => {
+  const id = 'client:simsu';
+  assert.equal(starAppearanceOf(id).pulsePhase, Math.round((hash(`pulsePhase\0${id}`) / 2 ** 32) * PULSE_PHASE_MAX * 1e4) / 1e4 + 0);
+  assert.deepEqual(starAppearanceOf(id), starAppearanceOf(id));
+  assert.notEqual(starAppearanceOf(id).pulsePhase, appearanceOf(id).spinPhase, 'its own salt, not the spin phase');
+  const phases = IDS.map((value) => starAppearanceOf(value).pulsePhase);
+  for (const quarter of [0, 1, 2, 3]) {
+    assert.ok(phases.some((phase) => phase >= (quarter * PULSE_PHASE_MAX) / 4 && phase < ((quarter + 1) * PULSE_PHASE_MAX) / 4), `quarter ${quarter}`);
+  }
+});
+
 // --- The committed artifact -----------------------------------------------------------------------
 
-test('every committed Project’s appearance is its re-derivation, and no Client has the key', () => {
+test('every committed Project’s appearance is its re-derivation, and every Client’s is its Star’s (9.4)', () => {
   assert.ok(COMMITTED.clients.length > 0);
   for (const client of COMMITTED.clients) {
-    assert.ok(!('appearance' in client), `${client.id} is a Star`);
+    assert.deepEqual(client['appearance'], starAppearanceOf(client.id), `${client.id} is a Star`);
     assert.ok(client.projects.length > 0);
     for (const project of client.projects) assert.deepEqual(project.appearance, appearanceOf(project.id), project.id);
   }
@@ -290,7 +317,7 @@ test('the assignment’s rounding is the solve’s four places, and each keeps i
 const APPEARANCE_READERS: readonly string[] = ['src/derive/artifact-schema.ts', 'src/derive/artifact.ts', 'src/derive/index.ts'];
 
 /** What the schema may take from the module: bounds, and never the assignment. */
-const SCHEMA_TAKES = /^(?:TILT|SPIN_RATE|SPIN_PHASE)_(?:MIN|MAX)$/;
+const SCHEMA_TAKES = /^(?:TILT|SPIN_RATE|SPIN_PHASE|PULSE_PHASE)_(?:MIN|MAX)$/;
 
 interface Module {
   readonly path: string;

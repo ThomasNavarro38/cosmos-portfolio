@@ -12,7 +12,7 @@
  * the document rather than of the data.
  */
 
-import { appearanceOf } from './appearance.ts';
+import { appearanceOf, starAppearanceOf } from './appearance.ts';
 import { byId, type ClientEntity, type EntityGraph, type ProjectEntity } from './entities.ts';
 import type { Position, SolvedLayout } from './solve.ts';
 import { SCHEMA_VERSION, type Artifact, type ArtifactClient, type ArtifactProject } from './artifact-schema.ts';
@@ -90,6 +90,10 @@ function clientOf(client: ClientEntity, layout: SolvedLayout): ArtifactClient {
     // The calendar span (4.5), derived in `entities.ts` beside `timeAxis`, so the
     // Fallback draws a Client's years without aggregating its Projects' dates.
     span: client.span,
+    // The Star's band (9.4), resolved in `entities.ts` by the recency rule.
+    luminanceBand: client.luminanceBand,
+    // From the ID alone, as a Planet's is (9.4).
+    appearance: starAppearanceOf(client.id),
     position: positionOf(layout, client.id),
     // Projects in ID order, so the document's own ordering is content-derived
     // and a re-ordered `career.json` emits byte-identical bytes. This is the

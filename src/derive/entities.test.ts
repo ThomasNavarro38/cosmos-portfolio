@@ -18,7 +18,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { CareerSchema } from '../data/schema.ts';
 import { RESTING_BANDS } from './rules.ts';
-import { clientFoldWarnings, clientIdOf, clientSpanOf, deriveEntities, isDeepProject, projectIdOf } from './entities.ts';
+import { clientFoldWarnings, clientIdOf, clientLuminanceBands, clientSpanOf, deriveEntities, isDeepProject, projectIdOf } from './entities.ts';
 import { allProjects, AS_OF, baseEntry, entry, graphOf as derive } from './fixtures.test.ts';
 
 /** The real authored file, resolved the way `src/data/validate.test.ts` does. */
@@ -403,4 +403,48 @@ test('clientSpanOf: order-free, null wins, and an empty set throws', () => {
   assert.deepEqual(clientSpanOf([{ start: '2020-01', end: null }, ...durations]), { start: '2018-07', end: null });
   assert.deepEqual(clientSpanOf([...durations, { start: '2022-01', end: null }]), { start: '2018-07', end: null });
   assert.throws(() => clientSpanOf([]), /at least one/);
+});
+
+// --- A Star's band (9.4) ------------------------------------------------------
+
+test('six Clients by latest Project recency: the older half is stroke-rest and the newer half stroke-near', () => {
+  const graph = derive(
+    entry('A', 'Old', { duration: { start: '2010-01', end: '2011-01' } }),
+    entry('A', 'Late', { duration: { start: '2012-01', end: '2015-06' } }),
+    entry('B', 'One', { duration: { start: '2013-01', end: '2014-01' } }),
+    entry('C', 'One', { duration: { start: '2015-01', end: '2016-01' } }),
+    entry('D', 'One', { duration: { start: '2016-01', end: '2018-01' } }),
+    entry('E', 'One', { duration: { start: '2018-01', end: '2020-01' } }),
+    entry('F', 'One', { duration: { start: '2021-01', end: null } }),
+  );
+  const band = (id: string) => graph.clients.find((client) => client.id === id)?.luminanceBand;
+  // B (2014-01) is older than A, whose latest Project ends 2015-06: the latest, not the first.
+  assert.deepEqual(['b', 'a', 'c', 'd', 'e', 'f'].map((id) => band(`client:${id}`)), [
+    'stroke-rest',
+    'stroke-rest',
+    'stroke-rest',
+    'stroke-near',
+    'stroke-near',
+    'stroke-near',
+  ]);
+});
+
+test('one Client alone is stroke-near, by the zero-width rule, and equal recency shares a band', () => {
+  assert.equal(derive(entry('Solo', 'One', { duration: { start: '2010-01', end: '2011-01' } })).clients[0]?.luminanceBand, 'stroke-near');
+  const tied = derive(
+    entry('A', 'One', { duration: { start: '2010-01', end: '2012-01' } }),
+    entry('B', 'One', { duration: { start: '2011-01', end: '2012-01' } }),
+    entry('C', 'One', { duration: { start: '2019-01', end: null } }),
+  );
+  assert.deepEqual(tied.clients.map((client) => client.luminanceBand), ['stroke-rest', 'stroke-rest', 'stroke-near']);
+});
+
+test('clientLuminanceBands: order-free, ongoing is current, and an empty Client throws naming it', () => {
+  const clients = [
+    { id: 'client:a', durations: [{ start: '2010-01', end: '2011-01' }] },
+    { id: 'client:b', durations: [{ start: '2012-01', end: null }, { start: '2010-01', end: '2010-06' }] },
+  ];
+  assert.deepEqual([...clientLuminanceBands(clients, AS_OF)], [['client:a', 'stroke-rest'], ['client:b', 'stroke-near']]);
+  assert.deepEqual(new Map(clientLuminanceBands([...clients].reverse(), AS_OF)), new Map(clientLuminanceBands(clients, AS_OF)));
+  assert.throws(() => clientLuminanceBands([{ id: 'client:empty', durations: [] }], AS_OF), /client:empty/);
 });

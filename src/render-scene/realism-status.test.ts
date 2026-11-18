@@ -19,7 +19,7 @@ import { createRealismOwner, moveStatus, type DocumentStatus, type RealismArtifa
 
 const ORIGIN = { x: 0, y: 0, z: 0 };
 const ARTIFACT: RealismArtifact = {
-  clients: [{ id: 'client:a', position: ORIGIN, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, appearance: { map: 'moon', meanLuminance: 0.3, tilt: 0, spinRate: 0.05, spinPhase: 0 } }] }],
+  clients: [{ id: 'client:a', position: ORIGIN, luminanceBand: 'stroke-rest', appearance: { pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, appearance: { map: 'moon', meanLuminance: 0.3, tilt: 0, spinRate: 0.05, spinPhase: 0 } }] }],
 };
 const DRAW: RealismDraw = { scene: 'scene', camera: 'camera', renderer: 'renderer', delta: 0.5, reduced: false, pace: 1, subject: () => null };
 const BASE = '/base/';
@@ -35,6 +35,8 @@ interface Fails {
   readonly dispose?: boolean;
   /** How the warm-up ends: resolved at once by default. */
   readonly warm?: 'throws' | 'rejects' | 'pending';
+  /** What a fade read does (9.4): 0.25 by default. */
+  readonly fade?: () => number;
 }
 
 /** A layer recording what it was asked, with each method's failure chosen by the row. `settle` ends a pending warm-up. */
@@ -58,6 +60,9 @@ function fakeLayer(calls: string[], fails: Fails = {}): RealismLayer & { settle(
     frame(camera, delta, reduced) {
       calls.push(`frame ${String(camera)} ${delta} ${reduced}`);
       if (fails.frame) throw new Error('frame');
+    },
+    fade() {
+      return fails.fade === undefined ? 0.25 : fails.fade();
     },
     dispose() {
       calls.push('dispose');
@@ -825,6 +830,7 @@ function recordingLayer(seen: unknown[][]): RealismLayer {
     frame(_camera, _delta, _reduced, pace, subject) {
       seen.push([pace, subject]);
     },
+    fade: () => 1,
     dispose() {},
   };
 }
@@ -931,6 +937,9 @@ const MOUNT_LINES: readonly string[] = [
   "import { createRealismOwner, type RealismArtifact } from './realism-status.ts';",
   "import { sceneSubject } from './stroke-model.ts';",
   `const owner = createRealismOwner(() => ${THE_IMPORT}, () => resetFrameSampling());`,
+  'export function lineWorkFade(): number {',
+  '  return owner.lineWorkFade();',
+  '}',
   'export interface RealismMountProps {',
   '  readonly artifact: RealismArtifact;',
   '  readonly rail: Rail;',
@@ -993,6 +1002,9 @@ test('the mount audit rejects each departure, and a comment is not one', () => {
     ['the owner exported', (s: string) => `${s}\nexport { owner };\n`],
     ['the owner exported where it is bound', (s: string) => s.replace('const owner =', 'export const owner =')],
     ['a second component', (s: string) => `${s}\nexport function Other() {\n  return null;\n}\n`],
+    ['the line-work fade fixed', (s: string) => s.replace('  return owner.lineWorkFade();', '  return 1;')],
+    ['the line-work fade read off the owner’s status', (s: string) => s.replace('  return owner.lineWorkFade();', "  return owner.status().document === 'shown' ? 0 : 1;")],
+    ['the owner handed out through the fade', (s: string) => s.replace('export function lineWorkFade(): number {\n  return owner.lineWorkFade();', 'export function lineWorkFade() {\n  return owner;')],
     ['a module-scope call', (s: string) => `${s}\nowner.enterCanvas();\n`],
     ['a module-scope call, before the owner is used', (s: string) => s.replace('export interface RealismMountProps {', 'void BASE.length;\nexport interface RealismMountProps {')],
   ] as const) {
@@ -1162,4 +1174,58 @@ test('no status or identifier in the owner, the mount or the chunk contains a ga
   for (const line of ['const d = new ImageBitmapLoader();', 'decoder.loadAsync(url);', '// the loader, loading', 'const loaded = true;']) {
     assert.deepEqual(auditGateFree([{ path, text: line }]), [], line);
   }
+});
+
+// --- The line-work it replaces (9.4) --------------------------------------------------------------
+
+test('lineWorkFade is 1 with no layer, while it warms and on the warm draw, and 1 − fade once arrived', async () => {
+  let fade = 0.25;
+  const { owner } = ownerOver(undefined, () => fakeLayer([], { warm: 'pending', fade: () => fade }));
+  assert.equal(owner.lineWorkFade(), 1, 'idle');
+  await frames(owner, 2);
+  assert.equal(owner.status().document, 'decoded');
+  assert.equal(owner.lineWorkFade(), 1, 'decoded, no layer');
+  owner.frame(ARTIFACT, BASE, DRAW);
+  await settled();
+  assert.equal(owner.lineWorkFade(), 1, 'warming');
+  const pending = ownerOver(undefined, () => fakeLayer([], { fade: () => fade }));
+  await frames(pending.owner, 2);
+  pending.owner.frame(ARTIFACT, BASE, DRAW);
+  await settled();
+  pending.owner.frame(ARTIFACT, BASE, DRAW);
+  assert.equal(pending.owner.lineWorkFade(), 1, 'the hidden warm draw');
+  pending.owner.frame(ARTIFACT, BASE, DRAW);
+  assert.equal(pending.owner.lineWorkFade(), 0.75, 'arrived at fade 0.25');
+  fade = 1;
+  assert.equal(pending.owner.lineWorkFade(), 0, 'arrived whole: the marks are hidden');
+  fade = 0;
+  assert.equal(pending.owner.lineWorkFade(), 1);
+  fade = 1.5;
+  assert.equal(pending.owner.lineWorkFade(), 0, 'clamped');
+});
+
+test('lineWorkFade is 1 after failure, and on a fade read that throws or is not finite, and never throws', async () => {
+  for (const read of [() => { throw new Error('fade'); }, () => Number.NaN, () => Number.POSITIVE_INFINITY, () => undefined as unknown as number]) {
+    await silently(async () => {
+      const { owner } = ownerOver(undefined, () => fakeLayer([], { fade: read }));
+      await frames(owner, 2);
+      await arrive(owner);
+      assert.doesNotThrow(() => owner.lineWorkFade());
+      assert.equal(owner.lineWorkFade(), 1);
+      assert.notEqual(owner.status().document, 'failed', 'a read is not a stage');
+    });
+  }
+  const { owner } = ownerOver(undefined, () => fakeLayer([], { frame: false, fade: () => 1 }));
+  await frames(owner, 2);
+  await arrive(owner);
+  assert.equal(owner.lineWorkFade(), 0);
+  owner.markFailed();
+  assert.equal(owner.lineWorkFade(), 1, 'the marks return, whole, when the layer goes');
+  const left = ownerOver(undefined, () => fakeLayer([], { fade: () => 1 }));
+  await frames(left.owner, 2);
+  const leave = left.owner.enterCanvas();
+  await arrive(left.owner);
+  assert.equal(left.owner.lineWorkFade(), 0);
+  leave();
+  assert.equal(left.owner.lineWorkFade(), 1, 'and when the Canvas leaves');
 });

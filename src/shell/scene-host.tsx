@@ -135,6 +135,9 @@ export interface SceneHostArtifact {
     // The Client's name, published as-is on its Star (9.3, FR-11).
     readonly name: string;
     readonly position: { readonly x: number; readonly y: number; readonly z: number };
+    // The Star's band and pulse phase (9.4), which only its light under realism reads. The host reads neither.
+    readonly luminanceBand: string;
+    readonly appearance: { readonly pulsePhase: number };
     readonly projects: readonly {
       readonly id: string;
       readonly clientId: string;
