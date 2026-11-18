@@ -56,7 +56,7 @@ The wrapper itself (the variant `none`: wrapper, no object) costs **+3,473** in 
 | ring | +1,583 | 10,143 | 13,857 | +24 | 953,063 | **6,937** | `RING_RADIUS_RATIO`, `RingGeometry`, `bodyRadius` |
 | belt + nebula + ring | +6,192 | 14,752 | 9,248 | +54 | 953,093 | **6,907** | all seven above |
 
-As measured, with the wrapper in: `none` 12,033 / 953,079; belt 14,194 / 953,109; nebula 14,502 / 953,093; ring 13,616 / 953,103; all three 18,225 / 953,133. Every one is within both limits. Chunk files per variant are in `bytes.json`.
+As measured, with the wrapper in (`realism` / `scene`, then `scene` headroom left): `none` 12,033 / 953,079, 6,921 left; belt 14,194 / 953,109, 6,891; nebula 14,502 / 953,093, 6,907; ring 13,616 / 953,103, 6,897; all three 18,225 / 953,133, 6,867. Every one is within both limits. In `bytes.json`, each variant's `realismHeadroom`/`sceneHeadroom` hold these with-wrapper figures, and its `shipLike` block holds the ship-like figures in the table above. Chunk files per variant are there too.
 
 Checks enforced by the script, all passing:
 
@@ -66,7 +66,7 @@ Checks enforced by the script, all passing:
 
 **No new `three` class lands in the `scene` chunk.** R3F's catalogue already keeps the whole `three` namespace there, `RingGeometry` included. The `scene` deltas are only new *exports* of things the chunk already holds: three classes the realism chunk now imports from it (`BufferGeometry`, `Float32BufferAttribute`, `RingGeometry`), and model values (`orbitPoints`, `RESTING_STEPS`, `RING_RADIUS_RATIO`, `bodyRadius`). The listing was read from an unminified twin of each build, so it is shown, not asserted.
 
-**The ship-like figures are lower bounds.** The shipped `createFillLayer` receives only the `RealismArtifact` (clients and projects, with positions and appearance). It has no orbit or Rail data, and today's `scene` chunk exports neither `buildScene` nor `buildRail`. The prototypes get their bodies and Rail through the wrapper (`buildScene`, `buildRail`, `railLine`, `sceneLines`, `notableRings`), and the wrapper also calls each prototype's `frame`. That wiring is charged to the wrapper (+3,473 `realism`, +40 `scene`), not to any object. A shipped belt, nebula or ring disc would need some of it: those `scene` exports, or a wider `RealismArtifact` and the data the mount hands over, plus the per-frame calls. So the ship-like `realism` and `scene` figures, and the 6,907 B `scene` headroom, are lower bounds on the cost. The with-wrapper column below (953,133 B in `scene`, 6,867 B left) is an upper bound for that `scene` wiring, since the wrapper also carries probe and hide code no object needs. The nebula shows it most clearly: the wrapper already exports `railLine`, so its +14 here leaves out an export a shipped nebula would add. The first attempt, without a wrapper, measured the nebula at +22.
+**The ship-like figures are lower bounds.** The shipped `createFillLayer` is typed to receive only the `RealismArtifact` (clients and projects, with positions and appearance). At runtime the mount hands over the whole scene artifact, which the wrapper relies on, but the type exposes no orbit or Rail data. And today's `scene` chunk exports neither `buildScene` nor `buildRail`, so building bodies and the Rail inside `realism` costs new `scene` exports whatever the type says. The prototypes get their bodies and Rail through the wrapper (`buildScene`, `buildRail`, `railLine`, `sceneLines`, `notableRings`), and the wrapper also calls each prototype's `frame`. That wiring is charged to the wrapper (+3,473 `realism`, +40 `scene`), not to any object. A shipped belt, nebula or ring disc would need some of it: those `scene` exports, or a wider `RealismArtifact` carrying already-built orbits and Rail, plus the per-frame calls. So the ship-like `realism` and `scene` figures, and the 6,907 B `scene` headroom, are lower bounds on the cost. The with-wrapper figures (953,133 B in `scene`, 6,867 B left, in the paragraph after the table above and in the next table) is an upper bound for that `scene` wiring, since the wrapper also carries probe and hide code no object needs. The nebula shows it most clearly: the wrapper already exports `railLine`, so its +14 here leaves out an export a shipped nebula would add. The first attempt, without a wrapper, measured the nebula at +22.
 
 **Why the combined delta is not the sum of the singles.** The sum of the singles is +6,213 in `realism` and +68 in `scene`; together they cost +6,192 and +54. In `scene`, `BufferGeometry` and `Float32BufferAttribute` are exported once for the belt and the nebula together, not twice. In `realism`, the shared `three` import and the import list from `scene` are written once, and the minifier's names and compression differ. Each prototype also restates its own noise GLSL, so a shipped version sharing one noise snippet would likely be a few hundred bytes smaller.
 
@@ -76,8 +76,8 @@ Checks enforced by the script, all passing:
 
 | Limit | Measured, all three, ship-like | Measured, all three, with the spike wrapper | Within? |
 | --- | ---: | ---: | --- |
-| `realism` 24,000 B | 14,752 | 18,225 | yes (9,248 left, ship-like) |
-| `scene` 960,000 B | 953,093 | 953,133 | yes (**6,907 left**, ship-like) |
+| `realism` 24,000 B | 14,752 | 18,225 | yes (9,248 left, ship-like; 5,775 with the wrapper) |
+| `scene` 960,000 B | 953,093 | 953,133 | yes (**6,907 left**, ship-like; 6,867 with the wrapper) |
 
 ### A note to 9.2: the `scene` headroom is shared
 
@@ -85,7 +85,7 @@ After these three objects, the `scene` chunk has at most about **6.9 KB** left o
 
 ## Draw calls
 
-Method: `node spikes/sky-cost/measure-draws.mjs`, over each variant's production build. Each variant gets its own server and Chrome, both checked to be the spawned processes. Realism arrives through the real mount (the wrapper's fade reaches 1), and the three poses are reached through the app's own input:
+Method: `node spikes/sky-cost/measure-draws.mjs`, over each variant's production build. Each run gets its own server and Chrome, both checked to be the spawned processes: one run per variant, plus one more per object variant with `?spike-hide`, nine in all. The script fails if a run serves a build whose objects are not the variant's, if a reading is not stable, if no renderer was captured, or if any pose's camera differs from the `none` run's. Realism arrives through the real mount (the wrapper's fade reaches 1), and the three poses are reached through the app's own input:
 
 - **opening frame:** no input;
 - **the Deep Planet's Client stop:** stop 4, `client:sncf`, reached by four real ArrowDown key events;
@@ -121,8 +121,8 @@ Gross is the variant minus `none`. The line-work replaced is the variant minus t
 | | Client stop | +1 | 2 | −1 | | yes |
 | | Focus | +1 | 2 | −1 | | yes |
 | Nebula | every pose | +1 | 1 | 0 | 1 | yes |
-| Ring disc | every pose | +1 | 1 | 0 | ≤ 2 per Deep Project (disc + moon) | yes |
-| All three | opening frame | +3 | 10 | −7 | 4 (1 + 1 + 2 × 1) | yes |
+| Ring disc | every pose | +1 | 1 | 0 | 1 per Deep Planet (the disc's share of AD-23's 2 per Deep Project; the moon keeps the other) | yes |
+| All three | opening frame | +3 | 10 | −7 | 3 (1 + 1 + 1 × 1) | yes |
 | | Client stop, Focus | +3 | 4 | −1 | | yes |
 
 Line-work counts fall away from the opening frame because three culls orbit lines that are off-frame, and then fewer orbits remain to be replaced. The belt is one mesh whatever is in view.
@@ -149,7 +149,7 @@ Each PNG is stamped in-frame "spike, not a judgement · story 9.1 · <object> ·
 
 **The 32:9 captures were not taken on the Odyssey Ark.** They are 3840×1080 viewports emulated on this machine, whose Chrome `screen` is 3072×1728 (16:9) at 1.25. Seeing them on the Ark is left to Thomas, and this record does not claim it.
 
-These are observations for whoever builds the objects, not verdicts. At the placeholder values, the nebula reads only as a faint blue haze. The stamp sits over the corner chrome's wordmark.
+These are notes on the captures, not verdicts on the looks. The prototypes use untuned placeholder values, and their alpha is low. The nebula ribbon's width comes from `cross(tangent, view)`, which degenerates where the Rail runs along the view direction, and the camera rides the Rail. So the nebula captures may under-show the ribbon, and they are not representative of how a shipped nebula would look. The stamp sits over the corner chrome's wordmark.
 
 ## Reproduce
 
@@ -158,4 +158,4 @@ node spikes/sky-cost/measure-bytes.mjs
 node spikes/sky-cost/measure-draws.mjs
 ```
 
-`measure-bytes.mjs` runs `npm run build`, then builds six spike variants into `spikes/sky-cost/dist/` (git-ignored). It exits 1 if the bare baseline differs from the shipped line or a placement check fails. `measure-draws.mjs` drives those builds in hardware Chrome, refuses a software renderer, and writes `results/draws.json` and the six PNGs above.
+`measure-bytes.mjs` runs `npm run build`, which replaces the root's `dist/` with a fresh shipped build, then builds six spike variants into `spikes/sky-cost/dist/` (git-ignored). It exits 1 if the bare baseline differs from the shipped line or a placement check fails. `measure-draws.mjs` drives those builds in hardware Chrome, refuses a software renderer, and writes `results/draws.json` and the six PNGs above.

@@ -1,7 +1,7 @@
 {
  "label": "spike, not a judgement",
  "story": "9.1",
- "measured": "2026-11-18T07:17:46.499Z",
+ "measured": "2026-11-18T08:06:42.486Z",
  "limits": {
   "realism": 24000,
   "scene": 960000
@@ -94,6 +94,12 @@
    "sceneDelta": 0,
    "realismHeadroom": 11967,
    "sceneHeadroom": 6921,
+   "shipLike": {
+    "realism": 8560,
+    "scene": 953039,
+    "realismHeadroom": 15440,
+    "sceneHeadroom": 6961
+   },
    "overRealism": false,
    "overScene": false,
    "sceneExportsGained": [],
@@ -147,6 +153,12 @@
    "sceneDelta": 30,
    "realismHeadroom": 9806,
    "sceneHeadroom": 6891,
+   "shipLike": {
+    "realism": 10721,
+    "scene": 953069,
+    "realismHeadroom": 13279,
+    "sceneHeadroom": 6931
+   },
    "overRealism": false,
    "overScene": false,
    "sceneExportsGained": [
@@ -203,6 +215,12 @@
    "sceneDelta": 14,
    "realismHeadroom": 9498,
    "sceneHeadroom": 6907,
+   "shipLike": {
+    "realism": 11029,
+    "scene": 953053,
+    "realismHeadroom": 12971,
+    "sceneHeadroom": 6947
+   },
    "overRealism": false,
    "overScene": false,
    "sceneExportsGained": [
@@ -258,6 +276,12 @@
    "sceneDelta": 24,
    "realismHeadroom": 10384,
    "sceneHeadroom": 6897,
+   "shipLike": {
+    "realism": 10143,
+    "scene": 953063,
+    "realismHeadroom": 13857,
+    "sceneHeadroom": 6937
+   },
    "overRealism": false,
    "overScene": false,
    "sceneExportsGained": [
@@ -322,6 +346,12 @@
    "sceneDelta": 54,
    "realismHeadroom": 5775,
    "sceneHeadroom": 6867,
+   "shipLike": {
+    "realism": 14752,
+    "scene": 953093,
+    "realismHeadroom": 9248,
+    "sceneHeadroom": 6907
+   },
    "overRealism": false,
    "overScene": false,
    "sceneExportsGained": [

@@ -86,7 +86,7 @@ function inject(): Plugin {
       ].join('\n');
       const tail = used.map(({ file, name }) => `\nexport { ${name} } from ${abs(file)};`).join('');
       transformed += 1;
-      return { code: code.replace(SHIPPED_EXPORT, head) + tail, map: null };
+      return { code: code.replace(SHIPPED_EXPORT, () => head) + tail, map: null };
     },
     buildEnd() {
       if (seen === 0) this.error('the spike never saw the realism facade, so nothing was injected or measured.');

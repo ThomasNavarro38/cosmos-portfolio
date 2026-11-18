@@ -119,6 +119,15 @@ const rows = Object.fromEntries(
       sceneDelta: r.scene - none.scene,
       realismHeadroom: LIMITS.realism - r.realism,
       sceneHeadroom: LIMITS.scene - r.scene,
+      // Ship-like: the bare baseline plus the object's delta, with the wrapper's own cost set aside.
+      // A lower bound on cost, since a shipped object needs some of the wrapper's wiring; the
+      // with-wrapper headroom above is the other bound.
+      shipLike: {
+        realism: bare.realism + (r.realism - none.realism),
+        scene: bare.scene + (r.scene - none.scene),
+        realismHeadroom: LIMITS.realism - (bare.realism + (r.realism - none.realism)),
+        sceneHeadroom: LIMITS.scene - (bare.scene + (r.scene - none.scene)),
+      },
       overRealism: r.realism > LIMITS.realism,
       overScene: r.scene > LIMITS.scene,
       sceneExportsGained: gained(none, r),

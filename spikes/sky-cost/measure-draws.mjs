@@ -299,7 +299,8 @@ async function main() {
           await send('Page.navigate', { url: 'about:blank' });
           await sleep(300);
           await send('Page.navigate', { url: hide ? `${url}?spike-hide` : url });
-          const arrived = await tools.until('realism to arrive', (p) => p !== null && p.attached && p.fade >= 1, 90_000);
+          // A software renderer may keep realism from arriving at all, so it ends the wait as well, and blocks below.
+          const arrived = await tools.until('realism to arrive', (p) => p !== null && ((p.renderer !== null && SOFTWARE.test(p.renderer)) || (p.attached && p.fade >= 1)), 90_000);
           if (arrived.renderer === null || SOFTWARE.test(arrived.renderer)) {
             const error = new Error(`no hardware GPU in the browser (${arrived.renderer})`);
             error.blocked = true;
@@ -309,11 +310,12 @@ async function main() {
           if (JSON.stringify(arrived.objects) !== JSON.stringify(expected)) {
             throw new Error(`spikes/sky-cost/dist/${variant} carries ${JSON.stringify(arrived.objects)}, not ${JSON.stringify(expected)}: a stale build; rerun measure-bytes.mjs.`);
           }
-          const viewport =await tools.evaluate('({ innerWidth, innerHeight, devicePixelRatio: window.devicePixelRatio, canvas: [document.querySelector("canvas").width, document.querySelector("canvas").height] })');
+          const viewport = await tools.evaluate('({ innerWidth, innerHeight, devicePixelRatio: window.devicePixelRatio, canvas: [document.querySelector("canvas").width, document.querySelector("canvas").height] })');
           const row = { renderer: arrived.renderer, deepCount: arrived.deepCount, viewport, hidden: arrived.hidden, poses: {} };
           const at = async (pose) => {
             const camera = await tools.settle();
             const values = await tools.calls();
+            if (values.some((v) => !(v >= 0))) throw new Error(`${variant} ${frame.name} ${pose}: no renderer captured, readings ${JSON.stringify(values)}.`);
             const p = await tools.probe();
             row.poses[pose] = { ...summarise(values), values, subject: p.subject, camera };
             const object = variant.includes('+') || variant === 'none' ? null : variant;
@@ -377,7 +379,8 @@ async function main() {
 
   const deepPlanets = sessions.none.frames['1920x1080'].deepCount;
   if (!(deepPlanets >= 1)) throw new Error(`the artifact has ${deepPlanets} Deep Planets.`);
-  const LIMITS = { belt: 1, nebula: 1, ring: 2 * deepPlanets, 'belt+nebula+ring': 1 + 1 + 2 * deepPlanets };
+  // AD-23 allows 2 per Deep Project: the ring disc and the moon. The moon keeps one, so the disc's own share is 1.
+  const LIMITS = { belt: 1, nebula: 1, ring: deepPlanets, 'belt+nebula+ring': 1 + 1 + deepPlanets };
   const shown = (variant, frame, pose) => sessions[variant].frames[frame].poses[pose].calls;
   const hiddenOf = (variant, frame, pose) => sessions[`${variant} (hidden)`].frames[frame].poses[pose].calls;
   const table = {};
@@ -393,6 +396,24 @@ async function main() {
       }
     }
   }
+  // Gross and net subtract readings across sessions, so each pose must be the same camera in every session.
+  const drift = [];
+  for (const [name, s] of Object.entries(sessions)) {
+    for (const [frame, row] of Object.entries(s.frames)) {
+      for (const pose of POSES) {
+        const a = sessions.none.frames[frame].poses[pose].camera;
+        const b = row.poses[pose].camera;
+        if (a.length !== b.length || a.some((v, i) => Math.abs(v - b[i]) > 1e-4)) drift.push(`${name} ${frame} ${pose}`);
+      }
+    }
+  }
+  if (drift.length > 0) throw new Error(`poses differ from the baseline's: ${drift.join('; ')}`);
+  // An unstable reading means the pose was not still, so its draw figure is not a measurement.
+  const unstable = Object.entries(sessions).flatMap(([name, s]) =>
+    Object.entries(s.frames).flatMap(([frame, row]) =>
+      Object.entries(row.poses).filter(([, r]) => !r.stable).map(([pose, r]) => `${name} ${frame} ${pose} (${r.min}-${r.max})`),
+    ),
+  );
   const any = sessions.none.frames['1920x1080'];
   const report = {
     label: 'spike, not a judgement',
@@ -406,6 +427,7 @@ async function main() {
     limits: LIMITS,
     deepPlanets,
     table,
+    unstable,
     captures: Object.values(sessions).flatMap((s) => s.captures),
     sessions,
   };
@@ -416,11 +438,5 @@ async function main() {
     }
   }
   console.log('results/draws.json written.');
-  // An unstable reading means the pose was not still, so its draw figure is not a measurement.
-  const unstable = Object.entries(sessions).flatMap(([name, s]) =>
-    Object.entries(s.frames).flatMap(([frame, row]) =>
-      Object.entries(row.poses).filter(([, r]) => !r.stable).map(([pose, r]) => `${name} ${frame} ${pose} (${r.min}-${r.max})`),
-    ),
-  );
   if (unstable.length > 0) throw new Error(`unstable draw readings: ${unstable.join('; ')}`);
 }

@@ -123,6 +123,22 @@ deferred: []
 - Given each object, when it is captured at 1920×1080 and at a 32:9 frame from its production build, then the PNGs sit beside the record and each is labelled a spike, not a judgement. If Chrome's `screen` is not the Ark's 32:9, the record states the 32:9 capture was not taken on the Ark and leaves it to Thomas rather than claiming it.
 - Given any figure over its limit, when the record is read, then it proposes a new limit as the measured figure plus a stated margin, for 9.2 to rule on.
 
+### Review Findings
+
+Follow-up code review, 2026-11-18, of `61b0ed0` against `6776938`.
+
+- [x] [Review][Patch] (medium) The record says the shipped `createFillLayer` "has no orbit or Rail data", but at runtime the mount hands over the whole scene artifact (`inject.ts` relies on it). Restate the lower-bound argument: the type exposes no orbit or Rail data, and today's `scene` chunk does not export `buildScene`/`buildRail`. [_bmad-output/implementation-artifacts/sky-cost-9-1.md:69]
+- [x] [Review][Patch] (medium) The record's bold headroom column (bare + Δ) appears nowhere in `bytes.json`, whose `sceneHeadroom` holds the with-wrapper figures. The "6,867 B left" cross-reference points at a table that does not show it. `measure-bytes.mjs` should write the ship-like figures too, and the record should cite both. [spikes/sky-cost/measure-bytes.mjs]
+- [x] [Review][Patch] (low) The ring disc is checked against the whole 2-per-Deep-Project allowance. Its own share is 1, with the moon holding the other. [spikes/sky-cost/measure-draws.mjs]
+- [x] [Review][Patch] (low) A software renderer that keeps realism from arriving ends in a timeout, not the required `BLOCKED: no hardware GPU in the browser`. [spikes/sky-cost/measure-draws.mjs:297]
+- [x] [Review][Patch] (low) "At the same pose" is not enforced. The camera is recorded per pose but never compared across sessions. [spikes/sky-cost/measure-draws.mjs:315]
+- [x] [Review][Patch] (low) `calls()` returns -1 when no renderer was captured, and a stable -1 would be recorded as a draw count. [spikes/sky-cost/inject.ts:105]
+- [x] [Review][Patch] (low) `code.replace(SHIPPED_EXPORT, head)` expands `$&`/`$1` sequences in the injected paths. Use a replacer function. [spikes/sky-cost/build.config.ts:89]
+- [x] [Review][Patch] (low) When readings are unstable, `draws.json` is written without saying so before the run fails. [spikes/sky-cost/measure-draws.mjs]
+- [x] [Review][Patch] (low) "the nebula reads only as a faint blue haze" reads close to a verdict (Never: record a verdict on the looks). [_bmad-output/implementation-artifacts/sky-cost-9-1.md:152]
+- [x] [Review][Patch] (low) The record does not warn that the nebula ribbon's side vector degenerates where the Rail runs along the view direction, so its captures may under-show it. [_bmad-output/implementation-artifacts/sky-cost-9-1.md:152]
+- [x] [Review][Patch] (low) The record says "each variant gets its own server and Chrome", but each runs once per variant per hide setting (nine sessions). Its Reproduce section also omits that `measure-bytes.mjs` replaces the root `dist/`. [_bmad-output/implementation-artifacts/sky-cost-9-1.md:88]
+
 ## Spec Change Log
 
 ### 2026-11-17 — review loop 1
@@ -241,3 +257,12 @@ Draw calls are counted, not assumed. A merged belt should be 1, but a `Line2` or
 - The ship-like byte figures and the 6,907 B `scene` headroom are lower bounds on cost: the wiring a shipped object needs (bodies and Rail data, per-frame calls) is charged to the wrapper. The with-wrapper headroom of 6,867 B bounds it from the other side. The Client labels (9.3) and the crossfade (9.10) have to share what is left.
 - The 3840×1080 captures are emulated on a 3072×1728 screen at a scale of 1.25, not taken on the Odyssey Ark; that is left to Thomas.
 - The prototypes are untuned and outside the typecheck; zero-length and parallel-tangent guards were not added, since no such case occurs in the measured scene.
+
+### Follow-up code review (2026-11-18)
+
+11 patches applied (medium 2, low 9), 0 decision-needed, 0 deferred, 29 dismissed. Reran after the patches:
+- `node spikes/sky-cost/measure-bytes.mjs`: exit 0, with the same figures as before; `bytes.json` now also carries the `shipLike` block.
+- `node spikes/sky-cost/measure-draws.mjs`: exit 0. Every reading was stable, every pose's camera matched the `none` run, and every object is within its limit, with the disc at its share of 1 per Deep Planet.
+- `npm test`: 2181 pass, 0 fail.
+- `npm run typecheck`: pass.
+- Reach grep: no match.
