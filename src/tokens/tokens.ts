@@ -47,6 +47,8 @@ export const tokens = {
     'realism-star-red-dark': '#FF9A5C',
     'realism-ambient-floor': '#0E1626',
     'realism-ambient-floor-dark': '#0E1626',
+    'realism-belt': '#6E6A62',
+    'realism-belt-dark': '#6E6A62',
   },
   typography: {
     fontFamily: {

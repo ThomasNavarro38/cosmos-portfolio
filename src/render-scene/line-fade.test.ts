@@ -1,12 +1,15 @@
 /**
- * The line-work realism replaces, as it fades (9.4): which billboards are held, and what
- * one fade writes to them, on structural fakes and on real three objects.
+ * The line-work realism replaces, as it fades (9.4, 9.6): which billboards and orbit lines
+ * are held, and what one fade writes to them, on structural fakes and on real three objects.
  */
 
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { Group, Mesh, MeshBasicMaterial } from 'three';
-import { fadeStarMarks, holdStarMarks, type FadedMaterial, type StarMarks } from './line-fade.ts';
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { fadeStarMarks, holdOrbitLine, holdStarMarks, type FadedMaterial, type StarMarks } from './line-fade.ts';
 
 const STAR = { id: 'client:a', kind: 'star' };
 const PLANET = { id: 'project:a/one', kind: 'planet' };
@@ -75,4 +78,39 @@ test('over real three objects, every mesh under a billboard takes the fade, and 
   assert.equal(billboard.visible, false);
   fadeStarMarks(held.values(), 1);
   assert.deepEqual([billboard.visible, (outline.material as MeshBasicMaterial).opacity], [true, 1], 'and they return whole');
+});
+
+test('an orbit line is held by its ID, dropped on null, and the Rail, or any other line, never (9.6)', () => {
+  const held = new Map<string, string>();
+  holdOrbitLine(held, { id: 'orbit:project:a/one' }, 'line');
+  holdOrbitLine(held, { id: 'orbit:project:a/two' }, 'other');
+  assert.deepEqual([...held], [['orbit:project:a/one', 'line'], ['orbit:project:a/two', 'other']]);
+  holdOrbitLine(held, { id: 'rail' }, 'rail');
+  holdOrbitLine(held, { id: 'project:a/orbit:x' }, 'not an orbit');
+  holdOrbitLine(held, { id: 'Orbit:project:a/one' }, 'not an orbit');
+  assert.equal(held.size, 2, 'the Rail is never held');
+  holdOrbitLine(held, { id: 'orbit:project:a/one' }, 'again');
+  assert.equal(held.get('orbit:project:a/one'), 'again', 'a new ref replaces the old');
+  holdOrbitLine(held, { id: 'orbit:project:a/one' }, null);
+  holdOrbitLine(held, { id: 'rail' }, null);
+  assert.deepEqual([...held], [['orbit:project:a/two', 'other']]);
+});
+
+test('over real drei-style lines, the orbits take the fade, hide at 0 and return whole, and the Rail stays at 1 (9.6)', () => {
+  const line = (): Line2 => new Line2(new LineGeometry(), new LineMaterial({ transparent: true, opacity: 1 }));
+  const orbit = line();
+  const rail = line();
+  const held = new Map<string, Line2>();
+  holdOrbitLine(held, { id: 'orbit:project:a/one' }, orbit);
+  holdOrbitLine(held, { id: 'rail' }, rail);
+  const star = new Group();
+  star.add(new Mesh(undefined, new MeshBasicMaterial({ transparent: true, opacity: 1 })));
+  const marks = new Map<string, StarMarks>([['client:a', star]]);
+  for (const [fade, visible] of [[1, true], [0.4, true], [0, false], [Number.NaN, true]] as const) {
+    fadeStarMarks([...marks.values(), ...held.values()], fade);
+    const value = Number.isFinite(fade) ? fade : 1;
+    assert.deepEqual([orbit.visible, orbit.material.opacity], [visible, value], `the orbit at ${fade}`);
+    assert.equal(((star.children[0] as Mesh).material as MeshBasicMaterial).opacity, value, `the Star marks with it, at ${fade}`);
+    assert.deepEqual([rail.visible, rail.material.opacity], [true, 1], `the Rail at ${fade}`);
+  }
 });

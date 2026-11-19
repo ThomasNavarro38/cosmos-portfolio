@@ -85,6 +85,10 @@ colors:
   realism-star-red-dark: "#FF9A5C"
   realism-ambient-floor: "#0E1626"
   realism-ambient-floor-dark: "#0E1626"
+  # --- the orbits' debris belts (9.6): one hue for every belt, encoding nothing; the shader
+  # divides it by its own luminance and takes each belt to its Planet's band. ---
+  realism-belt: "#6E6A62"
+  realism-belt-dark: "#6E6A62"
 
 typography:
   fontFamily:
@@ -486,7 +490,7 @@ both assume a dark void. Each of these tokens still has a bare light key because
 the generator requires a pair, but that value is a placeholder. A light theme
 would need its own decision for the scene, not a token swap.
 
-The family has two tokens. *[amended by the 9.5 review, 2026-11-18: it now has six, the five `realism-star-*` tints and `realism-ambient-floor`; `realism-belt` joins in 9.6 and `realism-nebula` in 9.7.]* Only `render-scene/realism/` may read them, and what the shader outputs from them stays under the luminance ceiling (AD-20).
+The family has two tokens. *[amended by the 9.5 review, 2026-11-18: it now has six, the five `realism-star-*` tints and `realism-ambient-floor`; `realism-belt` joins in 9.6 and `realism-nebula` in 9.7.]* *[declared by 9.6, 2026-11-19: it now has seven, with `realism-belt`.]* Only `render-scene/realism/` may read them, and what the shader outputs from them stays under the luminance ceiling (AD-20).
 
 *[amended 2026-11-17 for Epic 9 (sprint-change-proposal-2026-11-17.md, Proposal 6): `realism-star-glow` is replaced by
 `realism-star-blue #A9BFFF`, `-white #F4F1EA`, `-yellow #FFE6B0`, `-orange
@@ -510,7 +514,7 @@ Until each story lands, the frontmatter keeps the two tokens it declares today.]
 | `realism-star-orange` | `#FFC27A` | `#FFC27A` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* *[declared by 9.5, 2026-11-18: the Star's core takes it too, not only its glow, each normalised to the same luminance, so it is hue alone.]* |
 | `realism-star-red` | `#FF9A5C` | `#FF9A5C` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* *[declared by 9.5, 2026-11-18: the Star's core takes it too, not only its glow, each normalised to the same luminance, so it is hue alone.]* |
 | `realism-nebula` | `#4A5A7A` | `#4A5A7A` (placeholder) | *[amended 2026-11-17 for Epic 9: the colour of the Rail's nebula ribbon. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.7.]* |
-| `realism-belt` | `#6E6A62` | `#6E6A62` (placeholder) | *[amended 2026-11-17 for Epic 9: the colour of an orbit's debris belt. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.6.]* |
+| `realism-belt` | `#6E6A62` | `#6E6A62` (placeholder) | *[amended 2026-11-17 for Epic 9: the colour of an orbit's debris belt. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.6.]* *[declared by 9.6, 2026-11-19: in the frontmatter. One hue for every belt, encoding nothing: the shader divides it by its own linear luminance and takes each belt to its Planet's band, whose peak is the Planet's own band token's luminance (`stroke-rest-dark`'s, about 0.026, or `stroke-near-dark`'s, about 0.061), so the belts keep the ladder's order and stay far under `stroke-active`. The M2 orbit was always `stroke-rest`, so a `stroke-near` belt's peak is brighter than the hairline it replaces. Its OKLCH chroma is about 0.013, under the achromatic line; it is exempt by its prefix all the same.]* |
 
 `[NOTE FOR UX] Direction 02 pairs its palette with an editorial serif and a
 graded (not uniform) line weight. The colour swap alone will not reproduce
@@ -789,6 +793,12 @@ The shape vocabulary is four items and nothing else.
   are rotated off-axis (the mock uses −16°, +26°, −46°) so that a Focused
   Project's Motes read as a cloud settling rather than as a planetary system,
   which would falsely imply hierarchy among Skills.
+  *[amended 2026-11-19 by 9.6: under realism a Planet's orbit hairline fades out
+  as its debris belt arrives, on the layer's one fade, and returns if realism
+  fails. The belt is a faint flat annulus on the same orbit circle, from 0.92 to
+  1.08 of its radius, so it too is seen as an ellipse at an angle: static, with no
+  particles, its brightness its Planet's band. First Paint, the Fallback and the
+  preview keep the hairline. Mote orbits are unchanged.]*
 - **The straight line.** Leader lines only. Always a single straight segment
   from Body edge to label baseline. **No elbows, no dog-legs, no curves.** An
   elbowed leader is a diagram convention and this is not a diagram. The one

@@ -46,9 +46,10 @@ export const FILL_NEAR_CEILING = 0.98;
 /** What a map's mean is normalised to, fully lit. A starting value for Epic 8. */
 export const FILL_TARGET_LUMINANCE = 0.18;
 
-/** One draw per Planet, two per Star (7.7), and none for Dust. */
+/** One draw per Planet, two per Star (7.7), one for every belt together (9.6), and none for Dust. */
 const DRAWS_PER_PLANET = 1;
 const DRAWS_PER_STAR = 2;
+const DRAWS_FOR_BELTS = 1;
 
 interface Point {
   readonly x: number;
@@ -156,7 +157,7 @@ export function mapFromWorld(tilt: number, angle: number): readonly [number, num
   return [cosSpin, 0, sinSpin, sinTilt * sinSpin, cosTilt, -sinTilt * cosSpin, -cosTilt * sinSpin, sinTilt, cosTilt * cosSpin];
 }
 
-/** The draws realism adds to a scene of this many Planets and Stars. */
+/** The draws realism adds to a scene of this many Planets and Stars: the belts' one merged draw only when there is a Planet to carry one. */
 export function addedDraws(planets: number, stars: number): number {
-  return planets * DRAWS_PER_PLANET + stars * DRAWS_PER_STAR;
+  return planets * DRAWS_PER_PLANET + stars * DRAWS_PER_STAR + (planets > 0 ? DRAWS_FOR_BELTS : 0);
 }

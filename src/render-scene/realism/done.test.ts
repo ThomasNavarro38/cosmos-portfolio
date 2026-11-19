@@ -48,7 +48,7 @@ import { loadMutant } from '../../../scripts/mutant.ts';
 import { missingNamedTests, tableUnder } from '../../../scripts/record-table.ts';
 import { filesUnder, isTestFile, SOURCE_MODULE, stripComments, stripCommentsAndStrings } from '../../../scripts/source-scan.ts';
 import type { RealismArtifact } from '../realism-status.ts';
-import { DUST_DRAWS_BUDGET, PLANET_DRAWS_BUDGET, SPHERE_HEIGHT_SEGMENTS_BUDGET, SPHERE_WIDTH_SEGMENTS_BUDGET, STAR_DRAWS_BUDGET } from './budgets.ts';
+import { BELT_DRAWS_BUDGET, DUST_DRAWS_BUDGET, PLANET_DRAWS_BUDGET, SPHERE_HEIGHT_SEGMENTS_BUDGET, SPHERE_WIDTH_SEGMENTS_BUDGET, STAR_DRAWS_BUDGET } from './budgets.ts';
 import { createFillLayer } from './fill-layer.ts';
 import * as fillModel from './fill-model.ts';
 import { addedDraws, FILL_SPHERE_HEIGHT_SEGMENTS, FILL_SPHERE_WIDTH_SEGMENTS, fillPlans, lightDirection } from './fill-model.ts';
@@ -80,7 +80,7 @@ after(() => {
   if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
 });
 
-// --- Added draws: 1 per Planet, 2 per Star, 0 for Dust --------------------------------------------
+// --- Added draws: 1 per Planet, 2 per Star, 1 for all belts, 0 for Dust --------------------------------------------
 
 /**
  * Every way a draw count breaks the row: nothing to count (no Planet or no Star, so a
@@ -89,7 +89,7 @@ after(() => {
  */
 function drawFailures(planets: number, stars: number, draws: number): string[] {
   if (planets === 0 || stars === 0) return [`added draws: ${planets} Planets and ${stars} Stars — nothing to measure, so the row cannot pass on 0`];
-  const budget = planets * PLANET_DRAWS_BUDGET + stars * STAR_DRAWS_BUDGET + DUST_DRAWS_BUDGET;
+  const budget = planets * PLANET_DRAWS_BUDGET + stars * STAR_DRAWS_BUDGET + BELT_DRAWS_BUDGET + DUST_DRAWS_BUDGET;
   return draws > budget ? [`added draws: ${draws} for ${planets} Planets and ${stars} Stars, over the budget of ${budget}`] : [];
 }
 
@@ -133,7 +133,7 @@ test('added draws fail on nothing to measure: no Planet, no Star, or neither', (
   assert.match(drawFailures(fillPlans(empty).length, starPlans(empty).length, addedDraws(0, 0)).join('\n'), /nothing to measure/, 'an artifact with no Client');
 });
 
-test('added draws fail past the budget: a model drawing three per Star, and one draw too many', async () => {
+test('added draws fail past the budget: a model drawing three per Star, two for the belts, and one draw too many', async () => {
   const artifact = committed();
   const planets = fillPlans(artifact).length;
   const stars = starPlans(artifact).length;
@@ -141,6 +141,8 @@ test('added draws fail past the budget: a model drawing three per Star, and one 
   assert.match(drawFailures(planets, stars, mutant.addedDraws(planets, stars)).join('\n'), /over the budget/);
   const twoPerPlanet = await loadMutant<typeof fillModel>(FILL_MODEL, 'const DRAWS_PER_PLANET = 1;', 'const DRAWS_PER_PLANET = 2;');
   assert.match(drawFailures(planets, stars, twoPerPlanet.addedDraws(planets, stars)).join('\n'), /over the budget/);
+  const twoBelts = await loadMutant<typeof fillModel>(FILL_MODEL, 'const DRAWS_FOR_BELTS = 1;', 'const DRAWS_FOR_BELTS = 2;');
+  assert.match(drawFailures(planets, stars, twoBelts.addedDraws(planets, stars)).join('\n'), /over the budget/, 'the belts are one merged draw (9.6)');
   assert.match(drawFailures(planets, stars, addedDraws(planets, stars) + 1).join('\n'), /over the budget/);
 });
 

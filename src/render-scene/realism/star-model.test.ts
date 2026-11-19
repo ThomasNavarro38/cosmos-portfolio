@@ -17,7 +17,7 @@ import { tokens } from '../../tokens/tokens.ts';
 import { createRealismOwner, type RealismArtifact } from '../realism-status.ts';
 import { FILL_RENDER_ORDER, GLOW_RENDER_ORDER } from '../scene-model.ts';
 import { STAR_RADIUS } from '../stroke-model.ts';
-import { DUST_DRAWS_BUDGET, PLANET_DRAWS_BUDGET, STAR_DRAWS_BUDGET } from './budgets.ts';
+import { BELT_DRAWS_BUDGET, DUST_DRAWS_BUDGET, PLANET_DRAWS_BUDGET, STAR_DRAWS_BUDGET } from './budgets.ts';
 import { createFillLayer } from './fill-layer.ts';
 import { addedDraws, FILL_CEILING_LUMINANCE, FILL_RADIUS_RATIO, fillPlans } from './fill-model.ts';
 import { FILL_VERTEX_SHADER } from './fill-shader.ts';
@@ -63,7 +63,7 @@ const GLOW_94_HEX = '#B09468';
 const APPEARANCE = { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.05, spinPhase: 1.5 };
 const ARTIFACT: RealismArtifact = {
   clients: [
-    { id: 'client:a', position: { x: 1, y: 2, z: 3 }, luminanceBand: 'stroke-near', appearance: { tint: 'red', pulsePhase: 1.5 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 11, y: 2, z: 3 }, appearance: APPEARANCE }] },
+    { id: 'client:a', position: { x: 1, y: 2, z: 3 }, luminanceBand: 'stroke-near', appearance: { tint: 'red', pulsePhase: 1.5 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 11, y: 2, z: 3 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: APPEARANCE }] },
     { id: 'client:b', position: { x: 100, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'blue', pulsePhase: 0 }, projects: [] },
   ],
 };
@@ -339,13 +339,14 @@ test('the shape eases from 0 to 1, monotone with no slope at either end, and hol
   assert.ok(riseShape(0.001) < 0.001 && riseShape(0.999) > 0.999, 'it leaves and arrives flat');
 });
 
-test('added draws are Planets + 2 × Stars and 0 for Dust, within the budgets', () => {
+test('added draws are Planets + 2 × Stars + 1 for all belts and 0 for Dust, within the budgets', () => {
   assert.equal(STAR_DRAWS_BUDGET, 2);
   assert.equal(DUST_DRAWS_BUDGET, 0);
-  assert.equal(addedDraws(8, 6), 8 * PLANET_DRAWS_BUDGET + 6 * STAR_DRAWS_BUDGET + DUST_DRAWS_BUDGET);
-  assert.equal(addedDraws(8, 6), 20);
-  assert.equal(addedDraws(0, 3), 6);
-  assert.equal(addedDraws(5, 0), 5, 'no Clients, no Star draw');
+  assert.equal(BELT_DRAWS_BUDGET, 1);
+  assert.equal(addedDraws(8, 6), 8 * PLANET_DRAWS_BUDGET + 6 * STAR_DRAWS_BUDGET + BELT_DRAWS_BUDGET + DUST_DRAWS_BUDGET);
+  assert.equal(addedDraws(8, 6), 21);
+  assert.equal(addedDraws(0, 3), 6, 'no Planet, no belt');
+  assert.equal(addedDraws(5, 0), 6, 'no Clients, no Star draw, and the belts');
 });
 
 // --- The ceilings --------------------------------------------------------------------------------
@@ -1045,11 +1046,11 @@ test('the layer draws the Stars over its one geometry, and on going disposes Sta
   layer.attach(scene);
   const meshes = drawsOf(scene);
   assert.equal(meshes.length, addedDraws(fillPlans(ARTIFACT).length, starPlans(ARTIFACT).length));
-  assert.equal(new Set(meshes.map((mesh) => mesh.geometry)).size, 1);
+  assert.equal(new Set(meshes.filter((mesh) => mesh.name !== 'belt').map((mesh) => mesh.geometry)).size, 1, 'the belts have their own geometry (9.6)');
   layer.frame(new PerspectiveCamera(), DELTA, false, 1, 'client:a');
   const counts = { material: 0, geometry: 0 };
   for (const mesh of meshes) materialOf(mesh).addEventListener('dispose', () => { counts.material += 1; });
-  meshes[0]!.geometry.addEventListener('dispose', () => { counts.geometry += 1; });
+  meshes.find((mesh) => mesh.name !== 'belt')!.geometry.addEventListener('dispose', () => { counts.geometry += 1; });
   layer.dispose();
   layer.dispose();
   assert.deepEqual(counts, { material: meshes.length, geometry: 1 });

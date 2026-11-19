@@ -37,12 +37,13 @@ The chunk figures are the bundle assertion's bytes: minified, as emitted, counte
 | Sphere height segments | `SPHERE_HEIGHT_SEGMENTS_BUDGET` | 32 | 32 (`FILL_SPHERE_HEIGHT_SEGMENTS`), one shared geometry | A budget; 32 is the starting value. |
 | Added draws per Planet | `PLANET_DRAWS_BUDGET` | 1 per Planet | 1 per Planet; 8 Planets, 8 draws | A budget; 1 is the starting value. |
 | Added draws per Star | `STAR_DRAWS_BUDGET` | 2 per Star | 2 per Star; 6 Stars, 12 draws | A budget; 2 is the starting value. |
+| Added draws for all belts (9.6) | `BELT_DRAWS_BUDGET` | 1 for all belts | 1 for all belts, one merged mesh; added by 9.6 (2026-11-19), not measured at this commit | A budget; 1 is the starting value. |
 | Added draws for Dust | `DUST_DRAWS_BUDGET` | 0 | 0 | A budget; 0 is the starting value. |
 | Entry chunk (M2) | `ENTRY_BUDGET_BYTES` | 4,000 B | 3,278 B | M2's budget, unchanged; 3,278 is the starting value. |
 | Full-screen passes, render targets, shadow maps, scene lights | (none: held by `done.test.ts`'s scan) | 0 of each | 0 of each | A budget; 0 is the starting value. |
 | New runtime dependencies | (none: held by `check-pins.ts`'s closed list, M2's) | 0 | 0 (7 dependencies, M2's list) | A budget; 0 is the starting value. |
 
-In all, the realism layer adds 20 draws over the committed artifact (8 × 1 + 6 × 2). Every value is within its budget.
+In all, the realism layer adds 20 draws over the committed artifact (8 × 1 + 6 × 2). Every value is within its budget. *[9.6, 2026-11-19: the sentence above is 8.3's, kept as history; it measured the commit this record names. At the 9.6 working tree the layer adds 21 draws (8 × 1 + 6 × 2 + 1, the belts' one merged, single-pass draw), and the chunks measure `realism` 14,665 B and `scene` 957,602 B (2,398 B of headroom), within their budgets. The table's measured column stays 8.3's.]*
 
 ## Target-run protocol
 

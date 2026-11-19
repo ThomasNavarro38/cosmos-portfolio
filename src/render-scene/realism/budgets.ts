@@ -3,7 +3,8 @@
  * and `scripts/`, and changed only by a ruling recorded in the memlog. Each
  * budget lands with the first code that can break it, so this holds the map
  * library's four limits (7.3), the two chunks' (7.5), the shared sphere's and a
- * Planet's added draws (7.6), and a Star's and Dust's added draws (7.7), and no other. Imports
+ * Planet's added draws (7.6), a Star's and Dust's added draws (7.7), and the belts'
+ * one merged draw (9.6), and no other. Imports
  * nothing and re-exports nothing; `scripts/check-maps.test.ts` holds that and the
  * reach.
  *
@@ -21,5 +22,7 @@ export const SPHERE_WIDTH_SEGMENTS_BUDGET = 64;
 export const SPHERE_HEIGHT_SEGMENTS_BUDGET = 32;
 export const PLANET_DRAWS_BUDGET = 1;
 export const STAR_DRAWS_BUDGET = 2;
+/** AD-23's ratified 2026-11-17 row, "1 for all debris belts together (one merged mesh)", landed by 9.6: counted when there is at least one Planet. */
+export const BELT_DRAWS_BUDGET = 1;
 /** Declarative: the chunk draws no Dust and names none, which a test holds, so no code can break this today. */
 export const DUST_DRAWS_BUDGET = 0;

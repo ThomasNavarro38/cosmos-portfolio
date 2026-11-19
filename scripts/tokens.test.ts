@@ -575,11 +575,11 @@ test('tokens.css: every colour key as --color-<key>, and the spacing ramp withou
   }
 });
 
-test('the realism family is exactly twelve keys, the floor and the five Star tints (9.5), each bare value a placeholder of the dark one, emitted to both files by the unchanged generator (7.2)', () => {
+test('the realism family is exactly fourteen keys, the floor, the five Star tints (9.5) and the belt (9.6), each bare value a placeholder of the dark one, emitted to both files by the unchanged generator (7.2)', () => {
   const tints = ['blue', 'white', 'yellow', 'orange', 'red'];
-  const family = ['realism-ambient-floor', 'realism-ambient-floor-dark', ...tints.flatMap((tint) => [`realism-star-${tint}`, `realism-star-${tint}-dark`])].sort();
+  const family = ['realism-ambient-floor', 'realism-ambient-floor-dark', 'realism-belt', 'realism-belt-dark', ...tints.flatMap((tint) => [`realism-star-${tint}`, `realism-star-${tint}-dark`])].sort();
   const colors: Readonly<Record<string, string>> = tokens.colors;
-  assert.equal(family.length, 12);
+  assert.equal(family.length, 14);
   assert.deepEqual(Object.keys(colors).filter((key) => key.includes('realism')).sort(), family);
   assert.ok(!Object.keys(colors).some((key) => key.startsWith('realism-star-glow')), 'realism-star-glow is retired (9.5)');
   for (const tint of tints) {
@@ -591,6 +591,8 @@ test('the realism family is exactly twelve keys, the floor and the five Star tin
     'the five tints are the placeholders, hot to cool, white warmed to a pale cream',
   );
   assert.equal(colors['realism-ambient-floor'], colors['realism-ambient-floor-dark'], 'the bare value is a placeholder, not a designed light theme');
+  assert.equal(colors['realism-belt-dark'], '#6E6A62', 'the belt is its placeholder (9.6)');
+  assert.equal(colors['realism-belt'], colors['realism-belt-dark'], 'the bare value is a placeholder, not a designed light theme');
   const committedCss = readFileSync(join(TOKENS_DIR, CSS_FILE), 'utf8');
   const committedTs = readFileSync(join(TOKENS_DIR, TS_FILE), 'utf8');
   for (const key of family) {

@@ -357,12 +357,13 @@ export const BODY_MARGIN = 3;
 export const STOP_MARGIN = 3;
 
 /*
- * The draw order, declared once, here: DUST 1 < GLOW 1.25 < FILL 1.5 < BODY 2 <
- * MOON 3. Constants need no import, so this module keeps importing nothing at
- * all. `dust-model.ts` and `notable-model.ts` re-export their own step, so their
- * importers are unchanged. The two realism steps sit between Dust and the Bodies,
+ * The draw order, declared once, here: DUST 1 < GLOW 1.25 < FILL 1.5 < BELT 1.6 <
+ * BODY 2 < MOON 3. Constants need no import, so this module keeps importing nothing
+ * at all. `dust-model.ts` and `notable-model.ts` re-export their own step, so their
+ * importers are unchanged. The three realism steps sit between Dust and the Bodies,
  * which is why the steps are not whole numbers: Dust, Bodies and Moons keep their
- * M2 values.
+ * M2 values. The nebula (9.7) and the ring disc (9.8) add theirs with their stories
+ * (AD-19 as amended 2026-11-18).
  */
 
 /**
@@ -386,6 +387,14 @@ export const GLOW_RENDER_ORDER = 1.25;
  * first whatever the `renderOrder`.
  */
 export const FILL_RENDER_ORDER = 1.5;
+
+/**
+ * The render order of the orbits' debris belts (9.6): after the fills, and
+ * depth-tested against them, so a belt's near side passes over its Planet as an M2
+ * orbit's near half does; before the line-work that stays at `BODY 2`, which draws
+ * over it. The belts write no depth, so they hold nothing drawn later back.
+ */
+export const BELT_RENDER_ORDER = 1.6;
 
 /**
  * The render order every Body draw carries.

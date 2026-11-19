@@ -14,7 +14,7 @@ import { type Camera, type Group, type Mesh, type Object3D, PerspectiveCamera, S
 import { stripCommentsAndStrings } from '../../../scripts/source-scan.ts';
 import { REDUCED_MOTION_PACE } from '../../shell/motion-preference.ts';
 import { createRealismOwner, type RealismArtifact } from '../realism-status.ts';
-import { GLOW_RENDER_ORDER } from '../scene-model.ts';
+import { BELT_RENDER_ORDER, GLOW_RENDER_ORDER } from '../scene-model.ts';
 import { depthWrites, FADE_MAX_FRAME_SECONDS, FADE_SECONDS, nextFade } from './arrival-model.ts';
 import { createFillLayer } from './fill-layer.ts';
 import { addedDraws } from './fill-model.ts';
@@ -23,7 +23,7 @@ const DELTA = 1 / 60;
 const APPEARANCE = { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.05, spinPhase: 1.5 };
 const ARTIFACT: RealismArtifact = {
   clients: [
-    { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, appearance: APPEARANCE }, { id: 'project:a/two', clientId: 'client:a', position: { x: -10, y: 0, z: 0 }, appearance: { ...APPEARANCE, map: 'mars' } }] },
+    { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: APPEARANCE }, { id: 'project:a/two', clientId: 'client:a', position: { x: -10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: { ...APPEARANCE, map: 'mars' } }] },
     { id: 'client:b', position: { x: 100, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [] },
   ],
 };
@@ -98,8 +98,11 @@ function drawsOf(root: Object3D): Mesh[] {
 }
 const materialOf = (mesh: Mesh): ShaderMaterial => mesh.material as ShaderMaterial;
 const isGlow = (mesh: Mesh): boolean => mesh.renderOrder === GLOW_RENDER_ORDER;
-const fillsOf = (root: Object3D): Mesh[] => drawsOf(root).filter((mesh) => !isGlow(mesh));
+const isBelt = (mesh: Mesh): boolean => mesh.renderOrder === BELT_RENDER_ORDER;
+/** The fills, Planet and Star: every draw but the glows and the belts (9.6), which never write depth. */
+const fillsOf = (root: Object3D): Mesh[] => drawsOf(root).filter((mesh) => !isGlow(mesh) && !isBelt(mesh));
 const glowsOf = (root: Object3D): Mesh[] => drawsOf(root).filter(isGlow);
+const beltsOf = (root: Object3D): Mesh[] => drawsOf(root).filter(isBelt);
 const fadeOf = (root: Object3D): number => materialOf(drawsOf(root)[0]!).uniforms.uFade!.value as number;
 
 function attached() {
@@ -117,11 +120,11 @@ function sharedFade(materials: readonly ShaderMaterial[]): string[] {
   return objects.size === 1 ? [] : [`${objects.size} fade objects`];
 }
 
-test('one fade uniform object is shared by every Planet fill, Star fill and glow', () => {
+test('one fade uniform object is shared by every Planet fill, Star fill and glow, and the belts', () => {
   const { scene } = attached();
   const materials = drawsOf(scene).map(materialOf);
   assert.equal(materials.length, addedDraws(2, 2));
-  assert.ok(materials.some((material) => material.uniforms.uMap !== undefined) && glowsOf(scene).length === 2, 'Planets, Star fills and glows are all read');
+  assert.ok(materials.some((material) => material.uniforms.uMap !== undefined) && glowsOf(scene).length === 2 && beltsOf(scene).length === 1, 'Planets, Star fills, glows and the belts are all read');
   assert.deepEqual(sharedFade(materials), []);
   const mutated = materials.map((material, at) => (at === materials.length - 1 ? { ...material, uniforms: { ...material.uniforms, uFade: { value: 0 } } } as unknown as ShaderMaterial : material));
   assert.match(sharedFade(mutated).join(), /2 fade objects/, 'a second object is caught');
@@ -152,6 +155,7 @@ test('arrive with the fade: the fade rises by the clamped delta, depth stays off
     const writing = fillsOf(scene).map((mesh) => materialOf(mesh).depthWrite);
     assert.deepEqual(writing, writing.map(() => fade === 1), `frame ${frames}: depth is ${fade === 1 ? 'on for every fill' : 'off for every fill'}`);
     assert.ok(glowsOf(scene).every((mesh) => !materialOf(mesh).depthWrite), 'no glow writes depth');
+    assert.ok(beltsOf(scene).every((mesh) => !materialOf(mesh).depthWrite), 'no belt writes depth (9.6)');
     previous = fade;
     assert.ok(frames < 1000);
   }
@@ -178,6 +182,7 @@ test('arrive without the fade: whole at once, every fill writing depth, no glow,
   assert.equal(fadeOf(scene), 1);
   assert.ok(fillsOf(scene).every((mesh) => materialOf(mesh).depthWrite));
   assert.ok(glowsOf(scene).every((mesh) => !materialOf(mesh).depthWrite));
+  assert.ok(beltsOf(scene).length === 1 && beltsOf(scene).every((mesh) => !materialOf(mesh).depthWrite), 'the belt never writes depth (9.6)');
   layer.frame(camera, DELTA, false, 1, null);
   assert.equal(fadeOf(scene), 1);
 });
