@@ -116,7 +116,7 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
   const belts = beltPlans(artifact);
   const tint = beltTint();
   const ribbon = nebulaArrays(artifact.railLine);
-  const nebulaColor = nebulaTint();
+  const ribbonTint = nebulaTint();
   const geometry = new SphereGeometry(1, FILL_SPHERE_WIDTH_SEGMENTS, FILL_SPHERE_HEIGHT_SEGMENTS);
   const textures = new Map([...maps].map(([id, image]) => [id, mapTexture(image)]));
   const ambient = new Color(tokens.colors['realism-ambient-floor-dark']);
@@ -150,7 +150,7 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
   });
   const starRows = createStarRows(stars, geometry, fade, group);
   const belt = createBelt(belts, tint, fade, group);
-  const nebula = createNebula(ribbon, nebulaColor, fade, group);
+  const nebula = createNebula(ribbon, ribbonTint, fade, group);
   const materials = [
     ...rows.map(({ mesh }) => mesh.material as ShaderMaterial),
     ...starRows.materials,

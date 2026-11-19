@@ -14,7 +14,7 @@ Thomas rejected M3 on screen (8.4, 2026-11-17): the line-work read as a schemati
 - Story 9.4: Stars that shine (done)
 - Story 9.5: A colour per Star (done)
 - Story 9.6: Orbits as debris belts (done)
-- Story 9.7: The Rail as a nebula (built, in review)
+- Story 9.7: The Rail as a nebula (done)
 - Story 9.8: Deep Planets wear a ring and a moon
 - Story 9.9: The atmosphere rim
 - Story 9.10: The handover

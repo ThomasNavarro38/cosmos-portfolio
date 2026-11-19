@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { AdditiveBlending, type BufferAttribute, BufferGeometry, Color, DoubleSide, Group, InstancedMesh, type Mesh, type Object3D, PerspectiveCamera, Points, Scene, type ShaderMaterial, Sprite, type WebGLRenderer } from 'three';
 import { stripComments } from '../../../scripts/source-scan.ts';
+import { DUST_MEDIUM_COLOR, DUST_PARTICLE_COLOR } from '../dust-model.ts';
 import { tokens } from '../../tokens/tokens.ts';
 import { buildRail, RAIL_LINE_SAMPLES_PER_SEGMENT, type RailArtifact, railLine } from '../rail-model.ts';
 import type { RealismArtifact, RealismPoint } from '../realism-status.ts';
@@ -95,7 +96,11 @@ test('the colour is the token\'s hue at the peak luminance, each channel clamped
   for (const bad of [[0, 0, 0], [Number.NaN, 0.1, 0.1], [-0.1, 0.2, 0.2], [Number.POSITIVE_INFINITY, 0, 0]] as const) {
     assert.throws(() => nebulaColor(bad), /nebula colour/, String(bad));
   }
-  assert.deepEqual(nebulaColor([1, 0, 0]).map((value) => value <= 1), [true, true, true], 'clamped');
+  // The clamp cannot bind at this peak: a channel is at most peak / 0.0722 (pure blue), far
+  // under 1. It is the shader's guard for a raised peak, so the bound itself is what is held.
+  const bluest = nebulaColor([0, 0, 1]);
+  assert.ok(Math.abs(bluest[2] - NEBULA_PEAK_LUMINANCE / 0.0722) < 1e-12 && bluest[2] < 1, `the largest channel any colour reaches is ${bluest[2]}`);
+  for (const pure of [[1, 0, 0], [0, 1, 0], [0, 0, 1]] as const) assert.ok(nebulaColor(pure).every((value) => value <= NEBULA_PEAK_LUMINANCE / 0.0722 + 1e-12), String(pure));
   assert.ok(nebulaTint().equals(new Color(tokens.colors['realism-nebula-dark'])), 'the shipped token is the tint');
 });
 
@@ -126,8 +131,19 @@ test('for every ordered pair of tints, the void, the peak and two near glow peak
     }
   }
   assert.equal(pairs, 25, 'same-tint and mixed-tint stacks alike');
-  assert.ok(FILL_CEILING_LUMINANCE === linearLuminance(tokens.colors['stroke-active-dark']) || Math.abs(FILL_CEILING_LUMINANCE - linearLuminance(tokens.colors['stroke-active-dark'])) < 1e-12);
-  assert.ok(Math.abs(STAR_SUBJECT_CEILING_LUMINANCE - linearLuminance(tokens.colors['stroke-focus-dark'])) < 1e-12);
+  assert.ok(Math.abs(FILL_CEILING_LUMINANCE - linearLuminance(tokens.colors['stroke-active-dark'])) < 1e-12, 'the fill ceiling is stroke-active-dark');
+  assert.ok(Math.abs(STAR_SUBJECT_CEILING_LUMINANCE - linearLuminance(tokens.colors['stroke-focus-dark'])) < 1e-12, 'the subject ceiling is stroke-focus-dark');
+});
+
+test('the ribbon adds over the Dust (drawn before it): the brightest Dust, opaque, plus the peak stays under stroke-active', () => {
+  const nebula = nebulaAt(NEBULA_PEAK_LUMINANCE);
+  for (const [name, color] of [['a medium sprite', DUST_MEDIUM_COLOR], ['a speck', DUST_PARTICLE_COLOR]] as const) {
+    const dust = channels(color).map(toSrgb);
+    const over = decodedSum(dust, nebula);
+    assert.ok(over < FILL_CEILING_LUMINANCE, `${name} under the ribbon reads ${over}`);
+  }
+  // A Mote label over a glow is not a promise the ribbon could break: no glow keeps 4.5:1 for a
+  // label at the ceiling (signal.test.ts), so the label floor is held over the void alone, above.
 });
 
 // --- The alpha ----------------------------------------------------------------------------------
@@ -201,6 +217,13 @@ test('the side is a unit vector at right angles to the tangent, toward the camer
   };
   const side = check([1, 0, 0], [0, 0, 10], 'the usual pose');
   assert.ok(Math.abs(side[2]) < 1e-12, 'and at right angles to the line of sight');
+  const near = (a: readonly number[], b: readonly number[]): boolean => a.every((value, at) => Math.abs(value - b[at]!) < 1e-9);
+  assert.ok(near(side, [0, -1, 0]), `cross(tangent, toCamera) itself: ${side}`);
+  // Along the line of sight, off the view axes: the first fallback, cross(t, viewUp), and not view +x.
+  const along = check([1, 0, 1], [2, 0, 2], 'the tangent along the line of sight, off the axes');
+  assert.ok(near(along, [-Math.SQRT1_2, 0, Math.SQRT1_2]), `the first fallback is cross(tangent, viewUp): ${along}`);
+  // Along the line of sight and along view up: the second fallback, view +x.
+  assert.ok(near(check([0, 2, 0], [0, 7, 0], 'the tangent along view up, toward the camera'), [1, 0, 0]), 'the second fallback is view +x');
   check([0, 0, -3], [0, 0, 5], 'the tangent along the line of sight');
   check([0, 0, 1], [0, 0, 1e-9], 'the camera almost at the vertex, along the tangent');
   check([0, 2, 0], [0, 7, 0], 'the tangent along the line of sight and view up');
@@ -254,10 +277,15 @@ test('the committed artifact: the drawn Rail\'s 121 points, a 242-vertex ribbon 
   assert.equal(addedDraws(fillPlans(artifact).length, starPlans(artifact).length, artifact.railLine.length), 22);
 });
 
-test('past 65,535 vertices the index is 32-bit', () => {
-  const points = Array.from({ length: 33_000 }, (_, at) => ({ x: at, y: Math.sin(at), z: 0 }));
+test('past 65,535 vertices the index is 32-bit, and at 65,534 it is still 16-bit', () => {
+  const curve = (length: number) => Array.from({ length }, (_, at) => ({ x: at, y: Math.sin(at), z: 0 }));
+  const below = nebulaArrays(curve(32_767))!;
+  assert.equal(below.positions.length / 3, 65_534);
+  assert.ok(below.index instanceof Uint16Array, 'the last even count under the switch');
+  const points = curve(32_768);
   const arrays = nebulaArrays(points)!;
-  assert.ok(arrays.index instanceof Uint32Array);
+  assert.equal(arrays.positions.length / 3, 65_536);
+  assert.ok(arrays.index instanceof Uint32Array, 'the first even count past it');
   assert.equal(Math.max(...arrays.index.subarray(arrays.index.length - 6)), 2 * points.length - 1);
 });
 

@@ -2,8 +2,8 @@
  * The line-work realism replaces, as it fades (9.4, 9.6, 9.7, AD-19 and AD-22 as amended): a
  * Star's outline and core dot fall on the realism layer's one fade, as its emissive core
  * rises, every Planet's orbit hairline falls on it as its debris belt rises (9.6), and the
- * Rail's hairline as its nebula ribbon rises (9.7); all return whole if realism fails. Pure, and structural, so `node --test` runs it on fakes;
- * `body-field.tsx` binds it.
+ * Rail's hairline as its nebula ribbon rises (9.7); all return whole if realism fails. Pure,
+ * and structural, so `node --test` runs it on fakes; `body-field.tsx` binds it.
  *
  * **Stars, orbits and the Rail only.** `holdStarMarks` keeps a Star's billboard by its ID and
  * ignores every Planet, so a Planet's outline and Ring stay at their token values (9.9 and

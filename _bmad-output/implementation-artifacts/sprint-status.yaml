@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 11-19-2026 08:50
+last_updated: 11-19-2026 14:11
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -138,7 +138,7 @@ development_status:
   9-4-stars-that-shine: done
   9-5-a-colour-per-star: done
   9-6-orbits-as-debris-belts: done
-  9-7-the-rail-as-a-nebula: backlog
+  9-7-the-rail-as-a-nebula: done
   9-8-deep-planets-wear-a-ring-and-a-moon: backlog
   9-9-the-atmosphere-rim: backlog
   9-10-the-handover: backlog

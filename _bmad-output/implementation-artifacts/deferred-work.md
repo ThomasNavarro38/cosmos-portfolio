@@ -1682,3 +1682,11 @@ Still open after 3.5:
 
 - note (2026-11-19, story 9.7): the spec-9-2-the-rulings.md deferral "The spine does not carry the nebula drift stopping under reducedMotion() or the belt having no motion and no particles" is now closed: 9.6 addressed the belt, and AD-20's 2026-11-19 note for 9.7 states the nebula's one motion, its drift, holds while reducedMotion() is true, read as spin is (not motionPace), and wraps on a periodic field so it never jumps.
 - note (2026-11-19, story 9.7): the spec-9-2-the-rulings.md deferral "DESIGN §6's four-item shape vocabulary and AD-19's 'contrast floor over a fill or glow' are not extended to the ribbon, belt, ring disc and spheres" is addressed for the ribbon by 9.7: DESIGN §6's Rail sentence has a 2026-11-19 note (the ribbon is not a fifth shape and not a mark), and AD-19's 2026-11-19 note for 9.7 says the nebula precedes the fills, labels are DOM plates, and a Mote label, which has no plate, is held to 4.5:1 over the nebula's peak by test. The ring disc and spheres stay 9.8's.
+
+## Deferred from: code review of spec-9-7-the-rail-as-a-nebula.md (2026-11-19)
+
+The spec's own residual risks, recorded here so 9.11 does not depend on re-reading the spec.
+
+- **Self-overlap brightness is unbounded.** The ribbon is additive and writes no depth, so where it covers itself on screen the layers stack. Every brightness bound in `nebula-model.test.ts` is for one layer. The camera passes within about 5 units of the curve, so looking along the Rail is a normal pose, not a tight-bend edge case. No worst-case layer count at the opening pose has been estimated. 9.11 measures it on real pixels.
+- **The JS fbm mirror runs in float64, the GPU in float32.** `nebulaFbm` is exact to the shader's arithmetic only up to precision, and the hash is precision-sensitive near 2e4 (it needs highp). Nothing compares the two numerically. 9.11's on-screen check is the only evidence.
+- **`scene` headroom is 2,244 B** (957,756 of 960,000 B) for 9.8 to 9.10. The `RealismArtifact` field and the `NEBULA_RENDER_ORDER` export landed in `scene`. The next stories have little room before the budget needs a ruling.

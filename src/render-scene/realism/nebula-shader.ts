@@ -17,8 +17,10 @@
  *   cells, wraps modulo `NOISE_PERIOD` (`nextNebulaDrift`), so the wrap lands on the same field.
  *   The hash is sine-free (Dave Hoskins' `hash12`): it takes the cell's wrapped x and its y
  *   through `fract(p × 0.1031)` first, so every later intermediate is bounded whatever the
- *   cell index, octave or drift (below about 2.2e4, inside mediump's 65,504), where a sine
- *   hash would see arguments near 1e5 at the fourth octave.
+ *   cell index, octave or drift (below about 2.2e4), where a sine hash would see arguments
+ *   near 1e5 at the fourth octave. Bounded is range, not precision: near 2e4 a mediump float
+ *   steps by about 16, so its `fract` would be noise. The hash needs highp, which three
+ *   declares for a ShaderMaterial wherever the GPU has it.
  * - **The output is additive**, as the glow's is: `vec4(colour × alpha, 1.0)`, then
  *   `<colorspace_fragment>`. Nothing is tone-mapped.
  */

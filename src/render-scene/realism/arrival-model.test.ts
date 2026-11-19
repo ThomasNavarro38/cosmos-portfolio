@@ -14,15 +14,17 @@ import { type Camera, type Group, type Mesh, type Object3D, PerspectiveCamera, S
 import { stripCommentsAndStrings } from '../../../scripts/source-scan.ts';
 import { REDUCED_MOTION_PACE } from '../../shell/motion-preference.ts';
 import { createRealismOwner, type RealismArtifact } from '../realism-status.ts';
-import { BELT_RENDER_ORDER, GLOW_RENDER_ORDER } from '../scene-model.ts';
+import { BELT_RENDER_ORDER, GLOW_RENDER_ORDER, NEBULA_RENDER_ORDER } from '../scene-model.ts';
 import { depthWrites, FADE_MAX_FRAME_SECONDS, FADE_SECONDS, nextFade } from './arrival-model.ts';
 import { createFillLayer } from './fill-layer.ts';
 import { addedDraws } from './fill-model.ts';
 
 const DELTA = 1 / 60;
 const APPEARANCE = { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.05, spinPhase: 1.5 };
+/** A short drawn Rail (9.7), so the nebula ribbon is among the draws. */
+const RAIL_LINE = [{ x: 0, y: 0, z: 0 }, { x: 40, y: 2, z: -3 }, { x: 100, y: 0, z: 0 }];
 const ARTIFACT: RealismArtifact = {
-  railLine: [],
+  railLine: RAIL_LINE,
   clients: [
     { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: APPEARANCE }, { id: 'project:a/two', clientId: 'client:a', position: { x: -10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: { ...APPEARANCE, map: 'mars' } }] },
     { id: 'client:b', position: { x: 100, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [] },
@@ -100,10 +102,12 @@ function drawsOf(root: Object3D): Mesh[] {
 const materialOf = (mesh: Mesh): ShaderMaterial => mesh.material as ShaderMaterial;
 const isGlow = (mesh: Mesh): boolean => mesh.renderOrder === GLOW_RENDER_ORDER;
 const isBelt = (mesh: Mesh): boolean => mesh.renderOrder === BELT_RENDER_ORDER;
-/** The fills, Planet and Star: every draw but the glows and the belts (9.6), which never write depth. */
-const fillsOf = (root: Object3D): Mesh[] => drawsOf(root).filter((mesh) => !isGlow(mesh) && !isBelt(mesh));
+const isNebula = (mesh: Mesh): boolean => mesh.renderOrder === NEBULA_RENDER_ORDER;
+/** The fills, Planet and Star: every draw but the glows, the belts (9.6) and the ribbon (9.7), which never write depth. */
+const fillsOf = (root: Object3D): Mesh[] => drawsOf(root).filter((mesh) => !isGlow(mesh) && !isBelt(mesh) && !isNebula(mesh));
 const glowsOf = (root: Object3D): Mesh[] => drawsOf(root).filter(isGlow);
 const beltsOf = (root: Object3D): Mesh[] => drawsOf(root).filter(isBelt);
+const nebulaeOf = (root: Object3D): Mesh[] => drawsOf(root).filter(isNebula);
 const fadeOf = (root: Object3D): number => materialOf(drawsOf(root)[0]!).uniforms.uFade!.value as number;
 
 function attached() {
@@ -121,11 +125,11 @@ function sharedFade(materials: readonly ShaderMaterial[]): string[] {
   return objects.size === 1 ? [] : [`${objects.size} fade objects`];
 }
 
-test('one fade uniform object is shared by every Planet fill, Star fill and glow, and the belts', () => {
+test('one fade uniform object is shared by every Planet fill, Star fill and glow, the belts and the ribbon', () => {
   const { scene } = attached();
   const materials = drawsOf(scene).map(materialOf);
-  assert.equal(materials.length, addedDraws(2, 2, 0));
-  assert.ok(materials.some((material) => material.uniforms.uMap !== undefined) && glowsOf(scene).length === 2 && beltsOf(scene).length === 1, 'Planets, Star fills, glows and the belts are all read');
+  assert.equal(materials.length, addedDraws(2, 2, RAIL_LINE.length));
+  assert.ok(materials.some((material) => material.uniforms.uMap !== undefined) && glowsOf(scene).length === 2 && beltsOf(scene).length === 1 && nebulaeOf(scene).length === 1, 'Planets, Star fills, glows, the belts and the ribbon are all read');
   assert.deepEqual(sharedFade(materials), []);
   const mutated = materials.map((material, at) => (at === materials.length - 1 ? { ...material, uniforms: { ...material.uniforms, uFade: { value: 0 } } } as unknown as ShaderMaterial : material));
   assert.match(sharedFade(mutated).join(), /2 fade objects/, 'a second object is caught');
@@ -157,6 +161,7 @@ test('arrive with the fade: the fade rises by the clamped delta, depth stays off
     assert.deepEqual(writing, writing.map(() => fade === 1), `frame ${frames}: depth is ${fade === 1 ? 'on for every fill' : 'off for every fill'}`);
     assert.ok(glowsOf(scene).every((mesh) => !materialOf(mesh).depthWrite), 'no glow writes depth');
     assert.ok(beltsOf(scene).every((mesh) => !materialOf(mesh).depthWrite), 'no belt writes depth (9.6)');
+    assert.ok(nebulaeOf(scene).length === 1 && nebulaeOf(scene).every((mesh) => !materialOf(mesh).depthWrite), 'the ribbon never writes depth (9.7)');
     previous = fade;
     assert.ok(frames < 1000);
   }
@@ -184,6 +189,7 @@ test('arrive without the fade: whole at once, every fill writing depth, no glow,
   assert.ok(fillsOf(scene).every((mesh) => materialOf(mesh).depthWrite));
   assert.ok(glowsOf(scene).every((mesh) => !materialOf(mesh).depthWrite));
   assert.ok(beltsOf(scene).length === 1 && beltsOf(scene).every((mesh) => !materialOf(mesh).depthWrite), 'the belt never writes depth (9.6)');
+  assert.ok(nebulaeOf(scene).length === 1 && nebulaeOf(scene).every((mesh) => !materialOf(mesh).depthWrite), 'the ribbon never writes depth (9.7)');
   layer.frame(camera, DELTA, false, 1, null);
   assert.equal(fadeOf(scene), 1);
 });
@@ -197,7 +203,7 @@ test('the layer is one group: nothing reaches a scene before attach, and attach 
   const group = scene.children[0] as Group;
   assert.equal(group.type, 'Group');
   assert.equal((group as unknown as Mesh).isMesh, undefined);
-  assert.equal(group.children.length, addedDraws(2, 2, 0));
+  assert.equal(group.children.length, addedDraws(2, 2, RAIL_LINE.length));
   layer.dispose();
   assert.deepEqual(scene.children, []);
 });
@@ -254,7 +260,7 @@ test('warm uploads every texture once by initTexture and compiles once, over the
   assert.equal(compile!.scene, scene, 'prepared against the scene it will join, so its programs match that draw');
   assert.notEqual(compile!.root, scene);
   assert.equal(compile!.parentAtCompile, null, 'the group is in no scene while it compiles');
-  assert.equal(compile!.children, addedDraws(2, 2, 0), 'every draw is compiled');
+  assert.equal(compile!.children, addedDraws(2, 2, RAIL_LINE.length), 'every draw is compiled');
   assert.deepEqual(scene.children, [], 'warm attaches nothing');
 });
 
@@ -334,7 +340,7 @@ test('under the real owner, no layer mesh is in the scene before warm resolves, 
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(scene.children, [], 'resolving draws nothing until a frame');
   owner.frame(ARTIFACT, '/', draw);
-  assert.equal(drawsOf(scene).length, addedDraws(2, 2, 0), 'the warm draw');
+  assert.equal(drawsOf(scene).length, addedDraws(2, 2, RAIL_LINE.length), 'the warm draw');
   assert.equal(fadeOf(scene), 0);
   assert.ok(drawsOf(scene).every((mesh) => !materialOf(mesh).depthWrite));
   assert.deepEqual(owner.status(), { document: 'decoded', uploaded: true });
@@ -357,6 +363,27 @@ test('under the real owner, a program that did not link ends in markFailed, with
     for (let at = 0; at < 5; at += 1) assert.doesNotThrow(() => owner.frame(ARTIFACT, '/', draw));
     assert.deepEqual(scene.children, []);
     assert.equal(fake.compiled.length, 1, 'no retry');
+  } finally {
+    Object.assign(console, saved);
+  }
+  assert.deepEqual(consoleCalls, []);
+});
+
+test('under the real owner, a bad Rail sample fails the document at the build, silently: nothing attached, no warm-up, and the line-work stays whole', async () => {
+  const consoleCalls: unknown[] = [];
+  const saved = { error: console.error, warn: console.warn, log: console.log };
+  for (const key of ['error', 'warn', 'log'] as const) console[key] = (...args: unknown[]) => void consoleCalls.push(args);
+  try {
+    const bad: RealismArtifact = { ...ARTIFACT, railLine: [RAIL_LINE[0]!, { x: Number.NaN, y: 0, z: 0 }, RAIL_LINE[2]!] };
+    const fake = fakeRenderer();
+    const { owner, scene, draw } = await realOwner(fake.renderer);
+    owner.frame(bad, '/', draw);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(owner.status(), { document: 'failed', uploaded: false });
+    for (let at = 0; at < 5; at += 1) assert.doesNotThrow(() => owner.frame(bad, '/', draw));
+    assert.deepEqual(scene.children, [], 'the schematic is all there is');
+    assert.equal(fake.compiled.length, 0, 'nothing was built to warm');
+    assert.equal(owner.lineWorkFade(), 1, 'the Rail hairline, the orbits and the Star marks stay at their token values');
   } finally {
     Object.assign(console, saved);
   }

@@ -34,7 +34,8 @@
  * octaves double the frequency and the period, and shift on y only), so the drift wraps
  * modulo that period and lands on the identical field: no jump. The hash is sine-free (Dave
  * Hoskins' `hash12`), taking the wrapped cell through `fract(p × 0.1031)` first, so its
- * intermediates are bounded (below about 2.2e4) at every cell, octave and drift.
+ * intermediates are bounded (below about 2.2e4) at every cell, octave and drift. That is a
+ * bound on range, not precision: the hash needs highp, where its `fract` keeps the bits.
  *
  * **The drift holds under reduced motion,** read as spin is, never through `motionPace`.
  *

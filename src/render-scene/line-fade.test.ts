@@ -7,12 +7,16 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { Group, Mesh, MeshBasicMaterial } from 'three';
 import { Line2 as DreiLine2, LineGeometry as DreiLineGeometry, LineMaterial as DreiLineMaterial } from 'three-stdlib';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { fadeStarMarks, holdReplacedLine, holdStarMarks, type FadedMaterial, type StarMarks } from './line-fade.ts';
+import { buildRail, RAIL_LINE_SAMPLES_PER_SEGMENT, railLine } from './rail-model.ts';
+import { buildScene, type SceneArtifact } from './scene-model.ts';
+import { sceneLines } from './stroke-model.ts';
 
 const STAR = { id: 'client:a', kind: 'star' };
 const PLANET = { id: 'project:a/one', kind: 'planet' };
@@ -99,6 +103,17 @@ test('an orbit line and the Rail line are held by their IDs and dropped on null,
   holdReplacedLine(held, { id: 'orbit:project:a/one' }, null);
   holdReplacedLine(held, { id: 'rail' }, null);
   assert.deepEqual([...held], [['orbit:project:a/two', 'other']]);
+});
+
+test('over the committed scene\'s real sceneLines, exactly the Rail and every orbit are held, so a renamed ID cannot leave a hairline unfaded', () => {
+  const artifact = JSON.parse(readFileSync(fileURLToPath(new URL('../../generated/layout.generated.json', import.meta.url)), 'utf8')) as SceneArtifact;
+  const { bodies } = buildScene(artifact);
+  const lines = sceneLines(bodies, railLine(buildRail(artifact, bodies), RAIL_LINE_SAMPLES_PER_SEGMENT));
+  const held = new Map<string, string>();
+  for (const line of lines) holdReplacedLine(held, line, line.id);
+  const planets = bodies.filter((body) => body.kind === 'planet');
+  assert.ok(planets.length > 0, 'the committed scene has orbits to hold');
+  assert.deepEqual([...held.keys()].sort(), ['rail', ...planets.map((body) => `orbit:${body.id}`)].sort(), 'the Rail and one orbit per Planet');
 });
 
 test('over real drei-style lines, the orbits and the Rail take the fade, hide at 0 and return whole (9.6, 9.7)', () => {

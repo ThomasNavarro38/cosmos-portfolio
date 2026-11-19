@@ -30,7 +30,7 @@ deferred: []
 - **Curve.** The ribbon follows exactly the curve the hairline draws: `railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT)`.
   - `realism-mount.tsx` samples it, memoised on `[artifact, rail]`, and hands the owner `{ ...artifact, railLine }`.
   - `RealismArtifact` gains `readonly railLine: readonly RealismPoint[]`. This is documented as not part of the committed artifact.
-  - The `realism` chunk imports no Rail code and the `scene` chunk exports nothing new.
+  - The `realism` chunk imports no Rail code, and the `scene` chunk exports nothing new at run time but `NEBULA_RENDER_ORDER` (the type `RealismPoint` is erased).
   - With fewer than 2 points there is no ribbon and no draw, as with the hairline.
 - **Geometry.**
   - There are two vertices per curve point, carrying `aRibbon = (arc length in scene units, across ∓1)` and a central-difference `aTangent`.
@@ -175,6 +175,28 @@ deferred: []
 - **Ceiling and labels:** given any tint, when the nebula's peak sits under two near glows, then the sum stays under `stroke-active`, and with the subject's glow under `stroke-focus`. When it sits over the void, then it decodes at most to the Rail line's luminance, and a Mote label over it keeps 4.5:1.
 - **Failure:** given realism fails or never arrives, when the Rail is drawn, then the Rail hairline stays at its token value, at opacity 1.
 - **Budgets:** given the committed artifact, when `npm run build` runs, then the gate passes, `addedDraws` is `planets + 2 × stars + 1 + 1` on the committed artifact (22), `scene` ≤ 960,000 B and `realism` ≤ 24,000 B.
+
+### Review Findings
+
+Code review, 2026-11-19, of 695a036 against d2dc8d7 (Blind Hunter, Edge Case Hunter, Verification Gap, Acceptance Auditor). 0 decision-needed, 17 patch, 0 defer, 8 dismissed.
+
+- [x] [Review][Patch] The ribbon's "no depth write at any fade" is never checked after arrival: every owner and arrival fixture has `railLine: []`, so no nebula is built under `arrive`/`frame`. Give the fixture a curve, leave `nebula` out of `fillsOf`, assert `!depthWrite` beside the belts' [src/render-scene/realism/arrival-model.test.ts:25]
+- [x] [Review][Patch] A bad Rail sample is only shown to make `createFillLayer` throw; no test takes it through `createRealismOwner` to `failed` with the schematic whole and the Rail hairline at 1 [src/render-scene/realism-status.test.ts:22]
+- [x] [Review][Patch] The hash is called safe "inside mediump's 65,504": that is range, not precision. Near 2e4 mediump steps by ~16, so `fract` is meaningless; the ribbon relies on highp. Say so (or pin highp) in both docs [src/render-scene/realism/nebula-shader.ts:20]
+- [x] [Review][Patch] `buildRail` runs in `Scene`'s render body, so `rail` is new each render and the `[artifact, rail]` memo resamples `railLine` on every Scene render; the owner keeps its first layer regardless [src/render-scene/scene.tsx:173] — `scene.tsx` may not memoise (thinness audit, `scene-model.test.ts:972`), so the mount's doc now says so; the curve is the same each time, being a pure function of the committed artifact
+- [x] [Review][Patch] `RAIL_LINE_ID = 'rail'` restates `sceneLines`' id as a literal; no test runs `holdReplacedLine` over real `sceneLines(...)` output, so a rename would leave the hairline at 1 under the ribbon in silence [src/render-scene/line-fade.ts:44] — fixed by a test over the committed scene's `sceneLines`
+- [x] [Review][Patch] The "clamped" colour assertion is vacuous: at the current peak no channel can exceed 1 (max is peak / 0.0722 ≈ 0.105), so the clamp never runs. Assert the real bound, or test the clamp directly [src/render-scene/realism/nebula-model.test.ts:98]
+- [x] [Review][Patch] The spec's residual risks (self-overlap brightness when looking along the Rail, the float64 fbm mirror, `scene` headroom of 2,244 B) are not in the deferral register [_bmad-output/implementation-artifacts/deferred-work.md]
+- [x] [Review][Patch] The brightness grid omits Dust under the ribbon (additive after Dust) and a Mote label over ribbon plus glow [src/render-scene/realism/nebula-model.test.ts:102] — Dust added; the label over a glow is not a promise (no glow keeps 4.5:1 at the ceiling, `signal.test.ts:297`), so it is noted, not tested
+- [x] [Review][Patch] The 16/32-bit index switch is tested at 66,000 vertices only, not at its boundary [src/render-scene/realism/nebula-model.ts:119]
+- [x] [Review][Patch] `ribbonSide`'s degenerate fallbacks (`cross(t, viewUp)`, then `+x`) are not asserted by direction, only as unit and perpendicular [src/render-scene/realism/nebula-model.test.ts:193]
+- [x] [Review][Patch] Redundant `===` branch and no message on the ceiling assertion; match the tolerance form beside it [src/render-scene/realism/nebula-model.test.ts:129]
+- [x] [Review][Patch] README still says "the five `*_RENDER_ORDER` constants"; there are seven [src/render-scene/README.md:12]
+- [x] [Review][Patch] The spec says the `scene` chunk "exports nothing new", but the Code Map requires `NEBULA_RENDER_ORDER` (and `RealismPoint` is now exported, type-only); reword the constraint [_bmad-output/implementation-artifacts/spec-9-7-the-rail-as-a-nebula.md:33]
+- [x] [Review][Patch] Local `const nebulaColor = nebulaTint()` shadows the exported model function `nebulaColor`; rename it as the belt's `tint` [src/render-scene/realism/fill-layer.ts:119]
+- [x] [Review][Patch] The edited `line-fade.ts` header line runs past the block's wrap width [src/render-scene/line-fade.ts]
+- [x] [Review][Patch] DESIGN §2 calls `realism-nebula` "the hued token of the family", but the star tints are hued too; "a hued token" [_bmad-output/planning-artifacts/ux-designs/ux-cosmos-portfolio-2026-09-01/DESIGN.md:520]
+- [x] [Review][Patch] Status disagrees across records: sprint status `backlog`, epic context "built, in review", spec `done` [_bmad-output/implementation-artifacts/sprint-status.yaml:141]
 
 ## Spec Change Log
 

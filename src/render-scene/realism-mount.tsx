@@ -30,7 +30,10 @@
  * **The Rail's curve (9.7)** is sampled here, as `body-field.tsx` draws its hairline
  * (`railLine` at `RAIL_LINE_SAMPLES_PER_SEGMENT`), memoised on the artifact and the Rail,
  * and handed to the owner on the artifact as `railLine`, so the nebula ribbon follows
- * exactly the drawn curve and the realism chunk imports no Rail code.
+ * exactly the drawn curve and the realism chunk imports no Rail code. `scene.tsx` builds the
+ * Rail in its render body (it may not memoise), so a Scene render samples again; the owner
+ * builds its layer once per arrival, from a curve that is the same each time, because the
+ * Rail is a pure function of the committed artifact.
  *
  * **The subject is a thunk,** resolved inside the owner's `try`, so a store read that
  * throws cannot reach R3F, and nothing is read before a layer exists. It writes nothing.
