@@ -103,7 +103,7 @@ deferred:
 - `scripts/tokens.test.ts:578-593` -- the family becomes 14 keys.
 - `src/identity-audit.test.ts:170-190` -- check whether the realism family listing needs `realism-belt` (it is hued, chroma > 0, and exempt by prefix).
 - `src/render-scene/realism/README.md` -- the Imports line (`../scene-model.ts` `BELT_RENDER_ORDER`, `../stroke-model.ts` `orbitPoints`/`ORBIT_SEGMENTS`, the token), the file table, and a new "The belt (9.6)" section. Update 9.4's "No other line-work fades yet".
-- `ARCHITECTURE-SPINE.md` AD-20 and AD-19 -- dated 9.6 notes. These close deferred-work lines 1644 and 1645 for the belt.
+- `ARCHITECTURE-SPINE.md` AD-20 and AD-19 -- dated 9.6 notes. These close two deferrals in `deferred-work.md` for the belt: the spec-9-2-the-rulings.md deferral "The spine does not carry the nebula drift stopping under reducedMotion() or the belt having no motion and no particles", and the spec-9-2-the-rulings.md deferral "DESIGN §6's four-item shape vocabulary and AD-19's 'contrast floor over a fill or glow' are not extended to the ribbon, belt, ring disc and spheres".
 
 ## Tasks & Acceptance
 
@@ -144,7 +144,7 @@ deferred:
    - DESIGN.md §2 and §6 notes;
    - AD-19 (a belt is not a Body's mark; labels are DOM overlays on opaque plates, so the belt cannot lower their contrast) and AD-20 (the belt carries its Planet's band, static, no particles) notes, dated 2026-11-19;
    - one `(decision)` memlog entry via `py _bmad/scripts/memlog.py append`;
-   - mark deferred-work entries 1644/1645 as addressed for the belt in the Auto Run Result.
+   - mark the two spec-9-2-the-rulings.md deferrals (the belt's no motion and no particles; §6 and AD-19 not extended to the belt) as addressed for the belt in the Auto Run Result.
 
 **Acceptance Criteria:**
 - **Belts, not lines:** given realism has arrived, when orbits are drawn, then each Planet's orbit is a wide, faint band on its own orbit circle, all in one mesh, and its hairline is at opacity 0 and hidden, while the Rail line stays.
@@ -152,6 +152,25 @@ deferred:
 - **Not Dust:** given any time and any `reducedMotion()`, then the belt is identical frame to frame. It has no particles, no `Points`, no time uniform and no thresholded specks.
 - **Failure:** given realism fails or never arrives, then every orbit hairline stays at its token value, at opacity 1.
 - **Budgets:** given `npm run build`, then the gate passes, `addedDraws` is `planets + 2 × stars + 1`, `scene` ≤ 960,000 B and `realism` ≤ 24,000 B.
+
+### Review Findings
+
+Follow-up review, 2026-11-19 (Blind Hunter, Edge Case Hunter, Verification Gap, Acceptance Auditor): 0 decision-needed, 9 patch, 5 defer, 12 dismissed. Applied 2026-11-19: 8 patches; 1 reclassified as dismissed on applying. After them: `npm run typecheck` clean; `npm test` 2,287 tests, 2,286 pass, 0 fail, 1 skipped (the existing environmental skip); `npm run build`: the gate passes, `realism` 14,798 of 24,000 B (`beltTint` adds 133 B to 9.6's 14,665), `scene` 957,602 of 960,000 B, entry 3,278 of 4,000 B.
+
+- [x] [Review][Patch] [medium] The orbit-hairline fade is tested only on `three/examples` `Line2`/`LineMaterial`, built by hand. drei's `Line` forwards its ref to `three-stdlib`'s classes, so no test runs the fade on the object the ref callback actually receives, and the Failure AC has no orbit-specific test [src/render-scene/line-fade.test.ts:9]
+- [x] [Review][Patch] [low] `createFillLayer` says it throws "before anything is built", but `createBelt`'s `realism-belt` colour guard runs after the sphere geometry, textures, Planet materials and Star rows exist, so they leak if it throws. Move the guard ahead of construction [src/render-scene/realism/fill-layer.ts:113, src/render-scene/realism/belt-layer.ts:36]
+- [x] [Review][Patch] [low] `beltColor` rejects only a non-positive or non-finite total luminance. A negative or NaN channel with a positive total still passes [src/render-scene/realism/belt-model.ts:160]
+- [x] [Review][Patch] [low] The `Uint32Array` index branch (above 65,535 vertices) never runs in a test [src/render-scene/realism/belt-model.ts:127]
+- [x] [Review][Patch] [low] `BELT_BAND_LUMINANCE`'s keys are pinned to a literal, not to derive's `RESTING_BANDS` [src/render-scene/realism/belt-model.test.ts:34]
+- [x] [Review][Dismissed] [low] The frame loop spreads both ref maps into a new array every frame [src/render-scene/body-field.tsx:67]. Not applied: every variant either still allocates (a rest array, a generator) or splits the one `fadeStarMarks` call that `auditBodyField` pins, with its mutations, as the one read of the fade. The array holds 14 references per frame.
+- [x] [Review][Patch] [low] The 9.6 memlog decision gives `realism 14,138 B` (before the review patches; the final figure is 14,665 B) and omits `forceSinglePass`. Append a correction entry [_bmad-output/planning-artifacts/architecture/architecture-cosmos-portfolio-2026-09-01/.memlog.md:116]
+- [x] [Review][Patch] [low] The NFR-2 `BELT_DRAWS_BUDGET` row's measured cell gives a figure and says "not measured at this commit" in the same cell [_bmad-output/implementation-artifacts/nfr-2-record-8-3.md:40]
+- [x] [Review][Patch] [low] The closed deferrals are identified by line number ("deferred-work.md lines 1644 and 1645"), and those numbers shift as the file grows. Name them by their text [_bmad-output/implementation-artifacts/spec-9-6-orbits-as-debris-belts.md:106,147,203]
+- [x] [Review][Defer] The draw-budget tests count `Mesh` objects, not GL draws. A multi-pass material passed them, and only a source pin now guards `forceSinglePass` [src/render-scene/realism/done.test.ts:92] — deferred, pre-existing
+- [x] [Review][Defer] Sibling belts of one Star can overlap (when `r1·1.08 > r2·0.92`), and a small orbit's inner edge can enter its Star's glow. No check or note covers this [src/render-scene/realism/belt-model.ts:35] — deferred to 9.11's on-screen judgement
+- [x] [Review][Defer] The belt noise's seam, continuity and range are pinned only by regexes on the GLSL. `beltAlpha` takes `noise` as an input and does not mirror `hash`/`noise` [src/render-scene/realism/belt-shader.ts] — deferred, no GPU under node --test
+- [x] [Review][Defer] `StarMarks`/`fadeStarMarks` now also type and fade orbit lines, so the names no longer match their role [src/render-scene/line-fade.ts:26,57] — deferred to 9.10, which extends the same fade
+- [x] [Review][Defer] AD-19, AD-20 and DESIGN's realism family count carry stacked dated amendments that contradict their own rule bodies, instead of being folded in [ARCHITECTURE-SPINE.md, DESIGN.md] — deferred, pre-existing pattern
 
 ## Spec Change Log
 
@@ -200,7 +219,7 @@ deferred:
 - **Verification:** `npm run typecheck` clean; `npm test` 2,281 pass, 0 fail.
 - **New:** `realism/belt-model.ts` (+ test), `belt-shader.ts`, `belt-layer.ts`; `BELT_RENDER_ORDER` 1.6 with the six-step pin; `BELT_DRAWS_BUDGET`; `realism-belt`/`-dark` `#6E6A62` in DESIGN.md's frontmatter and the generated tokens; `holdOrbitLine` in `line-fade.ts`; the orbit lines on `body-field.tsx`'s one frame loop under `auditBodyField`'s extended allowance.
 - **Records touched beyond the code map:** `nfr-2-record-8-3.md` gains the `BELT_DRAWS_BUDGET` row (its guard requires one row per `budgets.ts` export), with `nfr-2-record.test.ts`'s count at 13; `realism-done-7-10.md` names the two renamed test titles. `fill-model.test.ts`'s realism source audit admits `belt-model.ts` as the second reader of `luminanceBand`.
-- **Deferred work:** `deferred-work.md` lines 1644 (the spine not carrying the belt's no motion and no particles; AD-20 note of 2026-11-19) and 1645 (§6 and AD-19 not extended to the belt; DESIGN §6 ellipse note and AD-19 note of 2026-11-19) are addressed for the belt. The nebula, ring disc and spheres remain 9.7 and 9.8's.
+- **Deferred work:** in `deferred-work.md`, the spec-9-2-the-rulings.md deferral "The spine does not carry the nebula drift stopping under reducedMotion() or the belt having no motion and no particles" (by AD-20's note of 2026-11-19) and the spec-9-2-the-rulings.md deferral "DESIGN §6's four-item shape vocabulary and AD-19's 'contrast floor over a fill or glow' are not extended to the ribbon, belt, ring disc and spheres" (by DESIGN §6's ellipse note and AD-19's note of 2026-11-19) are addressed for the belt. The nebula, ring disc and spheres remain 9.7 and 9.8's.
 - **Not verified:** the scene was not run in a browser. The belt's two shaders were compiled and linked in a real WebGL2 context under a hand-written three-like prefix (the colour-space include replaced), with clean logs, but not through three's own program build; `warm`'s link check still covers that at run time, failing silently to the schematic. How the belts look at 1080p and 32:9 is 9.11's.
 - **Review patches (2026-11-19):**
   - The belt material is `forceSinglePass`, so three draws the transparent `DoubleSide` belt once, not twice. This is pinned in the source and on the object graph.

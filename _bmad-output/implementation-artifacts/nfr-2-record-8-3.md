@@ -37,7 +37,7 @@ The chunk figures are the bundle assertion's bytes: minified, as emitted, counte
 | Sphere height segments | `SPHERE_HEIGHT_SEGMENTS_BUDGET` | 32 | 32 (`FILL_SPHERE_HEIGHT_SEGMENTS`), one shared geometry | A budget; 32 is the starting value. |
 | Added draws per Planet | `PLANET_DRAWS_BUDGET` | 1 per Planet | 1 per Planet; 8 Planets, 8 draws | A budget; 1 is the starting value. |
 | Added draws per Star | `STAR_DRAWS_BUDGET` | 2 per Star | 2 per Star; 6 Stars, 12 draws | A budget; 2 is the starting value. |
-| Added draws for all belts (9.6) | `BELT_DRAWS_BUDGET` | 1 for all belts | 1 for all belts, one merged mesh; added by 9.6 (2026-11-19), not measured at this commit | A budget; 1 is the starting value. |
+| Added draws for all belts (9.6) | `BELT_DRAWS_BUDGET` | 1 for all belts | none at this commit, which has no belt; 9.6 (2026-11-19) counts 1, one merged single-pass mesh, recorded in the note below | A budget; 1 is the starting value. |
 | Added draws for Dust | `DUST_DRAWS_BUDGET` | 0 | 0 | A budget; 0 is the starting value. |
 | Entry chunk (M2) | `ENTRY_BUDGET_BYTES` | 4,000 B | 3,278 B | M2's budget, unchanged; 3,278 is the starting value. |
 | Full-screen passes, render targets, shadow maps, scene lights | (none: held by `done.test.ts`'s scan) | 0 of each | 0 of each | A budget; 0 is the starting value. |

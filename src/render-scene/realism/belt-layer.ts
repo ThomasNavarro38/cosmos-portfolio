@@ -28,12 +28,21 @@ export interface Belt {
   dispose(): void;
 }
 
-/** The one belt mesh for these plans, added to `group`, reading `fade`; `null`, adding nothing, when there are none. */
-export function createBelt(plans: readonly BeltPlan[], fade: { value: number }, group: Group): Belt | null {
-  if (plans.length === 0) return null;
+/**
+ * `realism-belt`'s colour, read here and nowhere else. The layer reads it before it builds
+ * anything, so a token that cannot be drawn leaves nothing behind to free.
+ *
+ * @throws as `beltColor` does on a token with no luminance, which has no hue to normalise.
+ */
+export function beltTint(): Color {
   const color = new Color(tokens.colors['realism-belt-dark']);
-  // A token with no luminance has no hue to normalise: refused before anything is built.
   beltColor([color.r, color.g, color.b], 1);
+  return color;
+}
+
+/** The one belt mesh for these plans, in `color` (`beltTint()`), added to `group`, reading `fade`; `null`, adding nothing, when there are none. */
+export function createBelt(plans: readonly BeltPlan[], color: Color, fade: { value: number }, group: Group): Belt | null {
+  if (plans.length === 0) return null;
   const { positions, belt, luminance, index } = beltArrays(plans);
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(positions, 3));

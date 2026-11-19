@@ -57,7 +57,7 @@ import type { RealismArtifact } from '../realism-status.ts';
 import { FILL_RENDER_ORDER } from '../scene-model.ts';
 import { PLANET_RADIUS } from '../stroke-model.ts';
 import { depthWrites, nextFade } from './arrival-model.ts';
-import { createBelt } from './belt-layer.ts';
+import { beltTint, createBelt } from './belt-layer.ts';
 import { beltPlans } from './belt-model.ts';
 import {
   FILL_RADIUS_RATIO,
@@ -103,13 +103,14 @@ function mapTexture(image: ImageBitmap): Texture<ImageBitmap> {
 /**
  * The layer for this artifact, from the decoded images, with nothing added yet.
  *
- * @throws as `fillPlans`, `fillMaps`, `starPlans` and `beltPlans` do, before anything is built.
+ * @throws as `fillPlans`, `fillMaps`, `starPlans`, `beltPlans` and `beltTint` do, before anything is built.
  */
 export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<string, ImageBitmap>): FillLayer {
   const plans = fillPlans(artifact);
   const maps = fillMaps(plans, images);
   const stars = starPlans(artifact);
   const belts = beltPlans(artifact);
+  const tint = beltTint();
   const geometry = new SphereGeometry(1, FILL_SPHERE_WIDTH_SEGMENTS, FILL_SPHERE_HEIGHT_SEGMENTS);
   const textures = new Map([...maps].map(([id, image]) => [id, mapTexture(image)]));
   const ambient = new Color(tokens.colors['realism-ambient-floor-dark']);
@@ -142,7 +143,7 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
     return { mesh, plan, turn };
   });
   const starRows = createStarRows(stars, geometry, fade, group);
-  const belt = createBelt(belts, fade, group);
+  const belt = createBelt(belts, tint, fade, group);
   const materials = [...rows.map(({ mesh }) => mesh.material as ShaderMaterial), ...starRows.materials, ...(belt === null ? [] : [belt.material])];
   const facing = new Quaternion();
   let seconds = 0;

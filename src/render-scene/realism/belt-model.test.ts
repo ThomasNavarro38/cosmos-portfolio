@@ -14,7 +14,7 @@ import type { RealismArtifact } from '../realism-status.ts';
 import { BELT_RENDER_ORDER, buildScene, type SceneArtifact } from '../scene-model.ts';
 import { ORBIT_SEGMENTS, sceneLines } from '../stroke-model.ts';
 import { BELT_DRAWS_BUDGET } from './budgets.ts';
-import { createBelt } from './belt-layer.ts';
+import { beltTint, createBelt } from './belt-layer.ts';
 import { BELT_BAND_LUMINANCE, BELT_DENSITY_FLOOR, BELT_HALF_WIDTH_RATIO, BELT_NOISE_CELLS, beltAlpha, beltArrays, beltColor, beltPlans, type BeltBand } from './belt-model.ts';
 import { BELT_FRAGMENT_SHADER, BELT_VERTEX_SHADER } from './belt-shader.ts';
 import { createFillLayer } from './fill-layer.ts';
@@ -61,6 +61,11 @@ test('each band luminance is its stroke token\'s own, pinned against the tokens,
   assert.ok(Math.abs(BELT_BAND_LUMINANCE['stroke-rest'] - linearLuminance(tokens.colors['stroke-rest-dark'])) < 1e-12, 'stroke-rest-dark');
   assert.ok(Math.abs(BELT_BAND_LUMINANCE['stroke-near'] - linearLuminance(tokens.colors['stroke-near-dark'])) < 1e-12, 'stroke-near-dark');
   assert.deepEqual(BANDS, ['stroke-rest', 'stroke-near'], 'the resting bands, dimmest first');
+  // Text, not an import, as stroke-model.test.ts pins RESTING_STEPS: the scene does not import derive.
+  // A band added to derive alone would pass the gate and then throw in beltPlans, failing all of realism.
+  const literal = /export const RESTING_BANDS = \[([^\]]*)\] as const;/.exec(readFileSync(new URL('../../derive/rules.ts', import.meta.url), 'utf8'));
+  assert.ok(literal !== null, 'rules.ts declares its resting bands as a literal list');
+  assert.deepEqual(BANDS, [...(literal[1] ?? '').matchAll(/'([^']+)'/g)].map((match) => match[1]), 'derive\'s RESTING_BANDS, in its order');
   assert.ok(BELT_BAND_LUMINANCE['stroke-rest'] < BELT_BAND_LUMINANCE['stroke-near'], 'the ladder\'s order');
   assert.ok(BELT_BAND_LUMINANCE['stroke-near'] <= 0.061, 'faint');
   assert.ok(BELT_BAND_LUMINANCE['stroke-near'] < FILL_CEILING_LUMINANCE / 7, 'far under stroke-active');
@@ -78,8 +83,9 @@ test('the colour is the token\'s hue at the band\'s luminance, every channel sma
 });
 
 test('a belt colour with no luminance is refused, not divided by: in the model, and guarded in the shader', () => {
-  for (const rgb of [[0, 0, 0], [-1, -1, -1], [Number.NaN, 0, 0], [Number.POSITIVE_INFINITY, 0, 0]] as const) {
-    assert.throws(() => beltColor(rgb as unknown as [number, number, number], BELT_BAND_LUMINANCE['stroke-near']), /no usable luminance/, String(rgb));
+  assert.throws(() => beltColor([0, 0, 0], BELT_BAND_LUMINANCE['stroke-near']), /no usable luminance/, 'black');
+  for (const rgb of [[-1, -1, -1], [Number.NaN, 0, 0], [Number.POSITIVE_INFINITY, 0, 0], [-0.1, 1, 0], [0.5, Number.NaN, 0.5], [0.2, 0.2, -1e-9]] as const) {
+    assert.throws(() => beltColor(rgb as unknown as [number, number, number], BELT_BAND_LUMINANCE['stroke-near']), /unusable channel/, String(rgb));
   }
   assert.ok(luminanceOf(BELT_LINEAR) > 0, 'the shipped token has a luminance to normalise by');
   assert.match(BELT_FRAGMENT_SHADER, /uColor \/ max\(dot\(uColor, WEIGHTS\), 1e-6\)/);
@@ -202,6 +208,26 @@ test('the vertex and index counts: two vertices per orbit point and two triangle
   assert.ok(positions.every(Number.isFinite));
 });
 
+test('past 65,535 vertices the index is 32-bit, and every triangle still stays in its own strip', () => {
+  const [plan] = beltPlans(ARTIFACT);
+  const per = 2 * plan!.points.length;
+  const count = Math.floor(65_535 / per) + 1;
+  const plans = Array.from({ length: count }, () => plan!);
+  const { index } = beltArrays(plans);
+  const vertices = count * per;
+  assert.ok(vertices > 65_535, `${vertices} vertices`);
+  assert.ok(index instanceof Uint32Array, 'no index wraps at 16 bits');
+  let max = 0;
+  for (let at = 0; at < index.length; at += 3) {
+    const strip = Math.floor(index[at]! / per);
+    assert.ok([index[at + 1]!, index[at + 2]!].every((value) => Math.floor(value / per) === strip), `triangle ${at / 3} stays in strip ${strip}`);
+    max = Math.max(max, index[at]!, index[at + 1]!, index[at + 2]!);
+  }
+  assert.equal(max, vertices - 1);
+  const below = beltArrays(Array.from({ length: Math.floor(65_535 / per) }, () => plan!));
+  assert.ok(below.index instanceof Uint16Array, 'at or under 65,535 vertices it stays 16-bit');
+});
+
 test('the noise cells are whole numbers, so the noise wraps where the orbit closes, and the strip closes on its first point', () => {
   assert.ok(Number.isInteger(BELT_NOISE_CELLS.along) && BELT_NOISE_CELLS.along > 0);
   assert.ok(Number.isInteger(BELT_NOISE_CELLS.across) && BELT_NOISE_CELLS.across > 0);
@@ -244,7 +270,7 @@ test('an artifact with no Planet has no belt: no plans, empty arrays, no mesh, a
   const arrays = beltArrays([]);
   assert.deepEqual([arrays.positions.length, arrays.belt.length, arrays.luminance.length, arrays.index.length], [0, 0, 0, 0]);
   const group = new Group();
-  assert.equal(createBelt([], { value: 0 }, group), null);
+  assert.equal(createBelt([], beltTint(), { value: 0 }, group), null);
   assert.equal(group.children.length, 0);
   const scene = new Scene();
   const layer = createFillLayer(starsOnly, new Map());
@@ -282,6 +308,18 @@ test('the layer\'s source: transparent, no depth write, depth tested, both sides
     assert.ok(LAYER_SOURCE.includes(line), line);
   }
   assert.doesNotMatch(LAYER_SOURCE, /\bPoints\b|\bInstanced\w*|\bSprite\b|\buTime\b|\bframe\s*\(/);
+});
+
+test('the fill layer reads the belt\'s colour before it builds anything, so a token it refuses leaks nothing', () => {
+  const fill = stripComments(readFileSync(new URL('./fill-layer.ts', import.meta.url), 'utf8'));
+  const tint = fill.indexOf('beltTint()');
+  assert.ok(tint > 0, 'the fill layer reads beltTint()');
+  for (const build of ['new SphereGeometry(', 'mapTexture(image)', 'new ShaderMaterial(', 'createStarRows(', 'new Group(']) {
+    const at = fill.indexOf(build);
+    assert.ok(at > tint, `${build} comes after beltTint()`);
+  }
+  const color = beltTint();
+  assert.ok(color.r + color.g + color.b > 0, 'the shipped token has a luminance');
 });
 
 // --- The one mesh, over real three objects -------------------------------------------------------
@@ -391,7 +429,7 @@ test('the belt is compiled and link-checked by warm, and disposed with the layer
 test('createBelt alone: one mesh into the group it is handed, on the fade it is handed, freed safely twice', () => {
   const group = new Group();
   const fade = { value: 0.3 };
-  const belt = createBelt(beltPlans(ARTIFACT), fade, group);
+  const belt = createBelt(beltPlans(ARTIFACT), beltTint(), fade, group);
   assert.ok(belt !== null);
   assert.equal(group.children.length, 1);
   assert.equal(belt.material.uniforms.uFade, fade);

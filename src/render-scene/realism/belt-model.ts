@@ -152,12 +152,14 @@ export function beltArrays(plans: readonly BeltPlan[]): BeltArrays {
  * A belt's colour, as the shader computes it: the token's linear colour divided by its own
  * linear luminance, then times the band's luminance, each channel clamped to 1.
  *
- * @throws on a colour whose own luminance is not above 0, which has no hue to normalise.
+ * @throws on a channel that is negative or not finite, which no token decodes to, and on a
+ * colour whose own luminance is not above 0, which has no hue to normalise.
  */
 export function beltColor(linearRgb: readonly [number, number, number], luminance: number): [number, number, number] {
   const [r, g, b] = linearRgb;
+  if (![r, g, b].every((channel) => Number.isFinite(channel) && channel >= 0)) throw new Error(`the belt colour has an unusable channel: ${String(linearRgb)}`);
   const own = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  if (!(own > 0) || !Number.isFinite(own)) throw new Error(`the belt colour has no usable luminance: ${own}`);
+  if (!(own > 0)) throw new Error(`the belt colour has no usable luminance: ${own}`);
   return [Math.min((r / own) * luminance, 1), Math.min((g / own) * luminance, 1), Math.min((b / own) * luminance, 1)];
 }
 

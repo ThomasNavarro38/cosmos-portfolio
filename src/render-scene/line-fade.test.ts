@@ -4,8 +4,11 @@
  */
 
 import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
 import { Group, Mesh, MeshBasicMaterial } from 'three';
+import { Line2 as DreiLine2, LineGeometry as DreiLineGeometry, LineMaterial as DreiLineMaterial } from 'three-stdlib';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
@@ -111,6 +114,38 @@ test('over real drei-style lines, the orbits take the fade, hide at 0 and return
     const value = Number.isFinite(fade) ? fade : 1;
     assert.deepEqual([orbit.visible, orbit.material.opacity], [visible, value], `the orbit at ${fade}`);
     assert.equal(((star.children[0] as Mesh).material as MeshBasicMaterial).opacity, value, `the Star marks with it, at ${fade}`);
+    assert.deepEqual([rail.visible, rail.material.opacity], [true, 1], `the Rail at ${fade}`);
+  }
+});
+
+test('drei’s Line hands its ref the three-stdlib Line2 that carries its LineMaterial, the object the orbits’ ref callback holds (9.6)', () => {
+  // body-field.tsx holds whatever drei's Line forwards its ref to: pinned here, so a drei upgrade that changes it fails a test.
+  const source = readFileSync(createRequire(import.meta.url).resolve('@react-three/drei/core/Line.js'), 'utf8');
+  assert.match(source, /import \{[^}]*\bLine2\b[^}]*\bLineMaterial\b[^}]*\} from 'three-stdlib'/, 'Line2 and LineMaterial come from three-stdlib');
+  assert.match(source, /object: line2,\s*ref: ref/, 'the ref is the Line2 itself');
+  assert.match(source, /object: lineMaterial,\s*attach: "material"/, 'its LineMaterial is attached as the Line2’s material');
+});
+
+test('over drei’s own line classes, an orbit falls with the fade and comes back whole when realism fails (9.6)', () => {
+  // As drei builds one: a bare Line2, its geometry and material attached after.
+  const line = (): DreiLine2 => {
+    const object = new DreiLine2();
+    object.geometry = new DreiLineGeometry();
+    object.material = new DreiLineMaterial();
+    object.material.transparent = true;
+    object.material.opacity = 1;
+    return object;
+  };
+  const orbit = line();
+  const rail = line();
+  const held = new Map<string, DreiLine2>();
+  holdOrbitLine(held, { id: 'orbit:project:a/one' }, orbit);
+  holdOrbitLine(held, { id: 'rail' }, rail);
+  assert.deepEqual([...held.keys()], ['orbit:project:a/one'], 'the Rail is never held');
+  // Arrival, then failure: lineWorkFade() reads 1 again once realism has failed.
+  for (const [fade, visible] of [[1, true], [0.5, true], [0, false], [1, true]] as const) {
+    fadeStarMarks(held.values(), fade);
+    assert.deepEqual([orbit.visible, orbit.material.opacity], [visible, fade], `the orbit at ${fade}`);
     assert.deepEqual([rail.visible, rail.material.opacity], [true, 1], `the Rail at ${fade}`);
   }
 });
