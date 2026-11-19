@@ -76,7 +76,8 @@
 /** The document's status. `failed` is terminal. */
 export type DocumentStatus = 'idle' | 'fetching' | 'decoded' | 'shown' | 'failed';
 
-interface RealismPoint {
+/** A point in scene units. */
+export interface RealismPoint {
   readonly x: number;
   readonly y: number;
   readonly z: number;
@@ -108,6 +109,13 @@ export interface RealismArtifact {
       };
     }[];
   }[];
+  /**
+   * The drawn Rail's curve (9.7), `railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT)`, which the
+   * nebula ribbon follows: not part of the committed artifact. `realism-mount.tsx` samples it
+   * from the scene's Rail and adds it, so the realism chunk imports no Rail code. Under two
+   * points there is no ribbon.
+   */
+  readonly railLine: readonly RealismPoint[];
 }
 
 /**

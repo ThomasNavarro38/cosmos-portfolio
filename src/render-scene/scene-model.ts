@@ -357,12 +357,12 @@ export const BODY_MARGIN = 3;
 export const STOP_MARGIN = 3;
 
 /*
- * The draw order, declared once, here: DUST 1 < GLOW 1.25 < FILL 1.5 < BELT 1.6 <
- * BODY 2 < MOON 3. Constants need no import, so this module keeps importing nothing
- * at all. `dust-model.ts` and `notable-model.ts` re-export their own step, so their
- * importers are unchanged. The three realism steps sit between Dust and the Bodies,
- * which is why the steps are not whole numbers: Dust, Bodies and Moons keep their
- * M2 values. The nebula (9.7) and the ring disc (9.8) add theirs with their stories
+ * The draw order, declared once, here: DUST 1 < NEBULA 1.1 < GLOW 1.25 < FILL 1.5 <
+ * BELT 1.6 < BODY 2 < MOON 3. Constants need no import, so this module keeps
+ * importing nothing at all. `dust-model.ts` and `notable-model.ts` re-export their
+ * own step, so their importers are unchanged. The four realism steps sit between
+ * Dust and the Bodies, which is why the steps are not whole numbers: Dust, Bodies
+ * and Moons keep their M2 values. The ring disc (9.8) adds its own with its story
  * (AD-19 as amended 2026-11-18).
  */
 
@@ -372,6 +372,14 @@ export const STOP_MARGIN = 3;
  * `dust-model.ts`.
  */
 export const DUST_RENDER_ORDER = 1;
+
+/**
+ * The render order of the Rail's nebula ribbon (9.7): after the Dust, and before
+ * every fill, core and plate, so each of them paints over it and it never hazes a
+ * Planet (AD-19 as amended 2026-11-18). It is additive and writes no depth, so it
+ * holds nothing drawn later back; its order against the Star light is cosmetic.
+ */
+export const NEBULA_RENDER_ORDER = 1.1;
 
 /**
  * The render order of a Star's additive glow: after the Dust, so the glow adds

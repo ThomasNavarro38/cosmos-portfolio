@@ -5,9 +5,10 @@
  * sphere. Everything is decided in `fill-model.ts`; this file builds it, and writes
  * the camera's quaternion and the map's turn each frame. It owns the one geometry,
  * so a Star's two draws (7.7, `star-layer.ts`) are built here over it, and the one
- * group and fade, so the belts' one draw (9.6, `belt-layer.ts`) is built here into
- * them: it reads the fade and is compiled, link-checked and freed with the rest, and
- * `frame` never touches it.
+ * group and fade, so the belts' one draw (9.6, `belt-layer.ts`) and the Rail's nebula
+ * ribbon (9.7, `nebula-layer.ts`) are built here into them: each reads the fade and is
+ * compiled, link-checked and freed with the rest. `frame` never touches the belts, and
+ * steps the ribbon's drift alone, on `reduced`, as the spin is.
  *
  * **Each frame** the mesh takes the camera's world quaternion, which is what drei's
  * `Billboard` computes, so the disc lies in the marks' plane at every pose. The
@@ -23,11 +24,12 @@
  * The owner attaches the group at fade 0 for one hidden warm draw, then calls `arrive`.
  *
  * **One fade, shared.** One uniform object is created here and handed to every Planet
- * fill, Star fill and glow, and to the belts. It sits at 0 from the build, until `arrive(true)` starts it
+ * fill, Star fill and glow, to the belts and to the ribbon. It sits at 0 from the build, until `arrive(true)` starts it
  * stepping each frame over `FADE_SECONDS × pace`, or `arrive(false)` sets it whole. No
  * fill writes depth until it reaches 1; on that frame every fill does. `fade()` reads it
  * back (9.4), so the owner can lower a Star's outline and core dot, and the orbit
- * hairlines (9.6), as it rises. The belts write no depth at any fade.
+ * hairlines (9.6) and the Rail's line (9.7), as it rises. The belts and the ribbon write
+ * no depth at any fade.
  *
  * **The images stay.** `dispose` frees the GPU's copies and never closes a bitmap:
  * a later Canvas builds again from them, and after a lost context three uploads
@@ -70,6 +72,8 @@ import {
   spinAngle,
 } from './fill-model.ts';
 import { FILL_FRAGMENT_SHADER, FILL_VERTEX_SHADER } from './fill-shader.ts';
+import { createNebula, nebulaTint } from './nebula-layer.ts';
+import { nebulaArrays } from './nebula-model.ts';
 import { createStarRows } from './star-layer.ts';
 import { starPlans } from './star-model.ts';
 
@@ -83,7 +87,7 @@ export interface FillLayer {
   attach(scene: Scene): void;
   /** Begins the arrival: with `fade`, every later `frame` steps the fade up from 0, the first of them in the same tick as this call, so the first visible frame is already one clamped step in; without, the layer is whole at once and every fill writes depth. */
   arrive(fade: boolean): void;
-  /** One frame: the fade's step, each disc to the camera, each map to its turn, each Star's rise toward the subject and its pulse. The spin and the Stars' clock take `reduced`, and the rise and the fade take `pace`. */
+  /** One frame: the fade's step, each disc to the camera, each map to its turn, each Star's rise toward the subject and its pulse, and the ribbon's drift. The spin, the Stars' clock and the drift take `reduced`, and the rise and the fade take `pace`. */
   frame(camera: Camera, delta: number, reduced: boolean, pace: number, subject: string | null): void;
   /** The one fade's value, 0 to 1 (9.4): what the owner reads for the line-work it replaces. */
   fade(): number;
@@ -103,7 +107,7 @@ function mapTexture(image: ImageBitmap): Texture<ImageBitmap> {
 /**
  * The layer for this artifact, from the decoded images, with nothing added yet.
  *
- * @throws as `fillPlans`, `fillMaps`, `starPlans`, `beltPlans` and `beltTint` do, before anything is built.
+ * @throws as `fillPlans`, `fillMaps`, `starPlans`, `beltPlans`, `beltTint`, `nebulaArrays` and `nebulaTint` do, before anything is built.
  */
 export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<string, ImageBitmap>): FillLayer {
   const plans = fillPlans(artifact);
@@ -111,6 +115,8 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
   const stars = starPlans(artifact);
   const belts = beltPlans(artifact);
   const tint = beltTint();
+  const ribbon = nebulaArrays(artifact.railLine);
+  const nebulaColor = nebulaTint();
   const geometry = new SphereGeometry(1, FILL_SPHERE_WIDTH_SEGMENTS, FILL_SPHERE_HEIGHT_SEGMENTS);
   const textures = new Map([...maps].map(([id, image]) => [id, mapTexture(image)]));
   const ambient = new Color(tokens.colors['realism-ambient-floor-dark']);
@@ -144,7 +150,13 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
   });
   const starRows = createStarRows(stars, geometry, fade, group);
   const belt = createBelt(belts, tint, fade, group);
-  const materials = [...rows.map(({ mesh }) => mesh.material as ShaderMaterial), ...starRows.materials, ...(belt === null ? [] : [belt.material])];
+  const nebula = createNebula(ribbon, nebulaColor, fade, group);
+  const materials = [
+    ...rows.map(({ mesh }) => mesh.material as ShaderMaterial),
+    ...starRows.materials,
+    ...(belt === null ? [] : [belt.material]),
+    ...(nebula === null ? [] : [nebula.material]),
+  ];
   const facing = new Quaternion();
   let seconds = 0;
   let fading = false;
@@ -202,6 +214,7 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
         turn.fromArray(mapFromWorld(plan.tilt, spinAngle(plan.spinPhase, plan.spinRate, seconds)));
       }
       starRows.frame(facing, subject, delta, pace, reduced);
+      nebula?.frame(delta, reduced);
     },
     fade() {
       return fade.value;
@@ -215,6 +228,7 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
         for (const { mesh } of rows) (mesh.material as ShaderMaterial).dispose();
         starRows.dispose();
         belt?.dispose();
+        nebula?.dispose();
         for (const texture of textures.values()) texture.dispose();
         geometry.dispose();
       };

@@ -33,7 +33,7 @@ import { tokens } from '../../tokens/tokens.ts';
 import { createRealismOwner, type RealismArtifact } from '../realism-status.ts';
 import { buildScene, FILL_RENDER_ORDER, type Body, type SceneArtifact } from '../scene-model.ts';
 import { bodyRadius, CIRCLE_SEGMENTS } from '../stroke-model.ts';
-import { BELT_DRAWS_BUDGET, PLANET_DRAWS_BUDGET, SPHERE_HEIGHT_SEGMENTS_BUDGET, SPHERE_WIDTH_SEGMENTS_BUDGET, STAR_DRAWS_BUDGET } from './budgets.ts';
+import { BELT_DRAWS_BUDGET, NEBULA_DRAWS_BUDGET, PLANET_DRAWS_BUDGET, SPHERE_HEIGHT_SEGMENTS_BUDGET, SPHERE_WIDTH_SEGMENTS_BUDGET, STAR_DRAWS_BUDGET } from './budgets.ts';
 import { createFillLayer } from './fill-layer.ts';
 import {
   addedDraws,
@@ -60,6 +60,7 @@ function planet(id: string, clientId: string, x: number, map = 'moon') {
 
 /** Two Clients, each with its own Star: the first at the origin, the second far along x. */
 const ARTIFACT: RealismArtifact = {
+  railLine: [],
   clients: [
     { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [planet('project:a/one', 'client:a', 10), planet('project:a/two', 'client:a', -10, 'mars')] },
     { id: 'client:b', position: { x: 100, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [planet('project:b/one', 'client:b', 110)] },
@@ -189,21 +190,21 @@ test("with two Clients, a Planet's light points to its own Star alone", () => {
   const plans = fillPlans(ARTIFACT);
   assert.deepEqual(plans.map((plan) => plan.id), ['project:a/one', 'project:a/two', 'project:b/one']);
   assert.deepEqual(plans.map((plan) => plan.light), [[-1, 0, 0], [1, 0, 0], [-1, 0, 0]]);
-  const moved: RealismArtifact = { clients: [{ ...ARTIFACT.clients[0]!, position: { x: 0, y: 5, z: 0 } }, ARTIFACT.clients[1]!] };
+  const moved: RealismArtifact = { railLine: [], clients: [{ ...ARTIFACT.clients[0]!, position: { x: 0, y: 5, z: 0 } }, ARTIFACT.clients[1]!] };
   assert.deepEqual(fillPlans(moved)[2]!.light, plans[2]!.light, "moving another Client's Star changes nothing");
   assert.notDeepEqual(fillPlans(moved)[0]!.light, plans[0]!.light, 'moving its own does');
 });
 
 test('a Project whose clientId names no Client throws, and so does a Planet at its Star', () => {
-  const orphan: RealismArtifact = { clients: [{ ...ARTIFACT.clients[0]!, projects: [planet('project:x', 'client:gone', 5)] }] };
+  const orphan: RealismArtifact = { railLine: [], clients: [{ ...ARTIFACT.clients[0]!, projects: [planet('project:x', 'client:gone', 5)] }] };
   assert.throws(() => fillPlans(orphan), /client:gone/);
-  const atStar: RealismArtifact = { clients: [{ ...ARTIFACT.clients[0]!, projects: [planet('project:x', 'client:a', 0)] }] };
+  const atStar: RealismArtifact = { railLine: [], clients: [{ ...ARTIFACT.clients[0]!, projects: [planet('project:x', 'client:a', 0)] }] };
   assert.throws(() => fillPlans(atStar), /no direction/);
 });
 
 test('a mean luminance that cannot normalise throws, since the shader divides by it', () => {
   for (const meanLuminance of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
-    const bad: RealismArtifact = { clients: [{ ...ARTIFACT.clients[0]!, projects: [{ ...planet('project:x', 'client:a', 5), appearance: { ...APPEARANCE, meanLuminance } }] }] };
+    const bad: RealismArtifact = { railLine: [], clients: [{ ...ARTIFACT.clients[0]!, projects: [{ ...planet('project:x', 'client:a', 5), appearance: { ...APPEARANCE, meanLuminance } }] }] };
     assert.throws(() => fillPlans(bad), /mean luminance/, String(meanLuminance));
   }
 });
@@ -211,7 +212,7 @@ test('a mean luminance that cannot normalise throws, since the shader divides by
 for (const field of ['tilt', 'spinRate', 'spinPhase'] as const) {
   test(`a non-finite ${field} throws, naming it`, () => {
     for (const value of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
-      const bad: RealismArtifact = { clients: [{ ...ARTIFACT.clients[0]!, projects: [{ ...planet('project:x', 'client:a', 5), appearance: { ...APPEARANCE, [field]: value } }] }] };
+      const bad: RealismArtifact = { railLine: [], clients: [{ ...ARTIFACT.clients[0]!, projects: [{ ...planet('project:x', 'client:a', 5), appearance: { ...APPEARANCE, [field]: value } }] }] };
       assert.throws(() => fillPlans(bad), new RegExp(field), String(value));
     }
   });
@@ -259,12 +260,16 @@ test('mapFromWorld inverts the tilt and the spin: the identity at rest, orthonor
 
 // --- The draws -----------------------------------------------------------------------------------
 
-test('added draws are Planets × 1, Stars × 2, and one for all belts when there is a Planet', () => {
-  assert.equal(addedDraws(8, 0), 8 * PLANET_DRAWS_BUDGET + BELT_DRAWS_BUDGET);
-  assert.equal(addedDraws(0, 0), 0);
-  assert.equal(addedDraws(0, 3), 3 * STAR_DRAWS_BUDGET, 'no Planet, no belt');
-  assert.equal(addedDraws(8, 6), 8 + 12 + 1, 'the committed artifact (9.6)');
-  assert.equal(addedDraws(fillPlans(ARTIFACT).length, ARTIFACT.clients.length), 8, 'three Planets under two Stars, and their belts');
+test('added draws are Planets × 1, Stars × 2, one for all belts when there is a Planet, and one for the nebula when the Rail is a curve', () => {
+  assert.equal(addedDraws(8, 0, 0), 8 * PLANET_DRAWS_BUDGET + BELT_DRAWS_BUDGET);
+  assert.equal(addedDraws(0, 0, 0), 0);
+  assert.equal(addedDraws(0, 3, 0), 3 * STAR_DRAWS_BUDGET, 'no Planet, no belt');
+  assert.equal(addedDraws(8, 6, 0), 8 + 12 + 1, 'no Rail: the count of 9.6');
+  assert.equal(addedDraws(8, 6, 1), 8 + 12 + 1, 'one point is no curve, so no nebula');
+  assert.equal(addedDraws(8, 6, 2), 8 + 12 + 1 + NEBULA_DRAWS_BUDGET, 'two points are a curve');
+  assert.equal(addedDraws(8, 6, 121), 8 + 12 + 1 + 1, 'the committed artifact (9.7)');
+  assert.equal(addedDraws(0, 0, 121), NEBULA_DRAWS_BUDGET, 'the nebula needs no Body');
+  assert.equal(addedDraws(fillPlans(ARTIFACT).length, ARTIFACT.clients.length, 0), 8, 'three Planets under two Stars, and their belts');
 });
 
 // --- The layer, over real three objects ----------------------------------------------------------
@@ -288,7 +293,7 @@ test('the layer is one Mesh per plan over one geometry and one texture per map, 
   layer.attach(scene);
   const meshes = meshesOf(scene);
   assert.equal(meshes.length, 3);
-  assert.equal(drawsOf(scene).length, addedDraws(3, 2), 'with the two Stars and the belts');
+  assert.equal(drawsOf(scene).length, addedDraws(3, 2, 0), 'with the two Stars and the belts');
   assert.equal(scene.children.length, 1, 'all in one group, which is not a draw');
   assert.equal(new Set(drawsOf(scene).filter((mesh) => mesh.name !== 'belt').map((mesh) => mesh.geometry)).size, 1, 'the Stars wear the same one; the belts have their own (9.6)');
   const geometry = meshes[0]!.geometry as SphereGeometry;
@@ -308,6 +313,7 @@ test('the layer is one Mesh per plan over one geometry and one texture per map, 
 
 /** Planets differing in every appearance field, each with its own map. */
 const DIFFERING: RealismArtifact = {
+  railLine: [],
   clients: [{
     id: 'client:a',
     position: { x: 0, y: 0, z: 0 },
@@ -344,7 +350,7 @@ test('each mesh wears its own plan: mean luminance, map and turn are that Planet
 });
 
 test('the fill radius of every Body the layer draws fits the unit sphere three culls by, since the shader applies the radius after culling', () => {
-  const layout = JSON.parse(readFileSync(new URL('../../../generated/layout.generated.json', import.meta.url), 'utf8')) as RealismArtifact;
+  const layout: RealismArtifact = { ...(JSON.parse(readFileSync(new URL('../../../generated/layout.generated.json', import.meta.url), 'utf8')) as Omit<RealismArtifact, 'railLine'>), railLine: [] };
   const plans = fillPlans(layout);
   const images = new Map(plans.map((plan) => [plan.map, {} as ImageBitmap]));
   const scene = new Scene();
@@ -451,7 +457,7 @@ function linkingRenderer(): WebGLRenderer {
 
 test('a build that cannot finish throws, and under the real owner the document fails with nothing added to the scene', async () => {
   assert.throws(() => createFillLayer(ARTIFACT, new Map([['moon', {} as ImageBitmap]])), /mars/);
-  const orphan: RealismArtifact = { clients: [{ ...ARTIFACT.clients[0]!, projects: [planet('project:x', 'client:gone', 5)] }] };
+  const orphan: RealismArtifact = { railLine: [], clients: [{ ...ARTIFACT.clients[0]!, projects: [planet('project:x', 'client:gone', 5)] }] };
   assert.throws(() => createFillLayer(orphan, IMAGES), /client:gone/);
   for (const [artifact, images] of [[ARTIFACT, new Map([['moon', {} as ImageBitmap]])], [orphan, IMAGES]] as const) {
     const owner = createRealismOwner<ImageBitmap, Scene, PerspectiveCamera, WebGLRenderer>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(images), createFillLayer }), () => undefined);
@@ -479,7 +485,7 @@ test('under the real owner, a fill layer whose update throws leaves the scene wi
   await new Promise((resolve) => setImmediate(resolve));
   owner.frame(ARTIFACT, '/', draw);
   owner.frame(ARTIFACT, '/', draw);
-  assert.equal(drawsOf(scene).length, addedDraws(3, 2), 'one fill per Planet, two draws per Star and the belts, once warmed');
+  assert.equal(drawsOf(scene).length, addedDraws(3, 2, 0), 'one fill per Planet, two draws per Star and the belts, once warmed');
   assert.deepEqual(owner.status(), { document: 'shown', uploaded: true });
   owner.frame(ARTIFACT, '/', { ...draw, camera: { updateMatrixWorld() { throw new Error('a port threw'); } } as unknown as PerspectiveCamera });
   assert.equal(owner.status().document, 'failed');

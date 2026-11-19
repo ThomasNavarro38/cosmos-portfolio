@@ -149,7 +149,7 @@ MEDIUM_TEXTURE.needsUpdate = true;
 
 /** What the scene needs: the artifact, and nothing else — the Bodies' slice, the Motes', the affordance's, the Client names' and realism's. */
 export interface SceneProps {
-  readonly artifact: SceneArtifact & MoteArtifact & AffordanceArtifact & ClientLabelArtifact & RealismArtifact;
+  readonly artifact: SceneArtifact & MoteArtifact & AffordanceArtifact & ClientLabelArtifact & Omit<RealismArtifact, 'railLine'>;
 }
 
 /**

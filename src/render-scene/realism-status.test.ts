@@ -19,6 +19,7 @@ import { createRealismOwner, moveStatus, type DocumentStatus, type RealismArtifa
 
 const ORIGIN = { x: 0, y: 0, z: 0 };
 const ARTIFACT: RealismArtifact = {
+  railLine: [],
   clients: [{ id: 'client:a', position: ORIGIN, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: { map: 'moon', meanLuminance: 0.3, tilt: 0, spinRate: 0.05, spinPhase: 0 } }] }],
 };
 const DRAW: RealismDraw = { scene: 'scene', camera: 'camera', renderer: 'renderer', delta: 0.5, reduced: false, pace: 1, subject: () => null };
@@ -928,12 +929,12 @@ test('realism-status.ts imports nothing, reads no store, logs nothing, throws no
 /** The mount, whole, as its comment-stripped lines: anything else in the file is a departure. */
 const MOUNT_LINES: readonly string[] = [
   "import { useFrame } from '@react-three/fiber';",
-  "import { useEffect } from 'react';",
+  "import { useEffect, useMemo } from 'react';",
   "import { resetFrameSampling } from '../shell/chart-offer.ts';",
   "import { motionPace, reducedMotion } from '../shell/motion-preference.ts';",
   "import { BASE } from '../shell/route.ts';",
   "import { navigationStore } from '../shell/state.ts';",
-  "import type { Rail } from './rail-model.ts';",
+  "import { RAIL_LINE_SAMPLES_PER_SEGMENT, railLine, type Rail } from './rail-model.ts';",
   "import { createRealismOwner, type RealismArtifact } from './realism-status.ts';",
   "import { sceneSubject } from './stroke-model.ts';",
   `const owner = createRealismOwner(() => ${THE_IMPORT}, () => resetFrameSampling());`,
@@ -941,14 +942,15 @@ const MOUNT_LINES: readonly string[] = [
   '  return owner.lineWorkFade();',
   '}',
   'export interface RealismMountProps {',
-  '  readonly artifact: RealismArtifact;',
+  "  readonly artifact: Omit<RealismArtifact, 'railLine'>;",
   '  readonly rail: Rail;',
   '}',
   'export function RealismMount({ artifact, rail }: RealismMountProps) {',
+  '  const drawn = useMemo(() => ({ ...artifact, railLine: railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT) }), [artifact, rail]);',
   '  useEffect(() => owner.enterCanvas(), []);',
   '  useFrame(({ scene, camera, gl }, delta) => {',
   '    const reduced = reducedMotion();',
-  '    owner.frame(artifact, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });',
+  '    owner.frame(drawn, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });',
   '  });',
   '  return null;',
   '}',
@@ -971,7 +973,7 @@ test('the mount is one owner at module scope, one effect, one frame callback and
 test('the mount audit rejects each departure, and a comment is not one', () => {
   const real = read(MOUNT_PATH).replaceAll('\r\n', '\n');
   const READ = '    const reduced = reducedMotion();\n';
-  const FRAME = '    owner.frame(artifact, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });\n';
+  const FRAME = '    owner.frame(drawn, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });\n';
   const USE = `  useFrame(({ scene, camera, gl }, delta) => {\n${READ}${FRAME}  });\n`;
   const BINDING = `const owner = createRealismOwner(() => ${THE_IMPORT}, () => resetFrameSampling());`;
   for (const [name, mutate] of [
@@ -985,7 +987,11 @@ test('the mount audit rejects each departure, and a comment is not one', () => {
     ['a fixed renderer', (s: string) => s.replace('renderer: gl,', 'renderer: null,')],
     ['no renderer', (s: string) => s.replace('renderer: gl, ', '')],
     ['a resource read', (s: string) => s.replace(USE, `  use(${THE_IMPORT});\n${USE}`)],
-    ['a guarded frame', (s: string) => s.replace(FRAME, `    if (artifact) ${FRAME.trimStart()}`)],
+    ['a guarded frame', (s: string) => s.replace(FRAME, `    if (drawn) ${FRAME.trimStart()}`)],
+    // 9.7: the nebula's curve is the drawn Rail's, sampled once per artifact and Rail.
+    ['rail line not sampled from the drawn Rail', (s: string) => s.replace('railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT)', 'railLine(rail, 8)')],
+    ['rail line left out of the artifact', (s: string) => s.replace('owner.frame(drawn, BASE,', 'owner.frame({ ...artifact, railLine: [] }, BASE,')],
+    ['rail line sampled every frame', (s: string) => s.replace('}), [artifact, rail]);', '}), [artifact, rail, Math.random()]);')],
     ['reduced held at a fixed value', (s: string) => s.replace('const reduced = reducedMotion();', 'const reduced = false;')],
     ['a second read of the preference', (s: string) => s.replace(USE, `  const held = reducedMotion();\n${USE}`)],
     ['a second read, as the pace', (s: string) => s.replace('motionPace(reduced)', 'motionPace(reducedMotion())')],

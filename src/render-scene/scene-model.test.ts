@@ -45,6 +45,7 @@ import {
   DEFAULT_FOV,
   DUST_RENDER_ORDER,
   BELT_RENDER_ORDER,
+  NEBULA_RENDER_ORDER,
   FILL_RENDER_ORDER,
   GLOW_RENDER_ORDER,
   MOON_RENDER_ORDER,
@@ -1119,29 +1120,30 @@ test('the drawn radius discriminates on kind, never on a missing mass', () => {
  *     alone, never the subject, so it is at rest and always.
  *   - **Draw order**: every visible draw at `BODY_RENDER_ORDER`, `transparent` at
  *     opacity 1 — after the Dust — and nothing else carries a `renderOrder`.
- *   - **The line-work's fade (9.4, extended to the orbits by 9.6), the one allowance**:
- *     exactly two `useRef` maps, the Stars' billboards held through `holdStarMarks` by
- *     each Body's billboard ref and the orbit hairlines held through `holdOrbitLine` by
- *     each scene hairline's ref (which never holds the Rail's), and one `useFrame` handing
+ *   - **The line-work's fade (9.4, extended to the orbits by 9.6 and to the Rail by 9.7),
+ *     the one allowance**: exactly two `useRef` maps, the Stars' billboards held through
+ *     `holdStarMarks` by each Body's billboard ref and the replaced hairlines held through
+ *     `holdReplacedLine` by each scene hairline's ref (the orbits' and the Rail's, no
+ *     other), and one `useFrame` handing
  *     both to `fadeStarMarks` on one `lineWorkFade()` from the mount; no other frame loop,
  *     ref, fade source or hand-set opacity, and a closed import set.
  */
 /** A Body's billboard, as it opens (9.4): its ref holds a Star's marks for the fade, and nothing else. */
 const BILLBOARD_OPEN = '<Billboard ref={(group) => holdStarMarks(starMarks.current, body, group)}>';
 
-/** The one frame loop the binding holds (9.4, 9.6): the Star marks and the orbit lines, together, at one read of the owner's line-work fade. */
-const STAR_MARKS_FRAME = 'useFrame(() => fadeStarMarks([...starMarks.current.values(), ...orbitLines.current.values()], lineWorkFade()));';
+/** The one frame loop the binding holds (9.4, 9.6, 9.7): the Star marks and the replaced lines (orbits and Rail), together, at one read of the owner's line-work fade. */
+const STAR_MARKS_FRAME = 'useFrame(() => fadeStarMarks([...starMarks.current.values(), ...replacedLines.current.values()], lineWorkFade()));';
 
-/** A scene hairline's ref (9.6): it holds an orbit's line for the fade, and never the Rail's. */
-const ORBIT_LINE_REF = 'ref={(object) => holdOrbitLine(orbitLines.current, line, object)}';
+/** A scene hairline's ref (9.6, 9.7): it holds an orbit's line or the Rail's for the fade, and no other. */
+const REPLACED_LINE_REF = 'ref={(object) => holdReplacedLine(replacedLines.current, line, object)}';
 
-/** The binding's imports, exactly (9.4 added the frame loop, the ref, the fade and its rule; 9.6 the orbits' rule). */
+/** The binding's imports, exactly (9.4 added the frame loop, the ref, the fade and its rule; 9.6 the orbits' rule, which 9.7 renamed to hold the Rail too). */
 const BODY_FIELD_IMPORTS: readonly string[] = [
   "import { Billboard, Line } from '@react-three/drei';",
   "import { useFrame } from '@react-three/fiber';",
   "import { useRef, useSyncExternalStore } from 'react';",
   "import { navigationStore } from '../shell/state.ts';",
-  "import { fadeStarMarks, holdOrbitLine, holdStarMarks, type StarMarks } from './line-fade.ts';",
+  "import { fadeStarMarks, holdReplacedLine, holdStarMarks, type StarMarks } from './line-fade.ts';",
   "import { lineWorkFade } from './realism-mount.tsx';",
   "import { RAIL_LINE_SAMPLES_PER_SEGMENT, railLine, type Rail } from './rail-model.ts';",
   "import { notableRings } from './notable-model.ts';",
@@ -1164,22 +1166,22 @@ function auditBodyField(source: string): string[] {
   if (/\buseThree\b|\buseState\b|\buseReducer\b|\buseEffect\b|\buseLayoutEffect\b|\buseMemo\b|\buseStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {
     failures.push('holds a frame loop, reactive state, an effect or a zustand binding — one selector subscription only');
   }
-  // 9.4, the one allowance, extended by 9.6 to the orbits: one ref map of the Stars'
-  // billboards, one of the orbit lines, and one frame loop handing both the owner's
+  // 9.4, the one allowance, extended by 9.6 to the orbits and by 9.7 to the Rail: one ref
+  // map of the Stars' billboards, one of the replaced lines, and one frame loop handing both the owner's
   // line-work fade, read once. No other frame loop, ref or fade.
   if ((code.match(/\buseFrame\b/g) ?? []).length !== 2 || !squash(code).includes(STAR_MARKS_FRAME)) {
-    failures.push('holds a frame loop other than the one fading the Star marks and the orbits by lineWorkFade()');
+    failures.push('holds a frame loop other than the one fading the Star marks, the orbits and the Rail by lineWorkFade()');
   }
   if (
     (code.match(/\buseRef\b/g) ?? []).length !== 3 ||
     !squash(code).includes('const starMarks = useRef(new Map<string, StarMarks>());') ||
-    !squash(code).includes('const orbitLines = useRef(new Map<string, StarMarks>());')
+    !squash(code).includes('const replacedLines = useRef(new Map<string, StarMarks>());')
   ) {
-    failures.push('holds a ref other than the one map of Star marks and the one map of orbit lines');
+    failures.push('holds a ref other than the one map of Star marks and the one map of replaced lines');
   }
-  // 9.6: the orbit lines, held by holdOrbitLine alone (which never holds the Rail's), on the scene hairlines' one <Line>.
-  if ((code.match(/\bholdOrbitLine\s*\(/g) ?? []).length !== 1 || (code.match(/\borbitLines\b/g) ?? []).length !== 3) {
-    failures.push('the orbit lines are held, faded or read other than by the one ref, holdOrbitLine and the one frame loop');
+  // 9.6, 9.7: the orbit and Rail lines, held by holdReplacedLine alone (no other line), on the scene hairlines' one <Line>.
+  if ((code.match(/\bholdReplacedLine\s*\(/g) ?? []).length !== 1 || (code.match(/\breplacedLines\b/g) ?? []).length !== 3) {
+    failures.push('the replaced lines are held, faded or read other than by the one ref, holdReplacedLine and the one frame loop');
   }
   if ((code.match(/\bholdStarMarks\s*\(/g) ?? []).length !== 1 || (code.match(/\bfadeStarMarks\s*\(/g) ?? []).length !== 1 || (code.match(/\blineWorkFade\b/g) ?? []).length !== 2 || (code.match(/\bstarMarks\b/g) ?? []).length !== 3) {
     failures.push('the Star marks are held, faded or read other than by the one ref, the one frame loop and lineWorkFade()');
@@ -1238,7 +1240,7 @@ function auditBodyField(source: string): string[] {
       failures.push(`a scene hairline's ${attribute} is not ${expected}`);
     }
   }
-  if (!sceneLine.includes(ORBIT_LINE_REF)) failures.push('a scene hairline is not held for the fade by holdOrbitLine(orbitLines.current, line, object)');
+  if (!sceneLine.includes(REPLACED_LINE_REF)) failures.push('a scene hairline is not held for the fade by holdReplacedLine(replacedLines.current, line, object)');
   const bodyBlock = mapBlocks(code, 'bodies')[0] ?? '';
   const opened = bodyBlock.indexOf(BILLBOARD_OPEN);
   const billboard = opened === -1 || bodyBlock.split('<Billboard').length !== 2 ? '' : bodyBlock.slice(opened + BILLBOARD_OPEN.length, bodyBlock.indexOf('</Billboard>', opened));
@@ -1374,15 +1376,16 @@ test('the Bodies’ binding audit rejects the real binding with any one guarante
     ['an import added', (s) => s.replace("import { lineWorkFade } from './realism-mount.tsx';", "import { lineWorkFade } from './realism-mount.tsx';\nimport { tokens } from '../tokens/tokens.ts';")],
     ['an opacity set by hand', (s) => s.replace(STAR_MARKS_FRAME, 'useFrame(() => { for (const group of starMarks.current.values()) group.visible = lineWorkFade() > 0; });')],
     ['a second ref', (s) => s.replace("const starMarks = useRef(new Map<string, StarMarks>());", "const starMarks = useRef(new Map<string, StarMarks>());\n  const other = useRef(null);")],
-    // The orbit lines' fade (9.6).
-    ['the Rail held', (s) => s.replace(ORBIT_LINE_REF, 'ref={(object) => holdOrbitLine(orbitLines.current, { id: `orbit:${line.id}` }, object)}')],
-    ['the orbits held by hand', (s) => s.replace(ORBIT_LINE_REF, 'ref={(object) => orbitLines.current.set(line.id, object)}')],
-    ['the orbits not held', (s) => s.replace(ORBIT_LINE_REF, '')],
-    ['the orbits held in the Star map', (s) => s.replace(ORBIT_LINE_REF, 'ref={(object) => holdOrbitLine(starMarks.current, line, object)}')],
-    ['the orbits left out of the fade', (s) => s.replace('fadeStarMarks([...starMarks.current.values(), ...orbitLines.current.values()], lineWorkFade())', 'fadeStarMarks([...starMarks.current.values()], lineWorkFade())')],
-    ['a second frame loop for the orbits', (s) => s.replace(STAR_MARKS_FRAME, 'useFrame(() => fadeStarMarks(starMarks.current.values(), lineWorkFade()));\n  useFrame(() => fadeStarMarks(orbitLines.current.values(), lineWorkFade()));')],
-    ['the orbits faded from elsewhere', (s) => s.replace(STAR_MARKS_FRAME, 'useFrame(() => { fadeStarMarks(starMarks.current.values(), lineWorkFade()); fadeStarMarks(orbitLines.current.values(), 1 - lineWorkFade()); });')],
-    ['the orbit map not a ref', (s) => s.replace('const orbitLines = useRef(new Map<string, StarMarks>());', 'const orbitLines = { current: new Map<string, StarMarks>() };')],
+    // The replaced lines' fade (9.6, extended to the Rail by 9.7).
+    ['a line held under an invented ID', (s) => s.replace(REPLACED_LINE_REF, "ref={(object) => holdReplacedLine(replacedLines.current, { id: 'rail' }, object)}")],
+    ['the Rail held by hand', (s) => s.replace(REPLACED_LINE_REF, "ref={(object) => { holdReplacedLine(replacedLines.current, line, object); if (line.id === 'rail') replacedLines.current.set('rail', object); }}")],
+    ['the orbits held by hand', (s) => s.replace(REPLACED_LINE_REF, 'ref={(object) => replacedLines.current.set(line.id, object)}')],
+    ['the orbits not held', (s) => s.replace(REPLACED_LINE_REF, '')],
+    ['the orbits held in the Star map', (s) => s.replace(REPLACED_LINE_REF, 'ref={(object) => holdReplacedLine(starMarks.current, line, object)}')],
+    ['the orbits left out of the fade', (s) => s.replace('fadeStarMarks([...starMarks.current.values(), ...replacedLines.current.values()], lineWorkFade())', 'fadeStarMarks([...starMarks.current.values()], lineWorkFade())')],
+    ['a second frame loop for the orbits', (s) => s.replace(STAR_MARKS_FRAME, 'useFrame(() => fadeStarMarks(starMarks.current.values(), lineWorkFade()));\n  useFrame(() => fadeStarMarks(replacedLines.current.values(), lineWorkFade()));')],
+    ['the orbits faded from elsewhere', (s) => s.replace(STAR_MARKS_FRAME, 'useFrame(() => { fadeStarMarks(starMarks.current.values(), lineWorkFade()); fadeStarMarks(replacedLines.current.values(), 1 - lineWorkFade()); });')],
+    ['the orbit map not a ref', (s) => s.replace('const replacedLines = useRef(new Map<string, StarMarks>());', 'const replacedLines = { current: new Map<string, StarMarks>() };')],
     ['the marks on a second billboard', (s) => s.replace('</Billboard>', `</Billboard>\n          <Billboard ref={(group) => holdStarMarks(starMarks.current, body, group)}></Billboard>`)],
     ['a line loses its order', (s) => s.replace('renderOrder={BODY_RENDER_ORDER}', '')],
     ['a line goes opaque', (s) => s.replace(/(<Line\b[^/]*?)\s*transparent\b/, '$1')],
@@ -1660,11 +1663,11 @@ test('the glow allowance is the one identifier in the one file and the word unde
 
 // --- The draw order, declared once ----------------------------------------------
 
-const ORDER_NAME = '(?:DUST|GLOW|FILL|BELT|BODY|MOON)_RENDER_ORDER';
+const ORDER_NAME = '(?:DUST|NEBULA|GLOW|FILL|BELT|BODY|MOON)_RENDER_ORDER';
 /** The value alone: braced in JSX, or ending its statement or property. */
 const ONE_ORDER_NAME = new RegExp(`^(?:\\{\\s*${ORDER_NAME}\\s*\\}|${ORDER_NAME}\\s*(?:[;,}\\n]|$))`);
 
-/** Every `renderOrder` set to anything but exactly one of the six named steps, as `file:line`. */
+/** Every `renderOrder` set to anything but exactly one of the seven named steps, as `file:line`. */
 function undeclaredOrders(files: readonly { readonly path: string; readonly source: string }[]): string[] {
   return files.flatMap((file) => {
     const code = stripComments(file.source);
@@ -1681,7 +1684,7 @@ function declaredOrders(path: string, source: string): string[] {
   return [...stripComments(source).matchAll(/\b(?:(?:const|let|var)\s+|as\s+)(\w+_RENDER_ORDER)\b/g)].map((match) => `${path} ${match[1]}`);
 }
 
-test('every renderOrder is exactly one of the six names scene-model.ts declares', () => {
+test('every renderOrder is exactly one of the seven names scene-model.ts declares', () => {
   const files = sourceFiles().filter((file) => file.path.startsWith('src/') && !/\.test\.ts$/.test(file.path));
   assert.ok(files.some((file) => file.path === 'src/render-scene/body-field.tsx'), 'the walk reaches the draws');
   assert.deepEqual(undeclaredOrders(files), []);
@@ -1715,6 +1718,8 @@ test('every renderOrder is exactly one of the six names scene-model.ts declares'
     'mesh.renderOrder = GLOW_RENDER_ORDER;',
     // 9.6: the belt's step, as its layer sets it.
     'mesh.renderOrder = BELT_RENDER_ORDER;',
+    // 9.7: the nebula's step, as its layer sets it.
+    'mesh.renderOrder = NEBULA_RENDER_ORDER;',
     'const a = { renderOrder: DUST_RENDER_ORDER, b: 1 };',
     'const a = { renderOrder: BODY_RENDER_ORDER };',
     'mesh.renderOrder === 1;',
@@ -1751,9 +1756,9 @@ function ownOrderFailures(source: string, name: string): string[] {
   return failures;
 }
 
-test('the draw order is six named constants, strictly increasing: DUST 1 < GLOW 1.25 < FILL 1.5 < BELT 1.6 < BODY 2 < MOON 3', () => {
-  const order: readonly number[] = [DUST_RENDER_ORDER, GLOW_RENDER_ORDER, FILL_RENDER_ORDER, BELT_RENDER_ORDER, BODY_RENDER_ORDER, MOON_RENDER_ORDER];
-  assert.deepEqual(order, [1, 1.25, 1.5, 1.6, 2, 3]);
+test('the draw order is seven named constants, strictly increasing: DUST 1 < NEBULA 1.1 < GLOW 1.25 < FILL 1.5 < BELT 1.6 < BODY 2 < MOON 3', () => {
+  const order: readonly number[] = [DUST_RENDER_ORDER, NEBULA_RENDER_ORDER, GLOW_RENDER_ORDER, FILL_RENDER_ORDER, BELT_RENDER_ORDER, BODY_RENDER_ORDER, MOON_RENDER_ORDER];
+  assert.deepEqual(order, [1, 1.1, 1.25, 1.5, 1.6, 2, 3]);
   for (let index = 1; index < order.length; index += 1) {
     assert.ok((order[index - 1] as number) < (order[index] as number), `step ${index} of the draw order must rise`);
   }
@@ -1767,7 +1772,7 @@ test('the Dust and Moon orders, as importers see them, are scene-model.ts\'s own
   const declared = sourceFilesUnder(SRC_ROOT).filter((path) => !isTestFile(path)).flatMap((path) => declaredOrders(srcPath(path), readFileSync(path, 'utf8')));
   assert.deepEqual(
     declared.sort(),
-    ['BELT', 'BODY', 'DUST', 'FILL', 'GLOW', 'MOON'].map((step) => `src/render-scene/scene-model.ts ${step}_RENDER_ORDER`),
+    ['BELT', 'BODY', 'DUST', 'FILL', 'GLOW', 'MOON', 'NEBULA'].map((step) => `src/render-scene/scene-model.ts ${step}_RENDER_ORDER`),
     'every render order is declared in scene-model.ts and nowhere else',
   );
   // The pin bites on each way back to a second declaration.

@@ -15,6 +15,7 @@ import { distinctMapIds, mapUrl } from './map-urls.ts';
 function artifactWearing(...perClient: readonly (readonly string[])[]): RealismArtifact {
   const position = { x: 0, y: 0, z: 0 };
   return {
+    railLine: [],
     clients: perClient.map((maps, client) => ({
       id: `client:${client}`,
       position,
@@ -35,7 +36,7 @@ test('order in the artifact does not change the order of the requests', () => {
 });
 
 test('an artifact naming none names none', () => {
-  assert.deepEqual(distinctMapIds({ clients: [] }), []);
+  assert.deepEqual(distinctMapIds({ railLine: [], clients: [] }), []);
   assert.deepEqual(distinctMapIds(artifactWearing([], [])), []);
 });
 

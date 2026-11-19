@@ -27,17 +27,22 @@
  * **The line-work's fade (9.4)** is read through this module's `lineWorkFade`, by
  * `body-field.tsx` each frame, so the owner stays bound once and is never exported.
  *
+ * **The Rail's curve (9.7)** is sampled here, as `body-field.tsx` draws its hairline
+ * (`railLine` at `RAIL_LINE_SAMPLES_PER_SEGMENT`), memoised on the artifact and the Rail,
+ * and handed to the owner on the artifact as `railLine`, so the nebula ribbon follows
+ * exactly the drawn curve and the realism chunk imports no Rail code.
+ *
  * **The subject is a thunk,** resolved inside the owner's `try`, so a store read that
  * throws cannot reach R3F, and nothing is read before a layer exists. It writes nothing.
  */
 
 import { useFrame } from '@react-three/fiber';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { resetFrameSampling } from '../shell/chart-offer.ts';
 import { motionPace, reducedMotion } from '../shell/motion-preference.ts';
 import { BASE } from '../shell/route.ts';
 import { navigationStore } from '../shell/state.ts';
-import type { Rail } from './rail-model.ts';
+import { RAIL_LINE_SAMPLES_PER_SEGMENT, railLine, type Rail } from './rail-model.ts';
 import { createRealismOwner, type RealismArtifact } from './realism-status.ts';
 import { sceneSubject } from './stroke-model.ts';
 
@@ -49,16 +54,17 @@ export function lineWorkFade(): number {
 }
 
 export interface RealismMountProps {
-  readonly artifact: RealismArtifact;
+  readonly artifact: Omit<RealismArtifact, 'railLine'>;
   readonly rail: Rail;
 }
 
 /** Hands each frame to the owner, and each new Canvas. Renders nothing. */
 export function RealismMount({ artifact, rail }: RealismMountProps) {
+  const drawn = useMemo(() => ({ ...artifact, railLine: railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT) }), [artifact, rail]);
   useEffect(() => owner.enterCanvas(), []);
   useFrame(({ scene, camera, gl }, delta) => {
     const reduced = reducedMotion();
-    owner.frame(artifact, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });
+    owner.frame(drawn, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });
   });
   return null;
 }

@@ -22,6 +22,7 @@ import { addedDraws } from './fill-model.ts';
 const DELTA = 1 / 60;
 const APPEARANCE = { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.05, spinPhase: 1.5 };
 const ARTIFACT: RealismArtifact = {
+  railLine: [],
   clients: [
     { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: APPEARANCE }, { id: 'project:a/two', clientId: 'client:a', position: { x: -10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: { ...APPEARANCE, map: 'mars' } }] },
     { id: 'client:b', position: { x: 100, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [] },
@@ -123,7 +124,7 @@ function sharedFade(materials: readonly ShaderMaterial[]): string[] {
 test('one fade uniform object is shared by every Planet fill, Star fill and glow, and the belts', () => {
   const { scene } = attached();
   const materials = drawsOf(scene).map(materialOf);
-  assert.equal(materials.length, addedDraws(2, 2));
+  assert.equal(materials.length, addedDraws(2, 2, 0));
   assert.ok(materials.some((material) => material.uniforms.uMap !== undefined) && glowsOf(scene).length === 2 && beltsOf(scene).length === 1, 'Planets, Star fills, glows and the belts are all read');
   assert.deepEqual(sharedFade(materials), []);
   const mutated = materials.map((material, at) => (at === materials.length - 1 ? { ...material, uniforms: { ...material.uniforms, uFade: { value: 0 } } } as unknown as ShaderMaterial : material));
@@ -196,7 +197,7 @@ test('the layer is one group: nothing reaches a scene before attach, and attach 
   const group = scene.children[0] as Group;
   assert.equal(group.type, 'Group');
   assert.equal((group as unknown as Mesh).isMesh, undefined);
-  assert.equal(group.children.length, addedDraws(2, 2));
+  assert.equal(group.children.length, addedDraws(2, 2, 0));
   layer.dispose();
   assert.deepEqual(scene.children, []);
 });
@@ -253,7 +254,7 @@ test('warm uploads every texture once by initTexture and compiles once, over the
   assert.equal(compile!.scene, scene, 'prepared against the scene it will join, so its programs match that draw');
   assert.notEqual(compile!.root, scene);
   assert.equal(compile!.parentAtCompile, null, 'the group is in no scene while it compiles');
-  assert.equal(compile!.children, addedDraws(2, 2), 'every draw is compiled');
+  assert.equal(compile!.children, addedDraws(2, 2, 0), 'every draw is compiled');
   assert.deepEqual(scene.children, [], 'warm attaches nothing');
 });
 
@@ -333,7 +334,7 @@ test('under the real owner, no layer mesh is in the scene before warm resolves, 
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(scene.children, [], 'resolving draws nothing until a frame');
   owner.frame(ARTIFACT, '/', draw);
-  assert.equal(drawsOf(scene).length, addedDraws(2, 2), 'the warm draw');
+  assert.equal(drawsOf(scene).length, addedDraws(2, 2, 0), 'the warm draw');
   assert.equal(fadeOf(scene), 0);
   assert.ok(drawsOf(scene).every((mesh) => !materialOf(mesh).depthWrite));
   assert.deepEqual(owner.status(), { document: 'decoded', uploaded: true });

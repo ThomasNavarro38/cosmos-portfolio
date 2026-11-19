@@ -13,6 +13,7 @@ const BASE = '/cosmos-portfolio/';
 function artifactWearing(...maps: readonly string[]): RealismArtifact {
   const position = { x: 0, y: 0, z: 0 };
   return {
+    railLine: [],
     clients: [{
       id: 'client:a',
       position,
@@ -126,7 +127,7 @@ test('a rejecting fetch rejects the whole', async () => {
 
 test('no map named rejects, and asks for nothing', async () => {
   const ports = installPorts();
-  await assert.rejects(decodeMaps({ clients: [] }, BASE), /names no map/);
+  await assert.rejects(decodeMaps({ railLine: [], clients: [] }, BASE), /names no map/);
   await assert.rejects(decodeMaps(artifactWearing(), BASE), /names no map/);
   assert.deepEqual(ports.fetched, []);
 });

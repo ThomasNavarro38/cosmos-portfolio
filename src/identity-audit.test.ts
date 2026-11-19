@@ -183,6 +183,10 @@ test('achromatic: the realism exemption does work — the shipped tokens are hue
   assert.ok(oklch(belt).chroma > 0, `the shipped belt ${belt} carries some hue`);
   assert.ok(oklch(belt).chroma < ACHROMATIC_CHROMA, `the shipped belt ${belt} is under the achromatic line, as DESIGN.md says`);
   assert.deepEqual(auditAchromatic({ 'realism-belt-dark': belt }), ['achromatic: no -dark colour token to inspect'], 'the belt is exempt by its name');
+  // The nebula (9.7) is plainly hued, a dusky blue, and exempt by its name like the tints.
+  const nebula = tokens.colors['realism-nebula-dark'];
+  assert.ok(oklch(nebula).chroma >= ACHROMATIC_CHROMA, `the shipped nebula ${nebula} carries a hue, or the exemption exempts nothing`);
+  assert.deepEqual(auditAchromatic({ 'realism-nebula-dark': nebula }), ['achromatic: no -dark colour token to inspect'], 'the nebula is exempt by its name');
   assert.deepEqual(auditAchromatic(tokens.colors), []);
   assert.deepEqual(auditCast(tokens.colors), []);
   // The same hex under a non-realism key, in the shipped table, is what the exemption spares it from.

@@ -49,6 +49,8 @@ export const tokens = {
     'realism-ambient-floor-dark': '#0E1626',
     'realism-belt': '#6E6A62',
     'realism-belt-dark': '#6E6A62',
+    'realism-nebula': '#4A5A7A',
+    'realism-nebula-dark': '#4A5A7A',
   },
   typography: {
     fontFamily: {

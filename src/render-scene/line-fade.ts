@@ -1,15 +1,15 @@
 /**
- * The line-work realism replaces, as it fades (9.4, 9.6, AD-19 and AD-22 as amended): a
+ * The line-work realism replaces, as it fades (9.4, 9.6, 9.7, AD-19 and AD-22 as amended): a
  * Star's outline and core dot fall on the realism layer's one fade, as its emissive core
- * rises, and every Planet's orbit hairline falls on it as its debris belt rises (9.6); all
- * return whole if realism fails. Pure, and structural, so `node --test` runs it on fakes;
+ * rises, every Planet's orbit hairline falls on it as its debris belt rises (9.6), and the
+ * Rail's hairline as its nebula ribbon rises (9.7); all return whole if realism fails. Pure, and structural, so `node --test` runs it on fakes;
  * `body-field.tsx` binds it.
  *
- * **Stars and orbits only.** `holdStarMarks` keeps a Star's billboard by its ID and ignores
- * every Planet, so a Planet's outline and Ring stay at their token values (9.9 and 9.8
- * replace them). `holdOrbitLine` keeps a scene hairline only when its ID is an orbit's
- * (`orbit:`), so the Rail's line stays at its token value (9.7 replaces it), and 9.10
- * extends this path to the rest of the line-work.
+ * **Stars, orbits and the Rail only.** `holdStarMarks` keeps a Star's billboard by its ID and
+ * ignores every Planet, so a Planet's outline and Ring stay at their token values (9.9 and
+ * 9.8 replace them). `holdReplacedLine` keeps a scene hairline only when its ID is an
+ * orbit's (`orbit:`) or the Rail's (`rail`), and never any other, and 9.10 extends this
+ * path to the rest of the line-work.
  *
  * **Whole, never Body by Body.** `fadeStarMarks` writes one value to every held object:
  * each is `visible` while the value is above 0, and every material under it takes the
@@ -40,20 +40,22 @@ export function holdStarMarks<Group>(held: Map<string, Group>, body: { readonly 
 
 /** The prefix of an orbit hairline's ID in `sceneLines`: `orbit:<planet id>`. */
 const ORBIT_LINE_PREFIX = 'orbit:';
+/** The Rail hairline's ID in `sceneLines`. */
+const RAIL_LINE_ID = 'rail';
 
 /**
- * The scene hairlines' ref callback's rule (9.6): an orbit's line is held under its ID while
- * it is mounted, and dropped when React hands `null`. The Rail's, and any line that is not
- * an orbit's, is never held. A drei `Line` is a `Line2` mesh whose `LineMaterial` has
- * `opacity`, so `fadeStarMarks` fades it as it does a billboard.
+ * The scene hairlines' ref callback's rule (9.6, 9.7): an orbit's line, or the Rail's, is
+ * held under its ID while it is mounted, and dropped when React hands `null`. Any other line
+ * is never held. A drei `Line` is a `Line2` mesh whose `LineMaterial` has `opacity`, so
+ * `fadeStarMarks` fades it as it does a billboard.
  */
-export function holdOrbitLine<Held>(held: Map<string, Held>, line: { readonly id: string }, object: Held | null): void {
-  if (!line.id.startsWith(ORBIT_LINE_PREFIX)) return;
+export function holdReplacedLine<Held>(held: Map<string, Held>, line: { readonly id: string }, object: Held | null): void {
+  if (!line.id.startsWith(ORBIT_LINE_PREFIX) && line.id !== RAIL_LINE_ID) return;
   if (object === null) held.delete(line.id);
   else held.set(line.id, object);
 }
 
-/** Every held Star's marks and orbit line at this fade: shown while it is above 0, every material at its clamped value. */
+/** Every held Star's marks, orbit line and Rail line at this fade: shown while it is above 0, every material at its clamped value. */
 export function fadeStarMarks(groups: Iterable<StarMarks>, fade: number): void {
   const value = Number.isFinite(fade) ? Math.min(Math.max(fade, 0), 1) : 1;
   for (const group of groups) {

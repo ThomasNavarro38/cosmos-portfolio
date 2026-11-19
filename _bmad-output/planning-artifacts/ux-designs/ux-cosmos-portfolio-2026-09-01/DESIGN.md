@@ -89,6 +89,10 @@ colors:
   # divides it by its own luminance and takes each belt to its Planet's band. ---
   realism-belt: "#6E6A62"
   realism-belt-dark: "#6E6A62"
+  # --- the Rail's nebula ribbon (9.7): one hue, encoding nothing; the shader divides it by
+  # its own luminance and takes it to a faint additive peak over the void. ---
+  realism-nebula: "#4A5A7A"
+  realism-nebula-dark: "#4A5A7A"
 
 typography:
   fontFamily:
@@ -490,7 +494,7 @@ both assume a dark void. Each of these tokens still has a bare light key because
 the generator requires a pair, but that value is a placeholder. A light theme
 would need its own decision for the scene, not a token swap.
 
-The family has two tokens. *[amended by the 9.5 review, 2026-11-18: it now has six, the five `realism-star-*` tints and `realism-ambient-floor`; `realism-belt` joins in 9.6 and `realism-nebula` in 9.7.]* *[declared by 9.6, 2026-11-19: it now has seven, with `realism-belt`.]* Only `render-scene/realism/` may read them, and what the shader outputs from them stays under the luminance ceiling (AD-20).
+The family has two tokens. *[amended by the 9.5 review, 2026-11-18: it now has six, the five `realism-star-*` tints and `realism-ambient-floor`; `realism-belt` joins in 9.6 and `realism-nebula` in 9.7.]* *[declared by 9.6, 2026-11-19: it now has seven, with `realism-belt`.]* *[declared by 9.7, 2026-11-19: it now has eight, with `realism-nebula`.]* Only `render-scene/realism/` may read them, and what the shader outputs from them stays under the luminance ceiling (AD-20).
 
 *[amended 2026-11-17 for Epic 9 (sprint-change-proposal-2026-11-17.md, Proposal 6): `realism-star-glow` is replaced by
 `realism-star-blue #A9BFFF`, `-white #F4F1EA`, `-yellow #FFE6B0`, `-orange
@@ -513,7 +517,7 @@ Until each story lands, the frontmatter keeps the two tokens it declares today.]
 | `realism-star-yellow` | `#FFE6B0` | `#FFE6B0` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* *[declared by 9.5, 2026-11-18: the Star's core takes it too, not only its glow, each normalised to the same luminance, so it is hue alone.]* |
 | `realism-star-orange` | `#FFC27A` | `#FFC27A` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* *[declared by 9.5, 2026-11-18: the Star's core takes it too, not only its glow, each normalised to the same luminance, so it is hue alone.]* |
 | `realism-star-red` | `#FF9A5C` | `#FF9A5C` (placeholder) | *[amended 2026-11-17 for Epic 9: one of the five blackbody-like Star tints a Star is assigned from its ID (AD-21 as amended); its glow takes it. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.5.]* *[declared by 9.5, 2026-11-18: the Star's core takes it too, not only its glow, each normalised to the same luminance, so it is hue alone.]* |
-| `realism-nebula` | `#4A5A7A` | `#4A5A7A` (placeholder) | *[amended 2026-11-17 for Epic 9: the colour of the Rail's nebula ribbon. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.7.]* |
+| `realism-nebula` | `#4A5A7A` | `#4A5A7A` (placeholder) | *[amended 2026-11-17 for Epic 9: the colour of the Rail's nebula ribbon. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.7.]* *[declared by 9.7, 2026-11-19: in the frontmatter. One hue for the whole ribbon, encoding nothing: the shader divides it by its own linear luminance and takes it to a peak of `NEBULA_PEAK_LUMINANCE` (0.0076, a starting value), added to the frame. Over the void, the peak decodes to at most `stroke-dust-dark`'s luminance, the Rail line it replaces, and a Mote label over it keeps 4.5:1; stacked under two near glows it stays under `stroke-active`, and with the subject's glow under `stroke-focus`, over every tint, all pinned by test. It is the hued token of the family by intent (OKLCH chroma about 0.056), exempt by its prefix.]* |
 | `realism-belt` | `#6E6A62` | `#6E6A62` (placeholder) | *[amended 2026-11-17 for Epic 9: the colour of an orbit's debris belt. A placeholder tuned on screen, normalised under the ceiling. The bare value is a placeholder by ruling, as above. Declared in the frontmatter by 9.6.]* *[declared by 9.6, 2026-11-19: in the frontmatter. One hue for every belt, encoding nothing: the shader divides it by its own linear luminance and takes each belt to its Planet's band, whose peak is the Planet's own band token's luminance (`stroke-rest-dark`'s, about 0.026, or `stroke-near-dark`'s, about 0.061), so the belts keep the ladder's order and stay far under `stroke-active`. The M2 orbit was always `stroke-rest`, so a `stroke-near` belt's peak is brighter than the hairline it replaces. Its OKLCH chroma is about 0.013, under the achromatic line; it is exempt by its prefix all the same.]* |
 
 `[NOTE FOR UX] Direction 02 pairs its palette with an editorial serif and a
@@ -804,6 +808,15 @@ The shape vocabulary is four items and nothing else.
   elbowed leader is a diagram convention and this is not a diagram. The one
   exception is the Rail itself, which is a long continuous bezier at
   `stroke-dust` — the only curve in the product that is not an orbit.
+  *[amended 2026-11-19 by 9.7: under realism the Rail's hairline fades out as
+  its nebula ribbon arrives, on the layer's one fade, whole with the Star marks
+  and the orbits, and returns if realism fails. The ribbon is not a fifth shape
+  and not a mark: it is a soft, noise-shaded band along exactly the hairline's
+  curve, about 3 units either side, turned to face the camera, fading in over
+  its first and last 8 units, with no edge, no line and no specks, drifting
+  slowly and held still under reduced motion. It draws before every fill, so it
+  never hazes a Planet or a plate. First Paint, the Fallback and the preview
+  keep the hairline.]*
 - **The square-cornered rectangle.** The panel, the field-row rules, the
   Fallback's plate edges, and the keyboard focus outline. Radius is `0`
   everywhere. There is not one rounded corner in this product. A rounded

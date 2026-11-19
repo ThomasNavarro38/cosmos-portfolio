@@ -42,6 +42,7 @@ function project(id: string, clientId: string, position: { x: number; y: number;
 
 /** Two Stars, three Planets, both bands, one orbit off the axes. */
 const ARTIFACT: RealismArtifact = {
+  railLine: [],
   clients: [
     { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-near', appearance: { tint: 'red', pulsePhase: 0 }, projects: [project('project:a/one', 'client:a', { x: 10, y: 0, z: 0 }), project('project:a/two', 'client:a', { x: 0, y: -6, z: 0 }, { luminanceBand: 'stroke-near' })] },
     { id: 'client:b', position: { x: 100, y: 5, z: -3 }, luminanceBand: 'stroke-rest', appearance: { tint: 'blue', pulsePhase: 1 }, projects: [project('project:b/one', 'client:b', { x: 104, y: 5, z: 0 }, { orbitNormal: { x: 0, y: 1, z: 0 } })] },
@@ -52,6 +53,7 @@ const ARTIFACT_URL = new URL('../../../generated/layout.generated.json', import.
 const committed = (): RealismArtifact & SceneArtifact => JSON.parse(readFileSync(ARTIFACT_URL, 'utf8')) as RealismArtifact & SceneArtifact;
 
 const withProject = (extra: Record<string, unknown>, clientId = 'client:a', position = { x: 10, y: 0, z: 0 }): RealismArtifact => ({
+  railLine: [],
   clients: [{ ...ARTIFACT.clients[0]!, projects: [project('project:bad', clientId, position, extra) as never] }],
 });
 
@@ -257,15 +259,15 @@ test('every throw names the Planet: an unknown or missing band, a missing or non
   ];
   for (const [name, artifact] of cases) assert.throws(() => beltPlans(artifact), /project:bad/, name);
   for (const value of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
-    const badStar: RealismArtifact = { clients: [{ ...ARTIFACT.clients[0]!, position: { x: 0, y: value, z: 0 } }] };
+    const badStar: RealismArtifact = { railLine: [], clients: [{ ...ARTIFACT.clients[0]!, position: { x: 0, y: value, z: 0 } }] };
     assert.throws(() => beltPlans(badStar), /project:a\/one orbits client:a, which has no usable position/, `a Star at ${value}`);
   }
   assert.throws(() => createFillLayer(withProject({ luminanceBand: 'stroke-focus' }), IMAGES), /project:bad/, 'the layer throws before anything is built');
 });
 
 test('an artifact with no Planet has no belt: no plans, empty arrays, no mesh, and no belt draw', () => {
-  assert.deepEqual(beltPlans({ clients: [] }), []);
-  const starsOnly: RealismArtifact = { clients: ARTIFACT.clients.map((client) => ({ ...client, projects: [] })) };
+  assert.deepEqual(beltPlans({ railLine: [], clients: [] }), []);
+  const starsOnly: RealismArtifact = { railLine: [], clients: ARTIFACT.clients.map((client) => ({ ...client, projects: [] })) };
   assert.deepEqual(beltPlans(starsOnly), []);
   const arrays = beltArrays([]);
   assert.deepEqual([arrays.positions.length, arrays.belt.length, arrays.luminance.length, arrays.index.length], [0, 0, 0, 0]);
@@ -276,7 +278,7 @@ test('an artifact with no Planet has no belt: no plans, empty arrays, no mesh, a
   const layer = createFillLayer(starsOnly, new Map());
   layer.attach(scene);
   assert.equal(drawsOf(scene).filter((mesh) => mesh.name === 'belt').length, 0);
-  assert.equal(drawsOf(scene).length, addedDraws(0, 2));
+  assert.equal(drawsOf(scene).length, addedDraws(0, 2, 0));
   layer.dispose();
 });
 
@@ -357,7 +359,7 @@ test('the layer adds one belt Mesh for every Planet, on the layer\'s one fade, i
   assert.equal(belt!.parent, scene.children[0], 'in the layer\'s one group');
   layer.arrive(false);
   assert.equal(material.uniforms.uFade!.value, 1, 'it arrives with the layer');
-  assert.equal(drawsOf(scene).length, addedDraws(fillPlans(ARTIFACT).length, starPlans(ARTIFACT).length));
+  assert.equal(drawsOf(scene).length, addedDraws(fillPlans(ARTIFACT).length, starPlans(ARTIFACT).length, 0));
   layer.dispose();
 });
 
