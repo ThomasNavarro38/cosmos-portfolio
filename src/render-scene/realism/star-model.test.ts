@@ -17,7 +17,7 @@ import { tokens } from '../../tokens/tokens.ts';
 import { createRealismOwner, type RealismArtifact } from '../realism-status.ts';
 import { FILL_RENDER_ORDER, GLOW_RENDER_ORDER } from '../scene-model.ts';
 import { STAR_RADIUS } from '../stroke-model.ts';
-import { BELT_DRAWS_BUDGET, DUST_DRAWS_BUDGET, NEBULA_DRAWS_BUDGET, PLANET_DRAWS_BUDGET, STAR_DRAWS_BUDGET } from './budgets.ts';
+import { BELT_DRAWS_BUDGET, DEEP_PROJECT_DRAWS_BUDGET, DUST_DRAWS_BUDGET, NEBULA_DRAWS_BUDGET, PLANET_DRAWS_BUDGET, STAR_DRAWS_BUDGET } from './budgets.ts';
 import { createFillLayer } from './fill-layer.ts';
 import { addedDraws, FILL_CEILING_LUMINANCE, FILL_RADIUS_RATIO, fillPlans } from './fill-model.ts';
 import { FILL_VERTEX_SHADER } from './fill-shader.ts';
@@ -64,7 +64,7 @@ const APPEARANCE = { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.
 const ARTIFACT: RealismArtifact = {
   railLine: [],
   clients: [
-    { id: 'client:a', position: { x: 1, y: 2, z: 3 }, luminanceBand: 'stroke-near', appearance: { tint: 'red', pulsePhase: 1.5 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 11, y: 2, z: 3 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: APPEARANCE }] },
+    { id: 'client:a', position: { x: 1, y: 2, z: 3 }, luminanceBand: 'stroke-near', appearance: { tint: 'red', pulsePhase: 1.5 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 11, y: 2, z: 3 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, isDeep: false, appearance: APPEARANCE }] },
     { id: 'client:b', position: { x: 100, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'blue', pulsePhase: 0 }, projects: [] },
   ],
 };
@@ -340,17 +340,20 @@ test('the shape eases from 0 to 1, monotone with no slope at either end, and hol
   assert.ok(riseShape(0.001) < 0.001 && riseShape(0.999) > 0.999, 'it leaves and arrives flat');
 });
 
-test('added draws are Planets + 2 × Stars + 1 for all belts + 1 for the nebula and 0 for Dust, within the budgets', () => {
+test('added draws are Planets + 2 × Stars + 1 for all belts + 1 for the nebula + 2 per Deep Project and 0 for Dust, within the budgets', () => {
   assert.equal(STAR_DRAWS_BUDGET, 2);
   assert.equal(DUST_DRAWS_BUDGET, 0);
   assert.equal(BELT_DRAWS_BUDGET, 1);
-  assert.equal(addedDraws(8, 6, 0), 8 * PLANET_DRAWS_BUDGET + 6 * STAR_DRAWS_BUDGET + BELT_DRAWS_BUDGET + DUST_DRAWS_BUDGET);
-  assert.equal(addedDraws(8, 6, 0), 21);
+  assert.equal(addedDraws(8, 6, 0, 0), 8 * PLANET_DRAWS_BUDGET + 6 * STAR_DRAWS_BUDGET + BELT_DRAWS_BUDGET + DUST_DRAWS_BUDGET);
+  assert.equal(addedDraws(8, 6, 0, 0), 21);
   assert.equal(NEBULA_DRAWS_BUDGET, 1);
-  assert.equal(addedDraws(8, 6, 121), 8 * PLANET_DRAWS_BUDGET + 6 * STAR_DRAWS_BUDGET + BELT_DRAWS_BUDGET + NEBULA_DRAWS_BUDGET + DUST_DRAWS_BUDGET);
-  assert.equal(addedDraws(8, 6, 121), 22, 'the committed artifact (9.7)');
-  assert.equal(addedDraws(0, 3, 0), 6, 'no Planet, no belt');
-  assert.equal(addedDraws(5, 0, 0), 6, 'no Clients, no Star draw, and the belts');
+  assert.equal(addedDraws(8, 6, 121, 0), 8 * PLANET_DRAWS_BUDGET + 6 * STAR_DRAWS_BUDGET + BELT_DRAWS_BUDGET + NEBULA_DRAWS_BUDGET + DUST_DRAWS_BUDGET);
+  assert.equal(addedDraws(8, 6, 121, 0), 22, 'no Deep Project: the count of 9.7');
+  assert.equal(DEEP_PROJECT_DRAWS_BUDGET, 2);
+  assert.equal(addedDraws(8, 6, 121, 1), 8 * PLANET_DRAWS_BUDGET + 6 * STAR_DRAWS_BUDGET + BELT_DRAWS_BUDGET + NEBULA_DRAWS_BUDGET + DEEP_PROJECT_DRAWS_BUDGET + DUST_DRAWS_BUDGET);
+  assert.equal(addedDraws(8, 6, 121, 1), 24, 'the committed artifact (9.8)');
+  assert.equal(addedDraws(0, 3, 0, 0), 6, 'no Planet, no belt');
+  assert.equal(addedDraws(5, 0, 0, 0), 6, 'no Clients, no Star draw, and the belts');
 });
 
 // --- The ceilings --------------------------------------------------------------------------------
@@ -1049,7 +1052,7 @@ test('the layer draws the Stars over its one geometry, and on going disposes Sta
   const layer = createFillLayer(ARTIFACT, new Map([['moon', { close() { closed += 1; } } as unknown as ImageBitmap]]));
   layer.attach(scene);
   const meshes = drawsOf(scene);
-  assert.equal(meshes.length, addedDraws(fillPlans(ARTIFACT).length, starPlans(ARTIFACT).length, 0));
+  assert.equal(meshes.length, addedDraws(fillPlans(ARTIFACT).length, starPlans(ARTIFACT).length, 0, 0));
   assert.equal(new Set(meshes.filter((mesh) => mesh.name !== 'belt').map((mesh) => mesh.geometry)).size, 1, 'the belts have their own geometry (9.6)');
   layer.frame(new PerspectiveCamera(), DELTA, false, 1, 'client:a');
   const counts = { material: 0, geometry: 0 };
@@ -1102,6 +1105,8 @@ function linkingRenderer(): WebGLRenderer {
     compileAsync: (root: Object3D) => Promise.resolve(root),
     properties: { get: () => ({ currentProgram: { program: {} } }) },
     getContext: () => ({ LINK_STATUS, isContextLost: () => false, getProgramParameter: () => true }),
+    // The canvas's CSS size, which the layer reads for the moons' pixel floor (9.8).
+    getSize: (target: { set(x: number, y: number): unknown }) => target.set(1920, 1080),
   } as unknown as WebGLRenderer;
 }
 
@@ -1132,7 +1137,7 @@ test('under the real owner, a subject that throws removes every fill and glow, w
   await new Promise((resolve) => setImmediate(resolve));
   owner.frame(ARTIFACT, '/', draw);
   owner.frame(ARTIFACT, '/', draw);
-  assert.equal(drawsOf(scene).length, addedDraws(1, 2, 0));
+  assert.equal(drawsOf(scene).length, addedDraws(1, 2, 0, 0));
   assert.doesNotThrow(() => owner.frame(ARTIFACT, '/', { ...draw, subject: () => { throw new Error('the store threw'); } }));
   assert.equal(owner.status().document, 'failed');
   assert.deepEqual(scene.children, []);

@@ -46,6 +46,7 @@ import {
   DUST_RENDER_ORDER,
   BELT_RENDER_ORDER,
   NEBULA_RENDER_ORDER,
+  RING_DISC_RENDER_ORDER,
   FILL_RENDER_ORDER,
   GLOW_RENDER_ORDER,
   MOON_RENDER_ORDER,
@@ -1120,11 +1121,11 @@ test('the drawn radius discriminates on kind, never on a missing mass', () => {
  *     alone, never the subject, so it is at rest and always.
  *   - **Draw order**: every visible draw at `BODY_RENDER_ORDER`, `transparent` at
  *     opacity 1 — after the Dust — and nothing else carries a `renderOrder`.
- *   - **The line-work's fade (9.4, extended to the orbits by 9.6 and to the Rail by 9.7),
- *     the one allowance**: exactly two `useRef` maps, the Stars' billboards held through
- *     `holdStarMarks` by each Body's billboard ref and the replaced hairlines held through
- *     `holdReplacedLine` by each scene hairline's ref (the orbits' and the Rail's, no
- *     other), and one `useFrame` handing
+ *   - **The line-work's fade (9.4, extended to the orbits by 9.6, to the Rail by 9.7 and to
+ *     the Rings by 9.8), the one allowance**: exactly two `useRef` maps, the Stars'
+ *     billboards held through `holdStarMarks` by each Body's billboard ref and the replaced
+ *     lines held through `holdReplacedLine` by each scene hairline's ref (the orbits' and
+ *     the Rail's, no other) and each Ring's ref, and one `useFrame` handing
  *     both to `fadeStarMarks` on one `lineWorkFade()` from the mount; no other frame loop,
  *     ref, fade source or hand-set opacity, and a closed import set.
  */
@@ -1136,6 +1137,9 @@ const STAR_MARKS_FRAME = 'useFrame(() => fadeStarMarks([...starMarks.current.val
 
 /** A scene hairline's ref (9.6, 9.7): it holds an orbit's line or the Rail's for the fade, and no other. */
 const REPLACED_LINE_REF = 'ref={(object) => holdReplacedLine(replacedLines.current, line, object)}';
+
+/** A Ring's ref (9.8): it holds the Ring for the fade, in the same map as the replaced hairlines. */
+const RING_LINE_REF = 'ref={(object) => holdReplacedLine(replacedLines.current, ring, object)}';
 
 /** The binding's imports, exactly (9.4 added the frame loop, the ref, the fade and its rule; 9.6 the orbits' rule, which 9.7 renamed to hold the Rail too). */
 const BODY_FIELD_IMPORTS: readonly string[] = [
@@ -1179,9 +1183,10 @@ function auditBodyField(source: string): string[] {
   ) {
     failures.push('holds a ref other than the one map of Star marks and the one map of replaced lines');
   }
-  // 9.6, 9.7: the orbit and Rail lines, held by holdReplacedLine alone (no other line), on the scene hairlines' one <Line>.
-  if ((code.match(/\bholdReplacedLine\s*\(/g) ?? []).length !== 1 || (code.match(/\breplacedLines\b/g) ?? []).length !== 3) {
-    failures.push('the replaced lines are held, faded or read other than by the one ref, holdReplacedLine and the one frame loop');
+  // 9.6, 9.7: the orbit and Rail lines, held by holdReplacedLine alone (no other line), on the scene hairlines' one <Line>;
+  // 9.8: and each Ring, by the same rule, on the Ring's <Line>.
+  if ((code.match(/\bholdReplacedLine\s*\(/g) ?? []).length !== 2 || (code.match(/\breplacedLines\b/g) ?? []).length !== 4) {
+    failures.push('the replaced lines are held, faded or read other than by the two refs, holdReplacedLine and the one frame loop');
   }
   if ((code.match(/\bholdStarMarks\s*\(/g) ?? []).length !== 1 || (code.match(/\bfadeStarMarks\s*\(/g) ?? []).length !== 1 || (code.match(/\blineWorkFade\b/g) ?? []).length !== 2 || (code.match(/\bstarMarks\b/g) ?? []).length !== 3) {
     failures.push('the Star marks are held, faded or read other than by the one ref, the one frame loop and lineWorkFade()');
@@ -1278,6 +1283,8 @@ function auditBodyField(source: string): string[] {
   const ringBlock = squash(ringBlocks[0] ?? '');
   if (!/^notableRings\(\s*body\s*\)\s*\.\s*map\(\s*\(\s*ring\s*\)\s*=>/.test(ringBlock)) failures.push('the Rings are not mapped as (ring)');
   const ringLine = ringBlock.match(/<Line\b[\s\S]*?\/>/)?.[0] ?? '';
+  // 9.8: the Ring gives way to its ring disc, held for the fade by its own ref.
+  if (!ringLine.includes(RING_LINE_REF)) failures.push('a Ring is not held for the fade by holdReplacedLine(replacedLines.current, ring, object)');
   for (const [attribute, expected] of [
     ['key', 'ring.id'],
     ['points', 'ring.points'],
@@ -1386,6 +1393,12 @@ test('the Bodies’ binding audit rejects the real binding with any one guarante
     ['a second frame loop for the orbits', (s) => s.replace(STAR_MARKS_FRAME, 'useFrame(() => fadeStarMarks(starMarks.current.values(), lineWorkFade()));\n  useFrame(() => fadeStarMarks(replacedLines.current.values(), lineWorkFade()));')],
     ['the orbits faded from elsewhere', (s) => s.replace(STAR_MARKS_FRAME, 'useFrame(() => { fadeStarMarks(starMarks.current.values(), lineWorkFade()); fadeStarMarks(replacedLines.current.values(), 1 - lineWorkFade()); });')],
     ['the orbit map not a ref', (s) => s.replace('const replacedLines = useRef(new Map<string, StarMarks>());', 'const replacedLines = { current: new Map<string, StarMarks>() };')],
+    // The Ring's fade (9.8).
+    ['the Ring not held', (s) => s.replace(RING_LINE_REF, '')],
+    ['the Ring held by hand', (s) => s.replace(RING_LINE_REF, 'ref={(object) => replacedLines.current.set(ring.id, object)}')],
+    ['the Ring held in the Star map', (s) => s.replace(RING_LINE_REF, 'ref={(object) => holdReplacedLine(starMarks.current, ring, object)}')],
+    ['the Ring held under the line', (s) => s.replace(RING_LINE_REF, 'ref={(object) => holdReplacedLine(replacedLines.current, line, object)}')],
+    ['the Ring held under an invented ID', (s) => s.replace(RING_LINE_REF, "ref={(object) => holdReplacedLine(replacedLines.current, { id: 'ring:x' }, object)}")],
     ['the marks on a second billboard', (s) => s.replace('</Billboard>', `</Billboard>\n          <Billboard ref={(group) => holdStarMarks(starMarks.current, body, group)}></Billboard>`)],
     ['a line loses its order', (s) => s.replace('renderOrder={BODY_RENDER_ORDER}', '')],
     ['a line goes opaque', (s) => s.replace(/(<Line\b[^/]*?)\s*transparent\b/, '$1')],
@@ -1663,11 +1676,11 @@ test('the glow allowance is the one identifier in the one file and the word unde
 
 // --- The draw order, declared once ----------------------------------------------
 
-const ORDER_NAME = '(?:DUST|NEBULA|GLOW|FILL|BELT|BODY|MOON)_RENDER_ORDER';
+const ORDER_NAME = '(?:DUST|NEBULA|GLOW|FILL|BELT|RING_DISC|BODY|MOON)_RENDER_ORDER';
 /** The value alone: braced in JSX, or ending its statement or property. */
 const ONE_ORDER_NAME = new RegExp(`^(?:\\{\\s*${ORDER_NAME}\\s*\\}|${ORDER_NAME}\\s*(?:[;,}\\n]|$))`);
 
-/** Every `renderOrder` set to anything but exactly one of the seven named steps, as `file:line`. */
+/** Every `renderOrder` set to anything but exactly one of the eight named steps, as `file:line`. */
 function undeclaredOrders(files: readonly { readonly path: string; readonly source: string }[]): string[] {
   return files.flatMap((file) => {
     const code = stripComments(file.source);
@@ -1684,7 +1697,7 @@ function declaredOrders(path: string, source: string): string[] {
   return [...stripComments(source).matchAll(/\b(?:(?:const|let|var)\s+|as\s+)(\w+_RENDER_ORDER)\b/g)].map((match) => `${path} ${match[1]}`);
 }
 
-test('every renderOrder is exactly one of the seven names scene-model.ts declares', () => {
+test('every renderOrder is exactly one of the eight names scene-model.ts declares', () => {
   const files = sourceFiles().filter((file) => file.path.startsWith('src/') && !/\.test\.ts$/.test(file.path));
   assert.ok(files.some((file) => file.path === 'src/render-scene/body-field.tsx'), 'the walk reaches the draws');
   assert.deepEqual(undeclaredOrders(files), []);
@@ -1720,6 +1733,8 @@ test('every renderOrder is exactly one of the seven names scene-model.ts declare
     'mesh.renderOrder = BELT_RENDER_ORDER;',
     // 9.7: the nebula's step, as its layer sets it.
     'mesh.renderOrder = NEBULA_RENDER_ORDER;',
+    // 9.8: the ring disc's step, as its layer sets it.
+    'mesh.renderOrder = RING_DISC_RENDER_ORDER;',
     'const a = { renderOrder: DUST_RENDER_ORDER, b: 1 };',
     'const a = { renderOrder: BODY_RENDER_ORDER };',
     'mesh.renderOrder === 1;',
@@ -1756,9 +1771,9 @@ function ownOrderFailures(source: string, name: string): string[] {
   return failures;
 }
 
-test('the draw order is seven named constants, strictly increasing: DUST 1 < NEBULA 1.1 < GLOW 1.25 < FILL 1.5 < BELT 1.6 < BODY 2 < MOON 3', () => {
-  const order: readonly number[] = [DUST_RENDER_ORDER, NEBULA_RENDER_ORDER, GLOW_RENDER_ORDER, FILL_RENDER_ORDER, BELT_RENDER_ORDER, BODY_RENDER_ORDER, MOON_RENDER_ORDER];
-  assert.deepEqual(order, [1, 1.1, 1.25, 1.5, 1.6, 2, 3]);
+test('the draw order is eight named constants, strictly increasing: DUST 1 < NEBULA 1.1 < GLOW 1.25 < FILL 1.5 < BELT 1.6 < RING_DISC 1.75 < BODY 2 < MOON 3', () => {
+  const order: readonly number[] = [DUST_RENDER_ORDER, NEBULA_RENDER_ORDER, GLOW_RENDER_ORDER, FILL_RENDER_ORDER, BELT_RENDER_ORDER, RING_DISC_RENDER_ORDER, BODY_RENDER_ORDER, MOON_RENDER_ORDER];
+  assert.deepEqual(order, [1, 1.1, 1.25, 1.5, 1.6, 1.75, 2, 3]);
   for (let index = 1; index < order.length; index += 1) {
     assert.ok((order[index - 1] as number) < (order[index] as number), `step ${index} of the draw order must rise`);
   }
@@ -1772,7 +1787,7 @@ test('the Dust and Moon orders, as importers see them, are scene-model.ts\'s own
   const declared = sourceFilesUnder(SRC_ROOT).filter((path) => !isTestFile(path)).flatMap((path) => declaredOrders(srcPath(path), readFileSync(path, 'utf8')));
   assert.deepEqual(
     declared.sort(),
-    ['BELT', 'BODY', 'DUST', 'FILL', 'GLOW', 'MOON', 'NEBULA'].map((step) => `src/render-scene/scene-model.ts ${step}_RENDER_ORDER`),
+    ['BELT', 'BODY', 'DUST', 'FILL', 'GLOW', 'MOON', 'NEBULA', 'RING_DISC'].map((step) => `src/render-scene/scene-model.ts ${step}_RENDER_ORDER`),
     'every render order is declared in scene-model.ts and nowhere else',
   );
   // The pin bites on each way back to a second declaration.
@@ -3933,7 +3948,9 @@ test('the worst-window mount audit rejects the real scene with any one guarantee
  * no connector, no coordinate literal, no authored or band read. Positively: one
  * `notableMoons(bodies)`; a frame loop that is *exactly* — update the camera's
  * matrices, then each Moon's `moonScale` from both matrices and R3F's canvas
- * height, written with `applyMoonScale` to its own pooled mesh; one positioned
+ * height, written with `applyMoonScale` to its own pooled mesh, then (9.8, the one
+ * allowance) the whole pool handed to `fadeStarMarks` on one `lineWorkFade()` from
+ * the mount, so the Moon gives way to its moon sphere; one positioned
  * group per Moon at its Planet, a camera-facing `<Billboard>`, and in it one
  * mesh at the Moon's billboard-local centre, at `MOON_RENDER_ORDER` (one above
  * the Ring's `BODY_RENDER_ORDER`, so the overlap never flickers), a circle of
@@ -3982,6 +3999,13 @@ function auditMoonField(source: string): string[] {
     failures.push('the notable model is not imported as { MOON_RENDER_ORDER, applyMoonScale, moonScale, notableMoons }');
   }
   if (!/import\s*\{\s*Billboard\s*\}\s*from\s*'@react-three\/drei'/.test(quoted)) failures.push('does not import exactly { Billboard } from drei');
+  // 9.8: the Moons' fade, the one allowance: the line-work's rule, and the owner's one read, through the mount.
+  if (!/import\s*\{\s*fadeStarMarks\s*\}\s*from\s*'\.\/line-fade\.ts'/.test(quoted)) failures.push('fadeStarMarks is not imported, alone, from line-fade.ts');
+  if (!/import\s*\{\s*lineWorkFade\s*\}\s*from\s*'\.\/realism-mount\.tsx'/.test(quoted)) failures.push('lineWorkFade is not imported, alone, from realism-mount.tsx');
+  if ((code.match(/\bfadeStarMarks\b/g) ?? []).length !== 2 || (code.match(/\blineWorkFade\b/g) ?? []).length !== 2) {
+    failures.push('the Moons are faded other than by the one call in the frame loop, on one lineWorkFade()');
+  }
+  if (/\.(?:opacity|visible)\s*=(?!=)/.test(code)) failures.push('sets an opacity or a visibility itself — the fade is line-fade.ts’s');
 
   const loop = /\buseFrame\s*\(\s*\(\s*\{\s*camera\s*,\s*size\s*\}\s*\)\s*=>\s*\{([\s\S]*?)\}\s*\)\s*;/.exec(code);
   if (loop === null) {
@@ -3994,11 +4018,13 @@ function auditMoonField(source: string): string[] {
     const expected = [
       'camera.updateMatrixWorld()',
       'moons.forEach((moon,index)=>applyMoonScale(meshes.current[index],moonScale(moon,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size.height)))',
+      'fadeStarMarks(meshes.current,lineWorkFade())',
     ];
     if (JSON.stringify(statements) !== JSON.stringify(expected)) {
       failures.push(
         'the frame loop is not exactly: camera.updateMatrixWorld(), then every Moon’s moonScale(moon, ' +
-          'camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.height) applied to its own mesh',
+          'camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.height) applied to its own mesh, ' +
+          'then fadeStarMarks(meshes.current, lineWorkFade())',
       );
     }
   }
@@ -4090,6 +4116,14 @@ test('the Moon audit rejects the real renderer with any one guarantee broken', (
     ['a hover', (s) => s.replace('renderOrder={MOON_RENDER_ORDER}', 'renderOrder={MOON_RENDER_ORDER}\n              onPointerOver={() => undefined}')],
     ['a drei connector', (s) => s.replace("import { Billboard } from '@react-three/drei';", "import { Billboard, Line } from '@react-three/drei';")],
     ['a coordinate literal', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    camera.position.set(0, 5, 40);')],
+    // The Moons' fade (9.8).
+    ['the fade dropped', (s) => s.replace(/\n\s*fadeStarMarks\(meshes\.current, lineWorkFade\(\)\);/, '')],
+    ['the fade inverted', (s) => s.replace('fadeStarMarks(meshes.current, lineWorkFade());', 'fadeStarMarks(meshes.current, 1 - lineWorkFade());')],
+    ['a fixed fade', (s) => s.replace('fadeStarMarks(meshes.current, lineWorkFade());', 'fadeStarMarks(meshes.current, 0);')],
+    ['the fade on one Moon', (s) => s.replace('fadeStarMarks(meshes.current, lineWorkFade());', 'fadeStarMarks([meshes.current[0]], lineWorkFade());')],
+    ['the fade from the status module', (s) => s.replace("import { lineWorkFade } from './realism-mount.tsx';", "import { lineWorkFade } from './realism-status.ts';")],
+    ['the fade before the scale', (s) => s.replace(/(\n\s*moons\.forEach\([^\n]*)(\n\s*fadeStarMarks\(meshes\.current, lineWorkFade\(\)\);)/, '$2$1')],
+    ['a visibility set by hand', (s) => s.replace('fadeStarMarks(meshes.current, lineWorkFade());', 'fadeStarMarks(meshes.current, lineWorkFade());\n    for (const mesh of meshes.current) if (mesh) mesh.visible = lineWorkFade() > 0;')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);

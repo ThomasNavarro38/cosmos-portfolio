@@ -17,6 +17,7 @@ import { buildScene, NEBULA_RENDER_ORDER, type SceneArtifact } from '../scene-mo
 import { NEBULA_DRAWS_BUDGET } from './budgets.ts';
 import { createFillLayer } from './fill-layer.ts';
 import { addedDraws, FILL_CEILING_LUMINANCE, fillPlans } from './fill-model.ts';
+import { ringPlans } from './ring-model.ts';
 import { createNebula, nebulaTint } from './nebula-layer.ts';
 import {
   NEBULA_DENSITY_HIGH,
@@ -79,7 +80,7 @@ const APPEARANCE = { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.
 const ARTIFACT: RealismArtifact = {
   railLine: CURVE,
   clients: [
-    { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-near', appearance: { tint: 'red', pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: APPEARANCE }] },
+    { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-near', appearance: { tint: 'red', pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, isDeep: false, appearance: APPEARANCE }] },
     { id: 'client:b', position: { x: 40, y: 0, z: -20 }, luminanceBand: 'stroke-rest', appearance: { tint: 'blue', pulsePhase: 1 }, projects: [] },
   ],
 };
@@ -267,14 +268,15 @@ test('the arc length rises along the strip, is the same on both sides of a pair,
   assert.ok(Math.abs(arcs.at(-1)! - length) < 1e-3, 'ending at the length');
 });
 
-test('the committed artifact: the drawn Rail\'s 121 points, a 242-vertex ribbon in one draw, and addedDraws = 8 + 12 + 1 + 1', () => {
+test('the committed artifact: the drawn Rail\'s 121 points, a 242-vertex ribbon in one draw, and addedDraws = 8 + 12 + 1 + 1, with two for the Deep Project (9.8)', () => {
   const artifact = committed();
   assert.equal(artifact.railLine.length, 121);
   const arrays = nebulaArrays(artifact.railLine)!;
   assert.equal(arrays.positions.length / 3, 242);
   assert.equal(arrays.index.length, 6 * 120);
   assert.ok(arrays.length > 400 && arrays.length < 650, `about 513 units long: ${arrays.length}`);
-  assert.equal(addedDraws(fillPlans(artifact).length, starPlans(artifact).length, artifact.railLine.length), 22);
+  assert.equal(addedDraws(fillPlans(artifact).length, starPlans(artifact).length, artifact.railLine.length, 0), 22);
+  assert.equal(addedDraws(fillPlans(artifact).length, starPlans(artifact).length, artifact.railLine.length, ringPlans(artifact).length), 24);
 });
 
 test('past 65,535 vertices the index is 32-bit, and at 65,534 it is still 16-bit', () => {
@@ -298,8 +300,8 @@ test('no curve, no ribbon: under two points the arrays are null, the layer adds 
     const layer = createFillLayer({ ...ARTIFACT, railLine }, IMAGES);
     layer.attach(scene);
     assert.equal(nebulaeOf(scene).length, 0);
-    assert.equal(drawsOf(scene).length, addedDraws(1, 2, railLine.length));
-    assert.equal(addedDraws(1, 2, railLine.length), addedDraws(1, 2, 0));
+    assert.equal(drawsOf(scene).length, addedDraws(1, 2, railLine.length, 0));
+    assert.equal(addedDraws(1, 2, railLine.length, 0), addedDraws(1, 2, 0, 0));
     layer.dispose();
   }
 });
@@ -414,7 +416,7 @@ test('the layer adds one nebula Mesh along the curve, on the layer\'s one fade, 
   assert.equal(material.uniforms.uFade!.value, 0, 'it waits for the layer');
   layer.arrive(false);
   assert.equal(material.uniforms.uFade!.value, 1, 'and arrives with it');
-  assert.equal(drawsOf(scene).length, addedDraws(fillPlans(ARTIFACT).length, starPlans(ARTIFACT).length, CURVE.length));
+  assert.equal(drawsOf(scene).length, addedDraws(fillPlans(ARTIFACT).length, starPlans(ARTIFACT).length, CURVE.length, 0));
   layer.dispose();
 });
 

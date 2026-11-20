@@ -1,5 +1,5 @@
 /**
- * The line-work realism replaces, as it fades (9.4, 9.6, 9.7): which billboards, orbit lines and Rail line
+ * The line-work realism replaces, as it fades (9.4, 9.6, 9.7, 9.8): which billboards, orbit lines, Rail line, Rings and Moons
  * are held, and what one fade writes to them, on structural fakes and on real three objects.
  */
 
@@ -16,6 +16,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { fadeStarMarks, holdReplacedLine, holdStarMarks, type FadedMaterial, type StarMarks } from './line-fade.ts';
 import { buildRail, RAIL_LINE_SAMPLES_PER_SEGMENT, railLine } from './rail-model.ts';
 import { buildScene, type SceneArtifact } from './scene-model.ts';
+import { notableRings } from './notable-model.ts';
 import { sceneLines } from './stroke-model.ts';
 
 const STAR = { id: 'client:a', kind: 'star' };
@@ -164,5 +165,49 @@ test('over drei’s own line classes, an orbit falls with the fade and comes bac
     fadeStarMarks(held.values(), fade);
     assert.deepEqual([orbit.visible, orbit.material.opacity], [visible, fade], `the orbit at ${fade}`);
     assert.deepEqual([rail.visible, rail.material.opacity], [visible, fade], `the Rail at ${fade}`);
+  }
+});
+
+test('a Ring is held by its ID and dropped on null, and a look-alike never (9.8)', () => {
+  const held = new Map<string, string>();
+  holdReplacedLine(held, { id: 'ring:project:a/deep' }, 'ring');
+  assert.deepEqual([...held], [['ring:project:a/deep', 'ring']]);
+  for (const id of ['Ring:project:a/deep', 'ring', 'rings:x', 'project:a/ring:x', 'moon:project:a/deep', ' ring:x']) holdReplacedLine(held, { id }, 'not replaced');
+  assert.equal(held.size, 1, 'no other line is ever held');
+  holdReplacedLine(held, { id: 'ring:project:a/deep' }, null);
+  assert.deepEqual([...held], []);
+});
+
+test('over the committed scene\'s real Rings, every one is held, so a renamed ID cannot leave a Ring unfaded (9.8)', () => {
+  const artifact = JSON.parse(readFileSync(fileURLToPath(new URL('../../generated/layout.generated.json', import.meta.url)), 'utf8')) as SceneArtifact;
+  const { bodies } = buildScene(artifact);
+  const rings = bodies.flatMap((body) => notableRings(body));
+  assert.ok(rings.length > 0, 'the committed scene has a Ring to hold');
+  const held = new Map<string, string>();
+  for (const ring of rings) holdReplacedLine(held, ring, ring.id);
+  assert.deepEqual([...held.keys()], rings.map((ring) => ring.id));
+});
+
+test('the fade skips a handle not mounted yet, and fades the Moons\' pool around it (9.8)', () => {
+  const moon = new Mesh(undefined, new MeshBasicMaterial({ transparent: true, opacity: 1 }));
+  const pool: (Mesh | null | undefined)[] = [null, moon, undefined];
+  for (const [fade, visible] of [[1, true], [0.4, true], [0, false], [Number.NaN, true]] as const) {
+    assert.doesNotThrow(() => fadeStarMarks(pool, fade));
+    const value = Number.isFinite(fade) ? fade : 1;
+    assert.deepEqual([moon.visible, (moon.material as MeshBasicMaterial).opacity], [visible, value], `the Moon at ${fade}`);
+  }
+  assert.doesNotThrow(() => fadeStarMarks([null, undefined], 0.5), 'nothing mounted, nothing to do');
+});
+
+test('over real drei-style lines, a Ring falls with the Star marks, orbits and Rail, hides at 0 and returns whole (9.8)', () => {
+  const ring = new Line2(new LineGeometry(), new LineMaterial({ transparent: true, opacity: 1 }));
+  const orbit = new Line2(new LineGeometry(), new LineMaterial({ transparent: true, opacity: 1 }));
+  const held = new Map<string, Line2>();
+  holdReplacedLine(held, { id: 'ring:project:a/deep' }, ring);
+  holdReplacedLine(held, { id: 'orbit:project:a/deep' }, orbit);
+  for (const [fade, visible] of [[1, true], [0.4, true], [0, false], [1, true]] as const) {
+    fadeStarMarks(held.values(), fade);
+    assert.deepEqual([ring.visible, ring.material.opacity], [visible, fade], `the Ring at ${fade}`);
+    assert.deepEqual([orbit.visible, orbit.material.opacity], [visible, fade], `the orbit with it, at ${fade}`);
   }
 });

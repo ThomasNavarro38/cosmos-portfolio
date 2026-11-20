@@ -1,15 +1,18 @@
 /**
- * The line-work realism replaces, as it fades (9.4, 9.6, 9.7, AD-19 and AD-22 as amended): a
- * Star's outline and core dot fall on the realism layer's one fade, as its emissive core
- * rises, every Planet's orbit hairline falls on it as its debris belt rises (9.6), and the
- * Rail's hairline as its nebula ribbon rises (9.7); all return whole if realism fails. Pure,
- * and structural, so `node --test` runs it on fakes; `body-field.tsx` binds it.
+ * The line-work realism replaces, as it fades (9.4, 9.6, 9.7, 9.8, AD-19 and AD-22 as
+ * amended): a Star's outline and core dot fall on the realism layer's one fade, as its
+ * emissive core rises, every Planet's orbit hairline falls on it as its debris belt rises
+ * (9.6), the Rail's hairline as its nebula ribbon rises (9.7), and a Deep Planet's Ring and
+ * Moon as its ring disc and moon sphere rise (9.8); all return whole if realism fails. Pure,
+ * and structural, so `node --test` runs it on fakes; `body-field.tsx` and `moon-field.tsx`
+ * bind it.
  *
- * **Stars, orbits and the Rail only.** `holdStarMarks` keeps a Star's billboard by its ID and
- * ignores every Planet, so a Planet's outline and Ring stay at their token values (9.9 and
- * 9.8 replace them). `holdReplacedLine` keeps a scene hairline only when its ID is an
- * orbit's (`orbit:`) or the Rail's (`rail`), and never any other, and 9.10 extends this
- * path to the rest of the line-work.
+ * **Stars, orbits, the Rail, Rings and Moons only.** `holdStarMarks` keeps a Star's billboard
+ * by its ID and ignores every Planet, so a Planet's outline stays at its token value (9.9
+ * replaces it). `holdReplacedLine` keeps a line only when its ID is an orbit's (`orbit:`),
+ * the Rail's (`rail`) or a Ring's (`ring:`), and never any other, and 9.10 extends this path
+ * to the rest of the line-work. The Moons are `moon-field.tsx`'s own pool of meshes, handed
+ * to `fadeStarMarks` whole, which skips a handle not mounted yet.
  *
  * **Whole, never Body by Body.** `fadeStarMarks` writes one value to every held object:
  * each is `visible` while the value is above 0, and every material under it takes the
@@ -42,23 +45,26 @@ export function holdStarMarks<Group>(held: Map<string, Group>, body: { readonly 
 const ORBIT_LINE_PREFIX = 'orbit:';
 /** The Rail hairline's ID in `sceneLines`. */
 const RAIL_LINE_ID = 'rail';
+/** The prefix of a Ring's ID in `notableRings`: `ring:<planet id>`. */
+const RING_LINE_PREFIX = 'ring:';
 
 /**
- * The scene hairlines' ref callback's rule (9.6, 9.7): an orbit's line, or the Rail's, is
- * held under its ID while it is mounted, and dropped when React hands `null`. Any other line
- * is never held. A drei `Line` is a `Line2` mesh whose `LineMaterial` has `opacity`, so
- * `fadeStarMarks` fades it as it does a billboard.
+ * The replaced lines' ref callback's rule (9.6, 9.7, 9.8): an orbit's line, the Rail's, or a
+ * Ring's, is held under its ID while it is mounted, and dropped when React hands `null`. Any
+ * other line is never held. A drei `Line` is a `Line2` mesh whose `LineMaterial` has
+ * `opacity`, so `fadeStarMarks` fades it as it does a billboard.
  */
 export function holdReplacedLine<Held>(held: Map<string, Held>, line: { readonly id: string }, object: Held | null): void {
-  if (!line.id.startsWith(ORBIT_LINE_PREFIX) && line.id !== RAIL_LINE_ID) return;
+  if (!line.id.startsWith(ORBIT_LINE_PREFIX) && line.id !== RAIL_LINE_ID && !line.id.startsWith(RING_LINE_PREFIX)) return;
   if (object === null) held.delete(line.id);
   else held.set(line.id, object);
 }
 
-/** Every held Star's marks, orbit line and Rail line at this fade: shown while it is above 0, every material at its clamped value. */
-export function fadeStarMarks(groups: Iterable<StarMarks>, fade: number): void {
+/** Every held Star's marks, orbit line, Rail line, Ring and Moon at this fade: shown while it is above 0, every material at its clamped value. A handle not mounted yet (`null` or `undefined`) is skipped. */
+export function fadeStarMarks(groups: Iterable<StarMarks | null | undefined>, fade: number): void {
   const value = Number.isFinite(fade) ? Math.min(Math.max(fade, 0), 1) : 1;
   for (const group of groups) {
+    if (group === null || group === undefined) continue;
     group.visible = value > 0;
     group.traverse((object) => {
       if (!('material' in object)) return;

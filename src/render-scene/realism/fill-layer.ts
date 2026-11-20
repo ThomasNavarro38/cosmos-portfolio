@@ -5,10 +5,13 @@
  * sphere. Everything is decided in `fill-model.ts`; this file builds it, and writes
  * the camera's quaternion and the map's turn each frame. It owns the one geometry,
  * so a Star's two draws (7.7, `star-layer.ts`) are built here over it, and the one
- * group and fade, so the belts' one draw (9.6, `belt-layer.ts`) and the Rail's nebula
- * ribbon (9.7, `nebula-layer.ts`) are built here into them: each reads the fade and is
- * compiled, link-checked and freed with the rest. `frame` never touches the belts, and
- * steps the ribbon's drift alone, on `reduced`, as the spin is.
+ * group and fade, so the belts' one draw (9.6, `belt-layer.ts`), the Rail's nebula
+ * ribbon (9.7, `nebula-layer.ts`) and each Deep Planet's ring disc and moon sphere (9.8,
+ * `ring-layer.ts`, the moon on this one sphere) are built here into them: each reads the
+ * fade and is compiled, link-checked and freed with the rest. `frame` never touches the
+ * belts, steps the ribbon's drift alone, on `reduced`, as the spin is, and writes each
+ * disc's facing and each moon's position and scale, the scale's height read from the
+ * renderer `warm` was handed (`getSize`); before `warm` there is none, and the scale is 1.
  *
  * **Each frame** the mesh takes the camera's world quaternion, which is what drei's
  * `Billboard` computes, so the disc lies in the marks' plane at every pose. The
@@ -24,12 +27,15 @@
  * The owner attaches the group at fade 0 for one hidden warm draw, then calls `arrive`.
  *
  * **One fade, shared.** One uniform object is created here and handed to every Planet
- * fill, Star fill and glow, to the belts and to the ribbon. It sits at 0 from the build, until `arrive(true)` starts it
+ * fill, Star fill and glow, to the belts, the ribbon, the discs and the moons. It sits at 0 from the build, until `arrive(true)` starts it
  * stepping each frame over `FADE_SECONDS × pace`, or `arrive(false)` sets it whole. No
  * fill writes depth until it reaches 1; on that frame every fill does. `fade()` reads it
  * back (9.4), so the owner can lower a Star's outline and core dot, and the orbit
- * hairlines (9.6) and the Rail's line (9.7), as it rises. The belts and the ribbon write
- * no depth at any fade.
+ * hairlines (9.6), the Rail's line (9.7) and a Deep Planet's Ring and Moon (9.8), as it
+ * rises. The belts, the ribbon, the discs and the moons write no depth at any fade. Two
+ * artefacts of the fade are 9.10's (the crossfade): while it runs no fill writes depth, so a
+ * far belt, disc or moon shows over a nearer fill; and the M2 Moon dot and the moon sphere
+ * share `MOON_RENDER_ORDER` at one place, so three's depth sort can flicker between them.
  *
  * **The images stay.** `dispose` frees the GPU's copies and never closes a bitmap:
  * a later Canvas builds again from them, and after a lost context three uploads
@@ -51,6 +57,7 @@ import {
   SphereGeometry,
   SRGBColorSpace,
   Texture,
+  Vector2,
   Vector3,
   type WebGLRenderer,
 } from 'three';
@@ -74,6 +81,8 @@ import {
 import { FILL_FRAGMENT_SHADER, FILL_VERTEX_SHADER } from './fill-shader.ts';
 import { createNebula, nebulaTint } from './nebula-layer.ts';
 import { nebulaArrays } from './nebula-model.ts';
+import { createRingRows } from './ring-layer.ts';
+import { ringPlans } from './ring-model.ts';
 import { createStarRows } from './star-layer.ts';
 import { starPlans } from './star-model.ts';
 
@@ -87,7 +96,7 @@ export interface FillLayer {
   attach(scene: Scene): void;
   /** Begins the arrival: with `fade`, every later `frame` steps the fade up from 0, the first of them in the same tick as this call, so the first visible frame is already one clamped step in; without, the layer is whole at once and every fill writes depth. */
   arrive(fade: boolean): void;
-  /** One frame: the fade's step, each disc to the camera, each map to its turn, each Star's rise toward the subject and its pulse, and the ribbon's drift. The spin, the Stars' clock and the drift take `reduced`, and the rise and the fade take `pace`. */
+  /** One frame: the fade's step, each disc to the camera, each map to its turn, each Star's rise toward the subject and its pulse, the ribbon's drift, and each ring disc's facing and moon's place and scale. The spin, the Stars' clock and the drift take `reduced`, and the rise and the fade take `pace`. */
   frame(camera: Camera, delta: number, reduced: boolean, pace: number, subject: string | null): void;
   /** The one fade's value, 0 to 1 (9.4): what the owner reads for the line-work it replaces. */
   fade(): number;
@@ -107,9 +116,11 @@ function mapTexture(image: ImageBitmap): Texture<ImageBitmap> {
 /**
  * The layer for this artifact, from the decoded images, with nothing added yet.
  *
- * @throws as `fillPlans`, `fillMaps`, `starPlans`, `beltPlans`, `beltTint`, `nebulaArrays` and `nebulaTint` do, before anything is built.
+ * @throws as `fillPlans`, `fillMaps`, `starPlans`, `beltPlans`, `beltTint`, `nebulaArrays`, `nebulaTint` and `ringPlans` do, before anything is built.
  */
 export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<string, ImageBitmap>): FillLayer {
+  // First, so a Deep Planet that cannot carry its disc and moon is refused by name (9.8).
+  const deep = ringPlans(artifact);
   const plans = fillPlans(artifact);
   const maps = fillMaps(plans, images);
   const stars = starPlans(artifact);
@@ -151,13 +162,18 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
   const starRows = createStarRows(stars, geometry, fade, group);
   const belt = createBelt(belts, tint, fade, group);
   const nebula = createNebula(ribbon, ribbonTint, fade, group);
+  const ringRows = createRingRows(deep, geometry, fade, group);
   const materials = [
     ...rows.map(({ mesh }) => mesh.material as ShaderMaterial),
     ...starRows.materials,
     ...(belt === null ? [] : [belt.material]),
     ...(nebula === null ? [] : [nebula.material]),
+    ...ringRows.materials,
   ];
   const facing = new Quaternion();
+  const size = new Vector2();
+  // The renderer `warm` was handed, so `frame` can read its height for the moons' pixel floor; none before it.
+  let sized: WebGLRenderer | null = null;
   let seconds = 0;
   let fading = false;
   let depth = false;
@@ -175,6 +191,7 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
 
   return {
     warm(renderer, camera, scene) {
+      sized = renderer;
       for (const texture of textures.values()) renderer.initTexture(texture);
       const compiled = renderer.compileAsync(group, camera, scene);
       compiling = compiled;
@@ -215,6 +232,7 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
       }
       starRows.frame(facing, subject, delta, pace, reduced);
       nebula?.frame(delta, reduced);
+      ringRows.frame(camera, facing, sized === null ? 0 : sized.getSize(size).y);
     },
     fade() {
       return fade.value;
@@ -229,6 +247,7 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
         starRows.dispose();
         belt?.dispose();
         nebula?.dispose();
+        ringRows.dispose();
         for (const texture of textures.values()) texture.dispose();
         geometry.dispose();
       };

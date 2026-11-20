@@ -4,7 +4,8 @@
  * budget lands with the first code that can break it, so this holds the map
  * library's four limits (7.3), the two chunks' (7.5), the shared sphere's and a
  * Planet's added draws (7.6), a Star's and Dust's added draws (7.7), the belts'
- * one merged draw (9.6) and the Rail's nebula's one draw (9.7), and no other. Imports
+ * one merged draw (9.6), the Rail's nebula's one draw (9.7) and a Deep Project's two
+ * (9.8), and no other. Imports
  * nothing and re-exports nothing; `scripts/check-maps.test.ts` holds that and the
  * reach.
  *
@@ -26,5 +27,7 @@ export const STAR_DRAWS_BUDGET = 2;
 export const BELT_DRAWS_BUDGET = 1;
 /** AD-23's ratified 2026-11-17 row, "1 for the Rail's nebula", landed by 9.7: counted when the drawn Rail has at least two points. */
 export const NEBULA_DRAWS_BUDGET = 1;
+/** AD-23's ratified 2026-11-17 row, "2 per Deep Project (ring disc, moon sphere on the shared geometry)", landed by 9.8: the moon's share is 1, so no ruling is needed. */
+export const DEEP_PROJECT_DRAWS_BUDGET = 2;
 /** Declarative: the chunk draws no Dust and names none, which a test holds, so no code can break this today. */
 export const DUST_DRAWS_BUDGET = 0;

@@ -9,8 +9,9 @@
  *
  * - **Added draws:** the count over the committed artifact (its drawn Rail sampled as the
  *   mount samples it, 9.7), and the layer's real draws, against `PLANET_DRAWS_BUDGET`,
- *   `STAR_DRAWS_BUDGET`, `BELT_DRAWS_BUDGET` and `NEBULA_DRAWS_BUDGET`. A copy of
- *   `fill-model.ts` drawing three per Star breaks the limit; an artifact with no
+ *   `STAR_DRAWS_BUDGET`, `BELT_DRAWS_BUDGET`, `NEBULA_DRAWS_BUDGET` and
+ *   `DEEP_PROJECT_DRAWS_BUDGET` (9.8). A copy of `fill-model.ts` drawing three per Star,
+ *   or three per Deep Project, breaks the limit; an artifact with no
  *   Planet or no Star has nothing to measure, so it fails rather than passing as 0.
  * - **One shared sphere, at most 64×32:** the segment constants against the budget,
  *   and the source audit that the layer builds exactly one `SphereGeometry`, from
@@ -51,10 +52,11 @@ import { filesUnder, isTestFile, SOURCE_MODULE, stripComments, stripCommentsAndS
 import { buildRail, RAIL_LINE_SAMPLES_PER_SEGMENT, type RailArtifact, railLine } from '../rail-model.ts';
 import type { RealismArtifact } from '../realism-status.ts';
 import { buildScene, type SceneArtifact } from '../scene-model.ts';
-import { BELT_DRAWS_BUDGET, DUST_DRAWS_BUDGET, NEBULA_DRAWS_BUDGET, PLANET_DRAWS_BUDGET, SPHERE_HEIGHT_SEGMENTS_BUDGET, SPHERE_WIDTH_SEGMENTS_BUDGET, STAR_DRAWS_BUDGET } from './budgets.ts';
+import { BELT_DRAWS_BUDGET, DEEP_PROJECT_DRAWS_BUDGET, DUST_DRAWS_BUDGET, NEBULA_DRAWS_BUDGET, PLANET_DRAWS_BUDGET, SPHERE_HEIGHT_SEGMENTS_BUDGET, SPHERE_WIDTH_SEGMENTS_BUDGET, STAR_DRAWS_BUDGET } from './budgets.ts';
 import { createFillLayer } from './fill-layer.ts';
 import * as fillModel from './fill-model.ts';
 import { addedDraws, FILL_SPHERE_HEIGHT_SEGMENTS, FILL_SPHERE_WIDTH_SEGMENTS, fillPlans, lightDirection } from './fill-model.ts';
+import { ringPlans } from './ring-model.ts';
 import { starPlans } from './star-model.ts';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
@@ -91,18 +93,19 @@ after(() => {
   if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });
 });
 
-// --- Added draws: 1 per Planet, 2 per Star, 1 for all belts, 1 for the nebula, 0 for Dust -----------------------
+// --- Added draws: 1 per Planet, 2 per Star, 1 for all belts, 1 for the nebula, 2 per Deep Project, 0 for Dust ------
 
 /**
  * Every way a draw count breaks the row: nothing to count (no Planet or no Star, so a
  * zero would pass by vacuity), or one over the budget. The nebula's one draw (9.7) is in
- * the budget only when the drawn Rail is a curve (`railPoints` of two or more). That the
+ * the budget only when the drawn Rail is a curve (`railPoints` of two or more), and a Deep
+ * Project's two (9.8) for each of `deepPlanets`. That the
  * layer draws exactly the model's count is asserted beside it, over the committed artifact.
  */
-function drawFailures(planets: number, stars: number, railPoints: number, draws: number): string[] {
+function drawFailures(planets: number, stars: number, railPoints: number, deepPlanets: number, draws: number): string[] {
   if (planets === 0 || stars === 0) return [`added draws: ${planets} Planets and ${stars} Stars — nothing to measure, so the row cannot pass on 0`];
-  const budget = planets * PLANET_DRAWS_BUDGET + stars * STAR_DRAWS_BUDGET + BELT_DRAWS_BUDGET + (railPoints >= 2 ? NEBULA_DRAWS_BUDGET : 0) + DUST_DRAWS_BUDGET;
-  return draws > budget ? [`added draws: ${draws} for ${planets} Planets, ${stars} Stars and ${railPoints} Rail points, over the budget of ${budget}`] : [];
+  const budget = planets * PLANET_DRAWS_BUDGET + stars * STAR_DRAWS_BUDGET + BELT_DRAWS_BUDGET + (railPoints >= 2 ? NEBULA_DRAWS_BUDGET : 0) + deepPlanets * DEEP_PROJECT_DRAWS_BUDGET + DUST_DRAWS_BUDGET;
+  return draws > budget ? [`added draws: ${draws} for ${planets} Planets (${deepPlanets} Deep), ${stars} Stars and ${railPoints} Rail points, over the budget of ${budget}`] : [];
 }
 
 /** Every Mesh the layer adds: its draws. */
@@ -132,38 +135,44 @@ test('added draws over the committed artifact: at least one Planet and one Star,
   const planets = fillPlans(artifact).length;
   const stars = starPlans(artifact).length;
   const railPoints = artifact.railLine.length;
+  const deep = ringPlans(artifact).length;
   assert.ok(planets >= 1 && stars >= 1, `the committed artifact has ${planets} Planets and ${stars} Stars: something to measure`);
   assert.ok(railPoints >= 2, `the committed Rail is a curve of ${railPoints} points, so the nebula is drawn (9.7)`);
-  assert.deepEqual(drawFailures(planets, stars, railPoints, addedDraws(planets, stars, railPoints)), []);
-  assert.equal(addedDraws(planets, stars, railPoints), planets + 2 * stars + 1 + 1, 'planets + 2 × stars + the belts + the nebula');
-  assert.equal(layerDraws(artifact), addedDraws(planets, stars, railPoints), 'the layer draws what the model counts');
-  assert.equal(layerDraws(artifact), 22, 'the committed artifact (9.7)');
-  assert.deepEqual(drawFailures(planets, stars, railPoints, layerDraws(artifact)), []);
+  assert.equal(deep, 1, 'the committed artifact has one Deep Planet, so a ring disc and a moon are drawn (9.8)');
+  assert.deepEqual(drawFailures(planets, stars, railPoints, deep, addedDraws(planets, stars, railPoints, deep)), []);
+  assert.equal(addedDraws(planets, stars, railPoints, deep), planets + 2 * stars + 1 + 1 + 2 * deep, 'planets + 2 × stars + the belts + the nebula + 2 × Deep');
+  assert.equal(layerDraws(artifact), addedDraws(planets, stars, railPoints, deep), 'the layer draws what the model counts');
+  assert.equal(layerDraws(artifact), 24, 'the committed artifact (9.8)');
+  assert.deepEqual(drawFailures(planets, stars, railPoints, deep, layerDraws(artifact)), []);
 });
 
 test('added draws fail on nothing to measure: no Planet, no Star, or neither', () => {
   for (const [planets, stars] of [[0, 0], [0, 3], [5, 0]] as const) {
-    assert.match(drawFailures(planets, stars, 121, addedDraws(planets, stars, 121)).join('\n'), /nothing to measure/, `${planets} Planets, ${stars} Stars`);
+    assert.match(drawFailures(planets, stars, 121, 0, addedDraws(planets, stars, 121, 0)).join('\n'), /nothing to measure/, `${planets} Planets, ${stars} Stars`);
   }
   const empty: RealismArtifact = { railLine: [], clients: [] };
-  assert.match(drawFailures(fillPlans(empty).length, starPlans(empty).length, 0, addedDraws(0, 0, 0)).join('\n'), /nothing to measure/, 'an artifact with no Client');
+  assert.match(drawFailures(fillPlans(empty).length, starPlans(empty).length, 0, 0, addedDraws(0, 0, 0, 0)).join('\n'), /nothing to measure/, 'an artifact with no Client');
 });
 
-test('added draws fail past the budget: a model drawing three per Star, two for the belts, two for the nebula, and one draw too many', async () => {
+test('added draws fail past the budget: a model drawing three per Star, two for the belts, two for the nebula, three per Deep Project, and one draw too many', async () => {
   const artifact = committed();
   const planets = fillPlans(artifact).length;
   const stars = starPlans(artifact).length;
   const railPoints = artifact.railLine.length;
+  const deep = ringPlans(artifact).length;
   const mutant = await loadMutant<typeof fillModel>(FILL_MODEL, 'const DRAWS_PER_STAR = 2;', 'const DRAWS_PER_STAR = 3;');
-  assert.match(drawFailures(planets, stars, railPoints, mutant.addedDraws(planets, stars, railPoints)).join('\n'), /over the budget/);
+  assert.match(drawFailures(planets, stars, railPoints, deep, mutant.addedDraws(planets, stars, railPoints, deep)).join('\n'), /over the budget/);
   const twoPerPlanet = await loadMutant<typeof fillModel>(FILL_MODEL, 'const DRAWS_PER_PLANET = 1;', 'const DRAWS_PER_PLANET = 2;');
-  assert.match(drawFailures(planets, stars, railPoints, twoPerPlanet.addedDraws(planets, stars, railPoints)).join('\n'), /over the budget/);
+  assert.match(drawFailures(planets, stars, railPoints, deep, twoPerPlanet.addedDraws(planets, stars, railPoints, deep)).join('\n'), /over the budget/);
   const twoBelts = await loadMutant<typeof fillModel>(FILL_MODEL, 'const DRAWS_FOR_BELTS = 1;', 'const DRAWS_FOR_BELTS = 2;');
-  assert.match(drawFailures(planets, stars, railPoints, twoBelts.addedDraws(planets, stars, railPoints)).join('\n'), /over the budget/, 'the belts are one merged draw (9.6)');
+  assert.match(drawFailures(planets, stars, railPoints, deep, twoBelts.addedDraws(planets, stars, railPoints, deep)).join('\n'), /over the budget/, 'the belts are one merged draw (9.6)');
   const twoNebulae = await loadMutant<typeof fillModel>(FILL_MODEL, 'const DRAWS_FOR_NEBULA = 1;', 'const DRAWS_FOR_NEBULA = 2;');
-  assert.match(drawFailures(planets, stars, railPoints, twoNebulae.addedDraws(planets, stars, railPoints)).join('\n'), /over the budget/, 'the nebula is one draw (9.7)');
-  assert.match(drawFailures(planets, stars, railPoints, addedDraws(planets, stars, railPoints) + 1).join('\n'), /over the budget/);
-  assert.match(drawFailures(planets, stars, 1, addedDraws(planets, stars, railPoints)).join('\n'), /over the budget/, 'no curve, no nebula draw in the budget');
+  assert.match(drawFailures(planets, stars, railPoints, deep, twoNebulae.addedDraws(planets, stars, railPoints, deep)).join('\n'), /over the budget/, 'the nebula is one draw (9.7)');
+  const threeDeep = await loadMutant<typeof fillModel>(FILL_MODEL, 'const DRAWS_PER_DEEP_PROJECT = 2;', 'const DRAWS_PER_DEEP_PROJECT = 3;');
+  assert.match(drawFailures(planets, stars, railPoints, deep, threeDeep.addedDraws(planets, stars, railPoints, deep)).join('\n'), /over the budget/, 'a Deep Project is two draws (9.8)');
+  assert.match(drawFailures(planets, stars, railPoints, 0, addedDraws(planets, stars, railPoints, deep)).join('\n'), /over the budget/, 'no Deep Project, no disc or moon draw in the budget');
+  assert.match(drawFailures(planets, stars, railPoints, deep, addedDraws(planets, stars, railPoints, deep) + 1).join('\n'), /over the budget/);
+  assert.match(drawFailures(planets, stars, 1, deep, addedDraws(planets, stars, railPoints, deep)).join('\n'), /over the budget/, 'no curve, no nebula draw in the budget');
 });
 
 // --- One shared sphere, at most 64×32 -----------------------------------------------------------

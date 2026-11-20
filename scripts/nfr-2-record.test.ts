@@ -424,7 +424,7 @@ test('the NFR-2 record exists and holds: not yet passed, the budgets, the protoc
 
 test('the guard reads the instrument from source: the mark, the floor and the gap threshold', () => {
   assert.deepEqual(instrument(), { mark: 'scene-worst-window', floor: 24, maxFrameSeconds: 1 });
-  assert.equal(BUDGETS.length, 14, 'thirteen AD-23 constants, with the belts since 9.6 and the nebula since 9.7, and the entry budget');
+  assert.equal(BUDGETS.length, 15, 'fourteen AD-23 constants, with the belts since 9.6, the nebula since 9.7 and the Deep Project row since 9.8, and the entry budget');
 });
 
 test('the NFR-2 guard fails on each mutation of the record, naming it', () => {

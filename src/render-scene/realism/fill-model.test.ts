@@ -33,7 +33,7 @@ import { tokens } from '../../tokens/tokens.ts';
 import { createRealismOwner, type RealismArtifact } from '../realism-status.ts';
 import { buildScene, FILL_RENDER_ORDER, type Body, type SceneArtifact } from '../scene-model.ts';
 import { bodyRadius, CIRCLE_SEGMENTS } from '../stroke-model.ts';
-import { BELT_DRAWS_BUDGET, NEBULA_DRAWS_BUDGET, PLANET_DRAWS_BUDGET, SPHERE_HEIGHT_SEGMENTS_BUDGET, SPHERE_WIDTH_SEGMENTS_BUDGET, STAR_DRAWS_BUDGET } from './budgets.ts';
+import { BELT_DRAWS_BUDGET, DEEP_PROJECT_DRAWS_BUDGET, NEBULA_DRAWS_BUDGET, PLANET_DRAWS_BUDGET, SPHERE_HEIGHT_SEGMENTS_BUDGET, SPHERE_WIDTH_SEGMENTS_BUDGET, STAR_DRAWS_BUDGET } from './budgets.ts';
 import { createFillLayer } from './fill-layer.ts';
 import {
   addedDraws,
@@ -55,7 +55,7 @@ import { FILL_FRAGMENT_SHADER, FILL_VERTEX_SHADER } from './fill-shader.ts';
 const APPEARANCE = { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.05, spinPhase: 1.5 };
 
 function planet(id: string, clientId: string, x: number, map = 'moon') {
-  return { id, clientId, position: { x, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: { ...APPEARANCE, map } };
+  return { id, clientId, position: { x, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, isDeep: false, appearance: { ...APPEARANCE, map } };
 }
 
 /** Two Clients, each with its own Star: the first at the origin, the second far along x. */
@@ -260,16 +260,19 @@ test('mapFromWorld inverts the tilt and the spin: the identity at rest, orthonor
 
 // --- The draws -----------------------------------------------------------------------------------
 
-test('added draws are Planets × 1, Stars × 2, one for all belts when there is a Planet, and one for the nebula when the Rail is a curve', () => {
-  assert.equal(addedDraws(8, 0, 0), 8 * PLANET_DRAWS_BUDGET + BELT_DRAWS_BUDGET);
-  assert.equal(addedDraws(0, 0, 0), 0);
-  assert.equal(addedDraws(0, 3, 0), 3 * STAR_DRAWS_BUDGET, 'no Planet, no belt');
-  assert.equal(addedDraws(8, 6, 0), 8 + 12 + 1, 'no Rail: the count of 9.6');
-  assert.equal(addedDraws(8, 6, 1), 8 + 12 + 1, 'one point is no curve, so no nebula');
-  assert.equal(addedDraws(8, 6, 2), 8 + 12 + 1 + NEBULA_DRAWS_BUDGET, 'two points are a curve');
-  assert.equal(addedDraws(8, 6, 121), 8 + 12 + 1 + 1, 'the committed artifact (9.7)');
-  assert.equal(addedDraws(0, 0, 121), NEBULA_DRAWS_BUDGET, 'the nebula needs no Body');
-  assert.equal(addedDraws(fillPlans(ARTIFACT).length, ARTIFACT.clients.length, 0), 8, 'three Planets under two Stars, and their belts');
+test('added draws are Planets × 1, Stars × 2, one for all belts when there is a Planet, one for the nebula when the Rail is a curve, and two per Deep Project', () => {
+  assert.equal(addedDraws(8, 0, 0, 0), 8 * PLANET_DRAWS_BUDGET + BELT_DRAWS_BUDGET);
+  assert.equal(addedDraws(0, 0, 0, 0), 0);
+  assert.equal(addedDraws(0, 3, 0, 0), 3 * STAR_DRAWS_BUDGET, 'no Planet, no belt');
+  assert.equal(addedDraws(8, 6, 0, 0), 8 + 12 + 1, 'no Rail: the count of 9.6');
+  assert.equal(addedDraws(8, 6, 1, 0), 8 + 12 + 1, 'one point is no curve, so no nebula');
+  assert.equal(addedDraws(8, 6, 2, 0), 8 + 12 + 1 + NEBULA_DRAWS_BUDGET, 'two points are a curve');
+  assert.equal(addedDraws(8, 6, 121, 0), 8 + 12 + 1 + 1, 'no Deep Project: the count of 9.7');
+  assert.equal(addedDraws(8, 6, 121, 1), 8 + 12 + 1 + 1 + DEEP_PROJECT_DRAWS_BUDGET, 'the committed artifact (9.8)');
+  assert.equal(addedDraws(8, 6, 121, 1), 24);
+  assert.equal(addedDraws(8, 6, 121, 3), 8 + 12 + 1 + 1 + 3 * 2, 'two per Deep Project');
+  assert.equal(addedDraws(0, 0, 121, 0), NEBULA_DRAWS_BUDGET, 'the nebula needs no Body');
+  assert.equal(addedDraws(fillPlans(ARTIFACT).length, ARTIFACT.clients.length, 0, 0), 8, 'three Planets under two Stars, and their belts');
 });
 
 // --- The layer, over real three objects ----------------------------------------------------------
@@ -293,7 +296,7 @@ test('the layer is one Mesh per plan over one geometry and one texture per map, 
   layer.attach(scene);
   const meshes = meshesOf(scene);
   assert.equal(meshes.length, 3);
-  assert.equal(drawsOf(scene).length, addedDraws(3, 2, 0), 'with the two Stars and the belts');
+  assert.equal(drawsOf(scene).length, addedDraws(3, 2, 0, 0), 'with the two Stars and the belts');
   assert.equal(scene.children.length, 1, 'all in one group, which is not a draw');
   assert.equal(new Set(drawsOf(scene).filter((mesh) => mesh.name !== 'belt').map((mesh) => mesh.geometry)).size, 1, 'the Stars wear the same one; the belts have their own (9.6)');
   const geometry = meshes[0]!.geometry as SphereGeometry;
@@ -320,9 +323,9 @@ const DIFFERING: RealismArtifact = {
     luminanceBand: 'stroke-rest',
     appearance: { tint: 'white', pulsePhase: 0 },
     projects: [
-      { id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.05, spinPhase: 1.5 } },
-      { id: 'project:a/two', clientId: 'client:a', position: { x: 0, y: 10, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: { map: 'mars', meanLuminance: 0.123, tilt: -0.4, spinRate: 0.09, spinPhase: 4.2 } },
-      { id: 'project:a/three', clientId: 'client:a', position: { x: 0, y: 0, z: 10 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 1, y: 0, z: 0 }, appearance: { map: 'moon', meanLuminance: 0.2, tilt: 0.1, spinRate: 0.02, spinPhase: 0.3 } },
+      { id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, isDeep: false, appearance: { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.05, spinPhase: 1.5 } },
+      { id: 'project:a/two', clientId: 'client:a', position: { x: 0, y: 10, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, isDeep: false, appearance: { map: 'mars', meanLuminance: 0.123, tilt: -0.4, spinRate: 0.09, spinPhase: 4.2 } },
+      { id: 'project:a/three', clientId: 'client:a', position: { x: 0, y: 0, z: 10 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 1, y: 0, z: 0 }, isDeep: false, appearance: { map: 'moon', meanLuminance: 0.2, tilt: 0.1, spinRate: 0.02, spinPhase: 0.3 } },
     ],
   }],
 };
@@ -452,6 +455,8 @@ function linkingRenderer(): WebGLRenderer {
     compileAsync: (root: Object3D) => Promise.resolve(root),
     properties: { get: () => ({ currentProgram: { program: {} } }) },
     getContext: () => ({ LINK_STATUS, isContextLost: () => false, getProgramParameter: () => true }),
+    // The canvas's CSS size, which the layer reads for the moons' pixel floor (9.8).
+    getSize: (target: { set(x: number, y: number): unknown }) => target.set(1920, 1080),
   } as unknown as WebGLRenderer;
 }
 
@@ -485,7 +490,7 @@ test('under the real owner, a fill layer whose update throws leaves the scene wi
   await new Promise((resolve) => setImmediate(resolve));
   owner.frame(ARTIFACT, '/', draw);
   owner.frame(ARTIFACT, '/', draw);
-  assert.equal(drawsOf(scene).length, addedDraws(3, 2, 0), 'one fill per Planet, two draws per Star and the belts, once warmed');
+  assert.equal(drawsOf(scene).length, addedDraws(3, 2, 0, 0), 'one fill per Planet, two draws per Star and the belts, once warmed');
   assert.deepEqual(owner.status(), { document: 'shown', uploaded: true });
   owner.frame(ARTIFACT, '/', { ...draw, camera: { updateMatrixWorld() { throw new Error('a port threw'); } } as unknown as PerspectiveCamera });
   assert.equal(owner.status().document, 'failed');
@@ -522,6 +527,7 @@ const MODEL_PATH = 'src/render-scene/realism/fill-model.ts';
 const MOUNT_PATH = 'src/render-scene/realism-mount.tsx';
 const STAR_MODEL_PATH = 'src/render-scene/realism/star-model.ts';
 const BELT_MODEL_PATH = 'src/render-scene/realism/belt-model.ts';
+const RING_MODEL_PATH = 'src/render-scene/realism/ring-model.ts';
 
 /** Realism's own modules and the mount, by the shared walk, so a new file is read too. */
 function realismModules(): Module[] {
@@ -560,6 +566,9 @@ function auditRealismSource(modules: readonly Module[]): string[] {
       // star-layer.ts takes it through the plan, as `plan.band`, and never names it.
       // 9.6: an orbit's belt carries its Planet's band (AD-20 as amended), read by name in belt-model.ts only.
       if (name === 'luminanceBand' && (path === STAR_MODEL_PATH || path === BELT_MODEL_PATH)) continue;
+      // 9.8: a Deep Planet's ring disc and moon sphere carry Deep/Shallow (FR-9), read by name in ring-model.ts only;
+      // ring-layer.ts takes the plans, and never names it.
+      if (name === 'isDeep' && path === RING_MODEL_PATH) continue;
       if (pattern.test(code)) failures.push(`${path} reads ${name}`);
     }
     const banned = [...NO_PIPELINE, ...(path === LAYER_PATH ? [] : WARM_UP), ...(path === MOUNT_PATH ? [] : CHUNK_ONLY)];
@@ -614,6 +623,11 @@ test('the realism source audit rejects each form, in any module, and a comment i
   assert.match(auditRealismSource(adding('const a = project.luminanceBand;', MODEL_PATH)).join('\n'), /fill-model\.ts reads luminanceBand/);
   assert.match(auditRealismSource(adding('const a = client.luminanceBand;', MOUNT_PATH)).join('\n'), /realism-mount\.tsx reads luminanceBand/);
   assert.match(auditRealismSource(adding('const a = plan.mass;', STAR_MODEL_PATH)).join('\n'), /star-model\.ts reads mass/, 'and nothing else derived');
+  // 9.8: isDeep's one allowance is the ring model's.
+  assert.deepEqual(auditRealismSource(adding('const a = project.isDeep;', RING_MODEL_PATH)), [], 'the ring model alone may read isDeep');
+  assert.match(auditRealismSource(adding('const a = plan.isDeep;', 'src/render-scene/realism/ring-layer.ts')).join('\n'), /ring-layer\.ts reads isDeep/);
+  assert.match(auditRealismSource(adding('const a = project.luminanceBand;', RING_MODEL_PATH)).join('\n'), /ring-model\.ts reads luminanceBand/, 'and nothing else derived');
+  assert.match(auditRealismSource(adding('const a = project.mass;', RING_MODEL_PATH)).join('\n'), /ring-model\.ts reads mass/);
   assert.deepEqual(auditRealismSource(adding('const pace = motionPace(reduced);', MOUNT_PATH)), [], 'the mount alone may name the pace');
   assert.match(auditRealismSource(adding('const pace = motionPace(reduced);', 'src/render-scene/realism/star-layer.ts')).join('\n'), /star-layer\.ts holds motionPace/);
   assert.deepEqual(auditRealismSource(adding('resetFrameSampling();', MOUNT_PATH)), [], 'the mount alone may name the reset');

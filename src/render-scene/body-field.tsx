@@ -30,13 +30,14 @@
  * nothing. No light reaches any of it: every material is unlit.
  *
  * **A Star's outline and core dot give way to its light (9.4), an orbit to its belt (9.6),
- * and the Rail to its nebula (9.7).** One ref map holds each Star's billboard, by
- * `holdStarMarks`, and a second the replaced hairlines, by `holdReplacedLine`, which holds
- * each orbit's and the Rail's and no other. One frame loop hands both maps to
- * `fadeStarMarks` on one read of the realism owner's `lineWorkFade()`, through the mount:
- * 1 until realism has arrived and after it fails, `1 - fade` while it rises, so the Star
- * marks, the orbits and the Rail fall together, whole. Every Planet's marks stay at their
- * token values (9.8–9.10 extend this). The JSX still declares
+ * the Rail to its nebula (9.7), and a Deep Planet's Ring to its ring disc (9.8).** One ref
+ * map holds each Star's billboard, by `holdStarMarks`, and a second the replaced lines, by
+ * `holdReplacedLine`, on the scene hairlines' ref and the Ring's: it holds each orbit's, the
+ * Rail's and each Ring's, and no other. One frame loop hands both maps to `fadeStarMarks`
+ * on one read of the realism owner's `lineWorkFade()`, through the mount: 1 until realism
+ * has arrived and after it fails, `1 - fade` while it rises, so the Star marks, the orbits,
+ * the Rail and the Rings fall together, whole, with the Moons (`moon-field.tsx`, on the same
+ * read). A Planet's outline stays at its token value (9.9 and 9.10 extend this). The JSX still declares
  * every draw at opacity 1, so First Paint is M2's. The loop runs before the mount's, so
  * it reads the fade one frame late, which is accepted.
  */
@@ -95,6 +96,7 @@ export function BodyField({ bodies, rail }: BodyFieldProps) {
             {notableRings(body).map((ring) => (
               <Line
                 key={ring.id}
+                ref={(object) => holdReplacedLine(replacedLines.current, ring, object)}
                 points={ring.points}
                 color={ring.color}
                 lineWidth={ring.widthPx}

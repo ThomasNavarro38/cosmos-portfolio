@@ -21,7 +21,7 @@ function artifactWearing(...perClient: readonly (readonly string[])[]): RealismA
       position,
       luminanceBand: 'stroke-rest',
       appearance: { tint: 'white', pulsePhase: 0 },
-      projects: maps.map((map, at) => ({ id: `project:${client}/${at}`, clientId: `client:${client}`, position, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: { map, meanLuminance: 0.3, tilt: 0, spinRate: 0.05, spinPhase: 0 } })),
+      projects: maps.map((map, at) => ({ id: `project:${client}/${at}`, clientId: `client:${client}`, position, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, isDeep: false, appearance: { map, meanLuminance: 0.3, tilt: 0, spinRate: 0.05, spinPhase: 0 } })),
     })),
   };
 }

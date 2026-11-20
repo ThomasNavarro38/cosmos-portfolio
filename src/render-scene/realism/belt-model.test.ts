@@ -37,7 +37,7 @@ const APPEARANCE = { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.
 const UP = { x: 0, y: 0, z: 1 };
 
 function project(id: string, clientId: string, position: { x: number; y: number; z: number }, extra: Record<string, unknown> = {}) {
-  return { id, clientId, position, luminanceBand: 'stroke-rest', orbitNormal: UP, appearance: APPEARANCE, ...extra };
+  return { id, clientId, position, luminanceBand: 'stroke-rest', orbitNormal: UP, isDeep: false, appearance: APPEARANCE, ...extra };
 }
 
 /** Two Stars, three Planets, both bands, one orbit off the axes. */
@@ -278,7 +278,7 @@ test('an artifact with no Planet has no belt: no plans, empty arrays, no mesh, a
   const layer = createFillLayer(starsOnly, new Map());
   layer.attach(scene);
   assert.equal(drawsOf(scene).filter((mesh) => mesh.name === 'belt').length, 0);
-  assert.equal(drawsOf(scene).length, addedDraws(0, 2, 0));
+  assert.equal(drawsOf(scene).length, addedDraws(0, 2, 0, 0));
   layer.dispose();
 });
 
@@ -359,7 +359,7 @@ test('the layer adds one belt Mesh for every Planet, on the layer\'s one fade, i
   assert.equal(belt!.parent, scene.children[0], 'in the layer\'s one group');
   layer.arrive(false);
   assert.equal(material.uniforms.uFade!.value, 1, 'it arrives with the layer');
-  assert.equal(drawsOf(scene).length, addedDraws(fillPlans(ARTIFACT).length, starPlans(ARTIFACT).length, 0));
+  assert.equal(drawsOf(scene).length, addedDraws(fillPlans(ARTIFACT).length, starPlans(ARTIFACT).length, 0, 0));
   layer.dispose();
 });
 

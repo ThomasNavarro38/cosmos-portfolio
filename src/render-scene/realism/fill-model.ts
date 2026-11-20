@@ -46,11 +46,12 @@ export const FILL_NEAR_CEILING = 0.98;
 /** What a map's mean is normalised to, fully lit. A starting value for Epic 8. */
 export const FILL_TARGET_LUMINANCE = 0.18;
 
-/** One draw per Planet, two per Star (7.7), one for every belt together (9.6), one for the Rail's nebula (9.7), and none for Dust. */
+/** One draw per Planet, two per Star (7.7), one for every belt together (9.6), one for the Rail's nebula (9.7), two per Deep Project (9.8: the ring disc and the moon sphere), and none for Dust. */
 const DRAWS_PER_PLANET = 1;
 const DRAWS_PER_STAR = 2;
 const DRAWS_FOR_BELTS = 1;
 const DRAWS_FOR_NEBULA = 1;
+const DRAWS_PER_DEEP_PROJECT = 2;
 
 interface Point {
   readonly x: number;
@@ -160,9 +161,16 @@ export function mapFromWorld(tilt: number, angle: number): readonly [number, num
 
 /**
  * The draws realism adds to a scene of this many Planets and Stars, over a drawn Rail of
- * `railPoints` samples: the belts' one merged draw only when there is a Planet to carry one,
- * and the nebula's one only when the Rail is a curve (two points or more).
+ * `railPoints` samples, with `deepPlanets` of the Planets Deep: the belts' one merged draw
+ * only when there is a Planet to carry one, the nebula's one only when the Rail is a curve
+ * (two points or more), and a ring disc and a moon sphere per Deep Planet (9.8).
  */
-export function addedDraws(planets: number, stars: number, railPoints: number): number {
-  return planets * DRAWS_PER_PLANET + stars * DRAWS_PER_STAR + (planets > 0 ? DRAWS_FOR_BELTS : 0) + (railPoints >= 2 ? DRAWS_FOR_NEBULA : 0);
+export function addedDraws(planets: number, stars: number, railPoints: number, deepPlanets: number): number {
+  return (
+    planets * DRAWS_PER_PLANET +
+    stars * DRAWS_PER_STAR +
+    (planets > 0 ? DRAWS_FOR_BELTS : 0) +
+    (railPoints >= 2 ? DRAWS_FOR_NEBULA : 0) +
+    deepPlanets * DRAWS_PER_DEEP_PROJECT
+  );
 }

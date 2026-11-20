@@ -28,16 +28,18 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { PerspectiveCamera } from 'three';
+import { Euler, PerspectiveCamera, Quaternion, Vector3 } from 'three';
 import { contrast, luminance } from '../../shell/contrast.ts';
 import { tokens } from '../../tokens/tokens.ts';
 import { projectNdc } from '../mote-label.ts';
-import { moonScale, notableMoons, notableRings, RING_RADIUS_RATIO, worldPerPixel } from '../notable-model.ts';
+import { MOON_MIN_RADIUS_PX, moonScale, notableMoons, notableRings, RING_RADIUS_RATIO, worldPerPixel } from '../notable-model.ts';
 import { buildRail, DESKTOP_ASPECT, railFarPlane, railPose, railStopCount } from '../rail-model.ts';
+import type { RealismArtifact } from '../realism-status.ts';
 import { buildScene, DEFAULT_FOV, DEFAULT_NEAR, frameBodies, type Body, type SceneArtifact, type ScenePosition } from '../scene-model.ts';
 import { bodyRadius } from '../stroke-model.ts';
 import { depthWrites } from './arrival-model.ts';
 import { FILL_RADIUS_RATIO, FILL_TARGET_LUMINANCE } from './fill-model.ts';
+import { RING_DISC_INNER, RING_DISC_MIN_BAND_PX, RING_DISC_MIN_PX, RING_DISC_OUTER, RING_DISC_TILT, ringPlans } from './ring-model.ts';
 
 const ARTIFACT_URL = new URL('../../../generated/layout.generated.json', import.meta.url);
 const committed = (): SceneArtifact => JSON.parse(readFileSync(ARTIFACT_URL, 'utf8')) as SceneArtifact;
@@ -305,4 +307,98 @@ test('the luminance ceiling does not protect a label: ink-label-dark is below 4.
   const brightestGround = (luminance(ink) + 0.05) / 4.5 - 0.05;
   assert.ok(brightestGround > 0 && brightestGround < 0.02, `the brightest ground for 4.5:1 is ${brightestGround.toFixed(4)}`);
   assert.ok(brightestGround * 5 < FILL_TARGET_LUMINANCE, `${brightestGround.toFixed(4)} is far below FILL_TARGET_LUMINANCE ${FILL_TARGET_LUMINANCE}: the ceiling does not protect a label`);
+});
+
+// --- The ring disc and moon sphere are readable at a Client stop (9.8) --------------------------
+
+/** The least band measured on the committed layout (9.8), in CSS pixels: recorded here and in the realism README. */
+const BAND_RECORDED_PX = 2.83;
+
+/**
+ * At every integer Client stop (`k ≥ 1`), at 1920 × 1080, for each Deep Planet whose centre
+ * is in frame (FR-9: readable at client-stop distance). The opening frame (stop 0) frames
+ * the whole sky, where even the M2 Ring is about 1.4 px across its radius: it is measured
+ * and returned, not held to the floor. At each:
+ * its moon sphere's radius on screen (the plan's radius × `moonScale`) is at least
+ * `MOON_MIN_RADIUS_PX`, its ring disc's projected outer minor half-axis at least
+ * `RING_DISC_MIN_PX`, and the visible band (outer edge minus inner edge, at the least
+ * across the disc, which is along its minor axis) at least `RING_DISC_MIN_BAND_PX`. The disc
+ * is measured as the layer places it: both edges in the camera's facing turned by `tilt`
+ * (`RING_DISC_TILT` unless a control asks otherwise), every sample projected through the
+ * real camera, the minor half-axis the least distance from the projected centre.
+ */
+function deepReadability(
+  artifact: SceneArtifact,
+  tiltAngle = RING_DISC_TILT,
+): { readonly stops: number; readonly minMoonPx: number; readonly minDiscPx: number; readonly minBandPx: number; readonly openingDiscPx: number } {
+  const { bodies } = buildScene(artifact);
+  const rail = buildRail(artifact, bodies);
+  const far = farPlane(bodies, rail);
+  const plans = ringPlans({ ...(artifact as unknown as RealismArtifact), railLine: [] });
+  const tilt = new Quaternion().setFromEuler(new Euler(tiltAngle, 0, 0));
+  let stops = 0;
+  let minMoonPx = Number.POSITIVE_INFINITY;
+  let minDiscPx = Number.POSITIVE_INFINITY;
+  let minBandPx = Number.POSITIVE_INFINITY;
+  let openingDiscPx = Number.NaN;
+  for (let k = 0; k <= railStopCount(rail); k += 1) {
+    const pose = railPose(rail, k, DESKTOP_ASPECT);
+    const camera = cameraAt(pose.position, pose.target, DESKTOP_ASPECT, far);
+    const view = camera.matrixWorldInverse.elements;
+    const projection = camera.projectionMatrix.elements;
+    const toScreen = (point: ScenePosition) => {
+      const ndc = projectNdc(point, view, projection);
+      return { x: ((ndc.x + 1) / 2) * VIEWPORT.width, y: ((1 - ndc.y) / 2) * VIEWPORT.height, front: ndc.front };
+    };
+    const turned = camera.getWorldQuaternion(new Quaternion()).multiply(tilt);
+    for (const plan of plans) {
+      const depth = viewDepth(plan.position, view);
+      const centre = toScreen(plan.position);
+      if (!(depth > DEFAULT_NEAR && depth < far) || !centre.front || !onScreen(centre, VIEWPORT)) continue;
+      const pixelsPerUnit = (projection[5]! * VIEWPORT.height) / (2 * depth);
+      const reach = (radius: number, angle: number): number => {
+        const local = new Vector3(radius * Math.cos(angle), radius * Math.sin(angle), 0).applyQuaternion(turned);
+        const sample = toScreen({ x: plan.position.x + local.x, y: plan.position.y + local.y, z: plan.position.z + local.z });
+        return Math.hypot(sample.x - centre.x, sample.y - centre.y);
+      };
+      let minor = Number.POSITIVE_INFINITY;
+      let band = Number.POSITIVE_INFINITY;
+      for (let i = 0; i < 360; i += 1) {
+        const angle = (2 * Math.PI * i) / 360;
+        const outer = reach(RING_DISC_OUTER, angle);
+        minor = Math.min(minor, outer);
+        band = Math.min(band, outer - reach(RING_DISC_INNER, angle));
+      }
+      if (k === 0) {
+        openingDiscPx = minor;
+        continue;
+      }
+      stops += 1;
+      minMoonPx = Math.min(minMoonPx, plan.radius * moonScale(plan, view, projection, VIEWPORT.height) * pixelsPerUnit);
+      minDiscPx = Math.min(minDiscPx, minor);
+      minBandPx = Math.min(minBandPx, band);
+    }
+  }
+  return { stops, minMoonPx, minDiscPx, minBandPx, openingDiscPx };
+}
+
+test('the committed layout at 1920 × 1080: at every integer Client stop with a Deep Planet in frame, its moon is at least MOON_MIN_RADIUS_PX, its disc\'s minor half-axis at least RING_DISC_MIN_PX and its band at least RING_DISC_MIN_BAND_PX', () => {
+  const { stops, minMoonPx, minDiscPx, minBandPx, openingDiscPx } = deepReadability(committed());
+  assert.ok(stops >= 1, `a Deep Planet is in frame at ${stops} Client stops: something to measure`);
+  assert.ok(minMoonPx >= MOON_MIN_RADIUS_PX - 1e-9, `the least moon radius is ${minMoonPx.toFixed(2)} px`);
+  assert.ok(minDiscPx >= RING_DISC_MIN_PX, `the least disc minor half-axis is ${minDiscPx.toFixed(2)} px, against ${RING_DISC_MIN_PX}`);
+  // The measured minimum, recorded (9.8): about 7.3 px, at stop 3 (the neighbouring Client's), the farthest Client stop
+  // the Deep Planet is in frame at; at its own stop about 38.5. At the opening frame, not held, about 1.1 px.
+  assert.ok(minDiscPx > 7 && minDiscPx < 7.7, `recorded at about 7.3 px: read ${minDiscPx.toFixed(2)} px`);
+  assert.ok(openingDiscPx > 0.9 && openingDiscPx < 1.3, `the opening frame, recorded at about 1.1 px: read ${openingDiscPx.toFixed(2)} px`);
+  // The band: the visible annulus along the minor axis, about (2.2 − 1.35) / 2.2 of the outer half-axis.
+  assert.ok(minBandPx >= RING_DISC_MIN_BAND_PX, `the least band is ${minBandPx.toFixed(2)} px, against ${RING_DISC_MIN_BAND_PX}`);
+  assert.ok(minBandPx > BAND_RECORDED_PX - 0.2 && minBandPx < BAND_RECORDED_PX + 0.2, `recorded at about ${BAND_RECORDED_PX} px: read ${minBandPx.toFixed(2)} px`);
+});
+
+test('control: a disc re-measured nearly edge-on (1.53 rad) fails both readability floors at the same poses', () => {
+  const { stops, minDiscPx, minBandPx } = deepReadability(committed(), 1.53);
+  assert.ok(stops >= 1);
+  assert.ok(minDiscPx < RING_DISC_MIN_PX, `at 1.53 rad the minor half-axis reads ${minDiscPx.toFixed(2)} px`);
+  assert.ok(minBandPx < RING_DISC_MIN_BAND_PX, `and the band ${minBandPx.toFixed(2)} px`);
 });

@@ -790,6 +790,14 @@ The shape vocabulary is four items and nothing else.
   only, which is what makes a Star read as emitting rather than as an outline.
   *[amended 2026-11-17 for Epic 9: under realism the core dot is gone; the
   limb-darkened core makes the Star read as emitting.]*
+  *[amended 2026-11-20 by 9.8: under realism a Deep Planet's Moon dot fades out
+  as its moon sphere arrives, and its Ring as its ring disc arrives, on the
+  layer's one fade, whole with the Star marks, orbits and Rail, and both return
+  if realism fails. The moon sphere is still a circle on screen. The ring disc
+  is the one ellipse that is not an orbit: an annulus seen at a fixed tilt of
+  0.7 rad off the camera, so it reads as a ring around its Planet from every
+  pose, and never crosses its Planet's disc. First Paint, the Fallback and the
+  preview keep the Ring and the Moon.]*
 - **The ellipse.** Every orbit, and only orbits. An orbit is a circle seen at
   an angle; that is the only reason an ellipse exists in this system. Orbit
   ellipses are drawn at `stroke-rest` on the same hairline as everything else —
@@ -803,6 +811,11 @@ The shape vocabulary is four items and nothing else.
   1.08 of its radius, so it too is seen as an ellipse at an angle: static, with no
   particles, its brightness its Planet's band. First Paint, the Fallback and the
   preview keep the hairline. Mote orbits are unchanged.]*
+  *[amended 2026-11-20 by 9.8: under realism an orbit is no longer the only
+  ellipse. A Deep Planet's ring disc is an annulus held at a fixed tilt of
+  0.7 rad off the camera, so it is always seen as an ellipse around its Planet.
+  It is not an orbit and carries no recency; it is the Ring's realism carrier.
+  Everywhere the line-work is drawn, the orbit stays the only ellipse.]*
 - **The straight line.** Leader lines only. Always a single straight segment
   from Body edge to label baseline. **No elbows, no dog-legs, no curves.** An
   elbowed leader is a diagram convention and this is not a diagram. The one
@@ -891,6 +904,25 @@ channels are structural, neither is chromatic.
 sphere and the Ring a thin, tilted, semi-transparent ring disc, both
 achromatic. Two structural channels, redundant and colour-blind safe, with no
 size or brightness.]*
+
+*[amended 2026-11-20 by 9.8 (spec-9-8-deep-planets-wear-a-ring-and-a-moon.md):
+built. The **ring disc** is a thin annulus from 1.35 body radii out to the
+Ring's 2.2, grey at `stroke-near`'s luminance (the Ring's rung), at most 0.6
+alpha, broken into faint static radial bands, soft at both edges, turned to the
+camera then tilted 0.7 rad about its horizontal, so it is one constant ellipse
+at every pose and its inner edge stays outside its Planet's fill. The **moon
+sphere** sits exactly where the Moon dot sat, at its radius and its 2.4px floor,
+grey, lit from its own Star at a Planet's lit mean over the ambient floor. Both
+read Deep/Shallow alone: every Deep Planet's disc and moon are identical but for
+position and light, neither uses size or brightness, neither has hue, and both
+stay under `stroke-active`. On the committed layout at 1920×1080, at every
+Client stop where its Planet is in frame, the disc's outer minor half-axis is at
+least about 7.3px and its visible band (outer edge minus inner edge, along the
+minor axis) at least about 2.8px. At the opening frame the disc reads about
+1.1px across its minor half-axis, against about 1.4px for the M2 Ring it
+replaces: realism lowers the Deep/Shallow signal's legibility at the first view.
+That is held to 9.11's judgement on screen, not tested. The Ring hairline and
+Moon dot fade out as they arrive. The values are starting values for 9.11.]*
 
 **Size and brightness are NOT available for this signal.** FR-3 binds mass to
 duration and brightness to recency. A long-ago Shallow Project can legitimately

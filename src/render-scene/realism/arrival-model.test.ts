@@ -26,7 +26,7 @@ const RAIL_LINE = [{ x: 0, y: 0, z: 0 }, { x: 40, y: 2, z: -3 }, { x: 100, y: 0,
 const ARTIFACT: RealismArtifact = {
   railLine: RAIL_LINE,
   clients: [
-    { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: APPEARANCE }, { id: 'project:a/two', clientId: 'client:a', position: { x: -10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, appearance: { ...APPEARANCE, map: 'mars' } }] },
+    { id: 'client:a', position: { x: 0, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, isDeep: false, appearance: APPEARANCE }, { id: 'project:a/two', clientId: 'client:a', position: { x: -10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, isDeep: false, appearance: { ...APPEARANCE, map: 'mars' } }] },
     { id: 'client:b', position: { x: 100, y: 0, z: 0 }, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [] },
   ],
 };
@@ -128,7 +128,7 @@ function sharedFade(materials: readonly ShaderMaterial[]): string[] {
 test('one fade uniform object is shared by every Planet fill, Star fill and glow, the belts and the ribbon', () => {
   const { scene } = attached();
   const materials = drawsOf(scene).map(materialOf);
-  assert.equal(materials.length, addedDraws(2, 2, RAIL_LINE.length));
+  assert.equal(materials.length, addedDraws(2, 2, RAIL_LINE.length, 0));
   assert.ok(materials.some((material) => material.uniforms.uMap !== undefined) && glowsOf(scene).length === 2 && beltsOf(scene).length === 1 && nebulaeOf(scene).length === 1, 'Planets, Star fills, glows, the belts and the ribbon are all read');
   assert.deepEqual(sharedFade(materials), []);
   const mutated = materials.map((material, at) => (at === materials.length - 1 ? { ...material, uniforms: { ...material.uniforms, uFade: { value: 0 } } } as unknown as ShaderMaterial : material));
@@ -203,7 +203,7 @@ test('the layer is one group: nothing reaches a scene before attach, and attach 
   const group = scene.children[0] as Group;
   assert.equal(group.type, 'Group');
   assert.equal((group as unknown as Mesh).isMesh, undefined);
-  assert.equal(group.children.length, addedDraws(2, 2, RAIL_LINE.length));
+  assert.equal(group.children.length, addedDraws(2, 2, RAIL_LINE.length, 0));
   layer.dispose();
   assert.deepEqual(scene.children, []);
 });
@@ -218,8 +218,8 @@ interface FakeRenderer {
   finish(): void;
 }
 
-/** A renderer whose every program links unless `linked` says otherwise, and whose compile waits for `finish` when `pending`. */
-function fakeRenderer({ linked = () => true, pending = false, uploadThrows = false, lost = false }: { linked?: (material: ShaderMaterial) => boolean; pending?: boolean; uploadThrows?: boolean; lost?: boolean } = {}): FakeRenderer {
+/** A renderer whose every program links unless `linked` says otherwise, whose compile waits for `finish` when `pending`, and whose canvas is 1920 × `height`. */
+function fakeRenderer({ linked = () => true, pending = false, uploadThrows = false, lost = false, height = 1080 }: { linked?: (material: ShaderMaterial) => boolean; pending?: boolean; uploadThrows?: boolean; lost?: boolean; height?: number } = {}): FakeRenderer {
   const uploaded: Texture[] = [];
   const compiled: FakeRenderer['compiled'] = [];
   const programs = new Map<ShaderMaterial, { linked: boolean }>();
@@ -239,6 +239,8 @@ function fakeRenderer({ linked = () => true, pending = false, uploadThrows = fal
       return pending ? new Promise((resolve) => { finish = () => resolve(root); }) : Promise.resolve(root);
     },
     properties: { get: (material: ShaderMaterial) => ({ currentProgram: programs.has(material) ? { program: programs.get(material) } : undefined }) },
+    // The canvas's CSS size, which the layer reads for the moons' pixel floor (9.8).
+    getSize: (target: { set(x: number, y: number): unknown }) => target.set(1920, height),
     // A lost context answers null to every query, as WebGL does.
     getContext: () => ({ LINK_STATUS, isContextLost: () => lost, getProgramParameter: (program: { linked: boolean }, name: number) => (lost ? null : name === LINK_STATUS ? program.linked : null) }),
   };
@@ -260,7 +262,7 @@ test('warm uploads every texture once by initTexture and compiles once, over the
   assert.equal(compile!.scene, scene, 'prepared against the scene it will join, so its programs match that draw');
   assert.notEqual(compile!.root, scene);
   assert.equal(compile!.parentAtCompile, null, 'the group is in no scene while it compiles');
-  assert.equal(compile!.children, addedDraws(2, 2, RAIL_LINE.length), 'every draw is compiled');
+  assert.equal(compile!.children, addedDraws(2, 2, RAIL_LINE.length, 0), 'every draw is compiled');
   assert.deepEqual(scene.children, [], 'warm attaches nothing');
 });
 
@@ -340,7 +342,7 @@ test('under the real owner, no layer mesh is in the scene before warm resolves, 
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(scene.children, [], 'resolving draws nothing until a frame');
   owner.frame(ARTIFACT, '/', draw);
-  assert.equal(drawsOf(scene).length, addedDraws(2, 2, RAIL_LINE.length), 'the warm draw');
+  assert.equal(drawsOf(scene).length, addedDraws(2, 2, RAIL_LINE.length, 0), 'the warm draw');
   assert.equal(fadeOf(scene), 0);
   assert.ok(drawsOf(scene).every((mesh) => !materialOf(mesh).depthWrite));
   assert.deepEqual(owner.status(), { document: 'decoded', uploaded: true });
@@ -384,6 +386,32 @@ test('under the real owner, a bad Rail sample fails the document at the build, s
     assert.deepEqual(scene.children, [], 'the schematic is all there is');
     assert.equal(fake.compiled.length, 0, 'nothing was built to warm');
     assert.equal(owner.lineWorkFade(), 1, 'the Rail hairline, the orbits and the Star marks stay at their token values');
+  } finally {
+    Object.assign(console, saved);
+  }
+  assert.deepEqual(consoleCalls, []);
+});
+
+test('under the real owner, a bad Deep Planet fails the document at the build, silently: nothing attached, no warm-up, and its Ring line and Moon dot stay whole (9.8)', async () => {
+  const consoleCalls: unknown[] = [];
+  const saved = { error: console.error, warn: console.warn, log: console.log };
+  for (const key of ['error', 'warn', 'log'] as const) console[key] = (...args: unknown[]) => void consoleCalls.push(args);
+  try {
+    for (const position of [{ x: Number.NaN, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }]) {
+      const bad: RealismArtifact = {
+        ...ARTIFACT,
+        clients: ARTIFACT.clients.map((client) => ({ ...client, projects: client.projects.map((project, at) => (at === 0 ? { ...project, isDeep: true, position } : project)) })),
+      };
+      const fake = fakeRenderer();
+      const { owner, scene, draw } = await realOwner(fake.renderer);
+      owner.frame(bad, '/', draw);
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(owner.status(), { document: 'failed', uploaded: false }, `at ${JSON.stringify(position)}`);
+      for (let at = 0; at < 5; at += 1) assert.doesNotThrow(() => owner.frame(bad, '/', draw));
+      assert.deepEqual(scene.children, [], 'the schematic is all there is');
+      assert.equal(fake.compiled.length, 0, 'nothing was built to warm');
+      assert.equal(owner.lineWorkFade(), 1, 'the Ring line and the Moon dot stay at their token values, with the rest of the line-work');
+    }
   } finally {
     Object.assign(console, saved);
   }

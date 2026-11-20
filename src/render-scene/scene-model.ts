@@ -358,12 +358,12 @@ export const STOP_MARGIN = 3;
 
 /*
  * The draw order, declared once, here: DUST 1 < NEBULA 1.1 < GLOW 1.25 < FILL 1.5 <
- * BELT 1.6 < BODY 2 < MOON 3. Constants need no import, so this module keeps
- * importing nothing at all. `dust-model.ts` and `notable-model.ts` re-export their
- * own step, so their importers are unchanged. The four realism steps sit between
+ * BELT 1.6 < RING_DISC 1.75 < BODY 2 < MOON 3. Constants need no import, so this module
+ * keeps importing nothing at all. `dust-model.ts` and `notable-model.ts` re-export their
+ * own step, so their importers are unchanged. The five realism steps sit between
  * Dust and the Bodies, which is why the steps are not whole numbers: Dust, Bodies
- * and Moons keep their M2 values. The ring disc (9.8) adds its own with its story
- * (AD-19 as amended 2026-11-18).
+ * and Moons keep their M2 values. A Deep Planet's moon sphere (9.8) shares
+ * `MOON_RENDER_ORDER` (AD-19 as amended 2026-11-18).
  */
 
 /**
@@ -403,6 +403,15 @@ export const FILL_RENDER_ORDER = 1.5;
  * over it. The belts write no depth, so they hold nothing drawn later back.
  */
 export const BELT_RENDER_ORDER = 1.6;
+
+/**
+ * The render order of a Deep Planet's ring disc (9.8): after the fills and the
+ * belts, depth-tested against the fills, so it draws over the belt and another
+ * Body's fill hides what lies behind it; before the line-work that stays at
+ * `BODY 2` and the moon sphere at `MOON 3`, which draw over it, so a Moon is always
+ * over its Ring. It writes no depth, so it holds nothing drawn later back.
+ */
+export const RING_DISC_RENDER_ORDER = 1.75;
 
 /**
  * The render order every Body draw carries.
