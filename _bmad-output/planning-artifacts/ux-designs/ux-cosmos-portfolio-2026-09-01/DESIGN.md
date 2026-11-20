@@ -778,6 +778,14 @@ M3's Star glow sprite, held under the luminance ceiling (§1, AD-20).
 is the replacing carriers' luminance, in ladder order. Glow is forbidden except
 the Star sprite and the Rail's nebula, both under the ceiling.]*
 
+*[amended 2026-11-20 by 9.9 (spec-9-9-the-atmosphere-rim.md): a Planet's
+carrier is now its atmosphere rim. Its limb brightens by its band's own
+luminance (`stroke-rest` or `stroke-near`), so a recent Planet's rim is brighter
+than an old one's, in ladder order, as its outline was. The rim is not a glow: it
+lies inside the fill, adds grey light at the limb only, and draws nothing
+beyond the disc. The Planet's outline fades out as the rim arrives, with the
+other replaced line-work, and returns if realism fails.]*
+
 ---
 
 ## 6. Shapes
@@ -923,6 +931,21 @@ minor axis) at least about 2.8px. At the opening frame the disc reads about
 replaces: realism lowers the Deep/Shallow signal's legibility at the first view.
 That is held to 9.11's judgement on screen, not tested. The Ring hairline and
 Moon dot fade out as they arrive. The values are starting values for 9.11.]*
+
+*[amended 2026-11-20 by 9.9 (spec-9-9-the-atmosphere-rim.md): under realism a
+Planet's outline circle is replaced by its **atmosphere rim**, drawn inside the
+fill's own shader (no added draw). The rim is an additive, achromatic brightening
+of the limb over the outer 8% of the disc's radius, its support never under 1.5px on screen,
+soft (a `smoothstep`, no cut). Its peak at the limb is the luminance of the step
+the outline would have worn: the Planet's band (`stroke-rest` or `stroke-near`)
+at rest, `stroke-active` when it is approached (3.4), `stroke-focus` (white)
+when it is the subject. Only the subject's rim passes `stroke-active` (its surface inside the rim
+keeps the rest ceiling), so white is still spent once. The outline billboard, and the Ring line inside it, fall to
+opacity 0 and hide on the layer's one fade with the Star marks, orbits, Rail,
+Rings and Moons, and return whole if realism fails. The Deep/Shallow signal is
+unchanged: the rim carries recency and the subject, never Deep/Shallow. The
+width and pixel floor are starting values for 9.11; the rim switches instantly,
+while a Star's subject core rises over 0.6 s, which 9.10 and 9.11 may revisit.]*
 
 **Size and brightness are NOT available for this signal.** FR-3 binds mass to
 duration and brightness to recency. A long-ago Shallow Project can legitimately

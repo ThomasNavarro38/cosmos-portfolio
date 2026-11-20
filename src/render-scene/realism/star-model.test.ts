@@ -1054,7 +1054,7 @@ test('the layer draws the Stars over its one geometry, and on going disposes Sta
   const meshes = drawsOf(scene);
   assert.equal(meshes.length, addedDraws(fillPlans(ARTIFACT).length, starPlans(ARTIFACT).length, 0, 0));
   assert.equal(new Set(meshes.filter((mesh) => mesh.name !== 'belt').map((mesh) => mesh.geometry)).size, 1, 'the belts have their own geometry (9.6)');
-  layer.frame(new PerspectiveCamera(), DELTA, false, 1, 'client:a');
+  layer.frame(new PerspectiveCamera(), DELTA, false, 1, 'client:a', null);
   const counts = { material: 0, geometry: 0 };
   for (const mesh of meshes) materialOf(mesh).addEventListener('dispose', () => { counts.material += 1; });
   meshes.find((mesh) => mesh.name !== 'belt')!.geometry.addEventListener('dispose', () => { counts.geometry += 1; });
@@ -1071,22 +1071,22 @@ test('the layer hands the Stars the camera, the subject and the pace, and the sp
   layer.attach(scene);
   const camera = new PerspectiveCamera();
   camera.rotation.set(0.2, 0.1, 0);
-  layer.frame(camera, DELTA, false, 1, 'client:a');
+  layer.frame(camera, DELTA, false, 1, 'client:a', null);
   const stars = drawsOf(scene).filter((mesh) => materialOf(mesh).uniforms.uRise !== undefined || materialOf(mesh).uniforms.uPeak !== undefined);
   const expected = camera.getWorldQuaternion(new Quaternion());
   for (const mesh of stars) assert.ok(mesh.quaternion.angleTo(expected) < 1e-7);
   const fills = stars.filter((mesh) => !isGlow(mesh));
   assert.deepEqual(fills.map(riseOf), [1, 0]);
   const time = uniformOf(fills[0]!, 'uTime');
-  layer.frame(camera, DELTA, true, 1, 'client:a');
+  layer.frame(camera, DELTA, true, 1, 'client:a', null);
   assert.equal(uniformOf(fills[0]!, 'uTime'), time, 'the layer hands the Stars reduced, so their clock holds');
-  layer.frame(camera, DELTA, false, 0.25, 'client:b');
+  layer.frame(camera, DELTA, false, 0.25, 'client:b', null);
   const reduced = riseOf(fills[1]!);
   const full = createFillLayer(ARTIFACT, IMAGES);
   const fullScene = new Scene();
   full.attach(fullScene);
-  full.frame(camera, DELTA, false, 1, 'client:a');
-  full.frame(camera, DELTA, false, 1, 'client:b');
+  full.frame(camera, DELTA, false, 1, 'client:a', null);
+  full.frame(camera, DELTA, false, 1, 'client:b', null);
   const fullFills = drawsOf(fullScene).filter((mesh) => materialOf(mesh).uniforms.uRise !== undefined && !isGlow(mesh));
   assert.ok(reduced > riseOf(fullFills[1]!), 'a pace below 1 moves it further per frame');
   const planets = drawsOf(scene).filter((mesh) => materialOf(mesh).uniforms.uMapFromWorld !== undefined);
@@ -1116,7 +1116,7 @@ for (const [name, artifact] of [
   test(`under the real owner, ${name} fails the document with nothing added`, async () => {
     const scene = new Scene();
     const owner = createRealismOwner<ImageBitmap, Scene, PerspectiveCamera, WebGLRenderer>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(IMAGES), createFillLayer }), () => undefined);
-    const draw = { scene, camera: new PerspectiveCamera(), renderer: linkingRenderer(), delta: DELTA, reduced: false, pace: 1, subject: () => null };
+    const draw = { scene, camera: new PerspectiveCamera(), renderer: linkingRenderer(), delta: DELTA, reduced: false, pace: 1, subject: () => null, approached: () => null };
     owner.frame(artifact as RealismArtifact, '/', draw);
     owner.frame(artifact as RealismArtifact, '/', draw);
     await new Promise((resolve) => setImmediate(resolve));
@@ -1129,7 +1129,7 @@ for (const [name, artifact] of [
 test('under the real owner, a subject that throws removes every fill and glow, with the loop alive', async () => {
   const scene = new Scene();
   const owner = createRealismOwner<ImageBitmap, Scene, PerspectiveCamera, WebGLRenderer>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(IMAGES), createFillLayer }), () => undefined);
-  const draw = { scene, camera: new PerspectiveCamera(), renderer: linkingRenderer(), delta: DELTA, reduced: false, pace: 1, subject: (): string | null => 'client:a' };
+  const draw = { scene, camera: new PerspectiveCamera(), renderer: linkingRenderer(), delta: DELTA, reduced: false, pace: 1, subject: (): string | null => 'client:a', approached: () => null };
   owner.frame(ARTIFACT, '/', draw);
   owner.frame(ARTIFACT, '/', draw);
   await new Promise((resolve) => setImmediate(resolve));
@@ -1148,12 +1148,12 @@ test('a new layer from the held images seeds the rise again, with no ramp', () =
   const first = new Scene();
   const layer = createFillLayer(ARTIFACT, IMAGES);
   layer.attach(first);
-  layer.frame(new PerspectiveCamera(), DELTA, false, 1, 'client:a');
+  layer.frame(new PerspectiveCamera(), DELTA, false, 1, 'client:a', null);
   layer.dispose();
   const second = new Scene();
   const again = createFillLayer(ARTIFACT, IMAGES);
   again.attach(second);
-  again.frame(new PerspectiveCamera(), DELTA, false, 1, 'client:b');
+  again.frame(new PerspectiveCamera(), DELTA, false, 1, 'client:b', null);
   const fills = drawsOf(second).filter((mesh) => materialOf(mesh).uniforms.uRise !== undefined && !isGlow(mesh));
   assert.deepEqual(fills.map(riseOf), [0, 1]);
 });

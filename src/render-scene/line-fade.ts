@@ -1,17 +1,21 @@
 /**
- * The line-work realism replaces, as it fades (9.4, 9.6, 9.7, 9.8, AD-19 and AD-22 as
+ * The line-work realism replaces, as it fades (9.4, 9.6, 9.7, 9.8, 9.9, AD-19 and AD-22 as
  * amended): a Star's outline and core dot fall on the realism layer's one fade, as its
  * emissive core rises, every Planet's orbit hairline falls on it as its debris belt rises
- * (9.6), the Rail's hairline as its nebula ribbon rises (9.7), and a Deep Planet's Ring and
- * Moon as its ring disc and moon sphere rise (9.8); all return whole if realism fails. Pure,
+ * (9.6), the Rail's hairline as its nebula ribbon rises (9.7), a Deep Planet's Ring and
+ * Moon as its ring disc and moon sphere rise (9.8), and a Planet's outline as its
+ * atmosphere rim rises (9.9); all return whole if realism fails. Pure,
  * and structural, so `node --test` runs it on fakes; `body-field.tsx` and `moon-field.tsx`
  * bind it.
  *
- * **Stars, orbits, the Rail, Rings and Moons only.** `holdStarMarks` keeps a Star's billboard
- * by its ID and ignores every Planet, so a Planet's outline stays at its token value (9.9
- * replaces it). `holdReplacedLine` keeps a line only when its ID is an orbit's (`orbit:`),
+ * **Every Body's billboard, orbits, the Rail, Rings and Moons only.** `holdBodyMarks` keeps
+ * each Body's billboard by its ID, a Star's or a Planet's (9.9: a Planet's outline, and the
+ * Ring line inside its billboard, fall with the rest). `holdReplacedLine` keeps a line only when its ID is an orbit's (`orbit:`),
  * the Rail's (`rail`) or a Ring's (`ring:`), and never any other, and 9.10 extends this path
- * to the rest of the line-work. The Moons are `moon-field.tsx`'s own pool of meshes, handed
+ * to the rest of the line-work. Since 9.9 a Ring is reached twice, by its own `ring:` hold and
+ * through its Planet's billboard; both write the same value in the same call, so the second
+ * is harmless, and the `ring:` hold is kept so a Ring never depends on where it is mounted.
+ * The Moons are `moon-field.tsx`'s own pool of meshes, handed
  * to `fadeStarMarks` whole, which skips a handle not mounted yet.
  *
  * **Whole, never Body by Body.** `fadeStarMarks` writes one value to every held object:
@@ -32,11 +36,10 @@ export interface StarMarks {
 }
 
 /**
- * The ref callback's rule: a Star's billboard is held under its ID while it is mounted,
- * and dropped when React hands `null`. A Planet's is never held.
+ * The ref callback's rule: a Body's billboard, a Star's or a Planet's (9.9), is held under
+ * its ID while it is mounted, and dropped when React hands `null`.
  */
-export function holdStarMarks<Group>(held: Map<string, Group>, body: { readonly id: string; readonly kind: string }, group: Group | null): void {
-  if (body.kind !== 'star') return;
+export function holdBodyMarks<Group>(held: Map<string, Group>, body: { readonly id: string }, group: Group | null): void {
   if (group === null) held.delete(body.id);
   else held.set(body.id, group);
 }
@@ -60,7 +63,7 @@ export function holdReplacedLine<Held>(held: Map<string, Held>, line: { readonly
   else held.set(line.id, object);
 }
 
-/** Every held Star's marks, orbit line, Rail line, Ring and Moon at this fade: shown while it is above 0, every material at its clamped value. A handle not mounted yet (`null` or `undefined`) is skipped. */
+/** Every held Body's marks, orbit line, Rail line, Ring and Moon at this fade: shown while it is above 0, every material at its clamped value. A handle not mounted yet (`null` or `undefined`) is skipped. */
 export function fadeStarMarks(groups: Iterable<StarMarks | null | undefined>, fade: number): void {
   const value = Number.isFinite(fade) ? Math.min(Math.max(fade, 0), 1) : 1;
   for (const group of groups) {

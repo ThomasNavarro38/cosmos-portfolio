@@ -12,9 +12,14 @@
  * `appearance.meanLuminance` describes a map, not a Project, and it is the one
  * brightness read from the artifact. Lit and dark sides follow solved positions,
  * which is composition and not a data mapping (AD-3, AD-20).
+ *
+ * **Recency is in the rim (9.9).** The plan carries the Planet's `luminanceBand` as
+ * `band`, read by name here alone among the fill's modules, for its atmosphere rim
+ * (`rim-model.ts`); the map, the light and the surface still take none of it.
  */
 
 import type { RealismArtifact } from '../realism-status.ts';
+import type { BeltBand } from './belt-model.ts';
 
 /**
  * The fill's radius as a share of the outline's. Below 1, so the outline is never
@@ -64,6 +69,8 @@ export type Direction = readonly [number, number, number];
 /** One Planet's fill: everything the layer builds it from. */
 export interface FillPlan {
   readonly id: string;
+  /** Its resting band (9.9), which its atmosphere rim carries at rest. */
+  readonly band: BeltBand;
   readonly position: Point;
   readonly map: string;
   readonly meanLuminance: number;
@@ -92,7 +99,9 @@ export function lightDirection(planet: Point, star: Point): Direction {
  *
  * @throws on a Project whose `clientId` names no Client, a Planet at its Star, a
  * mean luminance the shader could not divide by, or a non-finite tilt, spin rate or
- * spin phase, each of which would draw a surface of NaN in silence.
+ * spin phase, each of which would draw a surface of NaN in silence; and, naming the
+ * Project, on a band other than `stroke-rest` or `stroke-near` (9.9), which its rim
+ * would otherwise carry at a step nobody derived.
  */
 export function fillPlans(artifact: RealismArtifact): FillPlan[] {
   const stars = new Map(artifact.clients.map((client) => [client.id, client.position]));
@@ -100,6 +109,8 @@ export function fillPlans(artifact: RealismArtifact): FillPlan[] {
     client.projects.map((project) => {
       const star = stars.get(project.clientId);
       if (star === undefined) throw new Error(`${project.id} names no Client: ${project.clientId}`);
+      const band = project.luminanceBand;
+      if (band !== 'stroke-rest' && band !== 'stroke-near') throw new Error(`${project.id} has no rim band: ${band}`);
       const { appearance } = project;
       const meanLuminance = appearance.meanLuminance;
       if (!(meanLuminance > 0) || !Number.isFinite(meanLuminance)) throw new Error(`${project.id} has no usable mean luminance: ${meanLuminance}`);
@@ -108,6 +119,7 @@ export function fillPlans(artifact: RealismArtifact): FillPlan[] {
       }
       return {
         id: project.id,
+        band,
         position: project.position,
         map: appearance.map,
         meanLuminance,

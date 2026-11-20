@@ -22,12 +22,21 @@
  * **Nothing is tone-mapped.** `<colorspace_fragment>` is the output's sRGB, and
  * `flat` on the Canvas stays.
  *
+ * **The atmosphere rim (9.9)** is one additive, achromatic term at the limb: `uRim`, the
+ * step's luminance from `rim-model.ts`, times a `smoothstep` over the outer
+ * `max(RIM_WIDTH, RIM_MIN_PX × fwidth(r))` of the radius, added before the ceiling. The
+ * ceiling is `max(CEILING, uRim × w)`, so only the subject's rim (never its surface inside
+ * the rim) may pass `stroke-active`, up to `stroke-focus`; the 8-bit floor below uses the same value. The two constants are
+ * written in as literals, to keep the chunk's bytes, so neither may be a whole number,
+ * which GLSL would read as an int.
+ *
  * **Rounding must not pass the ceiling.** The output is rounded to 8 bits per
  * channel, which read back up to 0.5% above the ceiling on a saturated pixel. So a
  * pixel at or near it is floored to its 8-bit step, and the read-back holds.
  */
 
 import { FILL_CEILING_LUMINANCE, FILL_CLIP_OFFSET, FILL_NEAR_CEILING, FILL_TARGET_LUMINANCE } from './fill-model.ts';
+import { RIM_MIN_PX, RIM_WIDTH } from './rim-model.ts';
 
 export const FILL_VERTEX_SHADER = /* glsl */ `
   uniform float radius;
@@ -48,6 +57,7 @@ export const FILL_FRAGMENT_SHADER = /* glsl */ `
   uniform vec3 uAmbient;
   uniform mat3 uMapFromWorld;
   uniform float uFade;
+  uniform float uRim;
   varying vec2 vDisc;
   varying mat3 vWorld;
   const float FILL_TARGET_LUMINANCE = ${FILL_TARGET_LUMINANCE};
@@ -65,9 +75,12 @@ export const FILL_FRAGMENT_SHADER = /* glsl */ `
     float v = asin(clamp(m.y, -1.0, 1.0)) / PI + 0.5;
     vec3 albedo = texture2D(uMap, vec2(u, v)).rgb * (FILL_TARGET_LUMINANCE / uMeanLuminance);
     vec3 lit = albedo * max(dot(N, uLight), 0.0) + uAmbient;
+    float r = length(vDisc), w = smoothstep(1.0 - max(${RIM_WIDTH}, ${RIM_MIN_PX} * fwidth(r)), 1.0, r);
+    lit += vec3(uRim) * w;
+    float top = max(CEILING, uRim * w);
     float y = dot(lit, vec3(0.2126, 0.7152, 0.0722));
-    gl_FragColor = vec4(y > CEILING ? lit * (CEILING / y) : lit, uFade);
+    gl_FragColor = vec4(y > top ? lit * (top / y) : lit, uFade);
     #include <colorspace_fragment>
-    if (y > CEILING * NEAR_CEILING) gl_FragColor.rgb = floor(gl_FragColor.rgb * 255.0) / 255.0;
+    if (y > top * NEAR_CEILING) gl_FragColor.rgb = floor(gl_FragColor.rgb * 255.0) / 255.0;
   }
 `;

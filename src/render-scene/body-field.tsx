@@ -30,14 +30,17 @@
  * nothing. No light reaches any of it: every material is unlit.
  *
  * **A Star's outline and core dot give way to its light (9.4), an orbit to its belt (9.6),
- * the Rail to its nebula (9.7), and a Deep Planet's Ring to its ring disc (9.8).** One ref
- * map holds each Star's billboard, by `holdStarMarks`, and a second the replaced lines, by
+ * the Rail to its nebula (9.7), a Deep Planet's Ring to its ring disc (9.8), and a Planet's
+ * outline to its atmosphere rim (9.9).** One ref map holds every Body's billboard, a Star's
+ * or a Planet's, by `holdBodyMarks`, and a second the replaced lines, by
  * `holdReplacedLine`, on the scene hairlines' ref and the Ring's: it holds each orbit's, the
  * Rail's and each Ring's, and no other. One frame loop hands both maps to `fadeStarMarks`
  * on one read of the realism owner's `lineWorkFade()`, through the mount: 1 until realism
- * has arrived and after it fails, `1 - fade` while it rises, so the Star marks, the orbits,
- * the Rail and the Rings fall together, whole, with the Moons (`moon-field.tsx`, on the same
- * read). A Planet's outline stays at its token value (9.9 and 9.10 extend this). The JSX still declares
+ * has arrived and after it fails, `1 - fade` while it rises, so the Body marks (every
+ * outline, a Star's core dot, and the Ring inside a Planet's billboard), the orbits, the Rail
+ * and the Rings fall together, whole, with the Moons (`moon-field.tsx`, on the same read).
+ * The approach's `stroke-active` outline falls with them: under realism the rim carries it
+ * (9.9). 9.10 makes the fade a crossfade. The JSX still declares
  * every draw at opacity 1, so First Paint is M2's. The loop runs before the mount's, so
  * it reads the fade one frame late, which is accepted.
  */
@@ -46,7 +49,7 @@ import { Billboard, Line } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { useRef, useSyncExternalStore } from 'react';
 import { navigationStore } from '../shell/state.ts';
-import { fadeStarMarks, holdReplacedLine, holdStarMarks, type StarMarks } from './line-fade.ts';
+import { fadeStarMarks, holdBodyMarks, holdReplacedLine, type StarMarks } from './line-fade.ts';
 import { lineWorkFade } from './realism-mount.tsx';
 import { RAIL_LINE_SAMPLES_PER_SEGMENT, railLine, type Rail } from './rail-model.ts';
 import { notableRings } from './notable-model.ts';
@@ -84,7 +87,7 @@ export function BodyField({ bodies, rail }: BodyFieldProps) {
       ))}
       {bodies.map((body) => (
         <group key={body.id} position={[body.position.x, body.position.y, body.position.z]}>
-          <Billboard ref={(group) => holdStarMarks(starMarks.current, body, group)}>
+          <Billboard ref={(group) => holdBodyMarks(starMarks.current, body, group)}>
             <Line
               points={circlePoints(CIRCLE_SEGMENTS, bodyRadius(body))}
               color={bodyStroke(body, subject, approached).color}

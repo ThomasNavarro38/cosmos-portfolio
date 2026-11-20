@@ -1121,16 +1121,17 @@ test('the drawn radius discriminates on kind, never on a missing mass', () => {
  *     alone, never the subject, so it is at rest and always.
  *   - **Draw order**: every visible draw at `BODY_RENDER_ORDER`, `transparent` at
  *     opacity 1 — after the Dust — and nothing else carries a `renderOrder`.
- *   - **The line-work's fade (9.4, extended to the orbits by 9.6, to the Rail by 9.7 and to
- *     the Rings by 9.8), the one allowance**: exactly two `useRef` maps, the Stars'
- *     billboards held through `holdStarMarks` by each Body's billboard ref and the replaced
+ *   - **The line-work's fade (9.4, extended to the orbits by 9.6, to the Rail by 9.7, to
+ *     the Rings by 9.8 and to the Planets' outlines by 9.9), the one allowance**: exactly two
+ *     `useRef` maps, every Body's billboard (a Star's or a Planet's, 9.9) held through
+ *     `holdBodyMarks` by each Body's billboard ref and the replaced
  *     lines held through `holdReplacedLine` by each scene hairline's ref (the orbits' and
  *     the Rail's, no other) and each Ring's ref, and one `useFrame` handing
  *     both to `fadeStarMarks` on one `lineWorkFade()` from the mount; no other frame loop,
  *     ref, fade source or hand-set opacity, and a closed import set.
  */
-/** A Body's billboard, as it opens (9.4): its ref holds a Star's marks for the fade, and nothing else. */
-const BILLBOARD_OPEN = '<Billboard ref={(group) => holdStarMarks(starMarks.current, body, group)}>';
+/** A Body's billboard, as it opens (9.4, 9.9): its ref holds that Body's marks for the fade, a Star's or a Planet's, and nothing else. */
+const BILLBOARD_OPEN = '<Billboard ref={(group) => holdBodyMarks(starMarks.current, body, group)}>';
 
 /** The one frame loop the binding holds (9.4, 9.6, 9.7): the Star marks and the replaced lines (orbits and Rail), together, at one read of the owner's line-work fade. */
 const STAR_MARKS_FRAME = 'useFrame(() => fadeStarMarks([...starMarks.current.values(), ...replacedLines.current.values()], lineWorkFade()));';
@@ -1147,7 +1148,7 @@ const BODY_FIELD_IMPORTS: readonly string[] = [
   "import { useFrame } from '@react-three/fiber';",
   "import { useRef, useSyncExternalStore } from 'react';",
   "import { navigationStore } from '../shell/state.ts';",
-  "import { fadeStarMarks, holdReplacedLine, holdStarMarks, type StarMarks } from './line-fade.ts';",
+  "import { fadeStarMarks, holdBodyMarks, holdReplacedLine, type StarMarks } from './line-fade.ts';",
   "import { lineWorkFade } from './realism-mount.tsx';",
   "import { RAIL_LINE_SAMPLES_PER_SEGMENT, railLine, type Rail } from './rail-model.ts';",
   "import { notableRings } from './notable-model.ts';",
@@ -1170,11 +1171,11 @@ function auditBodyField(source: string): string[] {
   if (/\buseThree\b|\buseState\b|\buseReducer\b|\buseEffect\b|\buseLayoutEffect\b|\buseMemo\b|\buseStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {
     failures.push('holds a frame loop, reactive state, an effect or a zustand binding — one selector subscription only');
   }
-  // 9.4, the one allowance, extended by 9.6 to the orbits and by 9.7 to the Rail: one ref
-  // map of the Stars' billboards, one of the replaced lines, and one frame loop handing both the owner's
+  // 9.4, the one allowance, extended by 9.6 to the orbits, by 9.7 to the Rail and by 9.9 to the
+  // Planets' outlines: one ref map of every Body's billboard, one of the replaced lines, and one frame loop handing both the owner's
   // line-work fade, read once. No other frame loop, ref or fade.
   if ((code.match(/\buseFrame\b/g) ?? []).length !== 2 || !squash(code).includes(STAR_MARKS_FRAME)) {
-    failures.push('holds a frame loop other than the one fading the Star marks, the orbits and the Rail by lineWorkFade()');
+    failures.push('holds a frame loop other than the one fading every Body billboard and the replaced lines by lineWorkFade()');
   }
   if (
     (code.match(/\buseRef\b/g) ?? []).length !== 3 ||
@@ -1188,8 +1189,8 @@ function auditBodyField(source: string): string[] {
   if ((code.match(/\bholdReplacedLine\s*\(/g) ?? []).length !== 2 || (code.match(/\breplacedLines\b/g) ?? []).length !== 4) {
     failures.push('the replaced lines are held, faded or read other than by the two refs, holdReplacedLine and the one frame loop');
   }
-  if ((code.match(/\bholdStarMarks\s*\(/g) ?? []).length !== 1 || (code.match(/\bfadeStarMarks\s*\(/g) ?? []).length !== 1 || (code.match(/\blineWorkFade\b/g) ?? []).length !== 2 || (code.match(/\bstarMarks\b/g) ?? []).length !== 3) {
-    failures.push('the Star marks are held, faded or read other than by the one ref, the one frame loop and lineWorkFade()');
+  if ((code.match(/\bholdBodyMarks\s*\(/g) ?? []).length !== 1 || (code.match(/\bfadeStarMarks\s*\(/g) ?? []).length !== 1 || (code.match(/\blineWorkFade\b/g) ?? []).length !== 2 || (code.match(/\bstarMarks\b/g) ?? []).length !== 3) {
+    failures.push('the Body billboards are held, faded or read other than by the one ref, the one frame loop and lineWorkFade()');
   }
   if (/\.(?:opacity|visible)\s*=(?!=)/.test(code)) failures.push('sets an opacity or a visibility itself — the fade is line-fade.ts’s');
   const imports = quoted.split('\n').map((line) => line.trim()).filter((line) => /^import\b/.test(line));
@@ -1375,8 +1376,10 @@ test('the Bodies’ binding audit rejects the real binding with any one guarante
     // The Star marks' fade (9.4).
     ['a second frame loop', (s) => s.replace(STAR_MARKS_FRAME, `${STAR_MARKS_FRAME}\n  useFrame(() => undefined);`)],
     ['the frame loop dropped', (s) => s.replace(`  ${STAR_MARKS_FRAME}\n`, '')],
-    ['a fade on the Planets', (s) => s.replace('holdStarMarks(starMarks.current, body, group)', "holdStarMarks(starMarks.current, { ...body, kind: 'star' }, group)")],
-    ['a fade on every Body, held by hand', (s) => s.replace('ref={(group) => holdStarMarks(starMarks.current, body, group)}', 'ref={(group) => starMarks.current.set(body.id, group)}')],
+    // 9.9 inverted 9.4's "a fade on the Planets": every Body's billboard is held now, so leaving the Planets out is the departure.
+    ['the Planets left out of the fade', (s) => s.replace('ref={(group) => holdBodyMarks(starMarks.current, body, group)}', "ref={(group) => holdBodyMarks(starMarks.current, body.kind === 'star' ? body : { id: '' }, group)}")],
+    ['the Planets left out by a guard', (s) => s.replace('ref={(group) => holdBodyMarks(starMarks.current, body, group)}', "ref={(group) => { if (body.kind === 'star') holdBodyMarks(starMarks.current, body, group); }}")],
+    ['every Body held by hand', (s) => s.replace('ref={(group) => holdBodyMarks(starMarks.current, body, group)}', 'ref={(group) => starMarks.current.set(body.id, group)}')],
     ['a fade from elsewhere', (s) => s.replace('lineWorkFade()));', 'navigationStore.getState().scrollProgress));')],
     ['a fixed fade', (s) => s.replace('lineWorkFade()));', '0.5));')],
     ['the fade from the status module', (s) => s.replace("import { lineWorkFade } from './realism-mount.tsx';", "import { lineWorkFade } from './realism-status.ts';")],
@@ -1399,7 +1402,7 @@ test('the Bodies’ binding audit rejects the real binding with any one guarante
     ['the Ring held in the Star map', (s) => s.replace(RING_LINE_REF, 'ref={(object) => holdReplacedLine(starMarks.current, ring, object)}')],
     ['the Ring held under the line', (s) => s.replace(RING_LINE_REF, 'ref={(object) => holdReplacedLine(replacedLines.current, line, object)}')],
     ['the Ring held under an invented ID', (s) => s.replace(RING_LINE_REF, "ref={(object) => holdReplacedLine(replacedLines.current, { id: 'ring:x' }, object)}")],
-    ['the marks on a second billboard', (s) => s.replace('</Billboard>', `</Billboard>\n          <Billboard ref={(group) => holdStarMarks(starMarks.current, body, group)}></Billboard>`)],
+    ['the marks on a second billboard', (s) => s.replace('</Billboard>', `</Billboard>\n          <Billboard ref={(group) => holdBodyMarks(starMarks.current, body, group)}></Billboard>`)],
     ['a line loses its order', (s) => s.replace('renderOrder={BODY_RENDER_ORDER}', '')],
     ['a line goes opaque', (s) => s.replace(/(<Line\b[^/]*?)\s*transparent\b/, '$1')],
     ['a line fades', (s) => s.replace('opacity={1}', 'opacity={0.5}')],

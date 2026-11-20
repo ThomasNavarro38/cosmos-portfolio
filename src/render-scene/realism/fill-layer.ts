@@ -18,6 +18,12 @@
  * mount is mounted last, so the rig has already moved the camera. The light is
  * written once, here at the build.
  *
+ * **The atmosphere rim (9.9)** is in the fill's own shader, so it adds no draw. Each row
+ * has its own `uRim`, set to its band's step at the build, and `frame` writes it for every
+ * row from `rimStep(id, band, subject, approached)` on every frame: `stroke-focus` on the
+ * subject, `stroke-active` on the approached Planet, else its band. The switch is instant,
+ * as the M2 outline's is.
+ *
  * **The arrival (7.8).** Every mesh is built into one `Group`, which is in no scene
  * until `attach`. `warm` uploads each texture by `initTexture` and compiles every
  * material by `compileAsync` over that detached group against the scene it will join,
@@ -83,6 +89,7 @@ import { createNebula, nebulaTint } from './nebula-layer.ts';
 import { nebulaArrays } from './nebula-model.ts';
 import { createRingRows } from './ring-layer.ts';
 import { ringPlans } from './ring-model.ts';
+import { RIM_STEP_LUMINANCE, rimStep } from './rim-model.ts';
 import { createStarRows } from './star-layer.ts';
 import { starPlans } from './star-model.ts';
 
@@ -96,8 +103,8 @@ export interface FillLayer {
   attach(scene: Scene): void;
   /** Begins the arrival: with `fade`, every later `frame` steps the fade up from 0, the first of them in the same tick as this call, so the first visible frame is already one clamped step in; without, the layer is whole at once and every fill writes depth. */
   arrive(fade: boolean): void;
-  /** One frame: the fade's step, each disc to the camera, each map to its turn, each Star's rise toward the subject and its pulse, the ribbon's drift, and each ring disc's facing and moon's place and scale. The spin, the Stars' clock and the drift take `reduced`, and the rise and the fade take `pace`. */
-  frame(camera: Camera, delta: number, reduced: boolean, pace: number, subject: string | null): void;
+  /** One frame: the fade's step, each disc to the camera, each map to its turn, each Planet's rim to its step from the subject and the approached Project (9.9), each Star's rise toward the subject and its pulse, the ribbon's drift, and each ring disc's facing and moon's place and scale. The spin, the Stars' clock and the drift take `reduced`, and the rise and the fade take `pace`. */
+  frame(camera: Camera, delta: number, reduced: boolean, pace: number, subject: string | null, approached: string | null): void;
   /** The one fade's value, 0 to 1 (9.4): what the owner reads for the line-work it replaces. */
   fade(): number;
   /** Removes the fills and glows and frees the GPU's copies. Safe twice. The images are kept. */
@@ -135,6 +142,7 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
   const fade = { value: 0 };
   const rows = plans.map((plan) => {
     const turn = new Matrix3();
+    const rim = { value: RIM_STEP_LUMINANCE[plan.band] };
     const material = new ShaderMaterial({
       vertexShader: FILL_VERTEX_SHADER,
       fragmentShader: FILL_FRAGMENT_SHADER,
@@ -146,6 +154,7 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
         uAmbient: { value: ambient },
         uMapFromWorld: { value: turn },
         uFade: fade,
+        uRim: rim,
       },
       transparent: true,
       opacity: 1,
@@ -157,7 +166,7 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
     mesh.position.set(plan.position.x, plan.position.y, plan.position.z);
     mesh.renderOrder = FILL_RENDER_ORDER;
     group.add(mesh);
-    return { mesh, plan, turn };
+    return { mesh, plan, turn, rim };
   });
   const starRows = createStarRows(stars, geometry, fade, group);
   const belt = createBelt(belts, tint, fade, group);
@@ -218,7 +227,7 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
       fade.value = 1;
       writeDepth(depthWrites(fade.value));
     },
-    frame(camera, delta, reduced, pace, subject) {
+    frame(camera, delta, reduced, pace, subject, approached) {
       if (fading) {
         fade.value = nextFade(fade.value, delta, pace);
         writeDepth(depthWrites(fade.value));
@@ -226,9 +235,10 @@ export function createFillLayer(artifact: RealismArtifact, images: ReadonlyMap<s
       seconds = nextSpinSeconds(seconds, delta, reduced);
       camera.updateMatrixWorld();
       camera.getWorldQuaternion(facing);
-      for (const { mesh, plan, turn } of rows) {
+      for (const { mesh, plan, turn, rim } of rows) {
         mesh.quaternion.copy(facing);
         turn.fromArray(mapFromWorld(plan.tilt, spinAngle(plan.spinPhase, plan.spinRate, seconds)));
+        rim.value = RIM_STEP_LUMINANCE[rimStep(plan.id, plan.band, subject, approached)];
       }
       starRows.frame(facing, subject, delta, pace, reduced);
       nebula?.frame(delta, reduced);

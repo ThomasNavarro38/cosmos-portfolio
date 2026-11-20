@@ -51,6 +51,7 @@ import {
   spinAngle,
 } from './fill-model.ts';
 import { FILL_FRAGMENT_SHADER, FILL_VERTEX_SHADER } from './fill-shader.ts';
+import { RIM_MIN_PX, RIM_STEP_LUMINANCE, RIM_WIDTH } from './rim-model.ts';
 
 const APPEARANCE = { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.05, spinPhase: 1.5 };
 
@@ -133,9 +134,18 @@ function auditShader(vertex: string, fragment: string): string[] {
   if (!fragment.includes('sqrt(max(1.0 - dot(vDisc, vDisc), 0.0))')) failures.push('the normal is not the exact sphere normal');
   if (!vertex.includes('mat3(modelMatrix)')) failures.push('the normal is not taken to world space by the model matrix');
   if (!fragment.includes('max(dot(N, uLight), 0.0) + uAmbient')) failures.push('the lit term is not the one direction plus the floor');
-  if (!fragment.includes('y > CEILING ? lit * (CEILING / y) : lit')) failures.push('the ceiling does not hold the luminance');
+  if (!fragment.includes('y > top ? lit * (top / y) : lit')) failures.push('the ceiling does not hold the luminance');
+  // 9.9: the atmosphere rim, one additive, achromatic limb term, and the subject's ceiling.
+  if (!/\buniform float uRim;/.test(fragment)) failures.push('no uRim uniform');
+  if (!fragment.includes('float r = length(vDisc), w = ')) failures.push('the rim is not on the disc radius');
+  if (!fragment.includes(`w = smoothstep(1.0 - max(${RIM_WIDTH}, ${RIM_MIN_PX} * fwidth(r)), 1.0, r);`) || !fragment.includes('lit += vec3(uRim) * w;')) failures.push('the rim is not vec3(uRim) over the smoothstep with its pixel floor, added to lit');
+  if (fragment.indexOf('lit += vec3(uRim)') > fragment.indexOf('float y = dot(lit')) failures.push('the rim is added after the luminance');
+  if (!fragment.includes('float top = max(CEILING, uRim * w);')) failures.push('the ceiling is not max(CEILING, uRim * w)');
+  if (!fragment.includes('if (y > top * NEAR_CEILING)')) failures.push('the 8-bit floor does not use the rim ceiling');
+  if (/\bstep\(|\bdiscard\b/.test(fragment)) failures.push('a step( or a discard');
+  if (!String(RIM_WIDTH).includes('.') || !String(RIM_MIN_PX).includes('.')) failures.push('a rim constant would be a GLSL int');
   if (!/fwidth\(\w+\) <= fwidth\(\w+\)/.test(fragment)) failures.push('the seam has no two-candidate choice');
-  if (!/#include <colorspace_fragment>\s*if \(y > CEILING \* NEAR_CEILING\) gl_FragColor\.rgb = floor\(gl_FragColor\.rgb \* 255\.0\) \/ 255\.0;/.test(fragment)) failures.push('rounding can pass the ceiling');
+  if (!/#include <colorspace_fragment>\s*if \(y > top \* NEAR_CEILING\) gl_FragColor\.rgb = floor\(gl_FragColor\.rgb \* 255\.0\) \/ 255\.0;/.test(fragment)) failures.push('rounding can pass the ceiling');
   return failures;
 }
 
@@ -158,7 +168,18 @@ test('the shader audit rejects relief, a changed offset, a removed colorspace_fr
     ['tone mapping', V, F.replace('#include <colorspace_fragment>', '#include <tonemapping_fragment>\n#include <colorspace_fragment>'), /tone-mapped/],
     ['an interpolated normal', V, F.replace('sqrt(max(1.0 - dot(vDisc, vDisc), 0.0))', '0.5'), /exact sphere normal/],
     ['no ambient', V, F.replace(' + uAmbient', ''), /one direction/],
-    ['no ceiling', V, F.replace('y > CEILING ? lit * (CEILING / y) : lit', 'lit'), /ceiling/],
+    ['no ceiling', V, F.replace('y > top ? lit * (top / y) : lit', 'lit'), /ceiling/],
+    ['no rim uniform', V, F.replace('uniform float uRim;', ''), /no uRim/],
+    ['a hued rim', V, F.replace('vec3(uRim)', 'vec3(uRim, 0.0, 0.0)'), /vec3\(uRim\)/],
+    ['a rim with no pixel floor', V, F.replace(`max(${RIM_WIDTH}, ${RIM_MIN_PX} * fwidth(r))`, `${RIM_WIDTH}`), /pixel floor/],
+    ['a cut rim', V, F.replace(`smoothstep(1.0 - max(${RIM_WIDTH}, ${RIM_MIN_PX} * fwidth(r)), 1.0, r)`, `step(1.0 - ${RIM_WIDTH}, r)`), /a step\(/],
+    ['a changed pixel floor', V, F.replace(`${RIM_MIN_PX} * fwidth(r)`, '3.0 * fwidth(r)'), /pixel floor/],
+    ['a discarded rim', V, F.replace('float top = ', 'if (r > 1.0) discard;\n    float top = '), /discard/],
+    ['the subject held at the rest ceiling', V, F.replace('max(CEILING, uRim * w)', 'CEILING'), /max\(CEILING, uRim \* w\)/],
+    ["the subject's ceiling over its whole disc", V, F.replace('max(CEILING, uRim * w)', 'max(CEILING, uRim)'), /max\(CEILING, uRim \* w\)/],
+    ['the floor at the rest ceiling', V, F.replace('y > top * NEAR_CEILING', 'y > CEILING * NEAR_CEILING'), /8-bit floor/],
+    ['the rim after the luminance', V, F.replace(/(\n\s*lit \+= vec3\(uRim\)[^\n]*)(\n\s*float top[^\n]*)(\n\s*float y[^\n]*)/, '$2$3$1'), /after the luminance/],
+    ['a changed rim width', V, F.replace(`max(${RIM_WIDTH},`, 'max(0.2,'), /pixel floor/],
     ['no seam choice', V, F.replace(/fwidth\(\w+\) <= fwidth\(\w+\)/, 'true'), /seam/],
     ['rounding left to the output', V, F.replace('floor(gl_FragColor.rgb * 255.0) / 255.0', 'gl_FragColor.rgb'), /rounding/],
     ['bare N, which freezes the surface', V, F.replace('vec3 m = uMapFromWorld * N;', 'vec3 m = N;'), /does not turn/],
@@ -217,6 +238,17 @@ for (const field of ['tilt', 'spinRate', 'spinPhase'] as const) {
     }
   });
 }
+
+test("a plan carries its Planet's band (9.9), and a band other than stroke-rest or stroke-near throws naming the Project, before anything is built", () => {
+  assert.deepEqual(fillPlans(ARTIFACT).map((plan) => plan.band), ['stroke-rest', 'stroke-rest', 'stroke-rest']);
+  const near: RealismArtifact = { railLine: [], clients: [{ ...ARTIFACT.clients[0]!, projects: [{ ...planet('project:x', 'client:a', 5), luminanceBand: 'stroke-near' }] }] };
+  assert.equal(fillPlans(near)[0]!.band, 'stroke-near');
+  for (const band of ['stroke-focus', 'stroke-active', 'stroke-dust', '', 'near', undefined as unknown as string, 2 as unknown as string]) {
+    const bad: RealismArtifact = { railLine: [], clients: [{ ...ARTIFACT.clients[0]!, projects: [{ ...planet('project:bad', 'client:a', 5), luminanceBand: band }] }] };
+    assert.throws(() => fillPlans(bad), /project:bad/, String(band));
+    assert.throws(() => createFillLayer(bad, IMAGES), /project:bad/, `the layer, ${band}`);
+  }
+});
 
 test('a plan carries the appearance as it stands, read from the artifact', () => {
   const plan = fillPlans(ARTIFACT)[1]!;
@@ -335,7 +367,7 @@ test('each mesh wears its own plan: mean luminance, map and turn are that Planet
   const images = new Map([['moon', { name: 'moon' } as unknown as ImageBitmap], ['mars', { name: 'mars' } as unknown as ImageBitmap]]);
   const layer = createFillLayer(DIFFERING, images);
   layer.attach(scene);
-  layer.frame(new PerspectiveCamera(), 3, false, 1, null);
+  layer.frame(new PerspectiveCamera(), 3, false, 1, null, null);
   const appearances = DIFFERING.clients[0]!.projects.map((project) => project.appearance);
   const meshes = meshesOf(scene);
   assert.equal(meshes.length, appearances.length);
@@ -350,6 +382,37 @@ test('each mesh wears its own plan: mean luminance, map and turn are that Planet
   });
   assert.equal(materialOf(meshes[0]!).uniforms.uMap!.value, materialOf(meshes[2]!).uniforms.uMap!.value, 'one texture per map, shared');
   assert.notEqual(materialOf(meshes[0]!).uniforms.uMap!.value, materialOf(meshes[1]!).uniforms.uMap!.value);
+});
+
+test("each fill row has its own uRim at its band's step, and frame writes it from the subject and the approached Project, adding no mesh (9.9)", () => {
+  const scene = new Scene();
+  const bands: RealismArtifact = {
+    railLine: [],
+    clients: [{ ...DIFFERING.clients[0]!, projects: DIFFERING.clients[0]!.projects.map((project, at) => ({ ...project, luminanceBand: at === 1 ? 'stroke-near' : 'stroke-rest' })) }],
+  };
+  const images = new Map([['moon', {} as ImageBitmap], ['mars', {} as ImageBitmap]]);
+  const layer = createFillLayer(bands, images);
+  layer.attach(scene);
+  const meshes = meshesOf(scene);
+  const draws = drawsOf(scene).length;
+  const rims = (): number[] => meshes.map((mesh) => materialOf(mesh).uniforms.uRim!.value as number);
+  assert.equal(new Set(meshes.map((mesh) => materialOf(mesh).uniforms.uRim)).size, meshes.length, 'one uniform per row');
+  const L = RIM_STEP_LUMINANCE;
+  assert.deepEqual(rims(), [L['stroke-rest'], L['stroke-near'], L['stroke-rest']], 'at the build, each at its rest step');
+  const camera = new PerspectiveCamera();
+  for (const [subject, approached, expected] of [
+    ['project:a/one', 'project:a/one', [L['stroke-focus'], L['stroke-near'], L['stroke-rest']]],
+    ['project:a/one', 'project:a/two', [L['stroke-focus'], L['stroke-active'], L['stroke-rest']]],
+    [null, 'project:a/three', [L['stroke-rest'], L['stroke-near'], L['stroke-active']]],
+    ['client:a', null, [L['stroke-rest'], L['stroke-near'], L['stroke-rest']]],
+    [null, null, [L['stroke-rest'], L['stroke-near'], L['stroke-rest']]],
+  ] as const) {
+    layer.frame(camera, 1 / 60, false, 1, subject, approached);
+    assert.deepEqual(rims(), expected, `subject ${subject}, approached ${approached}: instantly`);
+  }
+  assert.equal(meshesOf(scene).length, meshes.length, 'no mesh added');
+  assert.equal(drawsOf(scene).length, draws, 'no draw added');
+  assert.equal(draws, addedDraws(3, 1, 0, 0), 'the rim is inside the fill');
 });
 
 test('the fill radius of every Body the layer draws fits the unit sphere three culls by, since the shader applies the radius after culling', () => {
@@ -390,13 +453,13 @@ test("a frame turns each mesh to the camera's world quaternion, even under a par
   rig.add(camera);
   rig.rotation.set(0, 0.7, 0);
   camera.rotation.set(0.2, 0.1, 0);
-  layer.frame(camera, 0.5, false, 1, null);
+  layer.frame(camera, 0.5, false, 1, null, null);
   const expected = camera.getWorldQuaternion(new Quaternion());
   const lights = meshesOf(scene).map((mesh) => (materialOf(mesh).uniforms.uLight!.value as Vector3).toArray());
   const firstMaps = meshesOf(scene).map((mesh) => [...(materialOf(mesh).uniforms.uMapFromWorld!.value as Matrix3).elements]);
   for (const mesh of meshesOf(scene)) assert.ok(mesh.quaternion.angleTo(expected) < 1e-7);
   camera.rotation.set(1, 1, 0);
-  layer.frame(camera, 0.5, false, 1, null);
+  layer.frame(camera, 0.5, false, 1, null, null);
   assert.deepEqual(meshesOf(scene).map((mesh) => (materialOf(mesh).uniforms.uLight!.value as Vector3).toArray()), lights, 'time, spin and camera leave the light');
   assert.notDeepEqual(meshesOf(scene).map((mesh) => [...(materialOf(mesh).uniforms.uMapFromWorld!.value as Matrix3).elements]), firstMaps, 'the map turned');
 });
@@ -409,15 +472,15 @@ test('at full motion the map follows phase + rate × seconds; reduced, it holds,
   const uniform = () => [...(materialOf(meshesOf(scene)[0]!).uniforms.uMapFromWorld!.value as Matrix3).elements];
   const light = () => (materialOf(meshesOf(scene)[0]!).uniforms.uLight!.value as Vector3).toArray();
   const expected = (seconds: number) => [...new Matrix3().fromArray(mapFromWorld(APPEARANCE.tilt, spinAngle(APPEARANCE.spinPhase, APPEARANCE.spinRate, seconds))).elements];
-  layer.frame(camera, 2, false, 1, null);
+  layer.frame(camera, 2, false, 1, null, null);
   assert.deepEqual(uniform(), expected(2));
   const held = uniform();
   const heldLight = light();
-  layer.frame(camera, 2, true, 0.25, null);
-  layer.frame(camera, 2, true, 0.25, null);
+  layer.frame(camera, 2, true, 0.25, null, null);
+  layer.frame(camera, 2, true, 0.25, null, null);
   assert.deepEqual(uniform(), held, 'held');
   assert.deepEqual(light(), heldLight);
-  layer.frame(camera, 1, false, 1, null);
+  layer.frame(camera, 1, false, 1, null, null);
   assert.deepEqual(uniform(), expected(3), 'resumes from where it held');
 });
 
@@ -467,7 +530,7 @@ test('a build that cannot finish throws, and under the real owner the document f
   for (const [artifact, images] of [[ARTIFACT, new Map([['moon', {} as ImageBitmap]])], [orphan, IMAGES]] as const) {
     const owner = createRealismOwner<ImageBitmap, Scene, PerspectiveCamera, WebGLRenderer>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(images), createFillLayer }), () => undefined);
     const scene = new Scene();
-    const draw = { scene, camera: new PerspectiveCamera(), renderer: linkingRenderer(), delta: 0, reduced: false, pace: 1, subject: () => null };
+    const draw = { scene, camera: new PerspectiveCamera(), renderer: linkingRenderer(), delta: 0, reduced: false, pace: 1, subject: () => null, approached: () => null };
     owner.frame(artifact, '/', draw);
     owner.frame(artifact, '/', draw);
     await new Promise((resolve) => setImmediate(resolve));
@@ -482,7 +545,7 @@ test('under the real owner, a fill layer whose update throws leaves the scene wi
   const scene = new Scene();
   const owner = createRealismOwner<ImageBitmap, Scene, PerspectiveCamera, WebGLRenderer>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(IMAGES), createFillLayer }), () => undefined);
   const camera = new PerspectiveCamera();
-  const draw = { scene, camera, renderer: linkingRenderer(), delta: 0, reduced: false, pace: 1, subject: () => null };
+  const draw = { scene, camera, renderer: linkingRenderer(), delta: 0, reduced: false, pace: 1, subject: () => null, approached: () => null };
   owner.frame(ARTIFACT, '/', draw);
   owner.frame(ARTIFACT, '/', draw);
   await new Promise((resolve) => setImmediate(resolve));
@@ -565,7 +628,9 @@ function auditRealismSource(modules: readonly Module[]): string[] {
       // 9.4: a Star's light carries its band (AD-20 as amended). The field is read by name in star-model.ts only;
       // star-layer.ts takes it through the plan, as `plan.band`, and never names it.
       // 9.6: an orbit's belt carries its Planet's band (AD-20 as amended), read by name in belt-model.ts only.
-      if (name === 'luminanceBand' && (path === STAR_MODEL_PATH || path === BELT_MODEL_PATH)) continue;
+      // 9.9: a Planet's atmosphere rim carries its band (AD-20 as amended), read by name in fill-model.ts only, onto
+      // the plan; fill-layer.ts and rim-model.ts take it as `plan.band`, and never name it.
+      if (name === 'luminanceBand' && (path === STAR_MODEL_PATH || path === BELT_MODEL_PATH || path === MODEL_PATH)) continue;
       // 9.8: a Deep Planet's ring disc and moon sphere carry Deep/Shallow (FR-9), read by name in ring-model.ts only;
       // ring-layer.ts takes the plans, and never names it.
       if (name === 'isDeep' && path === RING_MODEL_PATH) continue;
@@ -620,7 +685,10 @@ test('the realism source audit rejects each form, in any module, and a comment i
   assert.deepEqual(auditRealismSource(adding('const a = project.luminanceBand;', BELT_MODEL_PATH)), [], 'and the belt model (9.6)');
   assert.match(auditRealismSource(adding('const a = plan.luminanceBand;', 'src/render-scene/realism/belt-layer.ts')).join('\n'), /belt-layer\.ts reads luminanceBand/);
   assert.match(auditRealismSource(adding('const a = plan.mass;', BELT_MODEL_PATH)).join('\n'), /belt-model\.ts reads mass/);
-  assert.match(auditRealismSource(adding('const a = project.luminanceBand;', MODEL_PATH)).join('\n'), /fill-model\.ts reads luminanceBand/);
+  assert.deepEqual(auditRealismSource(adding('const a = project.luminanceBand;', MODEL_PATH)), [], 'and the fill model, for the rim (9.9)');
+  assert.match(auditRealismSource(adding('const a = plan.luminanceBand;', LAYER_PATH)).join('\n'), /fill-layer\.ts reads luminanceBand/);
+  assert.match(auditRealismSource(adding('const a = plan.luminanceBand;', 'src/render-scene/realism/rim-model.ts')).join('\n'), /rim-model\.ts reads luminanceBand/);
+  assert.match(auditRealismSource(adding('const a = project.mass;', MODEL_PATH)).join('\n'), /fill-model\.ts reads mass/);
   assert.match(auditRealismSource(adding('const a = client.luminanceBand;', MOUNT_PATH)).join('\n'), /realism-mount\.tsx reads luminanceBand/);
   assert.match(auditRealismSource(adding('const a = plan.mass;', STAR_MODEL_PATH)).join('\n'), /star-model\.ts reads mass/, 'and nothing else derived');
   // 9.8: isDeep's one allowance is the ring model's.
@@ -665,6 +733,9 @@ function auditLayer(source: string): string[] {
   if ((code.match(/\{\s*value:\s*0\s*\}/g) ?? []).length !== 1 || !/const fade = \{ value: 0 \};/.test(code)) failures.push('not one fade uniform object');
   if (/\buFade:\s*\{/.test(code)) failures.push('a second fade uniform object');
   if (/\bscene\.add\((?!group\))/.test(code)) failures.push('a mesh is added to the scene, not to the group');
+  // 9.9: each row's own rim, at its band at the build, and written for every row from rimStep in the frame.
+  if (!code.includes('const rim = { value: RIM_STEP_LUMINANCE[plan.band] };') || !code.includes('uRim: rim,')) failures.push('a row has no rim of its own at its band');
+  if (!frame.includes('rim.value = RIM_STEP_LUMINANCE[rimStep(plan.id, plan.band, subject, approached)];')) failures.push('the frame does not write each rim from rimStep');
   return failures;
 }
 
@@ -676,7 +747,7 @@ test('the layer audit rejects a second draw, a second sphere, a moving light, a 
   const real = readFileSync(new URL('./fill-layer.ts', import.meta.url), 'utf8');
   const FRAME = /(\bframe\s*\([^)]*\)\s*\{\r?\n)/;
   assert.match(real, FRAME);
-  const STEP = 'return { mesh, plan, turn };';
+  const STEP = 'return { mesh, plan, turn, rim };';
   assert.ok(real.includes(STEP));
   for (const [name, mutated, message] of [
     ['a second mesh', real.replace(STEP, `const halo = new Mesh(geometry, material);\n      ${STEP}`), /second construction/],
@@ -694,6 +765,9 @@ test('the layer audit rejects a second draw, a second sphere, a moving light, a 
     ['a second fade uniform object', real.replace('uFade: fade,', 'uFade: { value: 0 },'), /fade uniform object/],
     ['a second fade, declared', real.replace('const fade = { value: 0 };', 'const fade = { value: 0 };\n  const other = { value: 0 };'), /not one fade uniform/],
     ['a mesh added to the scene', real.replace('scene.add(group);', 'scene.add(group);\n      scene.add(rows[0]!.mesh);'), /not to the group/],
+    ['a rim shared by every row', real.replace('uRim: rim,', "uRim: { value: RIM_STEP_LUMINANCE['stroke-rest'] },"), /rim of its own/],
+    ['the approach left out of the rim', real.replace('rimStep(plan.id, plan.band, subject, approached)', 'rimStep(plan.id, plan.band, subject, null)'), /from rimStep/],
+    ['the rim never written', real.replace('rim.value = RIM_STEP_LUMINANCE[rimStep(plan.id, plan.band, subject, approached)];', ''), /from rimStep/],
   ] as const) {
     assert.notEqual(mutated, real, `"${name}" must apply`);
     assert.match(auditLayer(mutated).join('\n'), message, name);

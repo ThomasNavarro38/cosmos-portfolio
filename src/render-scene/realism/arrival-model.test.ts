@@ -140,7 +140,7 @@ test('from the build the layer sits at fade 0 with no fill writing depth, and a 
   const { scene, layer, camera } = attached();
   assert.equal(fadeOf(scene), 0);
   for (const mesh of drawsOf(scene)) assert.equal(materialOf(mesh).depthWrite, false, `${mesh.renderOrder}`);
-  for (let at = 0; at < 120; at += 1) layer.frame(camera, DELTA, false, 1, null);
+  for (let at = 0; at < 120; at += 1) layer.frame(camera, DELTA, false, 1, null, null);
   assert.equal(fadeOf(scene), 0, 'the warm draw and any frame before arrive stay invisible');
   assert.ok(fillsOf(scene).every((mesh) => !materialOf(mesh).depthWrite));
 });
@@ -152,7 +152,7 @@ test('arrive with the fade: the fade rises by the clamped delta, depth stays off
   let previous = 0;
   let frames = 0;
   while (fadeOf(scene) < 1) {
-    layer.frame(camera, frames === 10 ? 10 : DELTA, false, 1, null);
+    layer.frame(camera, frames === 10 ? 10 : DELTA, false, 1, null, null);
     frames += 1;
     const fade = fadeOf(scene);
     assert.ok(fade > previous, `frame ${frames} rises`);
@@ -166,7 +166,7 @@ test('arrive with the fade: the fade rises by the clamped delta, depth stays off
     assert.ok(frames < 1000);
   }
   assert.ok(Math.abs(frames - 58) <= 1, `about FADE_SECONDS × 60 frames, one of them a stall's clamped step: ${frames}`);
-  for (let at = 0; at < 5; at += 1) layer.frame(camera, DELTA, false, 1, null);
+  for (let at = 0; at < 5; at += 1) layer.frame(camera, DELTA, false, 1, null, null);
   assert.equal(fadeOf(scene), 1);
   assert.ok(fillsOf(scene).every((mesh) => materialOf(mesh).depthWrite));
 });
@@ -176,7 +176,7 @@ test('arrive with the fade at reduced motion completes in FADE_SECONDS × pace',
   layer.arrive(true);
   let frames = 0;
   while (fadeOf(scene) < 1 && frames < 1000) {
-    layer.frame(camera, DELTA, true, REDUCED_MOTION_PACE, null);
+    layer.frame(camera, DELTA, true, REDUCED_MOTION_PACE, null, null);
     frames += 1;
   }
   assert.equal(frames, Math.ceil((FADE_SECONDS * REDUCED_MOTION_PACE) / DELTA - 1e-9));
@@ -190,7 +190,7 @@ test('arrive without the fade: whole at once, every fill writing depth, no glow,
   assert.ok(glowsOf(scene).every((mesh) => !materialOf(mesh).depthWrite));
   assert.ok(beltsOf(scene).length === 1 && beltsOf(scene).every((mesh) => !materialOf(mesh).depthWrite), 'the belt never writes depth (9.6)');
   assert.ok(nebulaeOf(scene).length === 1 && nebulaeOf(scene).every((mesh) => !materialOf(mesh).depthWrite), 'the ribbon never writes depth (9.7)');
-  layer.frame(camera, DELTA, false, 1, null);
+  layer.frame(camera, DELTA, false, 1, null, null);
   assert.equal(fadeOf(scene), 1);
 });
 
@@ -323,7 +323,7 @@ async function realOwner(renderer: WebGLRenderer, build: typeof createFillLayer 
   const scene = new Scene();
   let resets = 0;
   const owner = createRealismOwner<ImageBitmap, Scene, Camera, WebGLRenderer>(() => Promise.resolve({ decodeMaps: () => Promise.resolve(IMAGES), createFillLayer: build }), () => { resets += 1; });
-  const draw = { scene, camera: new PerspectiveCamera(), renderer, delta: DELTA, reduced: false, pace: 1, subject: (): string | null => null };
+  const draw = { scene, camera: new PerspectiveCamera(), renderer, delta: DELTA, reduced: false, pace: 1, subject: (): string | null => null, approached: () => null };
   owner.frame(ARTIFACT, '/', draw);
   owner.frame(ARTIFACT, '/', draw);
   await new Promise((resolve) => setImmediate(resolve));
@@ -453,7 +453,7 @@ function auditLayerFade(build: typeof createFillLayer): string[] {
   let expected = 0;
   const camera = new PerspectiveCamera();
   for (let at = 0; at < 80; at += 1) {
-    layer.frame(camera, DELTA, false, 1, null);
+    layer.frame(camera, DELTA, false, 1, null, null);
     expected = nextFade(expected, DELTA, 1);
     if (layer.fade() !== expected) {
       failures.push(`fade() reads ${layer.fade()} on frame ${at}, not ${expected}`);

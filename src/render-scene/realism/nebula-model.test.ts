@@ -440,19 +440,19 @@ test('frame moves the drift alone, and only when not reduced: under reduced moti
   assert.equal(drift(), 0);
   for (let frame = 0; frame < 5; frame += 1) {
     camera.position.set(frame, 3, 40);
-    layer.frame(camera, 1 / 60, true, 0.25, 'client:a');
+    layer.frame(camera, 1 / 60, true, 0.25, 'client:a', null);
     assert.equal(drift(), 0, 'held under reduced motion');
   }
   let before = drift();
   for (const delta of [1 / 60, 0.5, 2]) {
-    layer.frame(camera, delta, false, 1, null);
+    layer.frame(camera, delta, false, 1, null, null);
     assert.ok(drift() > before, `it advances on ${delta}`);
     assert.ok(Math.abs(drift() - nextNebulaDrift(before, delta, false)) < 1e-12);
     before = drift();
   }
-  layer.frame(camera, 1 / 60, true, 0.25, null);
+  layer.frame(camera, 1 / 60, true, 0.25, null, null);
   assert.equal(drift(), before, 'and holds again');
-  layer.frame(camera, Number.NaN, false, 1, null);
+  layer.frame(camera, Number.NaN, false, 1, null, null);
   assert.equal(drift(), before, 'a bad delta holds');
   scene.updateMatrixWorld();
   for (const { attribute, version, array } of attributes) {

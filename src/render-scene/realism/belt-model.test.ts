@@ -380,7 +380,7 @@ test('frame never touches the belt: its geometry, matrix and uniforms are the sa
   const camera = new PerspectiveCamera();
   for (const [delta, reduced, subject] of [[1 / 60, false, null], [0.5, true, 'client:a'], [10, false, 'client:b'], [1 / 60, true, null]] as const) {
     camera.position.set(delta * 10, 3, 40);
-    layer.frame(camera, delta, reduced, reduced ? 0.25 : 1, subject);
+    layer.frame(camera, delta, reduced, reduced ? 0.25 : 1, subject, null);
     scene.updateMatrixWorld();
   }
   for (const { attribute, version, array } of attributes) {

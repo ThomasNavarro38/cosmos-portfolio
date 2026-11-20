@@ -36,7 +36,9 @@
  * Rail is a pure function of the committed artifact.
  *
  * **The subject is a thunk,** resolved inside the owner's `try`, so a store read that
- * throws cannot reach R3F, and nothing is read before a layer exists. It writes nothing.
+ * throws cannot reach R3F, and nothing is read before a layer exists. So is the approached
+ * Project (9.9), which a Planet's atmosphere rim carries at `stroke-active`, read by the
+ * same `approachedId` `body-field.tsx` reads for the outline. It writes nothing.
  */
 
 import { useFrame } from '@react-three/fiber';
@@ -45,13 +47,14 @@ import { resetFrameSampling } from '../shell/chart-offer.ts';
 import { motionPace, reducedMotion } from '../shell/motion-preference.ts';
 import { BASE } from '../shell/route.ts';
 import { navigationStore } from '../shell/state.ts';
+import { approachedId } from './affordance-model.ts';
 import { RAIL_LINE_SAMPLES_PER_SEGMENT, railLine, type Rail } from './rail-model.ts';
 import { createRealismOwner, type RealismArtifact } from './realism-status.ts';
 import { sceneSubject } from './stroke-model.ts';
 
 const owner = createRealismOwner(() => import('./realism/index.ts'), () => resetFrameSampling());
 
-/** What a Star's outline and core dot are drawn at this frame (9.4): the owner's `lineWorkFade`, 1 unless realism has arrived. */
+/** What the replaced line-work (a Star's outline and core dot since 9.4, a Planet's outline since 9.9) is drawn at this frame: the owner's `lineWorkFade`, 1 unless realism has arrived. */
 export function lineWorkFade(): number {
   return owner.lineWorkFade();
 }
@@ -67,7 +70,7 @@ export function RealismMount({ artifact, rail }: RealismMountProps) {
   useEffect(() => owner.enterCanvas(), []);
   useFrame(({ scene, camera, gl }, delta) => {
     const reduced = reducedMotion();
-    owner.frame(drawn, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });
+    owner.frame(drawn, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail), approached: () => approachedId(navigationStore.getState()) });
   });
   return null;
 }

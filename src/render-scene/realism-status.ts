@@ -133,6 +133,8 @@ export interface RealismDraw<Scene = unknown, Camera = unknown, Renderer = unkno
   readonly reduced: boolean;
   readonly pace: number;
   readonly subject: () => string | null;
+  /** The approached Project (9.9, the rim's `stroke-active`), a thunk read inside the owner's `try`, as `subject` is. */
+  readonly approached: () => string | null;
 }
 
 /** The drawn layer, as the owner holds it. */
@@ -142,7 +144,7 @@ export interface RealismLayer<Scene = unknown, Camera = unknown, Renderer = unkn
   attach(scene: Scene): void;
   /** The first visible frame: with `fade`, the layer fades in from 0; without, it is whole at once. */
   arrive(fade: boolean): void;
-  frame(camera: Camera, delta: number, reduced: boolean, pace: number, subject: string | null): void;
+  frame(camera: Camera, delta: number, reduced: boolean, pace: number, subject: string | null, approached: string | null): void;
   /** The one fade's value, 0 to 1 (9.4). */
   fade(): number;
   dispose(): void;
@@ -175,7 +177,7 @@ export interface RealismOwner<Image, Scene = unknown, Camera = unknown, Renderer
   /** The decoded images by map id, or `null` while the document holds none. */
   images(): ReadonlyMap<string, Image> | null;
   /**
-   * What a Star's outline and core dot are drawn at (9.4, AD-22 as amended): `1 - fade`
+   * What the replaced line-work, every Body's outline (9.9) and a Star's core dot among it, is drawn at (9.4, AD-22 as amended): `1 - fade`
    * once this Canvas's layer has arrived, so they fall as it rises; 1 with no layer, while
    * it warms and on its hidden warm draw, and after failure. A fade read that throws, or
    * reads no finite number, is 1. Never throws.
@@ -292,7 +294,7 @@ export function createRealismOwner<Image, Scene = unknown, Camera = unknown, Ren
     if (arrival === 'warming') return;
     if (arrival === 'warmed') {
       layer.attach(draw.scene);
-      layer.frame(draw.camera, draw.delta, draw.reduced, draw.pace, draw.subject());
+      layer.frame(draw.camera, draw.delta, draw.reduced, draw.pace, draw.subject(), draw.approached());
       markUploaded();
       arrival = 'warm-drawn';
       return;
@@ -303,7 +305,7 @@ export function createRealismOwner<Image, Scene = unknown, Camera = unknown, Ren
       markShown();
       arrival = 'arrived';
     }
-    layer.frame(draw.camera, draw.delta, draw.reduced, draw.pace, draw.subject());
+    layer.frame(draw.camera, draw.delta, draw.reduced, draw.pace, draw.subject(), draw.approached());
   };
 
   return {

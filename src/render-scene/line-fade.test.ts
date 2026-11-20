@@ -1,5 +1,5 @@
 /**
- * The line-work realism replaces, as it fades (9.4, 9.6, 9.7, 9.8): which billboards, orbit lines, Rail line, Rings and Moons
+ * The line-work realism replaces, as it fades (9.4, 9.6, 9.7, 9.8, 9.9): which billboards, orbit lines, Rail line, Rings and Moons
  * are held, and what one fade writes to them, on structural fakes and on real three objects.
  */
 
@@ -13,7 +13,7 @@ import { Line2 as DreiLine2, LineGeometry as DreiLineGeometry, LineMaterial as D
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import { fadeStarMarks, holdReplacedLine, holdStarMarks, type FadedMaterial, type StarMarks } from './line-fade.ts';
+import { fadeStarMarks, holdBodyMarks, holdReplacedLine, type FadedMaterial, type StarMarks } from './line-fade.ts';
 import { buildRail, RAIL_LINE_SAMPLES_PER_SEGMENT, railLine } from './rail-model.ts';
 import { buildScene, type SceneArtifact } from './scene-model.ts';
 import { notableRings } from './notable-model.ts';
@@ -36,17 +36,31 @@ function fakeMarks(...materials: FadedMaterial[]): StarMarks & { materials: Fade
   };
 }
 
-test('a Star’s billboard is held by its ID, dropped on null, and a Planet’s never', () => {
+test('every Body’s billboard, a Star’s or a Planet’s, is held by its ID and dropped on null (9.9)', () => {
   const held = new Map<string, string>();
-  holdStarMarks(held, STAR, 'billboard');
+  holdBodyMarks(held, STAR, 'billboard');
   assert.deepEqual([...held], [['client:a', 'billboard']]);
-  holdStarMarks(held, STAR, 'again');
+  holdBodyMarks(held, STAR, 'again');
   assert.deepEqual([...held], [['client:a', 'again']], 'a new ref replaces the old');
-  holdStarMarks(held, PLANET, 'planet');
-  assert.deepEqual([...held], [['client:a', 'again']], 'a Planet is ignored');
-  holdStarMarks(held, PLANET, null);
-  holdStarMarks(held, STAR, null);
+  holdBodyMarks(held, PLANET, 'planet');
+  assert.deepEqual([...held], [['client:a', 'again'], ['project:a/one', 'planet']], 'a Planet is held too, under its own ID');
+  holdBodyMarks(held, PLANET, null);
+  assert.deepEqual([...held], [['client:a', 'again']], 'dropped on null');
+  holdBodyMarks(held, STAR, null);
   assert.deepEqual([...held], []);
+});
+
+test('a Planet’s outline falls on the fade with a Star’s marks, hides at 0, and is whole on a bad read', () => {
+  const held = new Map<string, StarMarks & { materials: FadedMaterial[] }>();
+  holdBodyMarks(held, STAR, fakeMarks({ opacity: 1 }, { opacity: 1 }));
+  holdBodyMarks(held, PLANET, fakeMarks({ opacity: 1 }));
+  for (const [fade, opacity, visible] of [[1, 1, true], [0.4, 0.4, true], [0, 0, false], [Number.NaN, 1, true]] as const) {
+    fadeStarMarks(held.values(), fade);
+    const planet = held.get(PLANET.id)!;
+    assert.equal(planet.visible, visible, `fade ${fade}`);
+    assert.equal(planet.materials[0]?.opacity, opacity, `fade ${fade}`);
+    assert.equal(held.get(STAR.id)!.materials[1]?.opacity, opacity, `the Star with it, fade ${fade}`);
+  }
 });
 
 test('one fade sets every held billboard’s visibility and every material’s opacity, whole', () => {
@@ -79,7 +93,7 @@ test('over real three objects, every mesh under a billboard takes the fade, and 
   inner.add(outline, dot);
   billboard.add(inner);
   const held = new Map<string, Group>();
-  holdStarMarks(held, STAR, billboard);
+  holdBodyMarks(held, STAR, billboard);
   fadeStarMarks(held.values(), 0.25);
   assert.deepEqual([billboard.visible, (outline.material as MeshBasicMaterial).opacity, (dot.material as MeshBasicMaterial).opacity], [true, 0.25, 0.25]);
   fadeStarMarks(held.values(), 0);

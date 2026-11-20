@@ -22,7 +22,7 @@ const ARTIFACT: RealismArtifact = {
   railLine: [],
   clients: [{ id: 'client:a', position: ORIGIN, luminanceBand: 'stroke-rest', appearance: { tint: 'white', pulsePhase: 0 }, projects: [{ id: 'project:a/one', clientId: 'client:a', position: { x: 10, y: 0, z: 0 }, luminanceBand: 'stroke-rest', orbitNormal: { x: 0, y: 0, z: 1 }, isDeep: false, appearance: { map: 'moon', meanLuminance: 0.3, tilt: 0, spinRate: 0.05, spinPhase: 0 } }] }],
 };
-const DRAW: RealismDraw = { scene: 'scene', camera: 'camera', renderer: 'renderer', delta: 0.5, reduced: false, pace: 1, subject: () => null };
+const DRAW: RealismDraw = { scene: 'scene', camera: 'camera', renderer: 'renderer', delta: 0.5, reduced: false, pace: 1, subject: () => null, approached: () => null };
 const BASE = '/base/';
 const IMAGES: ReadonlyMap<string, string> = new Map([['moon', 'image']]);
 const NO_RESET = (): void => undefined;
@@ -828,8 +828,8 @@ function recordingLayer(seen: unknown[][]): RealismLayer {
     warm: () => Promise.resolve(),
     attach() {},
     arrive() {},
-    frame(_camera, _delta, _reduced, pace, subject) {
-      seen.push([pace, subject]);
+    frame(_camera, _delta, _reduced, pace, subject, approached) {
+      seen.push([pace, subject, approached]);
     },
     fade: () => 1,
     dispose() {},
@@ -861,7 +861,33 @@ test('with a layer, the subject is resolved once a frame, inside the owner, and 
   owner.frame(ARTIFACT, BASE, { ...DRAW, pace: 1, subject: () => { calls += 1; return null; } });
   owner.frame(ARTIFACT, BASE, { ...DRAW, pace: 1, subject: () => { calls += 1; return 'client:gone'; } });
   assert.equal(calls, 3);
-  assert.deepEqual(seen, [[0.25, 'client:a'], [1, null], [1, 'client:gone']]);
+  assert.deepEqual(seen, [[0.25, 'client:a', null], [1, null, null], [1, 'client:gone', null]]);
+});
+
+test('with a layer, the approached Project is resolved once a frame, inside the owner, and handed on after the subject (9.9)', async () => {
+  const seen: unknown[][] = [];
+  const { owner } = await arrivedOwner(() => recordingLayer(seen));
+  seen.length = 0;
+  let calls = 0;
+  owner.frame(ARTIFACT, BASE, { ...DRAW, subject: () => 'project:a/one', approached: () => { calls += 1; return 'project:a/one'; } });
+  owner.frame(ARTIFACT, BASE, { ...DRAW, approached: () => { calls += 1; return 'project:a/two'; } });
+  owner.frame(ARTIFACT, BASE, { ...DRAW, approached: () => { calls += 1; return null; } });
+  assert.equal(calls, 3);
+  assert.deepEqual(seen, [[1, 'project:a/one', 'project:a/one'], [1, null, 'project:a/two'], [1, null, null]]);
+});
+
+test('before decode the approached Project is not read, and one that throws fails silently, as the subject does (9.9)', async () => {
+  let calls = 0;
+  const fetching = ownerOver(() => new Promise(() => undefined));
+  for (let at = 0; at < 6; at += 1) fetching.owner.frame(ARTIFACT, BASE, { ...DRAW, approached: () => { calls += 1; return null; } });
+  await settled();
+  assert.equal(calls, 0, 'idle and fetching');
+  const layerCalls: string[] = [];
+  const { owner } = await arrivedOwner(() => fakeLayer(layerCalls));
+  assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, { ...DRAW, approached: () => { throw new Error('the store threw'); } }));
+  assert.deepEqual(owner.status(), { document: 'failed', uploaded: false });
+  assert.equal(layerCalls.at(-1), 'dispose');
+  assert.doesNotThrow(() => owner.frame(ARTIFACT, BASE, DRAW));
 });
 
 test('a subject that throws: failed, silently, everything removed, and the loop goes on', async () => {
@@ -934,6 +960,7 @@ const MOUNT_LINES: readonly string[] = [
   "import { motionPace, reducedMotion } from '../shell/motion-preference.ts';",
   "import { BASE } from '../shell/route.ts';",
   "import { navigationStore } from '../shell/state.ts';",
+  "import { approachedId } from './affordance-model.ts';",
   "import { RAIL_LINE_SAMPLES_PER_SEGMENT, railLine, type Rail } from './rail-model.ts';",
   "import { createRealismOwner, type RealismArtifact } from './realism-status.ts';",
   "import { sceneSubject } from './stroke-model.ts';",
@@ -950,7 +977,7 @@ const MOUNT_LINES: readonly string[] = [
   '  useEffect(() => owner.enterCanvas(), []);',
   '  useFrame(({ scene, camera, gl }, delta) => {',
   '    const reduced = reducedMotion();',
-  '    owner.frame(drawn, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });',
+  '    owner.frame(drawn, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail), approached: () => approachedId(navigationStore.getState()) });',
   '  });',
   '  return null;',
   '}',
@@ -973,7 +1000,7 @@ test('the mount is one owner at module scope, one effect, one frame callback and
 test('the mount audit rejects each departure, and a comment is not one', () => {
   const real = read(MOUNT_PATH).replaceAll('\r\n', '\n');
   const READ = '    const reduced = reducedMotion();\n';
-  const FRAME = '    owner.frame(drawn, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail) });\n';
+  const FRAME = '    owner.frame(drawn, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail), approached: () => approachedId(navigationStore.getState()) });\n';
   const USE = `  useFrame(({ scene, camera, gl }, delta) => {\n${READ}${FRAME}  });\n`;
   const BINDING = `const owner = createRealismOwner(() => ${THE_IMPORT}, () => resetFrameSampling());`;
   for (const [name, mutate] of [
@@ -998,6 +1025,11 @@ test('the mount audit rejects each departure, and a comment is not one', () => {
     ['the pace held at a fixed value', (s: string) => s.replace('pace: motionPace(reduced)', 'pace: 1')],
     ['the subject resolved outside the owner', (s: string) => s.replace('subject: () => sceneSubject(navigationStore.getState(), rail)', 'subject: ((value) => () => value)(sceneSubject(navigationStore.getState(), rail))')],
     ['the subject fixed', (s: string) => s.replace('sceneSubject(navigationStore.getState(), rail)', 'null')],
+    // 9.9: the approached Project, which the rim carries, is a thunk too, read by the outline's own rule.
+    ['the approach resolved outside the owner', (s: string) => s.replace('approached: () => approachedId(navigationStore.getState())', 'approached: ((value) => () => value)(approachedId(navigationStore.getState()))')],
+    ['the approach fixed', (s: string) => s.replace('approached: () => approachedId(navigationStore.getState())', 'approached: () => null')],
+    ['the approach read off the hover alone', (s: string) => s.replace('approached: () => approachedId(navigationStore.getState())', 'approached: () => navigationStore.getState().hoveredProjectId')],
+    ['the approach dropped', (s: string) => s.replace(', approached: () => approachedId(navigationStore.getState())', '')],
     ['writing the store', (s: string) => s.replace(READ, `${READ}    navigationStore.setState({ focusedProjectId: null });\n`)],
     ['no rail prop', (s: string) => s.replace('  readonly rail: Rail;\n', '')],
     ['no cleanup: the effect drops what entering returns', (s: string) => s.replace('useEffect(() => owner.enterCanvas(), [])', 'useEffect(() => { owner.enterCanvas(); }, [])')],

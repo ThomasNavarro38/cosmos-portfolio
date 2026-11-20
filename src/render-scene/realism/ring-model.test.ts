@@ -436,7 +436,7 @@ test('under the layer: before warm there is no renderer and the moon\'s scale is
   camera.position.set(10, 0, 300);
   camera.lookAt(10, 0, 0);
   layer.attach(scene);
-  layer.frame(camera, 0, false, 1, null);
+  layer.frame(camera, 0, false, 1, null, null);
   const moon = named(scene, 'moon:project:a/deep')[0]!;
   assert.equal(moon.scale.x, 1, 'no renderer yet');
   const LINK_STATUS = 0x8b82;
@@ -449,7 +449,7 @@ test('under the layer: before warm there is no renderer and the moon\'s scale is
     getSize: (target: { set(x: number, y: number): unknown }) => target.set(1920, height),
   } as unknown as WebGLRenderer;
   await layer.warm(renderer, camera, scene);
-  layer.frame(camera, 0, false, 1, null);
+  layer.frame(camera, 0, false, 1, null, null);
   const plan = ringPlans(ARTIFACT)[0]!;
   assert.equal(moon.scale.x, moonScale(plan, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, 1080));
   assert.ok(moon.scale.x > 1);
@@ -458,7 +458,7 @@ test('under the layer: before warm there is no renderer and the moon\'s scale is
   const px = (MOON_RADIUS * moon.scale.x * camera.projectionMatrix.elements[5]! * 1080) / (2 * depth);
   assert.ok(Math.abs(px - MOON_MIN_RADIUS_PX) < 1e-6, `${px} px`);
   height = 0;
-  layer.frame(camera, 0, false, 1, null);
+  layer.frame(camera, 0, false, 1, null, null);
   assert.equal(moon.scale.x, 1, 'a height of 0: scale 1');
   layer.dispose();
 });
