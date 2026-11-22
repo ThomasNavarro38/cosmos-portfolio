@@ -12,13 +12,27 @@ import { stripComments } from '../../../scripts/source-scan.ts';
 import { tokens } from '../../tokens/tokens.ts';
 import type { RealismArtifact } from '../realism-status.ts';
 import { BELT_RENDER_ORDER, buildScene, type SceneArtifact } from '../scene-model.ts';
-import { ORBIT_SEGMENTS, sceneLines } from '../stroke-model.ts';
+import { ORBIT_SEGMENTS, PLANET_RADIUS, sceneLines } from '../stroke-model.ts';
 import { BELT_DRAWS_BUDGET } from './budgets.ts';
 import { beltTint, createBelt } from './belt-layer.ts';
-import { BELT_BAND_LUMINANCE, BELT_DENSITY_FLOOR, BELT_HALF_WIDTH_RATIO, BELT_NOISE_CELLS, beltAlpha, beltArrays, beltColor, beltPlans, type BeltBand } from './belt-model.ts';
+import {
+  BELT_BAND_LUMINANCE,
+  BELT_DENSITY_FLOOR,
+  BELT_HALF_WIDTH_RATIO,
+  BELT_JUNCTION_RADIUS,
+  BELT_JUNCTION_SOFTNESS,
+  BELT_NOISE_CELLS,
+  beltAlpha,
+  beltArrays,
+  beltColor,
+  beltJunction,
+  beltPlans,
+  type BeltBand,
+} from './belt-model.ts';
 import { BELT_FRAGMENT_SHADER, BELT_VERTEX_SHADER } from './belt-shader.ts';
 import { createFillLayer } from './fill-layer.ts';
-import { addedDraws, FILL_CEILING_LUMINANCE, fillPlans } from './fill-model.ts';
+import { addedDraws, FILL_CEILING_LUMINANCE, FILL_RADIUS_RATIO, fillPlans } from './fill-model.ts';
+import { glslFloat } from './star-shader.ts';
 import { STAR_BAND_LUMINANCE, starPlans } from './star-model.ts';
 import { STAR_TINT_TOKENS } from './star-layer.ts';
 
@@ -109,6 +123,131 @@ test('the alpha is (1 - t²)² across, times the density from its floor to 1, ti
   }
 });
 
+// --- The junction with its Planet ---------------------------------------------------------------
+
+const R = BELT_JUNCTION_RADIUS;
+const S = BELT_JUNCTION_SOFTNESS;
+const at = (x: number, y: number, z: number) => ({ x, y, z });
+const smooth = (gap: number): number => {
+  const t = Math.min(Math.max(gap / S, 0), 1);
+  return t * t * (3 - 2 * t);
+};
+const near = (actual: number, expected: number, name: string): void => assert.ok(Math.abs(actual - expected) < 1e-9, `${name}: ${actual}, not ${expected}`);
+
+test('the junction\'s constants: the fill\'s own radius, and a softness of 0.2', () => {
+  assert.equal(BELT_JUNCTION_RADIUS, FILL_RADIUS_RATIO * PLANET_RADIUS);
+  assert.equal(BELT_JUNCTION_SOFTNESS, 0.2);
+});
+
+/** Every case below is built from R and S, so tuning either keeps each test on its own row of the matrix. */
+const D = 20 * R;
+/** The point at `t` along the ray from the camera through `point`. */
+const along = (point: { x: number; y: number; z: number }, t: number) => {
+  const length = Math.hypot(point.x, point.y, point.z);
+  return at((point.x / length) * t, (point.y / length) * t, (point.z / length) * t);
+};
+/** The distance along the ray through `point` to the sphere's front surface, by the quadratic: an independent reference. */
+const frontHit = (point: { x: number; y: number; z: number }, centre: { x: number; y: number; z: number }): number => {
+  const length = Math.hypot(point.x, point.y, point.z);
+  const b = (point.x * centre.x + point.y * centre.y + point.z * centre.z) / length;
+  return b - Math.sqrt(b * b - (centre.x ** 2 + centre.y ** 2 + centre.z ** 2 - R * R));
+};
+
+test('the junction\'s cases hold for these constants: the softness under the radius, both far under the distance', () => {
+  assert.ok(S > 0 && S < R && R + S < D / 4, `S ${S}, R ${R}, D ${D}`);
+});
+
+test('the junction: off the fill and well in front it is 1', () => {
+  const centre = at(0, 0, -D);
+  assert.equal(beltJunction(at(R, 0, -D / 2), centre), 1, 'the ray meets the disc plane at 2R, outside the fill');
+  assert.equal(beltJunction(at(0, 0, -D / 2), centre), 1, 'over the footprint, far before the sphere and the plane');
+  assert.equal(beltJunction(at(0, 0, -(D - R) + S + 1e-9), centre), 1, 'S before the sphere\'s front');
+  assert.equal(beltJunction(at(2 * R, 0, -(D + R)), centre), 1, 'behind the plane, but off the footprint');
+});
+
+test('the junction: 0 on the sphere\'s front surface, rising continuously to 1 over S', () => {
+  const centre = at(0, 0, -D);
+  const front = -(D - R);
+  near(beltJunction(at(0, 0, front), centre), 0, 'on the front surface');
+  let last = 0;
+  for (let step = 0; step <= 40; step += 1) {
+    const gap = (S * step) / 40;
+    const factor = beltJunction(at(0, 0, front + gap), centre);
+    near(factor, smooth(gap), `${gap} before the sphere`);
+    assert.ok(factor >= last - 1e-9, 'never falls toward the camera');
+    assert.ok(factor - last < 0.06, 'no step');
+    last = factor;
+  }
+  near(last, 1, 'whole at S');
+});
+
+test('the junction: 0 on the disc plane, and 0 behind it, whatever the fills write', () => {
+  const centre = at(D / 2, 0, -D);
+  const point = at(centre.x - R / 2, 0, centre.z);
+  near(beltJunction(point, centre), 0, 'on the plane');
+  for (const scale of [1.001, 1 + R / (4 * D), 1 + R / D, 1.1]) {
+    assert.equal(beltJunction(at(point.x * scale, 0, point.z * scale), centre), 0, `${scale}: beyond the plane`);
+  }
+  assert.equal(beltJunction(at(0, 0, -(D + R / 2)), at(0, 0, -D)), 0, 'behind the plane on axis');
+  assert.equal(beltJunction(at(0, 0, -(D + 2 * R)), at(0, 0, -D)), 0, 'beyond the sphere\'s back');
+});
+
+test('the junction off axis, near the limb: the sphere\'s front surface comes before the disc plane along the ray, and governs', () => {
+  const centre = at(D / 2, 0, -D);
+  // The ray through a point of the disc just inside the footprint, on the side toward the axis.
+  const disc = at(centre.x - 0.98 * R, 0, centre.z);
+  const hit = frontHit(disc, centre);
+  const toPlane = Math.hypot(disc.x, disc.y, disc.z);
+  assert.ok(hit > 0 && hit < toPlane, 'over the footprint the sphere\'s front hit precedes the plane\'s');
+  for (let step = 0; step <= 8; step += 1) {
+    const gap = (S * step) / 8;
+    const view = along(disc, hit - gap);
+    near(beltJunction(view, centre), smooth(gap), `${gap} before the sphere`);
+  }
+  const half = beltJunction(along(disc, hit - S / 2), centre);
+  near(half, 0.5, 'half way through the softness');
+});
+
+test('the junction with the camera inside the sphere: the front hit is behind the camera, so the plane term alone governs', () => {
+  const centre = at(0, 0, -R / 2);
+  for (let step = 0; step < 8; step += 1) {
+    const gap = (R / 2) * (step / 8);
+    near(beltJunction(at(0, 0, centre.z + gap), centre), smooth(gap), `${gap} before the plane`);
+  }
+  near(beltJunction(at(0, 0, centre.z + S / 2), centre), 0.5, 'half way through the softness, before the plane');
+  // Off axis, the plane's gap is measured along the ray, not in view z.
+  const plane = at(R / 4, 0, centre.z);
+  const toPlane = Math.hypot(plane.x, plane.z);
+  near(beltJunction(along(plane, toPlane - S / 2), centre), 0.5, 'along the ray, half way through the softness');
+});
+
+test('the junction at the silhouette: it steps from 1 only where the ray crosses the footprint\'s edge', () => {
+  const centre = at(0, 0, -D);
+  const z = -(D - R / 4);
+  const scale = z / centre.z;
+  assert.equal(beltJunction(at((R + 1e-6) * scale, 0, z), centre), 1, 'just outside');
+  const inside = beltJunction(at((R - 1e-6) * scale, 0, z), centre);
+  assert.ok(inside < 1, `just inside, ${inside}`);
+});
+
+test('the junction\'s degenerate fragments are 1 and never NaN', () => {
+  const centre = at(0, 0, -10);
+  const cases = [
+    ['at the camera', at(0, 0, 0)],
+    ['parallel to the disc plane', at(1, 0, 0)],
+    ['behind the camera', at(0, 0, 1)],
+  ] as const;
+  for (const [name, view] of cases) assert.equal(beltJunction(view, centre), 1, name);
+  assert.equal(beltJunction(at(0, 0, -5), at(0, 0, 0)), 1, 'a Planet in the camera\'s plane: the ray never meets its disc');
+  assert.equal(beltJunction(at(0, 0, -5), at(0, 0, 3)), 1, 'a Planet behind the camera: the ray never meets its disc');
+  for (let x = -3; x <= 3; x += 0.25) {
+    for (let z = -12; z <= 1; z += 0.25) {
+      const factor = beltJunction(at(x, 0.1, z), centre);
+      assert.ok(factor >= 0 && factor <= 1, `${x}, ${z}: ${factor}`);
+    }
+  }
+});
+
 /** One belt pixel over a destination, blended on encoded values as the framebuffer does, decoded to linear luminance. */
 function blended(band: BeltBand, alpha: number, destination: readonly number[]): number {
   const source = beltColor(BELT_LINEAR, BELT_BAND_LUMINANCE[band]).map(toSrgb);
@@ -191,7 +330,7 @@ test('each strip\'s centreline is its orbit, and its inner and outer edges are a
 
 test('the vertex and index counts: two vertices per orbit point and two triangles per segment, each strip indexing only its own', () => {
   const plans = beltPlans(committed());
-  const { positions, belt, luminance, index } = beltArrays(plans);
+  const { positions, belt, luminance, planet, index } = beltArrays(plans);
   const vertices = plans.length * 2 * (ORBIT_SEGMENTS + 1);
   assert.equal(positions.length, 3 * vertices);
   assert.equal(belt.length, 2 * vertices);
@@ -206,6 +345,15 @@ test('the vertex and index counts: two vertices per orbit point and two triangle
   assert.ok(Math.max(...index) === vertices - 1);
   plans.forEach((plan, at) => {
     for (let v = at * per; v < (at + 1) * per; v += 1) assert.equal(luminance[v], Math.fround(BELT_BAND_LUMINANCE[plan.band]), `${plan.id}: its band`);
+  });
+  assert.equal(planet.length, 3 * vertices);
+  const positionsById = new Map(committed().clients.flatMap((client) => client.projects.map((each) => [each.id, each.position] as const)));
+  plans.forEach((plan, at) => {
+    const expected = positionsById.get(plan.id)!;
+    assert.deepEqual(plan.planet, expected, `${plan.id}: its Planet's position`);
+    for (let v = at * per; v < (at + 1) * per; v += 1) {
+      assert.deepEqual([...planet.subarray(3 * v, 3 * v + 3)], [expected.x, expected.y, expected.z].map(Math.fround), `${plan.id} vertex ${v}: its Planet's centre`);
+    }
   });
   assert.ok(positions.every(Number.isFinite));
 });
@@ -270,7 +418,7 @@ test('an artifact with no Planet has no belt: no plans, empty arrays, no mesh, a
   const starsOnly: RealismArtifact = { railLine: [], clients: ARTIFACT.clients.map((client) => ({ ...client, projects: [] })) };
   assert.deepEqual(beltPlans(starsOnly), []);
   const arrays = beltArrays([]);
-  assert.deepEqual([arrays.positions.length, arrays.belt.length, arrays.luminance.length, arrays.index.length], [0, 0, 0, 0]);
+  assert.deepEqual([arrays.positions.length, arrays.belt.length, arrays.luminance.length, arrays.planet.length, arrays.index.length], [0, 0, 0, 0, 0]);
   const group = new Group();
   assert.equal(createBelt([], beltTint(), { value: 0 }, group), null);
   assert.equal(group.children.length, 0);
@@ -287,13 +435,13 @@ test('an artifact with no Planet has no belt: no plans, empty arrays, no mesh, a
 test('the shader: no time, no step, no discard; the density line, the normalised colour line and the colour space, as written', () => {
   for (const source of [BELT_VERTEX_SHADER, BELT_FRAGMENT_SHADER]) {
     assert.doesNotMatch(source, /\buTime\b|\btime\b/i, 'no time uniform');
-    assert.doesNotMatch(source, /step\(|\bdiscard\b/, 'no threshold and no discard, so no specks');
+    assert.doesNotMatch(source, /\bstep\(|\bdiscard\b/, 'no threshold and no discard, so no specks');
     assert.doesNotMatch(source, /gl_PointSize|gl_PointCoord/, 'no points');
   }
   assert.match(BELT_FRAGMENT_SHADER, /float density = mix\(DENSITY_FLOOR, 1\.0, n\);/);
   assert.match(BELT_FRAGMENT_SHADER, /vec3 lit = min\(uColor \/ max\(dot\(uColor, WEIGHTS\), 1e-6\) \* vLuminance, vec3\(1\.0\)\);/);
   assert.match(BELT_FRAGMENT_SHADER, /float profile = \(1\.0 - t \* t\) \* \(1\.0 - t \* t\);/);
-  assert.match(BELT_FRAGMENT_SHADER, /gl_FragColor = vec4\(lit, profile \* density \* uFade\);\n\s*#include <colorspace_fragment>/);
+  assert.match(BELT_FRAGMENT_SHADER, /gl_FragColor = vec4\(lit, profile \* density \* uFade \* junction\(vView, vCentre\)\);\n\s*#include <colorspace_fragment>/);
   assert.match(BELT_FRAGMENT_SHADER, /const vec3 WEIGHTS = vec3\(0\.2126, 0\.7152, 0\.0722\);/);
   assert.match(BELT_FRAGMENT_SHADER, new RegExp(`const float DENSITY_FLOOR = ${BELT_DENSITY_FLOOR};`));
   assert.match(BELT_FRAGMENT_SHADER, new RegExp(`const float CELLS_ALONG = ${BELT_NOISE_CELLS.along}\\.0;`));
@@ -301,6 +449,30 @@ test('the shader: no time, no step, no discard; the density line, the normalised
   assert.match(BELT_FRAGMENT_SHADER, /noise\(p, CELLS_ALONG\)/);
   assert.match(BELT_FRAGMENT_SHADER, /noise\(p \* 2\.0, 2\.0 \* CELLS_ALONG\)/, 'the second octave wraps at a whole count too');
   assert.deepEqual([...BELT_FRAGMENT_SHADER.matchAll(/uniform \w+ (\w+);/g)].map((match) => match[1]), ['uColor', 'uFade'], 'nothing else changes');
+});
+
+test('the shader\'s junction: in view space, from the model\'s constants, the same steps as beltJunction', () => {
+  assert.match(BELT_VERTEX_SHADER, /attribute vec3 aPlanet;/);
+  assert.match(BELT_VERTEX_SHADER, /vView = \(modelViewMatrix \* vec4\(position, 1\.0\)\)\.xyz;/);
+  assert.match(BELT_VERTEX_SHADER, /vCentre = \(modelViewMatrix \* vec4\(aPlanet, 1\.0\)\)\.xyz;/);
+  assert.match(BELT_VERTEX_SHADER, /gl_Position = projectionMatrix \* vec4\(vView, 1\.0\);/);
+  for (const source of [BELT_VERTEX_SHADER, BELT_FRAGMENT_SHADER]) assert.match(source, /varying vec3 vView, vCentre;/);
+  assert.ok(BELT_FRAGMENT_SHADER.includes(`const float R = ${glslFloat(BELT_JUNCTION_RADIUS)}, S = ${glslFloat(BELT_JUNCTION_SOFTNESS)};`), 'the radius and the softness, from the model');
+  const junction = [
+    '  float junction(vec3 v, vec3 c) {',
+    '    if (v.z >= 0.0 || c.z >= 0.0) return 1.0;',
+    '    vec2 q = v.xy * (c.z / v.z) - c.xy;',
+    '    if (dot(q, q) >= R * R) return 1.0;',
+    '    float l = length(v), g = (v.z - c.z) * l / -v.z;',
+    '    vec3 d = v / l, p = c - dot(c, d) * d;',
+    '    float k = dot(c, d), h = R * R - dot(p, p);',
+    '    if (h > 0.0 && k > sqrt(h)) g = min(g, k - sqrt(h) - l);',
+    '    return smoothstep(0.0, S, g);',
+    '  }',
+    '  void main() {',
+  ].join('\n');
+  assert.ok(BELT_FRAGMENT_SHADER.includes(`\n${junction}\n`), 'the junction, whole and in order, as beltJunction computes it');
+  assert.equal(BELT_FRAGMENT_SHADER.split('float junction(').length, 2, 'one junction');
 });
 
 const LAYER_SOURCE = stripComments(readFileSync(new URL('./belt-layer.ts', import.meta.url), 'utf8'));
@@ -435,6 +607,10 @@ test('createBelt alone: one mesh into the group it is handed, on the fade it is 
   assert.ok(belt !== null);
   assert.equal(group.children.length, 1);
   assert.equal(belt.material.uniforms.uFade, fade);
+  const attribute = (group.children[0] as Mesh).geometry.getAttribute('aPlanet') as BufferAttribute;
+  assert.equal(attribute.itemSize, 3);
+  assert.deepEqual(Array.from(attribute.array), Array.from(beltArrays(beltPlans(ARTIFACT)).planet), 'each vertex carries its Planet\'s centre');
+  assert.deepEqual(Object.keys(belt.material.uniforms), ['uColor', 'uFade'], 'the centre is an attribute, never a uniform');
   belt.dispose();
   belt.dispose();
   assert.equal(group.children.length, 0);

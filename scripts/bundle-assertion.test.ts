@@ -195,6 +195,8 @@ function changed(chunks: readonly ChunkView[], fileName: string, change: Partial
 }
 
 const fileOf = (chunks: readonly ChunkView[], fileName: string): ChunkView => chunks.find((out) => out.fileName === fileName) as ChunkView;
+/** A byte count as the assertion writes it, so each message follows the budget. */
+const grouped = (n: number): string => n.toLocaleString('en-US');
 
 test('checkRealism: the expected shape passes, and scene counts its closure minus the mount\'s', () => {
   const view = viewOf(realismGraph());
@@ -220,8 +222,8 @@ test('checkRealism fails naming each break', () => {
     ['the realism chunk statically imported by the mount', changed(base, 'assets/mount.js', { imports: ['assets/ui.js', 'assets/realism.js'] }), /static closure of the mount chunk \(in assets\/realism\.js\)/],
     ['a realism module on the entry', changed(base, 'assets/index.js', { moduleIds: [MAIN, REALISM_DECODE] }), /static closure of the entry \(in assets\/index\.js\)/],
     ['the realism chunk statically imported by the entry', changed(base, 'assets/index.js', { imports: ['assets/realism.js'] }), /static closure of the entry \(in assets\/realism\.js\)/],
-    ['realism over budget', changed(base, 'assets/realism.js', { bytes: REALISM_CHUNK_BYTES_BUDGET + 1 }), /realism is 24,001 bytes, over its budget of 24,000/],
-    ['realism over budget through its closure outside the scene', [...changed(base, 'assets/realism.js', { imports: ['assets/scene.js', 'assets/own.js'] }), chunk('assets/own.js', [`${ROOT}/src/x.ts`], { bytes: REALISM_CHUNK_BYTES_BUDGET })], /realism is 26,000 bytes/],
+    ['realism over budget', changed(base, 'assets/realism.js', { bytes: REALISM_CHUNK_BYTES_BUDGET + 1 }), new RegExp(`realism is ${grouped(REALISM_CHUNK_BYTES_BUDGET + 1)} bytes, over its budget of ${grouped(REALISM_CHUNK_BYTES_BUDGET)}`)],
+    ['realism over budget through its closure outside the scene', [...changed(base, 'assets/realism.js', { imports: ['assets/scene.js', 'assets/own.js'] }), chunk('assets/own.js', [`${ROOT}/src/x.ts`], { bytes: REALISM_CHUNK_BYTES_BUDGET })], new RegExp(`realism is ${grouped(REALISM_CHUNK_BYTES_BUDGET + 2_000)} bytes`)],
     ['scene over budget', changed(base, 'assets/scene.js', { bytes: SCENE_CHUNK_BYTES_BUDGET + 1 }), /scene is 963,001 bytes, over its budget of 960,000/],
     ['scene over budget through its closure', changed(base, 'assets/tokens.js', { bytes: 60_001 }), /scene is 960,001 bytes/],
     ['three in the mount', [...threeOut.filter((out) => out.fileName !== 'assets/mount.js'), { ...fileOf(base, 'assets/mount.js'), moduleIds: [MOUNT_TSX, THREE_MODULE] }], /three is in assets\/mount\.js, inside the mount's closure/],
@@ -251,9 +253,9 @@ test('checkRealism: a shared chunk holding three counts against scene, exactly a
 });
 
 test('the realism budgets, and the line that reports them', () => {
-  assert.equal(REALISM_CHUNK_BYTES_BUDGET, 24_000);
+  assert.equal(REALISM_CHUNK_BYTES_BUDGET, 25_000, 'raised from 24,000 by the ruling of 2026-11-22');
   assert.equal(SCENE_CHUNK_BYTES_BUDGET, 960_000);
-  assert.equal(realismLine(1_234, 950_000), 'realism is 1,234 of 24,000 bytes, and scene is 950,000 of 960,000 bytes.');
+  assert.equal(realismLine(1_234, 950_000), `realism is 1,234 of ${grouped(REALISM_CHUNK_BYTES_BUDGET)} bytes, and scene is 950,000 of 960,000 bytes.`);
 });
 
 /** A logger that keeps what the plugin reports, so a passing build proves the assertion ran. */

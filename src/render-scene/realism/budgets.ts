@@ -17,7 +17,8 @@ export const MAP_COUNT_BUDGET = 12;
 export const MAP_WIDTH_BUDGET = 1024;
 export const MAP_HEIGHT_BUDGET = 512;
 export const MAP_TOTAL_BYTES_BUDGET = 4_000_000;
-export const REALISM_CHUNK_BYTES_BUDGET = 24_000;
+/** 24,000 until the ruling of 2026-11-22 raised it, so a belt can meet its Planet softly. */
+export const REALISM_CHUNK_BYTES_BUDGET = 25_000;
 export const SCENE_CHUNK_BYTES_BUDGET = 960_000;
 export const SPHERE_WIDTH_SEGMENTS_BUDGET = 64;
 export const SPHERE_HEIGHT_SEGMENTS_BUDGET = 32;

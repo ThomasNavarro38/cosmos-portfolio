@@ -40,7 +40,9 @@
  * hairlines (9.6), the Rail's line (9.7) and a Deep Planet's Ring and Moon (9.8), as it
  * rises. The belts, the ribbon, the discs and the moons write no depth at any fade. Two
  * artefacts of the fade are 9.10's (the crossfade): while it runs no fill writes depth, so a
- * far belt, disc or moon shows over a nearer fill; and the M2 Moon dot and the moon sphere
+ * far disc or moon shows over a nearer fill, as a belt does over a sibling Planet's (behind
+ * its own Planet a belt is hidden at any fade, by its own alpha, which fades out before the
+ * fill's sphere and disc); and the M2 Moon dot and the moon sphere
  * share `MOON_RENDER_ORDER` at one place, so three's depth sort can flicker between them.
  *
  * **The images stay.** `dispose` frees the GPU's copies and never closes a bitmap:

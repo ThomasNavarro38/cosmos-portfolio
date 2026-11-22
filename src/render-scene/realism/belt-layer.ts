@@ -11,8 +11,11 @@
  * **Drawn after the fills, depth-tested against them** (`BELT_RENDER_ORDER`), with normal
  * blending and no depth write, both sides in a single pass (`forceSinglePass`, so three
  * does not split it into a back-face and a front-face draw), so a belt's near side passes
- * over its Planet and its far side is hidden behind it once the fills write depth. The colour is
- * `realism-belt`'s, read here and nowhere else.
+ * over its Planet. Each vertex carries its Planet's centre as `aPlanet`, so the shader fades
+ * the belt out before the fill's sphere and disc: its far side is hidden behind its own
+ * Planet at any fade, by its own alpha, and the fill's flat depth never cuts it in a straight
+ * line. Behind a sibling Planet's fill it is hidden only once the fills write depth. The
+ * colour is `realism-belt`'s, read here and nowhere else.
  */
 
 import { BufferAttribute, BufferGeometry, Color, DoubleSide, type Group, Mesh, NormalBlending, ShaderMaterial } from 'three';
@@ -43,11 +46,12 @@ export function beltTint(): Color {
 /** The one belt mesh for these plans, in `color` (`beltTint()`), added to `group`, reading `fade`; `null`, adding nothing, when there are none. */
 export function createBelt(plans: readonly BeltPlan[], color: Color, fade: { value: number }, group: Group): Belt | null {
   if (plans.length === 0) return null;
-  const { positions, belt, luminance, index } = beltArrays(plans);
+  const { positions, belt, luminance, planet, index } = beltArrays(plans);
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(positions, 3));
   geometry.setAttribute('aBelt', new BufferAttribute(belt, 2));
   geometry.setAttribute('aLuminance', new BufferAttribute(luminance, 1));
+  geometry.setAttribute('aPlanet', new BufferAttribute(planet, 3));
   geometry.setIndex(new BufferAttribute(index, 1));
   const material = new ShaderMaterial({
     vertexShader: BELT_VERTEX_SHADER,
