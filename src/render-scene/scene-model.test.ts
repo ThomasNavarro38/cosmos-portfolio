@@ -1570,7 +1570,9 @@ const EFFECTS =
  * (7.7), as a word of its own (`GLOW_` and `-glow-` delimit it, a letter does not),
  * and nothing else there. Each is blanked only there, so any other `glow` in
  * `scene-model.ts`, a `glow` in any other file, and a bloom, a shadow or a light under
- * `realism/`, still fail.
+ * `realism/`, still fail. A third (2026-11-25): the identifier `textShadow`, whole, in
+ * `client-label-model.ts`, the Client names' tight halo of the page ground, its width
+ * pinned within 2px by that model's own test; any other effect there still fails.
  */
 function effectsIn(files: readonly { readonly path: string; readonly source: string }[]): string[] {
   const every = new RegExp(EFFECTS.source, `${EFFECTS.flags.replace('g', '')}g`);
@@ -1578,9 +1580,11 @@ function effectsIn(files: readonly { readonly path: string; readonly source: str
     const stripped = stripComments(file.source);
     const code = file.path === 'src/render-scene/scene-model.ts'
       ? stripped.replace(/(?<![\w$-])GLOW_RENDER_ORDER(?![\w$-])/g, '')
-      : file.path.startsWith('src/render-scene/realism/')
-        ? stripped.replace(/(?<![a-z])glows?(?![a-z])/gi, ' ')
-        : stripped;
+      : file.path === 'src/render-scene/client-label-model.ts'
+        ? stripped.replace(/(?<![\w$-])textShadow(?![\w$-])/g, '')
+        : file.path.startsWith('src/render-scene/realism/')
+          ? stripped.replace(/(?<![a-z])glows?(?![a-z])/gi, ' ')
+          : stripped;
     return [...code.matchAll(every)].map((match) => {
       const line = code.slice(0, match.index).split('\n').length;
       return `${file.path}:${line} holds ${match[0]}`;
@@ -1630,6 +1634,22 @@ test('the effects audit rejects each form, in code, and ignores comments', () =>
     effectsIn([{ path: 'src/shell/x.tsx', source: "const a = 1;\n<ambientLight />\n// glow\nstyle={{ boxShadow: 'x', borderRadius: 2 }}" }]),
     ['src/shell/x.tsx:2 holds ambientLight', 'src/shell/x.tsx:4 holds boxShadow', 'src/shell/x.tsx:4 holds borderRadius'],
   );
+});
+
+test('the halo allowance is the one identifier in the one file, and it is in use', () => {
+  const LABELS = 'src/render-scene/client-label-model.ts';
+  assert.match(stripComments(sourceFiles().find((file) => file.path === LABELS)?.source ?? ''), /\btextShadow: CLIENT_LABEL_HALO\b/, 'the allowance has something to admit');
+  assert.deepEqual(effectsIn([{ path: LABELS, source: 'const style = { textShadow: CLIENT_LABEL_HALO };' }]), []);
+  const rejected: readonly (readonly [string, string])[] = [
+    ['src/render-scene/affordance-model.ts', "const style = { textShadow: '0 0 1px #000' };"],
+    ['src/shell/x.tsx', 'const style = { textShadow: CLIENT_LABEL_HALO };'],
+    [LABELS, "const css = 'text-shadow: 0 0 1px #000';"],
+    [LABELS, 'const style = { boxShadow: CLIENT_LABEL_HALO };'],
+    [LABELS, "const style = { filter: 'blur(2px)' };"],
+    [LABELS, "const style = { borderRadius: '2px' };"],
+    [LABELS, 'const style = { textShadowX: 1 };'],
+  ];
+  for (const [path, source] of rejected) assert.notDeepEqual(effectsIn([{ path, source }]), [], `${path}: ${source} must be rejected`);
 });
 
 test('the glow allowance is the one identifier in the one file and the word under realism/, and it is in use', () => {

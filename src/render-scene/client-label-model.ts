@@ -34,11 +34,14 @@
  * `ink-label`. Both in `scene-label-client`. While a Project is Focused the
  * subject is a Planet, so no name is lifted.
  *
- * **The plate is the contrast proof.** Each name stands on an opaque
- * `surface-base` plate reaching `PLATE_PAD_PX` past its text, with no edge,
- * corner, shade or fade — the affordance's plate (7.9). The ground under every
- * glyph is therefore the page ground in every session, whatever the scene draws
- * behind it, and the flat-token audit on that ground is exact.
+ * **The halo is the contrast ground.** Each name carries `CLIENT_LABEL_HALO`,
+ * stacked `text-shadow`s of the opaque `surface-base` page ground, each at most
+ * 2px wide, with no box. The ground at every glyph's edge is therefore the page
+ * ground, or very near it, whatever the scene draws behind, and the flat-token
+ * audit is read on that ground. It replaced the opaque 7.9 plate (Thomas,
+ * 2026-11-23), whose hard dark box cut through the Stars' glow; a wider feather
+ * was tried and dropped (2026-11-25): it still laid a dark smudge in the glow.
+ * The estimated box, padding included, is still what the hides measure.
  *
  * **The Motes' labels yield to a shown name.** `sceneLabelObstacles` is the
  * affordance's obstacles plus every shown name's box, read from the same
@@ -81,7 +84,7 @@ import { bodyRadius, sceneSubject, type SubjectState } from './stroke-model.ts';
 /** The gap between a Star's outline on screen and the top of its name's plate, in CSS pixels. Tunable. */
 export const CLIENT_LABEL_GAP_PX = 8;
 
-/** The name's type: `scene-label-client` (11px, 300, 0.36em). */
+/** The name's type: `scene-label-client` (12px, 300, 0.22em). */
 export const CLIENT_LABEL_TYPE = tokens.typography['scene-label-client'];
 
 /** The name's font size, in CSS pixels, read off the token. */
@@ -346,18 +349,26 @@ export function clientLabelOverlayStyle() {
 }
 
 /**
+ * The name's ground: stacked, unoffset `text-shadow`s of the opaque page ground,
+ * kept tight. They lay the page ground right under every glyph's edge, where its
+ * contrast is read, and stop there: any wider layer shows as a dark smudge
+ * through a Star's glow. Tunable, within 2px.
+ */
+export const CLIENT_LABEL_HALO = [1, 2].map((blur) => `0 0 ${blur}px ${tokens.colors['surface-base-dark']}`).join(', ');
+
+/**
  * A name's plate: placed at the canvas's top-left and moved by its transform,
  * on one line, hidden until placed, in `scene-label-client` and the receded ink
- * until a frame writes its own. The page ground, opaque, `PLATE_PAD_PX` past the
- * text on every side, with no edge, corner, shade or fade (7.9's plate).
+ * until a frame writes its own. No box: its ground is `CLIENT_LABEL_HALO`, and
+ * its `PLATE_PAD_PX` padding keeps the estimated box the one the model places.
  */
 export function clientLabelPlateStyle() {
   return {
     position: 'absolute',
     left: 0,
     top: 0,
-    background: tokens.colors['surface-base-dark'],
     padding: `${PLATE_PAD_PX}px`,
+    textShadow: CLIENT_LABEL_HALO,
     whiteSpace: 'nowrap',
     pointerEvents: 'none',
     visibility: 'hidden',

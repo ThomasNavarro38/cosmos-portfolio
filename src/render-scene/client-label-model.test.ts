@@ -29,7 +29,9 @@ import {
 import {
   CLIENT_LABEL_CAPITAL_EM,
   CLIENT_LABEL_CLEARANCE_PX,
+  CLIENT_LABEL_FONT_PX,
   CLIENT_LABEL_GAP_PX,
+  CLIENT_LABEL_HALO,
   CLIENT_LABEL_RECEDED_INK,
   CLIENT_LABEL_SUBJECT_INK,
   applyClientLabels,
@@ -160,12 +162,12 @@ test('the pool is one label per Client, in artifact order, its name published as
 
 test('the estimated plate is fontPx × (advance + letterSpacing) per code point, a capital or digit wider, by fontPx × lineHeight, plus the pad', () => {
   const type = tokens.typography['scene-label-client'];
-  assert.equal(type.fontSize, '11px');
-  assert.equal(type.letterSpacing, '0.36em');
+  assert.equal(type.fontSize, '12px');
+  assert.equal(type.letterSpacing, '0.22em');
   assert.ok(CLIENT_LABEL_CAPITAL_EM > LABEL_CHAR_EM, 'a capital errs wider than the mean advance');
   const size = clientLabelSize('Alpha');
-  assert.ok(near(size.width, 11 * (CLIENT_LABEL_CAPITAL_EM + 4 * LABEL_CHAR_EM + 5 * 0.36) + 2 * PLATE_PAD_PX));
-  assert.ok(near(size.height, 11 * type.lineHeight + 2 * PLATE_PAD_PX));
+  assert.ok(near(size.width, 12 * (CLIENT_LABEL_CAPITAL_EM + 4 * LABEL_CHAR_EM + 5 * 0.22) + 2 * PLATE_PAD_PX));
+  assert.ok(near(size.height, 12 * type.lineHeight + 2 * PLATE_PAD_PX));
   assert.ok(clientLabelSize('SIMSU').width > clientLabelSize('simsu').width, 'an all-capital name is estimated wider');
   assert.ok(near(clientLabelSize('9').width, clientLabelSize('A').width), 'a digit takes the capital advance');
   assert.equal(clientLabelSize('😀').width, clientLabelSize('a').width, 'an astral character is one advance');
@@ -510,10 +512,28 @@ test('at every committed Rail stop, at each viewport, no shown name’s opaque p
 
 // --- The plate and the overlay -----------------------------------------------------------------
 
-test('the plate is the opaque page ground, padded 1px, in scene-label-client, with no edge, corner or shade', () => {
+test('the plate has no box: its ground is a tight halo of the opaque page ground, hugging the glyphs and never smudging the glow', () => {
   const style = clientLabelPlateStyle();
-  assert.equal(style.background, tokens.colors['surface-base-dark']);
-  assert.match(style.background, /^#[0-9A-Fa-f]{6}$/, 'opaque: a six-digit hex, no alpha');
+  const record = style as Record<string, unknown>;
+  for (const key of ['background', 'backgroundColor', 'boxShadow', 'borderRadius']) assert.equal(record[key], undefined, `no ${key}: no box to cut the sky`);
+  const ground = tokens.colors['surface-base-dark'];
+  assert.match(ground, /^#[0-9A-Fa-f]{6}$/, 'opaque: a six-digit hex, no alpha');
+  assert.equal(style.textShadow, CLIENT_LABEL_HALO);
+  const layers = CLIENT_LABEL_HALO.split(', ').map((layer) => /^0 0 (\d+(?:\.\d+)?)px (#[0-9A-Fa-f]{6})$/.exec(layer));
+  assert.ok(layers.length >= 2, 'stacked, so the ground at the glyph edge is near opaque');
+  const blurs = layers.map((match) => {
+    assert.ok(match !== null, 'every layer is unoffset and opaque');
+    const [, blur, colour] = match;
+    assert.equal(colour, ground, 'every layer is the page ground');
+    return Number(blur);
+  });
+  assert.ok(blurs.slice(1).every((blur, i) => blur > blurs[i]!), 'each layer wider than the last');
+  assert.ok(blurs.every((blur) => blur <= 2), 'every layer hugs the glyphs: a wider one lays a dark smudge through a Star’s glow');
+  assert.ok(blurs.at(-1)! < CLIENT_LABEL_FONT_PX / 4, 'the halo stays inside the letterforms’ own gaps');
+});
+
+test('the plate is padded 1px, in scene-label-client, with no edge or corner', () => {
+  const style = clientLabelPlateStyle();
   assert.equal(PLATE_PAD_PX, 1);
   assert.equal(style.padding, '1px');
   assert.equal(style.whiteSpace, 'nowrap');
@@ -529,7 +549,7 @@ test('the plate is the opaque page ground, padded 1px, in scene-label-client, wi
   assert.deepEqual(clientLabelOverlayStyle(), { position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none' });
 });
 
-test('both inks clear 4.5:1 on the plate, and the subject’s is the lifted one', () => {
+test('both inks clear 4.5:1 on the halo’s ground, and the subject’s is the lifted one', () => {
   assert.equal(CLIENT_LABEL_SUBJECT_INK, tokens.colors['ink-lift-dark']);
   assert.equal(CLIENT_LABEL_RECEDED_INK, tokens.colors['ink-label-dark']);
   for (const ink of [CLIENT_LABEL_SUBJECT_INK, CLIENT_LABEL_RECEDED_INK]) {

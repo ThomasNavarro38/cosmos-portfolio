@@ -96,7 +96,7 @@ colors:
 
 typography:
   fontFamily:
-    sans: '"Helvetica Neue", Helvetica, Arial, sans-serif'
+    sans: '"Helvetica Neue", "Segoe UI Variable Text", "Segoe UI", Helvetica, Arial, sans-serif'
     sans-light-theme: '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif'
     mono: 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace'
 
@@ -109,10 +109,10 @@ typography:
 
   scene-label-client:
     fontFamily: "{typography.fontFamily.sans}"
-    fontSize: "11px"
+    fontSize: "12px"
     fontWeight: 300
     lineHeight: 1.3
-    letterSpacing: "0.36em"
+    letterSpacing: "0.22em"
 
   scene-label-project:
     fontFamily: "{typography.fontFamily.sans}"
@@ -632,8 +632,10 @@ verification on the greybox at M1.]`
 
 ## 3. Typography
 
-One family. `"Helvetica Neue", Helvetica, Arial, sans-serif` — a light
-grotesque, weight 200–300 throughout, never above 400. There is no second
+One family. `"Helvetica Neue", "Segoe UI Variable Text", "Segoe UI", Helvetica, Arial, sans-serif` — a light
+grotesque, weight 200–300 throughout, never above 400. *[amended 2026-11-25 (Thomas): Segoe UI Variable Text and
+Segoe UI stand in for Helvetica Neue on Windows, which ships neither it nor a light Arial, so every 200 and 300 weight
+had rendered as regular Arial there. Helvetica Neue still leads wherever it is installed.]* There is no second
 family at M2, with one exception: the Colophon's JSON body is set in the system
 monospace stack, `typography.fontFamily.mono`, and nowhere else (§7.11). The
 serif recorded in `typography.fontFamily.sans-light-theme` is for the future
@@ -649,7 +651,7 @@ weight, so that it reads as writing rather than as a filled-in form.
 | Role | Size | Weight | Tracking | Where |
 |---|---|---|---|---|
 | `chrome` | 9.5px | 300 | 0.34em | Two corner lines per frame. Never a third. |
-| `scene-label-client` | 11px | 300 | 0.36em | A Client Star's name. Widest tracking in the system — a Star's name should read as a plate designation, not a word. |
+| `scene-label-client` | 12px | 300 | 0.22em | A Client Star's name. Tracked, but read as a name. *[amended 2026-11-25 (Thomas): was 11px at 0.36em, a plate designation; over a Star's glow it read heavy and stark, so it is a size up and tracked closer.]* |
 | `scene-label-project` | 12px | 300 | 0.12em | A Project's title on hover or Focus. Nearly untracked, because it is a sentence fragment and must read at speed. |
 | `scene-label-secondary` | 9.5px | 300 | 0.17em | The sub-line under a hovered Project: role, team size, class. |
 | `mote-label` | 9.5px | 300 | 0.16em | Skill names on condensed Motes. |
@@ -857,7 +859,7 @@ must not be mistaken for a decoration.
 A circle at `stroke-focus` weight 0.9px when it is the Star the camera is
 heading for; at `stroke-rest`/`stroke-near` weight 0.7–0.8px otherwise. A
 filled core dot at ~15% radius. Label below at `scene-label-client`, tracked to
-0.36em, in `ink-lift` when it is the subject and `ink-quiet` or `ink-faint`
+0.22em *[amended 2026-11-25: was 0.36em]*, in `ink-lift` when it is the subject and `ink-quiet` or `ink-faint`
 when receded. Radius derives from nothing authored — a Star's scale is a
 function of its Projects, not a design decision.
 

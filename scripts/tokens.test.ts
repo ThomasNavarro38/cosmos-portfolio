@@ -519,11 +519,11 @@ test('the parser reads constructs nothing emits: a folded scalar, a list, a date
 
 test('tokens.ts: resolved values with literal types', () => {
   assert.equal(tokens.colors['stroke-dust-dark'], '#1D1D22');
-  assert.equal(tokens.typography['panel-title'].fontFamily, '"Helvetica Neue", Helvetica, Arial, sans-serif');
+  assert.equal(tokens.typography['panel-title'].fontFamily, '"Helvetica Neue", "Segoe UI Variable Text", "Segoe UI", Helvetica, Arial, sans-serif');
   assert.equal(tokens.typography['panel-title'].fontFamily, tokens.typography.fontFamily.sans);
   // Compile-time: these assignments typecheck only because the object is `as const`.
   const dust: '#1D1D22' = tokens.colors['stroke-dust-dark'];
-  const family: '"Helvetica Neue", Helvetica, Arial, sans-serif' = tokens.typography['panel-title'].fontFamily;
+  const family: '"Helvetica Neue", "Segoe UI Variable Text", "Segoe UI", Helvetica, Arial, sans-serif' = tokens.typography['panel-title'].fontFamily;
   assert.ok(dust && family);
   // No alias survives anywhere in the emitted object.
   assert.doesNotMatch(JSON.stringify(tokens), /\{[a-z-]+\.[a-z.-]+\}/i);
