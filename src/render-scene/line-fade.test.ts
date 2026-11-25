@@ -1,6 +1,7 @@
 /**
- * The line-work realism replaces, as it fades (9.4, 9.6, 9.7, 9.8, 9.9): which billboards, orbit lines, Rail line, Rings and Moons
- * are held, and what one fade writes to them, on structural fakes and on real three objects.
+ * The line-work realism replaces, as it fades (9.4, 9.6, 9.7, 9.8, 9.9, 9.10): which billboards, orbit lines, Rail line, Rings and Moons
+ * are held, what one fade writes to them, and how the mount's one write (`fadeLineWork`, 9.10) reaches every source, on
+ * structural fakes and on real three objects.
  */
 
 import { strict as assert } from 'node:assert';
@@ -13,7 +14,7 @@ import { Line2 as DreiLine2, LineGeometry as DreiLineGeometry, LineMaterial as D
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import { fadeStarMarks, holdBodyMarks, holdReplacedLine, type FadedMaterial, type StarMarks } from './line-fade.ts';
+import { fadeLineWork, fadeMarks, holdBodyMarks, holdReplacedLine, type FadedMaterial, type LineWorkSource, type ReplacedMarks } from './line-fade.ts';
 import { buildRail, RAIL_LINE_SAMPLES_PER_SEGMENT, railLine } from './rail-model.ts';
 import { buildScene, type SceneArtifact } from './scene-model.ts';
 import { notableRings } from './notable-model.ts';
@@ -23,7 +24,7 @@ const STAR = { id: 'client:a', kind: 'star' };
 const PLANET = { id: 'project:a/one', kind: 'planet' };
 
 /** A billboard with these materials, one per child, the first child carrying an array. */
-function fakeMarks(...materials: FadedMaterial[]): StarMarks & { materials: FadedMaterial[] } {
+function fakeMarks(...materials: FadedMaterial[]): ReplacedMarks & { materials: FadedMaterial[] } {
   const [first, ...rest] = materials;
   const children: object[] = [{}, ...(first === undefined ? [] : [{ material: [first] }]), ...rest.map((material) => ({ material }))];
   return {
@@ -51,11 +52,11 @@ test('every Body’s billboard, a Star’s or a Planet’s, is held by its ID an
 });
 
 test('a Planet’s outline falls on the fade with a Star’s marks, hides at 0, and is whole on a bad read', () => {
-  const held = new Map<string, StarMarks & { materials: FadedMaterial[] }>();
+  const held = new Map<string, ReplacedMarks & { materials: FadedMaterial[] }>();
   holdBodyMarks(held, STAR, fakeMarks({ opacity: 1 }, { opacity: 1 }));
   holdBodyMarks(held, PLANET, fakeMarks({ opacity: 1 }));
   for (const [fade, opacity, visible] of [[1, 1, true], [0.4, 0.4, true], [0, 0, false], [Number.NaN, 1, true]] as const) {
-    fadeStarMarks(held.values(), fade);
+    fadeMarks(held.values(), fade);
     const planet = held.get(PLANET.id)!;
     assert.equal(planet.visible, visible, `fade ${fade}`);
     assert.equal(planet.materials[0]?.opacity, opacity, `fade ${fade}`);
@@ -67,7 +68,7 @@ test('one fade sets every held billboard’s visibility and every material’s o
   const a = fakeMarks({ opacity: 1 }, { opacity: 1 });
   const b = fakeMarks({ opacity: 1 });
   for (const [fade, visible] of [[0.4, true], [0, false], [1, true], [0.001, true]] as const) {
-    fadeStarMarks([a, b], fade);
+    fadeMarks([a, b], fade);
     for (const marks of [a, b]) {
       assert.equal(marks.visible, visible, `fade ${fade}`);
       assert.ok(marks.materials.every((material) => material.opacity === fade), `fade ${fade}`);
@@ -78,11 +79,11 @@ test('one fade sets every held billboard’s visibility and every material’s o
 test('a fade out of range is clamped, and one that is not finite reads as 1', () => {
   const marks = fakeMarks({ opacity: 0.5 });
   for (const [fade, value] of [[-1, 0], [2, 1], [Number.NaN, 1], [Number.POSITIVE_INFINITY, 1], [Number.NEGATIVE_INFINITY, 1]] as const) {
-    fadeStarMarks([marks], fade);
+    fadeMarks([marks], fade);
     assert.equal(marks.materials[0]?.opacity, value, `fade ${fade}`);
     assert.equal(marks.visible, value > 0, `fade ${fade}`);
   }
-  assert.doesNotThrow(() => fadeStarMarks([], 0.5), 'no Star, nothing to do');
+  assert.doesNotThrow(() => fadeMarks([], 0.5), 'no Star, nothing to do');
 });
 
 test('over real three objects, every mesh under a billboard takes the fade, and the billboard hides at 0', () => {
@@ -94,11 +95,11 @@ test('over real three objects, every mesh under a billboard takes the fade, and 
   billboard.add(inner);
   const held = new Map<string, Group>();
   holdBodyMarks(held, STAR, billboard);
-  fadeStarMarks(held.values(), 0.25);
+  fadeMarks(held.values(), 0.25);
   assert.deepEqual([billboard.visible, (outline.material as MeshBasicMaterial).opacity, (dot.material as MeshBasicMaterial).opacity], [true, 0.25, 0.25]);
-  fadeStarMarks(held.values(), 0);
+  fadeMarks(held.values(), 0);
   assert.equal(billboard.visible, false);
-  fadeStarMarks(held.values(), 1);
+  fadeMarks(held.values(), 1);
   assert.deepEqual([billboard.visible, (outline.material as MeshBasicMaterial).opacity], [true, 1], 'and they return whole');
 });
 
@@ -140,9 +141,9 @@ test('over real drei-style lines, the orbits and the Rail take the fade, hide at
   holdReplacedLine(held, { id: 'rail' }, rail);
   const star = new Group();
   star.add(new Mesh(undefined, new MeshBasicMaterial({ transparent: true, opacity: 1 })));
-  const marks = new Map<string, StarMarks>([['client:a', star]]);
+  const marks = new Map<string, ReplacedMarks>([['client:a', star]]);
   for (const [fade, visible] of [[1, true], [0.4, true], [0, false], [Number.NaN, true]] as const) {
-    fadeStarMarks([...marks.values(), ...held.values()], fade);
+    fadeMarks([...marks.values(), ...held.values()], fade);
     const value = Number.isFinite(fade) ? fade : 1;
     assert.deepEqual([orbit.visible, orbit.material.opacity], [visible, value], `the orbit at ${fade}`);
     assert.equal(((star.children[0] as Mesh).material as MeshBasicMaterial).opacity, value, `the Star marks with it, at ${fade}`);
@@ -176,7 +177,7 @@ test('over drei’s own line classes, an orbit falls with the fade and comes bac
   assert.deepEqual([...held.keys()], ['orbit:project:a/one', 'rail'], 'the orbit and the Rail are held (9.7)');
   // Arrival, then failure: lineWorkFade() reads 1 again once realism has failed.
   for (const [fade, visible] of [[1, true], [0.5, true], [0, false], [1, true]] as const) {
-    fadeStarMarks(held.values(), fade);
+    fadeMarks(held.values(), fade);
     assert.deepEqual([orbit.visible, orbit.material.opacity], [visible, fade], `the orbit at ${fade}`);
     assert.deepEqual([rail.visible, rail.material.opacity], [visible, fade], `the Rail at ${fade}`);
   }
@@ -206,11 +207,11 @@ test('the fade skips a handle not mounted yet, and fades the Moons\' pool around
   const moon = new Mesh(undefined, new MeshBasicMaterial({ transparent: true, opacity: 1 }));
   const pool: (Mesh | null | undefined)[] = [null, moon, undefined];
   for (const [fade, visible] of [[1, true], [0.4, true], [0, false], [Number.NaN, true]] as const) {
-    assert.doesNotThrow(() => fadeStarMarks(pool, fade));
+    assert.doesNotThrow(() => fadeMarks(pool, fade));
     const value = Number.isFinite(fade) ? fade : 1;
     assert.deepEqual([moon.visible, (moon.material as MeshBasicMaterial).opacity], [visible, value], `the Moon at ${fade}`);
   }
-  assert.doesNotThrow(() => fadeStarMarks([null, undefined], 0.5), 'nothing mounted, nothing to do');
+  assert.doesNotThrow(() => fadeMarks([null, undefined], 0.5), 'nothing mounted, nothing to do');
 });
 
 test('over real drei-style lines, a Ring falls with the Star marks, orbits and Rail, hides at 0 and returns whole (9.8)', () => {
@@ -220,8 +221,110 @@ test('over real drei-style lines, a Ring falls with the Star marks, orbits and R
   holdReplacedLine(held, { id: 'ring:project:a/deep' }, ring);
   holdReplacedLine(held, { id: 'orbit:project:a/deep' }, orbit);
   for (const [fade, visible] of [[1, true], [0.4, true], [0, false], [1, true]] as const) {
-    fadeStarMarks(held.values(), fade);
+    fadeMarks(held.values(), fade);
     assert.deepEqual([ring.visible, ring.material.opacity], [visible, fade], `the Ring at ${fade}`);
     assert.deepEqual([orbit.visible, orbit.material.opacity], [visible, fade], `the orbit with it, at ${fade}`);
   }
+});
+
+// --- The mount's one write (9.10) ----------------------------------------------------------------
+
+test('fadeLineWork writes every source at the one fade, and an empty set is nothing to do (9.10)', () => {
+  const a = fakeMarks({ opacity: 1 }, { opacity: 1 });
+  const b = fakeMarks({ opacity: 1 });
+  const c = fakeMarks({ opacity: 1 });
+  const sources: LineWorkSource[] = [() => [a, b], () => new Map([['moon', c]]).values()];
+  for (const [fade, value] of [[1, 1], [0.4, 0.4], [0, 0], [Number.NaN, 1], [-1, 0], [2, 1]] as const) {
+    fadeLineWork(sources, fade);
+    for (const marks of [a, b, c]) {
+      assert.equal(marks.visible, value > 0, `fade ${fade}`);
+      assert.ok(marks.materials.every((material) => material.opacity === value), `fade ${fade}`);
+    }
+  }
+  assert.doesNotThrow(() => fadeLineWork([], 0.5), 'no source, nothing to do');
+  assert.doesNotThrow(() => fadeLineWork(new Set<LineWorkSource>(), 0.5));
+  assert.doesNotThrow(() => fadeLineWork([() => []], 0.5), 'a source holding nothing yet');
+});
+
+test('a source that throws is skipped, silently, and every other source is still written (9.10)', () => {
+  const before = fakeMarks({ opacity: 1 });
+  const after = fakeMarks({ opacity: 1 });
+  const throwing: ReplacedMarks = {
+    visible: true,
+    traverse() {
+      throw new Error('traverse');
+    },
+  };
+  const sources: LineWorkSource[] = [
+    () => [before],
+    () => {
+      throw new Error('a binding read');
+    },
+    () => [throwing],
+    () => [after],
+  ];
+  assert.doesNotThrow(() => fadeLineWork(sources, 0.25));
+  assert.deepEqual([before.visible, before.materials[0]?.opacity], [true, 0.25], 'the source before');
+  assert.deepEqual([after.visible, after.materials[0]?.opacity], [true, 0.25], 'and the source after, both written');
+});
+
+test('a mark that throws in the middle of one source is skipped, and the marks before and after it in that source are written (9.10)', () => {
+  const before = fakeMarks({ opacity: 1 });
+  const after = fakeMarks({ opacity: 1 });
+  const throwing: ReplacedMarks = {
+    visible: true,
+    traverse() {
+      throw new Error('traverse');
+    },
+  };
+  // As body-field.tsx hands it: one combined source over every held mark.
+  const sources: LineWorkSource[] = [() => [before, throwing, after]];
+  for (const fade of [0.4, 0, 1]) {
+    assert.doesNotThrow(() => fadeLineWork(sources, fade));
+    assert.deepEqual([before.visible, before.materials[0]?.opacity], [fade > 0, fade], `the mark before, at ${fade}`);
+    assert.deepEqual([after.visible, after.materials[0]?.opacity], [fade > 0, fade], `the mark after, at ${fade}`);
+  }
+});
+
+test('a source returning handles not mounted yet is skipped around them (9.10)', () => {
+  const moon = fakeMarks({ opacity: 1 });
+  const sources: LineWorkSource[] = [() => [null, undefined], () => [null, moon, undefined]];
+  assert.doesNotThrow(() => fadeLineWork(sources, 0));
+  assert.deepEqual([moon.visible, moon.materials[0]?.opacity], [false, 0]);
+  fadeLineWork(sources, 1);
+  assert.deepEqual([moon.visible, moon.materials[0]?.opacity], [true, 1], 'and it returns whole');
+});
+
+test('over real three objects, a Line2, a Mesh and a Group across two sources fall together and return whole (9.10)', () => {
+  const orbit = new Line2(new LineGeometry(), new LineMaterial({ transparent: true, opacity: 1 }));
+  const billboard = new Group();
+  const outline = new Mesh(undefined, new MeshBasicMaterial({ transparent: true, opacity: 1 }));
+  billboard.add(outline);
+  const moon = new Mesh(undefined, new MeshBasicMaterial({ transparent: true, opacity: 1 }));
+  const bodyMarks = new Map<string, ReplacedMarks>([['client:a', billboard]]);
+  const replacedLines = new Map<string, ReplacedMarks>([['orbit:project:a/one', orbit]]);
+  const pool: (Mesh | null)[] = [moon, null];
+  const sources = new Set<LineWorkSource>([() => [...bodyMarks.values(), ...replacedLines.values()], () => pool]);
+  for (const [fade, visible] of [[1, true], [0.4, true], [0, false], [Number.NaN, true]] as const) {
+    fadeLineWork(sources, fade);
+    const value = Number.isFinite(fade) ? fade : 1;
+    assert.deepEqual([orbit.visible, orbit.material.opacity], [visible, value], `the orbit at ${fade}`);
+    assert.deepEqual([billboard.visible, (outline.material as MeshBasicMaterial).opacity], [visible, value], `the billboard at ${fade}`);
+    assert.deepEqual([moon.visible, (moon.material as MeshBasicMaterial).opacity], [visible, value], `the Moon at ${fade}`);
+  }
+});
+
+test('a removed source is no longer written (9.10: an unmounted field)', () => {
+  const kept = fakeMarks({ opacity: 1 });
+  const gone = fakeMarks({ opacity: 1 });
+  const sources = new Set<LineWorkSource>();
+  const keep: LineWorkSource = () => [kept];
+  const leave: LineWorkSource = () => [gone];
+  sources.add(keep);
+  sources.add(leave);
+  fadeLineWork(sources, 0.5);
+  sources.delete(leave);
+  fadeLineWork(sources, 0);
+  assert.deepEqual([kept.visible, kept.materials[0]?.opacity], [false, 0]);
+  assert.deepEqual([gone.visible, gone.materials[0]?.opacity], [true, 0.5], 'the removed source keeps what it was last written');
 });

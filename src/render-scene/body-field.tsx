@@ -19,9 +19,10 @@
  * those two strings changing and on nothing else: `useSyncExternalStore` over
  * the store's `subscribe`, with `sceneSubject(navigationStore.getState(), rail)`
  * and `approachedId(navigationStore.getState())` as the snapshots — each a
- * string or `null`, so equal snapshots are equal by `Object.is`. One frame loop,
- * the line-work's fade below, and no write to the store but the pointer's approach,
- * through `scene-pick.ts`.
+ * string or `null`, so equal snapshots are equal by `Object.is`. No frame loop
+ * (9.10: the line-work's fade is written by the mount), one effect registering the held
+ * marks with it, and no write to the store but the pointer's approach, through
+ * `scene-pick.ts`.
  *
  * **Drawn after the Dust.** Every visible draw — outline, Ring, core dot, orbit,
  * Rail — carries `BODY_RENDER_ORDER` with a `transparent` material at opacity 1, so
@@ -31,26 +32,26 @@
  *
  * **A Star's outline and core dot give way to its light (9.4), an orbit to its belt (9.6),
  * the Rail to its nebula (9.7), a Deep Planet's Ring to its ring disc (9.8), and a Planet's
- * outline to its atmosphere rim (9.9).** One ref map holds every Body's billboard, a Star's
- * or a Planet's, by `holdBodyMarks`, and a second the replaced lines, by
- * `holdReplacedLine`, on the scene hairlines' ref and the Ring's: it holds each orbit's, the
- * Rail's and each Ring's, and no other. One frame loop hands both maps to `fadeStarMarks`
- * on one read of the realism owner's `lineWorkFade()`, through the mount: 1 until realism
- * has arrived and after it fails, `1 - fade` while it rises, so the Body marks (every
- * outline, a Star's core dot, and the Ring inside a Planet's billboard), the orbits, the Rail
- * and the Rings fall together, whole, with the Moons (`moon-field.tsx`, on the same read).
- * The approach's `stroke-active` outline falls with them: under realism the rim carries it
- * (9.9). 9.10 makes the fade a crossfade. The JSX still declares
- * every draw at opacity 1, so First Paint is M2's. The loop runs before the mount's, so
- * it reads the fade one frame late, which is accepted.
+ * outline to its atmosphere rim (9.9).** One ref map, `bodyMarks`, holds every Body's
+ * billboard, a Star's or a Planet's, by `holdBodyMarks`, and a second, `replacedLines`, the
+ * replaced lines, by `holdReplacedLine`, on the scene hairlines' ref and the Ring's: it holds
+ * each orbit's, the Rail's and each Ring's, and no other. One effect hands both maps to the
+ * mount, by `holdLineWork`, as one thunk over their current values, and returns the remover
+ * as its cleanup. 9.10: the fade is written by the mount, in its own frame callback, right
+ * after the owner's frame and on that frame's one `lineWorkFade()` read: 1 until realism has
+ * arrived and after it fails, `1 - fade` while it rises. So the Body marks (every outline, a
+ * Star's core dot, and the Ring inside a Planet's billboard), the orbits, the Rail and the
+ * Rings fall together, whole, with the Moons (`moon-field.tsx`, registered the same way), on
+ * the same frame as the layer rises, and return on the frame it fails. The approach's
+ * `stroke-active` outline falls with them: under realism the rim carries it (9.9). The JSX
+ * still declares every draw at opacity 1, so First Paint is M2's.
  */
 
 import { Billboard, Line } from '@react-three/drei';
-import { useFrame } from '@react-three/fiber';
-import { useRef, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { navigationStore } from '../shell/state.ts';
-import { fadeStarMarks, holdBodyMarks, holdReplacedLine, type StarMarks } from './line-fade.ts';
-import { lineWorkFade } from './realism-mount.tsx';
+import { holdBodyMarks, holdReplacedLine, type ReplacedMarks } from './line-fade.ts';
+import { holdLineWork } from './realism-mount.tsx';
 import { RAIL_LINE_SAMPLES_PER_SEGMENT, railLine, type Rail } from './rail-model.ts';
 import { notableRings } from './notable-model.ts';
 import { activateBody, hoverBody, leaveBody } from './scene-pick.ts';
@@ -67,9 +68,9 @@ export interface BodyFieldProps {
 export function BodyField({ bodies, rail }: BodyFieldProps) {
   const subject = useSyncExternalStore(navigationStore.subscribe, () => sceneSubject(navigationStore.getState(), rail));
   const approached = useSyncExternalStore(navigationStore.subscribe, () => approachedId(navigationStore.getState()));
-  const starMarks = useRef(new Map<string, StarMarks>());
-  const replacedLines = useRef(new Map<string, StarMarks>());
-  useFrame(() => fadeStarMarks([...starMarks.current.values(), ...replacedLines.current.values()], lineWorkFade()));
+  const bodyMarks = useRef(new Map<string, ReplacedMarks>());
+  const replacedLines = useRef(new Map<string, ReplacedMarks>());
+  useEffect(() => holdLineWork(() => [...bodyMarks.current.values(), ...replacedLines.current.values()]), []);
 
   return (
     <>
@@ -87,7 +88,7 @@ export function BodyField({ bodies, rail }: BodyFieldProps) {
       ))}
       {bodies.map((body) => (
         <group key={body.id} position={[body.position.x, body.position.y, body.position.z]}>
-          <Billboard ref={(group) => holdBodyMarks(starMarks.current, body, group)}>
+          <Billboard ref={(group) => holdBodyMarks(bodyMarks.current, body, group)}>
             <Line
               points={circlePoints(CIRCLE_SEGMENTS, bodyRadius(body))}
               color={bodyStroke(body, subject, approached).color}

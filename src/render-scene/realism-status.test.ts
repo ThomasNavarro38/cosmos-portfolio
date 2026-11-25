@@ -952,7 +952,13 @@ test('realism-status.ts imports nothing, reads no store, logs nothing, throws no
   assert.deepEqual(audit(`${source}\n// import x; console.warn; image.close();\n`), [], 'a comment is prose');
 });
 
-/** The mount, whole, as its comment-stripped lines: anything else in the file is a departure. */
+/**
+ * The mount, whole, as its comment-stripped lines: anything else in the file is a departure.
+ * 9.10: the fade is written by the mount. `lineWorkFade` is no longer exported; the mount holds
+ * one module-scope set of line-work sources, `holdLineWork` adds one and returns its remover,
+ * and the one frame callback writes them by `fadeLineWork` right after `owner.frame(...)`, on
+ * one `owner.lineWorkFade()` read.
+ */
 const MOUNT_LINES: readonly string[] = [
   "import { useFrame } from '@react-three/fiber';",
   "import { useEffect, useMemo } from 'react';",
@@ -961,12 +967,17 @@ const MOUNT_LINES: readonly string[] = [
   "import { BASE } from '../shell/route.ts';",
   "import { navigationStore } from '../shell/state.ts';",
   "import { approachedId } from './affordance-model.ts';",
+  "import { fadeLineWork, type LineWorkSource } from './line-fade.ts';",
   "import { RAIL_LINE_SAMPLES_PER_SEGMENT, railLine, type Rail } from './rail-model.ts';",
   "import { createRealismOwner, type RealismArtifact } from './realism-status.ts';",
   "import { sceneSubject } from './stroke-model.ts';",
   `const owner = createRealismOwner(() => ${THE_IMPORT}, () => resetFrameSampling());`,
-  'export function lineWorkFade(): number {',
-  '  return owner.lineWorkFade();',
+  'const lineWork = new Set<LineWorkSource>();',
+  'export function holdLineWork(source: LineWorkSource): () => void {',
+  '  lineWork.add(source);',
+  '  return () => {',
+  '    lineWork.delete(source);',
+  '  };',
   '}',
   'export interface RealismMountProps {',
   "  readonly artifact: Omit<RealismArtifact, 'railLine'>;",
@@ -978,6 +989,7 @@ const MOUNT_LINES: readonly string[] = [
   '  useFrame(({ scene, camera, gl }, delta) => {',
   '    const reduced = reducedMotion();',
   '    owner.frame(drawn, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail), approached: () => approachedId(navigationStore.getState()) });',
+  '    fadeLineWork(lineWork, owner.lineWorkFade());',
   '  });',
   '  return null;',
   '}',
@@ -1001,7 +1013,8 @@ test('the mount audit rejects each departure, and a comment is not one', () => {
   const real = read(MOUNT_PATH).replaceAll('\r\n', '\n');
   const READ = '    const reduced = reducedMotion();\n';
   const FRAME = '    owner.frame(drawn, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail), approached: () => approachedId(navigationStore.getState()) });\n';
-  const USE = `  useFrame(({ scene, camera, gl }, delta) => {\n${READ}${FRAME}  });\n`;
+  const WRITE = '    fadeLineWork(lineWork, owner.lineWorkFade());\n';
+  const USE = `  useFrame(({ scene, camera, gl }, delta) => {\n${READ}${FRAME}${WRITE}  });\n`;
   const BINDING = `const owner = createRealismOwner(() => ${THE_IMPORT}, () => resetFrameSampling());`;
   for (const [name, mutate] of [
     ['an owner per mount', (s: string) => s.replace(USE, `  ${BINDING}\n${USE}`)],
@@ -1040,9 +1053,18 @@ test('the mount audit rejects each departure, and a comment is not one', () => {
     ['the owner exported', (s: string) => `${s}\nexport { owner };\n`],
     ['the owner exported where it is bound', (s: string) => s.replace('const owner =', 'export const owner =')],
     ['a second component', (s: string) => `${s}\nexport function Other() {\n  return null;\n}\n`],
-    ['the line-work fade fixed', (s: string) => s.replace('  return owner.lineWorkFade();', '  return 1;')],
-    ['the line-work fade read off the owner’s status', (s: string) => s.replace('  return owner.lineWorkFade();', "  return owner.status().document === 'shown' ? 0 : 1;")],
-    ['the owner handed out through the fade', (s: string) => s.replace('export function lineWorkFade(): number {\n  return owner.lineWorkFade();', 'export function lineWorkFade() {\n  return owner;')],
+    // 9.10: the fade is written by the mount, right after the owner's frame, on one read.
+    ['the line-work write dropped', (s: string) => s.replace(WRITE, '')],
+    ['the line-work at a fixed value', (s: string) => s.replace(WRITE, '    fadeLineWork(lineWork, 1);\n')],
+    ['the line-work read off the owner’s status', (s: string) => s.replace(WRITE, "    fadeLineWork(lineWork, owner.status().document === 'shown' ? 0 : 1);\n")],
+    ['the line-work written before owner.frame', (s: string) => s.replace(`${READ}${FRAME}${WRITE}`, `${READ}${WRITE}${FRAME}`)],
+    ['a second set of sources', (s: string) => s.replace('const lineWork = new Set<LineWorkSource>();', 'const lineWork = new Set<LineWorkSource>();\nconst moreLineWork = new Set<LineWorkSource>();')],
+    ['a second write', (s: string) => s.replace(WRITE, `${WRITE}${WRITE}`)],
+    ['the fade exported again', (s: string) => s.replace('const lineWork = new Set<LineWorkSource>();', 'export function lineWorkFade(): number {\n  return owner.lineWorkFade();\n}\nconst lineWork = new Set<LineWorkSource>();')],
+    ['the sources exported', (s: string) => s.replace('const lineWork = new Set<LineWorkSource>();', 'export const lineWork = new Set<LineWorkSource>();')],
+    ['a source never removed', (s: string) => s.replace('    lineWork.delete(source);\n', '')],
+    ['the remover not returned', (s: string) => s.replace('  return () => {\n    lineWork.delete(source);\n  };\n', '  lineWork.delete(source);\n  return () => undefined;\n')],
+    ['the sources held per mount', (s: string) => s.replace(USE, `  const lineWork = new Set<LineWorkSource>();\n${USE}`)],
     ['a module-scope call', (s: string) => `${s}\nowner.enterCanvas();\n`],
     ['a module-scope call, before the owner is used', (s: string) => s.replace('export interface RealismMountProps {', 'void BASE.length;\nexport interface RealismMountProps {')],
   ] as const) {

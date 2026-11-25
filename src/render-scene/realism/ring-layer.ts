@@ -19,10 +19,13 @@
  *
  * Neither colour reads a token: both are grey, from the model's restated luminances.
  *
- * **Two artefacts during the fade, owned by 9.10 (the crossfade).** While the fade runs the
- * fills write no depth, so a far disc or moon shows over a nearer fill, as the belt does.
- * And the M2 Moon dot and the moon sphere share `MOON_RENDER_ORDER` at the same place, so
- * three's depth sort can flicker between them until the dot has faded out.
+ * **Two artefacts during the fade, accepted under AD-22 (2026-11-25) and 9.11's to judge.**
+ * While the fade runs the fills write no depth (AD-22 as ruled), so a far disc or moon shows
+ * over a nearer fill, as a belt behind a sibling Planet does (the nebula, drawn before the
+ * fills, shows through a half-faded fill by blending, a separate case under the same note). And the M2 Moon dot and the moon sphere share
+ * `MOON_RENDER_ORDER` at the same place (AD-19 as amended 2026-11-18), so three's depth sort
+ * can alternate between them while both are partly drawn. Each is bounded by the fade's
+ * `FADE_SECONDS × pace` and gone at `f = 1`; fixing either would contradict a ruling.
  */
 
 import { type BufferGeometry, type Camera, DoubleSide, Euler, FrontSide, type Group, Mesh, NormalBlending, Quaternion, RingGeometry, ShaderMaterial, Vector3 } from 'three';

@@ -24,8 +24,18 @@
  * `corner-chrome.tsx` compute it, so nothing in the realism directory names either.
  * The effect's cleanup leaves the Canvas, and the owner disposes the layer.
  *
- * **The line-work's fade (9.4)** is read through this module's `lineWorkFade`, by
- * `body-field.tsx` each frame, so the owner stays bound once and is never exported.
+ * **The line-work's fade (9.4, written here since 9.10).** `body-field.tsx` and
+ * `moon-field.tsx` register their held marks by `holdLineWork`, a thunk each, removed by the
+ * effect cleanup it returns, into one module-scope set. The one frame callback calls
+ * `owner.frame(...)`, then `fadeLineWork` over that set on the owner's `lineWorkFade()`, read
+ * once, right after it. So the line-work and the layer change on the same frame, from the
+ * same value: each stroke is at `1 - f` where `f` is the fade the layer draws on that frame,
+ * and a failure the owner catches inside that `frame` returns the line-work whole on that
+ * same frame. That rests on two facts alone: the write is in this same callback, right
+ * after `owner.frame(...)`, so it uses the fade that frame reached; and opacity is read only
+ * at render, which follows every callback, so writing it here is in time whatever order the
+ * other callbacks run in. Nothing else reads the fade, and the owner stays bound once and is never
+ * exported. `fadeLineWork` skips a source that throws, so nothing here throws into R3F.
  *
  * **The Rail's curve (9.7)** is sampled here, as `body-field.tsx` draws its hairline
  * (`railLine` at `RAIL_LINE_SAMPLES_PER_SEGMENT`), memoised on the artifact and the Rail,
@@ -48,15 +58,22 @@ import { motionPace, reducedMotion } from '../shell/motion-preference.ts';
 import { BASE } from '../shell/route.ts';
 import { navigationStore } from '../shell/state.ts';
 import { approachedId } from './affordance-model.ts';
+import { fadeLineWork, type LineWorkSource } from './line-fade.ts';
 import { RAIL_LINE_SAMPLES_PER_SEGMENT, railLine, type Rail } from './rail-model.ts';
 import { createRealismOwner, type RealismArtifact } from './realism-status.ts';
 import { sceneSubject } from './stroke-model.ts';
 
 const owner = createRealismOwner(() => import('./realism/index.ts'), () => resetFrameSampling());
 
-/** What the replaced line-work (a Star's outline and core dot since 9.4, a Planet's outline since 9.9) is drawn at this frame: the owner's `lineWorkFade`, 1 unless realism has arrived. */
-export function lineWorkFade(): number {
-  return owner.lineWorkFade();
+/** The replaced line-work's sources (9.10): one thunk per mounted binding, written each frame by the frame callback below. */
+const lineWork = new Set<LineWorkSource>();
+
+/** Registers a binding's held marks for the line-work's fade (9.10), and returns its remover, for a `useEffect` cleanup. */
+export function holdLineWork(source: LineWorkSource): () => void {
+  lineWork.add(source);
+  return () => {
+    lineWork.delete(source);
+  };
 }
 
 export interface RealismMountProps {
@@ -64,13 +81,14 @@ export interface RealismMountProps {
   readonly rail: Rail;
 }
 
-/** Hands each frame to the owner, and each new Canvas. Renders nothing. */
+/** Hands each frame to the owner, and each new Canvas, then writes the line-work on the fade the owner reached in that frame. Renders nothing. */
 export function RealismMount({ artifact, rail }: RealismMountProps) {
   const drawn = useMemo(() => ({ ...artifact, railLine: railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT) }), [artifact, rail]);
   useEffect(() => owner.enterCanvas(), []);
   useFrame(({ scene, camera, gl }, delta) => {
     const reduced = reducedMotion();
     owner.frame(drawn, BASE, { scene, camera, renderer: gl, delta, reduced, pace: motionPace(reduced), subject: () => sceneSubject(navigationStore.getState(), rail), approached: () => approachedId(navigationStore.getState()) });
+    fadeLineWork(lineWork, owner.lineWorkFade());
   });
   return null;
 }

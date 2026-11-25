@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { type Camera, type Group, type Mesh, type Object3D, PerspectiveCamera, Scene, ShaderMaterial, type Texture, type WebGLRenderer } from 'three';
 import { stripCommentsAndStrings } from '../../../scripts/source-scan.ts';
 import { REDUCED_MOTION_PACE } from '../../shell/motion-preference.ts';
-import { createRealismOwner, type RealismArtifact } from '../realism-status.ts';
+import { createRealismOwner, type RealismArtifact, type RealismDraw, type RealismLayer } from '../realism-status.ts';
 import { BELT_RENDER_ORDER, GLOW_RENDER_ORDER, NEBULA_RENDER_ORDER } from '../scene-model.ts';
 import { depthWrites, FADE_MAX_FRAME_SECONDS, FADE_SECONDS, nextFade } from './arrival-model.ts';
 import { createFillLayer } from './fill-layer.ts';
@@ -512,4 +512,108 @@ test('the fade-read audits reject a fade() fixed at 0, and one reading 1 - fade'
     assert.notDeepEqual(auditLayerFade(build), [], `${name}: the layer audit`);
     assert.notDeepEqual(await auditOwnerLineWork(build), [], `${name}: the owner audit`);
   }
+});
+
+
+// --- The crossfade, frame by frame (9.10), over a fake layer on the real FADE_SECONDS ---------------
+
+const FAKE_DRAW: RealismDraw<string, string, string> = { scene: 'scene', camera: 'camera', renderer: 'renderer', delta: 0.5, reduced: false, pace: 1, subject: () => null, approached: () => null };
+const settledAll = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
+/** The real owner over a chunk that decodes one map and builds `layer`. */
+function fakeOwner(layer: RealismLayer<string, string, string>) {
+  return createRealismOwner<string, string, string, string>(
+    () => Promise.resolve({ decodeMaps: () => Promise.resolve(new Map([['moon', 'image']])), createFillLayer: () => layer }),
+    () => undefined,
+  );
+}
+
+async function framesOf(owner: { frame(artifact: RealismArtifact, base: string, draw: RealismDraw<string, string, string>): void }, count: number, draw: RealismDraw<string, string, string> = FAKE_DRAW): Promise<void> {
+  for (let at = 0; at < count; at += 1) owner.frame(ARTIFACT, '/', draw);
+  await settledAll();
+}
+
+/** Runs the row with every console method held, and says none was called. */
+async function quietly(run: () => Promise<void>): Promise<void> {
+  const calls: unknown[] = [];
+  const saved = { error: console.error, warn: console.warn, log: console.log, info: console.info, debug: console.debug };
+  for (const key of ['error', 'warn', 'log', 'info', 'debug'] as const) console[key] = (...args: unknown[]) => void calls.push(args);
+  try {
+    await run();
+    await settledAll();
+    assert.deepEqual(calls, [], 'nothing logged');
+  } finally {
+    Object.assign(console, saved);
+  }
+}
+
+/**
+ * A layer whose one fade rises as the real one does once it has arrived: by
+ * `delta / (FADE_SECONDS × pace)` each frame, to 1. Its `frame` throws once the
+ * fade reaches `throwAt`, after the fade has moved, as a layer failing mid-fade would.
+ */
+function risingLayer(throwAt?: number): RealismLayer<string, string, string> {
+  let fade = 0;
+  let arrived = false;
+  return {
+    warm: () => Promise.resolve(),
+    attach: () => undefined,
+    arrive() {
+      arrived = true;
+      fade = 0;
+    },
+    frame(_camera, delta, _reduced, pace) {
+      if (!arrived) return;
+      fade = Math.min(1, fade + delta / (FADE_SECONDS * pace));
+      if (throwAt !== undefined && fade >= throwAt) throw new Error('frame');
+    },
+    fade: () => fade,
+    dispose: () => undefined,
+  };
+}
+
+const RISE_DELTA = 1 / 16;
+for (const [name, pace] of [['pace 1', 1], ['REDUCED_MOTION_PACE', REDUCED_MOTION_PACE]] as const) {
+  test(`at ${name}, after every frame the line-work is at 1 minus the fade the layer reached in that same frame, from the warm draw to whole (9.10)`, async () => {
+    const frameCount = Math.ceil((FADE_SECONDS * pace) / RISE_DELTA - 1e-9);
+    assert.ok(frameCount > 0, 'the fade takes at least one frame');
+    const layer = risingLayer();
+    const owner = fakeOwner(layer);
+    const draw: RealismDraw<string, string, string> = { ...FAKE_DRAW, delta: RISE_DELTA, reduced: pace !== 1, pace };
+    await framesOf(owner, 2, draw);
+    assert.equal(owner.status().document, 'decoded');
+    owner.frame(ARTIFACT, '/', draw);
+    await settledAll();
+    assert.deepEqual([layer.fade(), owner.lineWorkFade()], [0, 1], 'warming: no layer drawn, the line-work whole');
+    const seen: number[] = [];
+    for (let at = 0; at < 64 && layer.fade() < 1; at += 1) {
+      owner.frame(ARTIFACT, '/', draw);
+      assert.ok(Math.abs(owner.lineWorkFade() - (1 - layer.fade())) <= 1e-12, `frame ${at}: fade ${layer.fade()}, line-work ${owner.lineWorkFade()}`);
+      seen.push(layer.fade());
+    }
+    assert.equal(seen[0], 0, 'the hidden warm draw: the line-work still whole');
+    assert.equal(seen.length, 1 + frameCount, `the fade takes ${frameCount} frames at ${name}`);
+    assert.ok(seen.slice(1).every((fade, index) => fade > (seen[index] ?? 0)), 'it rises every frame');
+    assert.deepEqual([layer.fade(), owner.lineWorkFade()], [1, 0], 'whole: the line-work hidden');
+    owner.frame(ARTIFACT, '/', draw);
+    assert.deepEqual([layer.fade(), owner.lineWorkFade()], [1, 0], 'and it stays so');
+  });
+}
+
+test('a layer frame that throws at fade 0.4 fails the owner, and the next lineWorkFade() reads 1 with no further frame (9.10)', async () => {
+  await quietly(async () => {
+    const layer = risingLayer(0.4);
+    const owner = fakeOwner(layer);
+    const draw: RealismDraw<string, string, string> = { ...FAKE_DRAW, delta: 0.2 * FADE_SECONDS, pace: 1 };
+    await framesOf(owner, 2, draw);
+    owner.frame(ARTIFACT, '/', draw);
+    await settledAll();
+    owner.frame(ARTIFACT, '/', draw);
+    owner.frame(ARTIFACT, '/', draw);
+    assert.deepEqual([layer.fade(), owner.lineWorkFade()], [0.2, 0.8], 'rising');
+    assert.doesNotThrow(() => owner.frame(ARTIFACT, '/', draw));
+    assert.equal(layer.fade(), 0.4, 'the layer failed mid-fade');
+    assert.equal(owner.status().document, 'failed');
+    assert.equal(owner.lineWorkFade(), 1, 'the line-work whole on that same frame');
+  });
 });

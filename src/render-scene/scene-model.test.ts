@@ -1101,7 +1101,7 @@ test('the drawn radius discriminates on kind, never on a missing mass', () => {
  *
  * Every ladder rule is executed in `stroke-model.test.ts` and the Rail line in
  * `rail-model.test.ts`; this holds the binding. Negatively: no store write and
- * no named event, no frame loop, no reactive state or effect, no DOM, no ordering
+ * no named event, no frame loop, no reactive state or effect but the one below, no DOM, no ordering
  * or selection, no coordinate literal, no light, and no line geometry but drei's
  * `<Line>`. Positively:
  *
@@ -1123,18 +1123,19 @@ test('the drawn radius discriminates on kind, never on a missing mass', () => {
  *     opacity 1 — after the Dust — and nothing else carries a `renderOrder`.
  *   - **The line-work's fade (9.4, extended to the orbits by 9.6, to the Rail by 9.7, to
  *     the Rings by 9.8 and to the Planets' outlines by 9.9), the one allowance**: exactly two
- *     `useRef` maps, every Body's billboard (a Star's or a Planet's, 9.9) held through
- *     `holdBodyMarks` by each Body's billboard ref and the replaced
+ *     `useRef` maps, `bodyMarks`, every Body's billboard (a Star's or a Planet's, 9.9) held
+ *     through `holdBodyMarks` by each Body's billboard ref, and `replacedLines`, the replaced
  *     lines held through `holdReplacedLine` by each scene hairline's ref (the orbits' and
- *     the Rail's, no other) and each Ring's ref, and one `useFrame` handing
- *     both to `fadeStarMarks` on one `lineWorkFade()` from the mount; no other frame loop,
- *     ref, fade source or hand-set opacity, and a closed import set.
+ *     the Rail's, no other) and each Ring's ref. 9.10: the fade is written by the mount. So
+ *     no frame loop at all, and one `useEffect` returning `holdLineWork` of one thunk over
+ *     both maps' values, so its cleanup is the remover; no fade read or write here, no other
+ *     ref, effect or hand-set opacity, and a closed import set.
  */
 /** A Body's billboard, as it opens (9.4, 9.9): its ref holds that Body's marks for the fade, a Star's or a Planet's, and nothing else. */
-const BILLBOARD_OPEN = '<Billboard ref={(group) => holdBodyMarks(starMarks.current, body, group)}>';
+const BILLBOARD_OPEN = '<Billboard ref={(group) => holdBodyMarks(bodyMarks.current, body, group)}>';
 
-/** The one frame loop the binding holds (9.4, 9.6, 9.7): the Star marks and the replaced lines (orbits and Rail), together, at one read of the owner's line-work fade. */
-const STAR_MARKS_FRAME = 'useFrame(() => fadeStarMarks([...starMarks.current.values(), ...replacedLines.current.values()], lineWorkFade()));';
+/** The one effect the binding holds (9.10: the fade is written by the mount): both maps, as one source, registered with the mount, whose remover is the cleanup. */
+const LINE_WORK_HOLD = 'useEffect(() => holdLineWork(() => [...bodyMarks.current.values(), ...replacedLines.current.values()]), []);';
 
 /** A scene hairline's ref (9.6, 9.7): it holds an orbit's line or the Rail's for the fade, and no other. */
 const REPLACED_LINE_REF = 'ref={(object) => holdReplacedLine(replacedLines.current, line, object)}';
@@ -1142,14 +1143,13 @@ const REPLACED_LINE_REF = 'ref={(object) => holdReplacedLine(replacedLines.curre
 /** A Ring's ref (9.8): it holds the Ring for the fade, in the same map as the replaced hairlines. */
 const RING_LINE_REF = 'ref={(object) => holdReplacedLine(replacedLines.current, ring, object)}';
 
-/** The binding's imports, exactly (9.4 added the frame loop, the ref, the fade and its rule; 9.6 the orbits' rule, which 9.7 renamed to hold the Rail too). */
+/** The binding's imports, exactly (9.4 added the ref, the fade and its rule; 9.6 the orbits' rule, which 9.7 renamed to hold the Rail too; 9.10 traded the frame loop and the fade for the effect and `holdLineWork`). */
 const BODY_FIELD_IMPORTS: readonly string[] = [
   "import { Billboard, Line } from '@react-three/drei';",
-  "import { useFrame } from '@react-three/fiber';",
-  "import { useRef, useSyncExternalStore } from 'react';",
+  "import { useEffect, useRef, useSyncExternalStore } from 'react';",
   "import { navigationStore } from '../shell/state.ts';",
-  "import { fadeStarMarks, holdBodyMarks, holdReplacedLine, type StarMarks } from './line-fade.ts';",
-  "import { lineWorkFade } from './realism-mount.tsx';",
+  "import { holdBodyMarks, holdReplacedLine, type ReplacedMarks } from './line-fade.ts';",
+  "import { holdLineWork } from './realism-mount.tsx';",
   "import { RAIL_LINE_SAMPLES_PER_SEGMENT, railLine, type Rail } from './rail-model.ts';",
   "import { notableRings } from './notable-model.ts';",
   "import { activateBody, hoverBody, leaveBody } from './scene-pick.ts';",
@@ -1168,29 +1168,35 @@ function auditBodyField(source: string): string[] {
   if (/\b(?:advanceScroll|focusProject|releaseFocus|enterRail|enterFreeFlight|resetNavigation|activateClient|activateProject|hoverProject|keyboardApproach)\b/.test(code)) {
     failures.push('names a navigation event — a Body reaches the store through activateBody, hoverBody and leaveBody alone');
   }
-  if (/\buseThree\b|\buseState\b|\buseReducer\b|\buseEffect\b|\buseLayoutEffect\b|\buseMemo\b|\buseStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {
-    failures.push('holds a frame loop, reactive state, an effect or a zustand binding — one selector subscription only');
+  if (/\buseThree\b|\buseState\b|\buseReducer\b|\buseLayoutEffect\b|\buseMemo\b|\buseStore\b|\buseShallow\b/.test(code) || /['"]zustand(?:\/react)?/.test(quoted)) {
+    failures.push('holds reactive state, a layout effect or a zustand binding — one selector subscription only');
   }
   // 9.4, the one allowance, extended by 9.6 to the orbits, by 9.7 to the Rail and by 9.9 to the
-  // Planets' outlines: one ref map of every Body's billboard, one of the replaced lines, and one frame loop handing both the owner's
-  // line-work fade, read once. No other frame loop, ref or fade.
-  if ((code.match(/\buseFrame\b/g) ?? []).length !== 2 || !squash(code).includes(STAR_MARKS_FRAME)) {
-    failures.push('holds a frame loop other than the one fading every Body billboard and the replaced lines by lineWorkFade()');
+  // Planets' outlines: one ref map of every Body's billboard and one of the replaced lines.
+  // 9.10: the fade is written by the mount, so no frame loop at all, and one effect handing both
+  // maps to the mount as one source, its remover returned as the cleanup. No other ref, effect or fade.
+  if (/\buseFrame\b/.test(code) || /['"]@react-three\/fiber['"]/.test(quoted)) {
+    failures.push('holds a frame loop — 9.10: the fade is written by the mount');
   }
+  if ((code.match(/\buseEffect\b/g) ?? []).length !== 2 || !squash(code).includes(LINE_WORK_HOLD)) {
+    failures.push('holds an effect other than the one registering every Body billboard and the replaced lines with holdLineWork, its remover the cleanup');
+  }
+  if ((code.match(/\bholdLineWork\b/g) ?? []).length !== 2) failures.push('the line-work is registered other than by the one holdLineWork in the one effect');
+  if (/\b(?:lineWorkFade|fadeMarks|fadeLineWork|fadeStarMarks)\b/.test(code)) failures.push('reads or writes the fade itself — 9.10: the fade is written by the mount');
   if (
     (code.match(/\buseRef\b/g) ?? []).length !== 3 ||
-    !squash(code).includes('const starMarks = useRef(new Map<string, StarMarks>());') ||
-    !squash(code).includes('const replacedLines = useRef(new Map<string, StarMarks>());')
+    !squash(code).includes('const bodyMarks = useRef(new Map<string, ReplacedMarks>());') ||
+    !squash(code).includes('const replacedLines = useRef(new Map<string, ReplacedMarks>());')
   ) {
-    failures.push('holds a ref other than the one map of Star marks and the one map of replaced lines');
+    failures.push('holds a ref other than the one map of Body marks and the one map of replaced lines');
   }
   // 9.6, 9.7: the orbit and Rail lines, held by holdReplacedLine alone (no other line), on the scene hairlines' one <Line>;
   // 9.8: and each Ring, by the same rule, on the Ring's <Line>.
   if ((code.match(/\bholdReplacedLine\s*\(/g) ?? []).length !== 2 || (code.match(/\breplacedLines\b/g) ?? []).length !== 4) {
-    failures.push('the replaced lines are held, faded or read other than by the two refs, holdReplacedLine and the one frame loop');
+    failures.push('the replaced lines are held or read other than by the two refs, holdReplacedLine and the one source');
   }
-  if ((code.match(/\bholdBodyMarks\s*\(/g) ?? []).length !== 1 || (code.match(/\bfadeStarMarks\s*\(/g) ?? []).length !== 1 || (code.match(/\blineWorkFade\b/g) ?? []).length !== 2 || (code.match(/\bstarMarks\b/g) ?? []).length !== 3) {
-    failures.push('the Body billboards are held, faded or read other than by the one ref, the one frame loop and lineWorkFade()');
+  if ((code.match(/\bholdBodyMarks\s*\(/g) ?? []).length !== 1 || (code.match(/\bbodyMarks\b/g) ?? []).length !== 3) {
+    failures.push('the Body billboards are held or read other than by the one ref, holdBodyMarks and the one source');
   }
   if (/\.(?:opacity|visible)\s*=(?!=)/.test(code)) failures.push('sets an opacity or a visibility itself — the fade is line-fade.ts’s');
   const imports = quoted.split('\n').map((line) => line.trim()).filter((line) => /^import\b/.test(line));
@@ -1373,36 +1379,42 @@ test('the Bodies’ binding audit rejects the real binding with any one guarante
     ['the orbits not drawn', (s) => s.replace('sceneLines(bodies, railLine(rail, RAIL_LINE_SAMPLES_PER_SEGMENT))', 'sceneLines(bodies, [])')],
     ['a third line', (s) => s.replace(BILLBOARD_OPEN, `<Line points={[]} transparent opacity={1} renderOrder={BODY_RENDER_ORDER} />\n          ${BILLBOARD_OPEN}`)],
     ['a drei connector', (s) => s.replace(BILLBOARD_OPEN, `<QuadraticBezierLine start={a} end={b} />\n          ${BILLBOARD_OPEN}`)],
-    // The Star marks' fade (9.4).
-    ['a second frame loop', (s) => s.replace(STAR_MARKS_FRAME, `${STAR_MARKS_FRAME}\n  useFrame(() => undefined);`)],
-    ['the frame loop dropped', (s) => s.replace(`  ${STAR_MARKS_FRAME}\n`, '')],
+    // The line-work's hold (9.4; 9.10: the fade is written by the mount).
+    ['a fade loop re-added', (s) => s.replace(LINE_WORK_HOLD, `${LINE_WORK_HOLD}\n  useFrame(() => fadeMarks(bodyMarks.current.values(), 0.5));`)],
+    ['the 9.9 frame loop back in place of the hold', (s) => s.replace(LINE_WORK_HOLD, 'useFrame(() => fadeStarMarks([...bodyMarks.current.values(), ...replacedLines.current.values()], lineWorkFade()));').replace("import { useEffect, useRef, useSyncExternalStore } from 'react';", "import { useFrame } from '@react-three/fiber';\nimport { useRef, useSyncExternalStore } from 'react';")],
+    ['the source dropped', (s) => s.replace(`  ${LINE_WORK_HOLD}\n`, '')],
+    ['no cleanup returned', (s) => s.replace(LINE_WORK_HOLD, 'useEffect(() => { holdLineWork(() => [...bodyMarks.current.values(), ...replacedLines.current.values()]); }, []);')],
+    ['the Body marks left out of the source', (s) => s.replace('holdLineWork(() => [...bodyMarks.current.values(), ...replacedLines.current.values()])', 'holdLineWork(() => [...replacedLines.current.values()])')],
+    ['the replaced lines left out of the source', (s) => s.replace('holdLineWork(() => [...bodyMarks.current.values(), ...replacedLines.current.values()])', 'holdLineWork(() => [...bodyMarks.current.values()])')],
+    ['a second holdLineWork', (s) => s.replace(LINE_WORK_HOLD, `${LINE_WORK_HOLD}\n  useEffect(() => holdLineWork(() => replacedLines.current.values()), []);`)],
+    ['a second source in the one effect', (s) => s.replace(LINE_WORK_HOLD, 'useEffect(() => { const a = holdLineWork(() => [...bodyMarks.current.values(), ...replacedLines.current.values()]); const b = holdLineWork(() => []); return () => { a(); b(); }; }, []);')],
+    ['the hold re-run every render', (s) => s.replace(LINE_WORK_HOLD, 'useEffect(() => holdLineWork(() => [...bodyMarks.current.values(), ...replacedLines.current.values()]));')],
+    ['the maps snapshotted once', (s) => s.replace(LINE_WORK_HOLD, 'useEffect(() => holdLineWork(((held) => () => held)([...bodyMarks.current.values(), ...replacedLines.current.values()])), []);')],
+    ['the fade read here', (s) => s.replace("import { holdLineWork } from './realism-mount.tsx';", "import { holdLineWork, lineWorkFade } from './realism-mount.tsx';")],
+    ['the hold from the status module', (s) => s.replace("import { holdLineWork } from './realism-mount.tsx';", "import { holdLineWork } from './realism-status.ts';")],
+    ['an import added', (s) => s.replace("import { holdLineWork } from './realism-mount.tsx';", "import { holdLineWork } from './realism-mount.tsx';\nimport { tokens } from '../tokens/tokens.ts';")],
+    ['a second effect', (s) => s.replace(LINE_WORK_HOLD, `${LINE_WORK_HOLD}\n  useEffect(() => undefined, []);`)],
     // 9.9 inverted 9.4's "a fade on the Planets": every Body's billboard is held now, so leaving the Planets out is the departure.
-    ['the Planets left out of the fade', (s) => s.replace('ref={(group) => holdBodyMarks(starMarks.current, body, group)}', "ref={(group) => holdBodyMarks(starMarks.current, body.kind === 'star' ? body : { id: '' }, group)}")],
-    ['the Planets left out by a guard', (s) => s.replace('ref={(group) => holdBodyMarks(starMarks.current, body, group)}', "ref={(group) => { if (body.kind === 'star') holdBodyMarks(starMarks.current, body, group); }}")],
-    ['every Body held by hand', (s) => s.replace('ref={(group) => holdBodyMarks(starMarks.current, body, group)}', 'ref={(group) => starMarks.current.set(body.id, group)}')],
-    ['a fade from elsewhere', (s) => s.replace('lineWorkFade()));', 'navigationStore.getState().scrollProgress));')],
-    ['a fixed fade', (s) => s.replace('lineWorkFade()));', '0.5));')],
-    ['the fade from the status module', (s) => s.replace("import { lineWorkFade } from './realism-mount.tsx';", "import { lineWorkFade } from './realism-status.ts';")],
-    ['an import added', (s) => s.replace("import { lineWorkFade } from './realism-mount.tsx';", "import { lineWorkFade } from './realism-mount.tsx';\nimport { tokens } from '../tokens/tokens.ts';")],
-    ['an opacity set by hand', (s) => s.replace(STAR_MARKS_FRAME, 'useFrame(() => { for (const group of starMarks.current.values()) group.visible = lineWorkFade() > 0; });')],
-    ['a second ref', (s) => s.replace("const starMarks = useRef(new Map<string, StarMarks>());", "const starMarks = useRef(new Map<string, StarMarks>());\n  const other = useRef(null);")],
+    ['the Planets left out of the fade', (s) => s.replace('ref={(group) => holdBodyMarks(bodyMarks.current, body, group)}', "ref={(group) => holdBodyMarks(bodyMarks.current, body.kind === 'star' ? body : { id: '' }, group)}")],
+    ['the Planets left out by a guard', (s) => s.replace('ref={(group) => holdBodyMarks(bodyMarks.current, body, group)}', "ref={(group) => { if (body.kind === 'star') holdBodyMarks(bodyMarks.current, body, group); }}")],
+    ['every Body held by hand', (s) => s.replace('ref={(group) => holdBodyMarks(bodyMarks.current, body, group)}', 'ref={(group) => bodyMarks.current.set(body.id, group)}')],
+    ['an opacity set by hand', (s) => s.replace(LINE_WORK_HOLD, `${LINE_WORK_HOLD}\n  for (const group of bodyMarks.current.values()) group.visible = false;`)],
+    ['a second ref', (s) => s.replace('const bodyMarks = useRef(new Map<string, ReplacedMarks>());', 'const bodyMarks = useRef(new Map<string, ReplacedMarks>());\n  const other = useRef(null);')],
     // The replaced lines' fade (9.6, extended to the Rail by 9.7).
     ['a line held under an invented ID', (s) => s.replace(REPLACED_LINE_REF, "ref={(object) => holdReplacedLine(replacedLines.current, { id: 'rail' }, object)}")],
     ['the Rail held by hand', (s) => s.replace(REPLACED_LINE_REF, "ref={(object) => { holdReplacedLine(replacedLines.current, line, object); if (line.id === 'rail') replacedLines.current.set('rail', object); }}")],
     ['the orbits held by hand', (s) => s.replace(REPLACED_LINE_REF, 'ref={(object) => replacedLines.current.set(line.id, object)}')],
     ['the orbits not held', (s) => s.replace(REPLACED_LINE_REF, '')],
-    ['the orbits held in the Star map', (s) => s.replace(REPLACED_LINE_REF, 'ref={(object) => holdReplacedLine(starMarks.current, line, object)}')],
-    ['the orbits left out of the fade', (s) => s.replace('fadeStarMarks([...starMarks.current.values(), ...replacedLines.current.values()], lineWorkFade())', 'fadeStarMarks([...starMarks.current.values()], lineWorkFade())')],
-    ['a second frame loop for the orbits', (s) => s.replace(STAR_MARKS_FRAME, 'useFrame(() => fadeStarMarks(starMarks.current.values(), lineWorkFade()));\n  useFrame(() => fadeStarMarks(replacedLines.current.values(), lineWorkFade()));')],
-    ['the orbits faded from elsewhere', (s) => s.replace(STAR_MARKS_FRAME, 'useFrame(() => { fadeStarMarks(starMarks.current.values(), lineWorkFade()); fadeStarMarks(replacedLines.current.values(), 1 - lineWorkFade()); });')],
-    ['the orbit map not a ref', (s) => s.replace('const replacedLines = useRef(new Map<string, StarMarks>());', 'const replacedLines = { current: new Map<string, StarMarks>() };')],
+    ['the orbits held in the Body map', (s) => s.replace(REPLACED_LINE_REF, 'ref={(object) => holdReplacedLine(bodyMarks.current, line, object)}')],
+    ['a second source for the orbits', (s) => s.replace(LINE_WORK_HOLD, 'useEffect(() => holdLineWork(() => bodyMarks.current.values()), []);\n  useEffect(() => holdLineWork(() => replacedLines.current.values()), []);')],
+    ['the orbit map not a ref', (s) => s.replace('const replacedLines = useRef(new Map<string, ReplacedMarks>());', 'const replacedLines = { current: new Map<string, ReplacedMarks>() };')],
     // The Ring's fade (9.8).
     ['the Ring not held', (s) => s.replace(RING_LINE_REF, '')],
     ['the Ring held by hand', (s) => s.replace(RING_LINE_REF, 'ref={(object) => replacedLines.current.set(ring.id, object)}')],
-    ['the Ring held in the Star map', (s) => s.replace(RING_LINE_REF, 'ref={(object) => holdReplacedLine(starMarks.current, ring, object)}')],
+    ['the Ring held in the Body map', (s) => s.replace(RING_LINE_REF, 'ref={(object) => holdReplacedLine(bodyMarks.current, ring, object)}')],
     ['the Ring held under the line', (s) => s.replace(RING_LINE_REF, 'ref={(object) => holdReplacedLine(replacedLines.current, line, object)}')],
     ['the Ring held under an invented ID', (s) => s.replace(RING_LINE_REF, "ref={(object) => holdReplacedLine(replacedLines.current, { id: 'ring:x' }, object)}")],
-    ['the marks on a second billboard', (s) => s.replace('</Billboard>', `</Billboard>\n          <Billboard ref={(group) => holdBodyMarks(starMarks.current, body, group)}></Billboard>`)],
+    ['the marks on a second billboard', (s) => s.replace('</Billboard>', `</Billboard>\n          <Billboard ref={(group) => holdBodyMarks(bodyMarks.current, body, group)}></Billboard>`)],
     ['a line loses its order', (s) => s.replace('renderOrder={BODY_RENDER_ORDER}', '')],
     ['a line goes opaque', (s) => s.replace(/(<Line\b[^/]*?)\s*transparent\b/, '$1')],
     ['a line fades', (s) => s.replace('opacity={1}', 'opacity={0.5}')],
@@ -3971,15 +3983,20 @@ test('the worst-window mount audit rejects the real scene with any one guarantee
  * no connector, no coordinate literal, no authored or band read. Positively: one
  * `notableMoons(bodies)`; a frame loop that is *exactly* — update the camera's
  * matrices, then each Moon's `moonScale` from both matrices and R3F's canvas
- * height, written with `applyMoonScale` to its own pooled mesh, then (9.8, the one
- * allowance) the whole pool handed to `fadeStarMarks` on one `lineWorkFade()` from
- * the mount, so the Moon gives way to its moon sphere; one positioned
+ * height, written with `applyMoonScale` to its own pooled mesh; (9.8, the one
+ * allowance; 9.10: the fade is written by the mount) one `useEffect` returning
+ * `holdLineWork(() => meshes.current)`, so the whole pool is registered with the
+ * mount, its remover the cleanup, and the Moon gives way to its moon sphere on the
+ * mount's one write, with no fade read or write here; one positioned
  * group per Moon at its Planet, a camera-facing `<Billboard>`, and in it one
  * mesh at the Moon's billboard-local centre, at `MOON_RENDER_ORDER` (one above
  * the Ring's `BODY_RENDER_ORDER`, so the overlap never flickers), a circle of
  * the Moon's radius in an unlit `transparent` material at opacity 1 in the
  * Moon's colour.
  */
+/** The Moons' one effect (9.8; 9.10: the fade is written by the mount): the whole pool, as one source, registered with the mount, whose remover is the cleanup. */
+const MOON_LINE_WORK_HOLD = 'useEffect(() => holdLineWork(() => meshes.current), []);';
+
 function auditMoonField(source: string): string[] {
   const code = stripCommentsAndStrings(source);
   const quoted = stripComments(source);
@@ -3993,8 +4010,8 @@ function auditMoonField(source: string): string[] {
   if (/\bnavigationStore\b|\bgetState\b|\buseStore\b|\bsubscribe\b|\buseSyncExternalStore\b|\buseShallow\b|\bsceneSubject\b|\bsubject\b/.test(code) || /['"]zustand(?:\/react)?|shell\/state/.test(quoted)) {
     failures.push('reads the navigation state — a Moon is at rest and always, on isDeep alone');
   }
-  if (/\buseThree\b|\buseState\b|\buseReducer\b|\buseEffect\b|\buseLayoutEffect\b|\buseMemo\b/.test(code)) {
-    failures.push('holds reactive state or an effect — the meshes are refs, the loop is useFrame');
+  if (/\buseThree\b|\buseState\b|\buseReducer\b|\buseLayoutEffect\b|\buseMemo\b/.test(code)) {
+    failures.push('holds reactive state or a layout effect — the meshes are refs, the loop is useFrame');
   }
   if (/\bwindow\b|\bdocument\b|innerWidth|innerHeight|getBoundingClientRect|addEventListener|matchMedia/.test(code)) {
     failures.push('reads the DOM — the height arrives as R3F’s size');
@@ -4022,11 +4039,15 @@ function auditMoonField(source: string): string[] {
     failures.push('the notable model is not imported as { MOON_RENDER_ORDER, applyMoonScale, moonScale, notableMoons }');
   }
   if (!/import\s*\{\s*Billboard\s*\}\s*from\s*'@react-three\/drei'/.test(quoted)) failures.push('does not import exactly { Billboard } from drei');
-  // 9.8: the Moons' fade, the one allowance: the line-work's rule, and the owner's one read, through the mount.
-  if (!/import\s*\{\s*fadeStarMarks\s*\}\s*from\s*'\.\/line-fade\.ts'/.test(quoted)) failures.push('fadeStarMarks is not imported, alone, from line-fade.ts');
-  if (!/import\s*\{\s*lineWorkFade\s*\}\s*from\s*'\.\/realism-mount\.tsx'/.test(quoted)) failures.push('lineWorkFade is not imported, alone, from realism-mount.tsx');
-  if ((code.match(/\bfadeStarMarks\b/g) ?? []).length !== 2 || (code.match(/\blineWorkFade\b/g) ?? []).length !== 2) {
-    failures.push('the Moons are faded other than by the one call in the frame loop, on one lineWorkFade()');
+  // 9.8: the Moons' fade, the one allowance. 9.10: the fade is written by the mount, so the pool is
+  // registered with it, whole, by one effect whose cleanup is the remover, and nothing here reads or writes the fade.
+  if (!/import\s*\{\s*holdLineWork\s*\}\s*from\s*'\.\/realism-mount\.tsx'/.test(quoted)) failures.push('holdLineWork is not imported, alone, from realism-mount.tsx');
+  if (!/import\s*\{\s*useEffect\s*,\s*useRef\s*\}\s*from\s*'react'/.test(quoted)) failures.push('react is not imported as { useEffect, useRef }');
+  if (/['"]\.\/line-fade\.ts['"]/.test(quoted) || /\b(?:lineWorkFade|fadeMarks|fadeLineWork|fadeStarMarks)\b/.test(code)) {
+    failures.push('reads or writes the fade itself — 9.10: the fade is written by the mount');
+  }
+  if ((code.match(/\buseEffect\b/g) ?? []).length !== 2 || (code.match(/\bholdLineWork\b/g) ?? []).length !== 2 || !squash(code).includes(MOON_LINE_WORK_HOLD)) {
+    failures.push('the Moons are registered other than by the one effect returning holdLineWork(() => meshes.current)');
   }
   if (/\.(?:opacity|visible)\s*=(?!=)/.test(code)) failures.push('sets an opacity or a visibility itself — the fade is line-fade.ts’s');
 
@@ -4041,13 +4062,12 @@ function auditMoonField(source: string): string[] {
     const expected = [
       'camera.updateMatrixWorld()',
       'moons.forEach((moon,index)=>applyMoonScale(meshes.current[index],moonScale(moon,camera.matrixWorldInverse.elements,camera.projectionMatrix.elements,size.height)))',
-      'fadeStarMarks(meshes.current,lineWorkFade())',
     ];
     if (JSON.stringify(statements) !== JSON.stringify(expected)) {
       failures.push(
         'the frame loop is not exactly: camera.updateMatrixWorld(), then every Moon’s moonScale(moon, ' +
-          'camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.height) applied to its own mesh, ' +
-          'then fadeStarMarks(meshes.current, lineWorkFade())',
+          'camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.height) applied to its own mesh ' +
+          '(9.10: the fade is written by the mount)',
       );
     }
   }
@@ -4139,20 +4159,103 @@ test('the Moon audit rejects the real renderer with any one guarantee broken', (
     ['a hover', (s) => s.replace('renderOrder={MOON_RENDER_ORDER}', 'renderOrder={MOON_RENDER_ORDER}\n              onPointerOver={() => undefined}')],
     ['a drei connector', (s) => s.replace("import { Billboard } from '@react-three/drei';", "import { Billboard, Line } from '@react-three/drei';")],
     ['a coordinate literal', (s) => s.replace('camera.updateMatrixWorld();', 'camera.updateMatrixWorld();\n    camera.position.set(0, 5, 40);')],
-    // The Moons' fade (9.8).
-    ['the fade dropped', (s) => s.replace(/\n\s*fadeStarMarks\(meshes\.current, lineWorkFade\(\)\);/, '')],
-    ['the fade inverted', (s) => s.replace('fadeStarMarks(meshes.current, lineWorkFade());', 'fadeStarMarks(meshes.current, 1 - lineWorkFade());')],
-    ['a fixed fade', (s) => s.replace('fadeStarMarks(meshes.current, lineWorkFade());', 'fadeStarMarks(meshes.current, 0);')],
-    ['the fade on one Moon', (s) => s.replace('fadeStarMarks(meshes.current, lineWorkFade());', 'fadeStarMarks([meshes.current[0]], lineWorkFade());')],
-    ['the fade from the status module', (s) => s.replace("import { lineWorkFade } from './realism-mount.tsx';", "import { lineWorkFade } from './realism-status.ts';")],
-    ['the fade before the scale', (s) => s.replace(/(\n\s*moons\.forEach\([^\n]*)(\n\s*fadeStarMarks\(meshes\.current, lineWorkFade\(\)\);)/, '$2$1')],
-    ['a visibility set by hand', (s) => s.replace('fadeStarMarks(meshes.current, lineWorkFade());', 'fadeStarMarks(meshes.current, lineWorkFade());\n    for (const mesh of meshes.current) if (mesh) mesh.visible = lineWorkFade() > 0;')],
+    // The Moons' fade (9.8; 9.10: the fade is written by the mount).
+    ['a fade loop re-added', (s) => s.replace('    moons.forEach(', '    fadeStarMarks(meshes.current, lineWorkFade());\n    moons.forEach(')],
+    ['the 9.8 frame-loop fade back', (s) => s.replace(MOON_LINE_WORK_HOLD, '').replace("import { holdLineWork } from './realism-mount.tsx';", "import { fadeStarMarks } from './line-fade.ts';\nimport { lineWorkFade } from './realism-mount.tsx';").replace(/(\n\s*moons\.forEach\([^\n]*)/, '$1\n    fadeStarMarks(meshes.current, lineWorkFade());')],
+    ['the source dropped', (s) => s.replace(`  ${MOON_LINE_WORK_HOLD}\n`, '')],
+    ['no cleanup returned', (s) => s.replace(MOON_LINE_WORK_HOLD, 'useEffect(() => { holdLineWork(() => meshes.current); }, []);')],
+    ['one Moon left out', (s) => s.replace(MOON_LINE_WORK_HOLD, 'useEffect(() => holdLineWork(() => [meshes.current[0]]), []);')],
+    ['the pool snapshotted once', (s) => s.replace(MOON_LINE_WORK_HOLD, 'useEffect(() => holdLineWork(((pool) => () => pool)([...meshes.current])), []);')],
+    ['a second holdLineWork', (s) => s.replace(MOON_LINE_WORK_HOLD, `${MOON_LINE_WORK_HOLD}\n  useEffect(() => holdLineWork(() => meshes.current), []);`)],
+    ['the hold re-run every render', (s) => s.replace(MOON_LINE_WORK_HOLD, 'useEffect(() => holdLineWork(() => meshes.current));')],
+    ['the fade read here', (s) => s.replace("import { holdLineWork } from './realism-mount.tsx';", "import { holdLineWork, lineWorkFade } from './realism-mount.tsx';")],
+    ['the fade rule imported', (s) => s.replace("import { holdLineWork } from './realism-mount.tsx';", "import { holdLineWork } from './realism-mount.tsx';\nimport { fadeMarks } from './line-fade.ts';")],
+    ['the hold from the status module', (s) => s.replace("import { holdLineWork } from './realism-mount.tsx';", "import { holdLineWork } from './realism-status.ts';")],
+    ['a visibility set by hand', (s) => s.replace('    moons.forEach(', '    for (const mesh of meshes.current) if (mesh) mesh.visible = false;\n    moons.forEach(')],
   ];
   for (const [name, mutate] of mutations) {
     const mutated = mutate(real);
     assert.notEqual(mutated, real, `the mutation "${name}" must apply to the shipped renderer`);
     assert.notDeepEqual(auditMoonField(mutated), [], `"${name}" must be rejected`);
   }
+});
+
+// --- Who reaches the line-work's fade (9.10) --------------------------------------------------
+
+/** The only modules that import `line-fade.ts` (9.10): `body-field.tsx`, which holds marks by its rules, the mount that writes them, and `line-fade.test.ts`. `moon-field.tsx` needs nothing from it since 9.10, and `auditMoonField` forbids the import. */
+const LINE_FADE_IMPORTERS: readonly string[] = ['src/render-scene/body-field.tsx', 'src/render-scene/realism-mount.tsx', 'src/render-scene/line-fade.test.ts'];
+/** The only modules that call the mount's `holdLineWork` (9.10), once each. */
+const LINE_WORK_HOLDERS: readonly string[] = ['src/render-scene/body-field.tsx', 'src/render-scene/moon-field.tsx'];
+
+/**
+ * Who reaches the line-work's fade, as a pure function over `src/` (9.10: the fade is written
+ * by the mount). `line-fade.ts` is imported (by a static import on one line or several, a
+ * bare side-effect import, a re-export, or a dynamic import) only by `LINE_FADE_IMPORTERS`,
+ * each of which does. In shipped source (test files are not counted), `holdLineWork` is
+ * called only in `LINE_WORK_HOLDERS`, once in each, and named nowhere else but the mount. So
+ * the affordance, the leaders, the Client-name halo and the Mote plates, the Mote orbits and
+ * the Dust are drawn by code that never registers with or imports the fade, in every session.
+ */
+function auditLineWorkReach(files: readonly { readonly path: string; readonly source: string }[]): string[] {
+  const failures: string[] = [];
+  const importers: string[] = [];
+  for (const { path, source } of files) {
+    const quoted = stripComments(source);
+    const code = stripCommentsAndStrings(source);
+    const imports =
+      /^\s*(?:import|export)\b[^;'"]*?\bfrom\s*['"][^'"]*\bline-fade(?:\.[jt]s)?['"]/m.test(quoted) ||
+      /^\s*import\s*['"][^'"]*\bline-fade(?:\.[jt]s)?['"]/m.test(quoted) ||
+      /\bimport\s*\(\s*['"`][^'"`]*\bline-fade\b/.test(quoted);
+    if (imports) {
+      importers.push(path);
+      if (!LINE_FADE_IMPORTERS.includes(path)) failures.push(`${path} imports line-fade.ts — only body-field.tsx, the mount and line-fade.test.ts may`);
+    }
+    if (isTestFile(path)) continue;
+    const calls = (code.match(/(?<!\bfunction\s+)\bholdLineWork\s*\(/g) ?? []).length;
+    if (calls > 0 && !LINE_WORK_HOLDERS.includes(path)) failures.push(`${path} calls holdLineWork — only body-field.tsx and moon-field.tsx register line-work`);
+    if (LINE_WORK_HOLDERS.includes(path) && calls !== 1) failures.push(`${path} calls holdLineWork ${calls} times — once`);
+    if (/\bholdLineWork\b/.test(code) && !LINE_WORK_HOLDERS.includes(path) && path !== 'src/render-scene/realism-mount.tsx') failures.push(`${path} names holdLineWork`);
+  }
+  for (const path of LINE_FADE_IMPORTERS) if (!importers.includes(path)) failures.push(`${path} does not import line-fade.ts — the walk would hold nothing`);
+  for (const path of LINE_WORK_HOLDERS) if (!files.some((file) => file.path === path)) failures.push(`${path} is not reached by the walk`);
+  return failures;
+}
+
+const lineWorkFiles = () => srcFiles((path) => SOURCE_MODULE.test(path));
+
+test('only the two bindings register line-work, and only body-field.tsx, the mount and line-fade.test.ts import line-fade.ts (9.10)', () => {
+  assert.deepEqual(auditLineWorkReach(lineWorkFiles()), []);
+});
+
+test('the line-work reach audit rejects each departure (9.10)', () => {
+  const real = lineWorkFiles();
+  const edit = (path: string, change: (source: string) => string) => real.map((file) => (file.path === path ? { path, source: change(file.source) } : file));
+  const AFFORDANCE = 'src/render-scene/affordance-field.tsx';
+  const MOTES = 'src/render-scene/mote-field.tsx';
+  const SCENE = 'src/render-scene/scene.tsx';
+  const BODIES = 'src/render-scene/body-field.tsx';
+  const MOONS = 'src/render-scene/moon-field.tsx';
+  for (const path of [AFFORDANCE, MOTES, SCENE, BODIES, MOONS]) assert.ok(real.some((file) => file.path === path), `the walk reads ${path}`);
+  const mutations: readonly (readonly [string, readonly { path: string; source: string }[]])[] = [
+    ['the affordance imports the fade', edit(AFFORDANCE, (s) => `import { fadeMarks } from './line-fade.ts';\n${s}`)],
+    ['the affordance imports it over several lines', edit(AFFORDANCE, (s) => `import {\n  fadeMarks,\n  type ReplacedMarks,\n} from './line-fade.ts';\n${s}`)],
+    ['the Mote orbits import it for its side effect', edit(MOTES, (s) => `import './line-fade.ts';\n${s}`)],
+    ['the Moons import the rule again', edit(MOONS, (s) => `import { fadeMarks } from './line-fade.ts';\n${s}`)],
+    ['the Mote orbits re-export it', edit(MOTES, (s) => `${s}\nexport { fadeMarks } from './line-fade.ts';\n`)],
+    ['the Dust imports it dynamically', edit(SCENE, (s) => `${s}\nconst fade = import(${JSON.stringify('./line-fade.ts')});\n`)],
+    ['the Mote orbits register with the mount', edit(MOTES, (s) => `${s}\nconst gone = holdLineWork(() => []);\n`)],
+    ['the affordance registers with the mount', edit(AFFORDANCE, (s) => `${s}\nholdLineWork(() => []);\n`)],
+    ['the scene names the hold', edit(SCENE, (s) => `${s}\nconst hold = holdLineWork;\n`)],
+    ['the Bodies register twice', edit(BODIES, (s) => `${s}\nconst again = () => holdLineWork(() => []);\n`)],
+    ['the Moons do not register', edit(MOONS, (s) => s.replace('holdLineWork(() => meshes.current)', 'undefined'))],
+    ['the Bodies stop importing the rule', edit(BODIES, (s) => s.replace("import { holdBodyMarks, holdReplacedLine, type ReplacedMarks } from './line-fade.ts';", ''))],
+    ['a binding dropped from the walk', real.filter((file) => file.path !== MOONS)],
+  ];
+  for (const [name, files] of mutations) {
+    assert.notDeepEqual(files, real, `the mutation "${name}" must apply`);
+    assert.notDeepEqual(auditLineWorkReach(files), [], `"${name}" must be rejected`);
+  }
+  assert.deepEqual(auditLineWorkReach(edit(AFFORDANCE, (s) => `${s}\n// holdLineWork(() => []); import { fadeMarks } from './line-fade.ts';\n`)), [], 'a comment is prose');
 });
 
 // --- The affordance (3.4) ----------------------------------------------------------

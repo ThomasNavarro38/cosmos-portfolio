@@ -64,8 +64,8 @@
  *
  * **The line-work it replaces (9.4).** `lineWorkFade()` is `1 - fade` once the arrival is
  * `arrived`, and 1 at every other point and after failure, so a Star's outline and core
- * dot fall on the layer's one fade and return, whole, when the layer goes. Read by
- * `body-field.tsx` through the mount, each frame.
+ * dot fall on the layer's one fade and return, whole, when the layer goes. Read once per
+ * frame by the mount, right after `frame` (9.10), which writes it to the line-work.
  *
  * **Pure.** It imports nothing and is not in `navigationStore`. The import and the
  * sampling reset arrive as arguments and the layer behind a port typed here, so

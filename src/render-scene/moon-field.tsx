@@ -10,15 +10,13 @@
  * `scene-model.test.ts`: in `useFrame`, update the camera's matrices (the rig,
  * mounted before this, has just moved it), then for each Moon hand `moonScale`
  * the Moon, the camera's matrices and R3F's canvas height, and write the result
- * with `applyMoonScale`; then hand the whole pool to `fadeStarMarks` on one read of the
- * realism owner's `lineWorkFade()` (9.8), so the Moons give way to the moon spheres as
- * realism arrives, whole and with the Ring and the rest of the replaced line-work, and
- * return if it fails. It reads no store, holds no state and subscribes to nothing: a Moon
- * depends on the Planet's `isDeep` alone. The JSX still declares every Moon at opacity 1,
- * so First Paint is M2's. It is mounted after `<BodyField>` and before `<RealismMount>`
- * (`scene.tsx`), so, like `body-field.tsx`'s loop, it reads the fade the layer reached on the
- * previous frame, one frame late, which is accepted; the Ring and the Moon read the same
- * value in the same frame.
+ * with `applyMoonScale`. One effect hands the whole pool to the mount by `holdLineWork`
+ * (9.8; 9.10: the fade is written by the mount), so the Moons give way to the moon spheres
+ * as realism arrives, whole and with the Ring and the rest of the replaced line-work, on the
+ * same frame and the same `lineWorkFade()` read as the layer, and return on the frame it
+ * fails. It reads no store, holds no state and subscribes to nothing: a Moon depends on the
+ * Planet's `isDeep` alone. The JSX still declares every Moon at opacity 1, so First Paint is
+ * M2's.
  *
  * **Drawn after the Dust, and over its Ring.** Every Moon carries
  * `MOON_RENDER_ORDER` — one above `BODY_RENDER_ORDER` — with an unlit
@@ -29,11 +27,10 @@
 
 import { Billboard } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Mesh } from 'three';
-import { fadeStarMarks } from './line-fade.ts';
 import { MOON_RENDER_ORDER, applyMoonScale, moonScale, notableMoons } from './notable-model.ts';
-import { lineWorkFade } from './realism-mount.tsx';
+import { holdLineWork } from './realism-mount.tsx';
 import type { Body } from './scene-model.ts';
 
 export interface MoonFieldProps {
@@ -44,11 +41,11 @@ export interface MoonFieldProps {
 export function MoonField({ bodies }: MoonFieldProps) {
   const meshes = useRef<(Mesh | null)[]>([]);
   const moons = notableMoons(bodies);
+  useEffect(() => holdLineWork(() => meshes.current), []);
 
   useFrame(({ camera, size }) => {
     camera.updateMatrixWorld();
     moons.forEach((moon, index) => applyMoonScale(meshes.current[index], moonScale(moon, camera.matrixWorldInverse.elements, camera.projectionMatrix.elements, size.height)));
-    fadeStarMarks(meshes.current, lineWorkFade());
   });
 
   return (
