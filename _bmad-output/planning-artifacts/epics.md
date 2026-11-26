@@ -3178,7 +3178,7 @@ So that I know what each Star represents.
 
 **Given** DESIGN §7.1
 **When** the scene draws, in every session, realism or not
-**Then** each Client Star carries its name below it in `scene-label-client`, in `ink-lift` as the subject and `ink-quiet` or `ink-faint` as receded, on a `surface-base` plate as the Project label's (7.9)
+**Then** each Client Star carries its name below it in `scene-label-client`, in `ink-lift` as the subject and `ink-quiet` or `ink-faint` as receded, on a halo of the `surface-base` page ground (`CLIENT_LABEL_HALO`) with no box *(Amended 2026-11-26, recording Thomas's ruling of 2026-11-23, landed 2026-11-25 in `d157b65`: the opaque 7.9 plate's hard dark box cut through the Stars' glow, so the name sits on `CLIENT_LABEL_HALO`, two unoffset `text-shadow`s of the `surface-base` page ground within 2px, with no box. AD-19's effects scan admits `textShadow` in `client-label-model.ts` alone.)*
 **And** every name keeps its contrast floor over a fill, a glow or the nebula, proven by the identity audit
 **And** the "no readable label near the frame edge" rule and "one label per object" hold
 

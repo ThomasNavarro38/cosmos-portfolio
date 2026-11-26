@@ -49,6 +49,7 @@ deferred:
 - The label is built in every session: First Paint, after realism arrives, after realism fails.
 - There is one label per Client Star, and the affordance's Project label stays the Project's own.
 - The plate is opaque `surface-base-dark`, so the label's ground is the plate in every session, over a fill, a glow or the nebula.
+  > **Superseded 2026-11-25** (`d157b65`, Thomas's ruling of 2026-11-23): the plate gave way to `CLIENT_LABEL_HALO`, two unoffset `text-shadow`s of the `surface-base-dark` page ground within 2px, with no box, because the opaque plate's hard box cut through the Stars' glow. The estimated box, padding included, is still what the hides measure. Whether the halo proves the contrast floor is epic-9 retro item 3 (F-S2).
 - Placement is estimated, never measured from the DOM, and it is pure under `node --test`.
 - The `scene` chunk stays ≤ 960,000 B (about 6.9 KB left, shared with 9.10).
 
@@ -146,6 +147,7 @@ deferred:
 **Acceptance Criteria:**
 - Given any session, realism or not, when the scene draws at a Rail stop, then each Client Star whose box clears the inner-76% bounds, the affordance and a stronger name shows its Client's `name` below it:
   - in `scene-label-client`, on an opaque `surface-base-dark` plate padded 1px;
+    > **Superseded 2026-11-25** (`d157b65`, Thomas's ruling of 2026-11-23): the plate gave way to `CLIENT_LABEL_HALO`, two unoffset `text-shadow`s of the `surface-base-dark` page ground within 2px, with no box, because the opaque plate's hard box cut through the Stars' glow. The estimated box, padding included, is still what the hides measure. Whether the halo proves the contrast floor is epic-9 retro item 3 (F-S2).
   - in `ink-lift-dark` when it is `sceneSubject`, and `ink-label-dark` otherwise.
 - Given `npm test`, when the identity audit runs, then both Client name roles are read off `client-label-model.ts` and pass 4.5:1 on `surface-base-dark`. A mutation to `ink-quiet-dark` fails, naming the role.
 - Given the committed artifact at every Rail stop at 16:9 and 32:9, when the frame is computed, then no shown name's box lies outside `labelBounds` and no two shown names' boxes overlap. No Star has a second label.

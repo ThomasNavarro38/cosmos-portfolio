@@ -1717,7 +1717,7 @@ The crossfade is now written in one place: `realism-mount.tsx`'s frame callback 
 
 ## Deferred from: code review of spec-9-10-the-handover.md (2026-11-25)
 
-- source_spec: spec-9-10-the-handover.md / summary: The 2026-11-25 effects-scan allowance (`textShadow` in `client-label-model.ts`, AD-19) and the label restyle's ~500 B of `scene` have no memlog entry. / evidence: Commit d157b65 amended AD-19 and DESIGN.md, but `.memlog.md` has no 2026-11-25 entry before 9.10's; AD-23 says a budget or allowance changes only by a ruling recorded in the memlog. / location: _bmad-output/planning-artifacts/architecture/architecture-cosmos-portfolio-2026-09-01/.memlog.md / severity: low
+- ~~source_spec: spec-9-10-the-handover.md / summary: The 2026-11-25 effects-scan allowance (`textShadow` in `client-label-model.ts`, AD-19) and the label restyle's ~500 B of `scene` have no memlog entry.~~ — **closed 2026-11-26 by epic-9 retro item 4**: the memlog records Thomas's ruling, and the cost is measured at +507 B (scene 957,958 → 958,465 of 960,000 B). / evidence: Commit d157b65 amended AD-19 and DESIGN.md, but `.memlog.md` has no 2026-11-25 entry before 9.10's; AD-23 says a budget or allowance changes only by a ruling recorded in the memlog. / location: _bmad-output/planning-artifacts/architecture/architecture-cosmos-portfolio-2026-09-01/.memlog.md / severity: low
 
 ## Deferred from: code review of the Epic 7 and Epic 9 follow-up (review-epic-7-9-followup-2026-11-26.md, 2026-11-26)
 
