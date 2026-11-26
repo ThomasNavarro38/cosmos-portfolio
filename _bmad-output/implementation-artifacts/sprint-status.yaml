@@ -795,9 +795,12 @@ action_items:
   - id: "epic-9-retro-item-61-add-a-committed-layout-check-that-no-bel"
     epic: 9
     action: "Add a committed-layout check that no belt crosses a sibling Planet's
-      fill footprint, so the accepted 9.11 look cannot grow on a re-solve (F-V5)"
+      fill footprint, so the accepted 9.11 look cannot grow on a re-solve (F-V5).
+      Done as an exact pin: the 4 co-orbital sibling pairs accepted at 9.11 are
+      the only crossings allowed (belt-crossing.test.ts,
+      spec-e9-r6-no-belt-crosses-a-sibling-planet.md)"
     owner: "Amelia (dev)"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-9-retro-11-26-2026.md"
   - id: "epic-9-retro-item-62-file-the-deferred-edge-batch-in-deferred"
     epic: 9
