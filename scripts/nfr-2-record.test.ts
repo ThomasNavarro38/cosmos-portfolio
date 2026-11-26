@@ -45,16 +45,18 @@
  *   section `## Second judgement (9.11)` stands after 8.4's and before Live
  *   (8.5). Always, besides (g)'s parts: five poses (8.4's four and `Star close-up`)
  *   with the `deltaY: 2266.64` and `deltaY: 1000` wheel steps, both displays
- *   ("1920×1080", "Odyssey Ark") named in The poses, the thirteen routed looks
- *   with the dark ring closed as superseded by 9.4, Epic 7's and Epic 9's levers
+ *   ("1920×1080", "Odyssey Ark") named in The poses, the fourteen routed looks
+ *   (8.4's rejection answered among them) with the dark ring closed as
+ *   superseded by 9.4, Epic 7's and Epic 9's levers
  *   (the `realism-*` tokens) with the composer and line-work routed to the
  *   memlog, a `Displays` field, and 8.4's verdict still reading "Rejected".
- *   Wheel steps are matched bounded, so `deltaY: 10000` is not `deltaY: 1000`;
+ *   Wheel steps are matched bounded, each in its own pose's row (8.4's too), so
+ *   `deltaY: 10000` is not `deltaY: 1000` and swapped steps fail;
  *   `1920x1080` counts as `1920×1080`; the heading appears once, and the order
  *   check fails when a heading it compares is missing. Pending as (g).
  *   Recorded: Date, Machine, Browser, Displays and Poses written, Displays
  *   naming both displays, Commit the build's, and at least one
- *   `judgement-9-11-<pose>-<display>.png` (`-1920x1080` or `-ark`) named, each
+ *   `judgement-9-11-<pose>-<display>.png` (one of the five poses, `-1920x1080` or `-ark`) named, each
  *   present beside the record.
  * - **(h) Live (8.5):** the status stays "not yet passed".
  *
@@ -346,8 +348,8 @@ interface Judgement {
   readonly heading: string;
   /** Each within the first cell of a row of the poses table. */
   readonly poses: readonly string[];
-  /** The wheel steps the poses text must give. */
-  readonly steps: readonly string[];
+  /** The wheel steps the poses table must give, each `[pose, step]` in that pose's own row. */
+  readonly steps: readonly (readonly [string, string])[];
   /** Each within the first cell of a row of the checklist. */
   readonly looks: readonly string[];
   readonly levers: readonly (readonly [string, RegExp])[];
@@ -360,9 +362,9 @@ interface Judgement {
   /** Every screenshot's name starts with this, beside the record. */
   readonly prefix: string;
   /**
-   * How a named screenshot must end, when the sheet fixes it: `rule` names it in
-   * the failure, and `sample` is the ending the recorded fixture uses. Absent: any
-   * `<prefix><pose>.png`.
+   * The whole name a screenshot must have, when the sheet fixes it: `rule` names it
+   * in the failure, and `sample` is the display suffix the recorded fixture uses.
+   * Absent: any `<prefix><pose>.png`.
    */
   readonly ending?: { readonly pattern: RegExp; readonly rule: string; readonly sample: string };
   /** The verdict the recorded fixture writes: one this sheet's record may hold beside the other sheet's. */
@@ -390,7 +392,7 @@ const JUDGEMENT_8_4: Judgement = {
   heading: HEADINGS.judgement,
   poses: ['opening frame', 'Client stop', 'Focus', 'rail(p=2.8333)'],
   // The step that reaches `rail(p=2.8333)`: 2.8333 × `WHEEL_PIXELS_PER_STOP` (800).
-  steps: ['2266.64'],
+  steps: [['rail(p=2.8333)', '2266.64']],
   looks: [
     'A farther fill over a nearer glow',
     'Half-disc Planets',
@@ -418,7 +420,7 @@ const JUDGEMENT_8_4: Judgement = {
  */
 const DISPLAYS: readonly (readonly [string, RegExp, RegExp])[] = [
   ['1920×1080', /\b1920\s*[×x]\s*1080\b/, /\b1920\s*[×x]\s*1080\b/],
-  ['Odyssey Ark', /\bOdyssey Ark\b/, /\bArk\b/],
+  ['Odyssey Ark', /\bOdyssey Ark\b/, /\bArk\b/i],
 ];
 
 /** 9.11's own checks: both displays, the dark ring closed by 9.4, 8.4 still rejected, and the section's place. */
@@ -451,8 +453,12 @@ const JUDGEMENT_9_11: Judgement = {
   heading: HEADINGS.secondJudgement,
   poses: ['opening frame', 'Client stop', 'Focus', 'rail(p=2.8333)', 'Star close-up'],
   // rail(p=2.8333) by 2.8333 × 800; the Star close-up, rail(p=1.25), by 1.25 × 800.
-  steps: ['deltaY: 2266.64', 'deltaY: 1000'],
+  steps: [
+    ['rail(p=2.8333)', 'deltaY: 2266.64'],
+    ['Star close-up', 'deltaY: 1000'],
+  ],
   looks: [
+    "8.4's rejection, answered",
     "The Star's dark ring",
     'Overlapping rest glows',
     'A farther fill over a nearer glow',
@@ -472,8 +478,12 @@ const JUDGEMENT_9_11: Judgement = {
   left: ['Date', 'Machine', 'Browser', 'Displays'],
   written: ['Date', 'Machine', 'Browser', 'Displays', 'Poses'],
   prefix: 'judgement-9-11-',
-  // `judgement-9-11-<pose>-<display>.png`, the display `1920x1080` or `ark`.
-  ending: { pattern: /-(?:1920x1080|ark)\.png$/, rule: '-1920x1080.png or -ark.png', sample: '-1920x1080' },
+  // `judgement-9-11-<pose>-<display>.png`: one of the five poses, the display `1920x1080` or `ark`.
+  ending: {
+    pattern: /^judgement-9-11-(?:opening-frame|client-stop|focus|rail-2\.8333|star-close-up)-(?:1920x1080|ark)\.png$/,
+    rule: 'judgement-9-11-<pose>-<display>.png with a listed pose and display',
+    sample: '-1920x1080',
+  },
   recordedVerdict: 'Realistic, not a screensaver; ships.',
   extra: auditSecondOnly,
   recorded: (values) => {
@@ -517,7 +527,14 @@ function auditJudgement(record: string, sheet: Judgement, exists: Exists): strin
   const poses = sub(SHEET.poses);
   const poseCells = firstCells(poses);
   for (const pose of sheet.poses) if (!poseCells.some((cell) => cell.includes(pose))) failures.push(`${tag}: the pose "${pose}" is not in the poses table`);
-  if (poses !== undefined) for (const step of sheet.steps) if (!stepPattern(step).test(poses)) failures.push(`${tag}: the poses do not give the ${step} wheel step`);
+  // In its own pose's row, so two steps swapped between rows, or one given in prose only, fail.
+  const poseRows = poses === undefined ? [] : rowsOf(poses);
+  if (poses !== undefined) {
+    for (const [pose, step] of sheet.steps) {
+      const row = poseRows.find((cells) => (cells[0] ?? '').includes(pose));
+      if (row === undefined || !stepPattern(step).test(row.join(' | '))) failures.push(`${tag}: the poses do not give the ${step} wheel step`);
+    }
+  }
   const lookCells = firstCells(sub(SHEET.checklist)).map((cell) => cell.toLowerCase());
   for (const look of sheet.looks) if (!lookCells.some((cell) => cell.includes(look.toLowerCase()))) failures.push(`${tag}: the look "${look}" is not in the checklist`);
   const rejected = sub(SHEET.rejected);
@@ -547,7 +564,7 @@ function auditJudgement(record: string, sheet: Judgement, exists: Exists): strin
   const named = screenshotsIn(values.get('Screenshots') ?? '', sheet.prefix);
   if (named.length === 0) failures.push(`${tag}: a verdict is given and the "Screenshots" field names no ${sheet.prefix}*.png`);
   for (const name of named) if (!exists(name)) failures.push(`${tag}: the screenshot ${name} is not beside the record`);
-  if (sheet.ending !== undefined) for (const name of named) if (!sheet.ending.pattern.test(name)) failures.push(`${tag}: the screenshot ${name} does not end in ${sheet.ending.rule}`);
+  if (sheet.ending !== undefined) for (const name of named) if (!sheet.ending.pattern.test(name)) failures.push(`${tag}: the screenshot ${name} is not named ${sheet.ending.rule}`);
   failures.push(...sheet.recorded(values));
   return failures;
 }
@@ -758,8 +775,13 @@ function holdsBothStates(sheet: Judgement): { readonly recorded: string; readonl
   fails(recorded, new RegExp(`the screenshot ${escapeRegExp(shots[1] as string)} is not beside the record`), 'a named PNG absent', (name) => name === shots[0]);
   // A name without the sheet's fixed ending, when it fixes one.
   if (sheet.ending !== undefined) {
-    const bare = `${sheet.prefix}opening-frame.png`;
-    fails(setField(recorded, 'Screenshots', `\`${bare}\``), new RegExp(`the screenshot ${escapeRegExp(bare)} does not end in`), 'a screenshot without its display', anything);
+    for (const [bad, why] of [
+      [`${sheet.prefix}opening-frame.png`, 'a screenshot without its display'],
+      [`${sheet.prefix}anything-ark.png`, 'a screenshot of no listed pose'],
+      [`${sheet.prefix}ark.png`, 'a screenshot with no pose'],
+    ] as const) {
+      fails(setField(recorded, 'Screenshots', `\`${bad}\``), new RegExp(`the screenshot ${escapeRegExp(bad)} is not named`), why, anything);
+    }
   }
   fails(setField(recorded, 'Screenshots', 'None yet.'), new RegExp(`names no ${prefixRe}\\*\\.png`), 'a verdict with no screenshot', present);
   fails(setField(recorded, 'Screenshots', '`opening.png`'), new RegExp(`names no ${prefixRe}\\*\\.png`), `a screenshot not named ${sheet.prefix}*`, present);
@@ -780,10 +802,14 @@ function holdsBothStates(sheet: Judgement): { readonly recorded: string; readonl
   };
   for (const pose of sheet.poses) fails(inSheet(`${rowStarting(SHEET.poses, pose)}\n`, ''), new RegExp(`${named.source}the pose "${escapeRegExp(pose)}" is not in the poses table`), `the ${pose} pose dropped`);
   for (const look of sheet.looks) fails(inSheet(`${rowStarting(SHEET.checklist, look)}\n`, ''), new RegExp(`${named.source}the look "${escapeRegExp(look)}" is not in the checklist`), `the look ${look} dropped`);
-  for (const step of sheet.steps) {
+  for (const [pose, step] of sheet.steps) {
     fails(inSheet(new RegExp(escapeRegExp(step), 'g'), step.replace(/\d+(?:\.\d+)?$/, '7')), new RegExp(`the ${escapeRegExp(step)} wheel step`), `the step ${step} changed`);
     // A digit more is another step, not this one: `deltaY: 10000` is not `deltaY: 1000`.
     fails(inSheet(stepPattern(step, 'g'), `${step}0`), new RegExp(`the ${escapeRegExp(step)} wheel step`), `the step ${step} with a digit appended`);
+    // Taken out of its pose's row and given in the prose below the table: the row must hold it.
+    const row = rowStarting(SHEET.poses, pose);
+    const moved = inSheet(row, row.replace(stepPattern(step, 'g'), 'the step'));
+    fails(inSheet(SHEET.checklist, `The step is ${step}.\n\n${SHEET.checklist}`, moved), new RegExp(`the ${escapeRegExp(step)} wheel step`), `the step ${step} out of the ${pose} row`);
   }
   // The sentences every state keeps.
   fails(inSheet(/not the target profile/gi, 'a fine machine'), /not the target profile/, 'the target-profile line lost');
@@ -828,6 +854,7 @@ test('the 9.11 judgement sheet holds in both states, beside 8.4 rejected, at bot
   recordedFails(setDisplays('the Odyssey Ark only.'), /the "Displays" field does not name 1920×1080/, 'Displays naming the Ark only');
   recordedFails(setDisplays('a 1920×1080 display only.'), /the "Displays" field does not name Odyssey Ark/, 'Displays naming 1920×1080 only');
   assert.deepEqual(auditJudgement(setDisplays('a Dell at 1920x1080, DPR 1, 100% scaling; the Ark, DPR 1.'), sheet, present), [], 'both displays, in their short spellings, pass');
+  assert.deepEqual(auditJudgement(setDisplays('a 1920×1080 Dell and the Odyssey ark.'), sheet, present), [], 'the Ark in lower case counts');
   // The dark ring not closed: its row loses "superseded" or "9.4".
   const ring = (sectionOf(section, SHEET.checklist) as string).split('\n').find((line) => line.trim().startsWith('|') && /the star's dark ring/i.test(cellsOf(line)[0] ?? ''));
   assert.ok(ring !== undefined, 'the checklist has the dark-ring row');

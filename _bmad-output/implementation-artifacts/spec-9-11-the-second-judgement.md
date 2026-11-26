@@ -4,7 +4,7 @@ type: 'chore'
 created: '2026-11-26'
 status: 'done'
 baseline_revision: 'e73313eb78e1db00ce80b7cfdb7084f9072877f0'
-review_loop_iteration: 0
+review_loop_iteration: 1
 followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-9-context.md'
@@ -149,9 +149,48 @@ deferred: []
 - Given the agent's run ends, when the record is read, then 9.11's verdict is `Not yet given.`, 8.4's section is unchanged, and the record reads NFR-2 **not yet passed**.
 - Given Thomas later records a verdict, when `npm test` runs, then it passes only with every field filled and every named screenshot present, and the record still reads NFR-2 not yet passed.
 
+### Review Findings
+
+- [x] [Review][Decision] The checklist has no row for 8.4's own rejection reasons — resolved by Thomas (2026-11-26): add the row "8.4's rejection, answered", guarded, with a Spec Change Log entry. Now a patch.
+- [x] [Review][Patch] Add the checklist row "8.4's rejection, answered": the strokes under realism, the Stars reading as stars, and the tint variety, with levers, and add it to `JUDGEMENT_9_11.looks` [nfr-2-record-8-3.md:61]
+- [x] [Review][Patch] Serve gives no step to confirm the judged build: Thomas will build at a later HEAD, and nothing tells him to compare the three chunk names (and the commit) before judging [nfr-2-record-8-3.md:19]
+- [x] [Review][Patch] Star close-up: on the Ark the glow (3 × 148 px) runs off the top of the frame (centre y≈327), and "as large and whole as a visitor's input draws any Star" overstates it, since the largest is near p≈1.28 [nfr-2-record-8-3.md:37]
+- [x] [Review][Patch] The opening frame's cell carries other poses' sizes, and "69 px against 77 px at its stop" does not name the displays [nfr-2-record-8-3.md:33]
+- [x] [Review][Patch] No pointer rule: a pointer resting over a Body raises the hover affordance (`affordance-field.tsx` re-picks under a still pointer), so it can change a pose or its screenshot [nfr-2-record-8-3.md:27]
+- [x] [Review][Patch] The motion preference is not stated: under reduced motion the fade and rise shorten and the Star clock freezes (`arrival-model.ts:8`, `star-model.ts:27`), so the crossfade and rise looks differ [nfr-2-record-8-3.md:25]
+- [x] [Review][Patch] The Epic 9 lever list is not complete from source: `NEBULA_NOISE_PERIOD`, `RING_DISC_BAND_CELLS`, `BELT_JUNCTION_RADIUS` and the moon sphere's `MOON_*` are not named, and `affordance-model.ts` lacks its `src/render-scene/` path [nfr-2-record-8-3.md:66-67]
+- [x] [Review][Patch] The rejection route warns of `realism`'s 214 B headroom but not of `scene`'s 1,368 B [nfr-2-record-8-3.md:73]
+- [x] [Review][Patch] Guard: a 9.11 screenshot's pose slug is unchecked, so `judgement-9-11-anything-ark.png` passes [scripts/nfr-2-record.test.ts:619]
+- [x] [Review][Patch] Guard: wheel steps are matched anywhere in The poses, not in their own pose's row, so a swapped step passes [scripts/nfr-2-record.test.ts:671]
+- [x] [Review][Patch] Guard: the recorded Displays field's Ark pattern is case-sensitive, so "Odyssey ark" falsely fails [scripts/nfr-2-record.test.ts:564]
+
 ## Spec Change Log
 
+### 2026-11-26 — Code review (decision D1, Thomas)
+- **Change:** the checklist gains a 14th row, `8.4's rejection, answered`. It is guarded in `JUDGEMENT_9_11.looks`, and it checks 8.4's three points (the strokes, the Stars reading as stars, and the tint variety) against what Epic 9 changed.
+- **Why:** the enumerated rows carried 8.4's *routed* looks but not its verdict's own reasons. Those were raised only in The poses' preamble, with no levers and no guard.
+- **KEEP:** the other 13 rows as enumerated above, and the dark ring closed as superseded by 9.4.
+
 ## Review Triage Log
+
+### 2026-11-26 — Code review (`bmad-code-review`, 4 layers)
+- decision_needed: 1 (medium), resolved by Thomas as a patch.
+- patch: 11, all applied (the medium one is D1; the other 10 are low).
+- defer: 0.
+- dismissed: 16. Several repeat the previous pass's rejections (one screenshot is enough, split verdicts, brittle line references, guard depth). The others: the Ark only emulated (allowed by the spec), the poses not re-run after the wording patches, the spec status `done` against the sprint's `review` (the spec workflow's convention, as in 8.4), and adversarial wording for the dark ring and 8.4's verdict.
+- addressed_findings:
+  - `[medium]` `[patch]` D1: the row `8.4's rejection, answered`, added and guarded.
+  - `[low]` `[patch]` Serve now confirms the build (the chunk names, and no shipped change since the build commit) before judging.
+  - `[low]` `[patch]` Star close-up: "near the largest", since p≈1.28 is the largest; the glow runs off the top on the Ark and possibly in a maximised window.
+  - `[low]` `[patch]` The opening frame's cell drops the other poses' sizes; the Client stop names its own, per display.
+  - `[low]` `[patch]` The pointer is kept off the scene while judging.
+  - `[low]` `[patch]` The judgement is made with reduce-motion off.
+  - `[low]` `[patch]` The Epic 9 levers gain `NEBULA_NOISE_PERIOD` and `RING_DISC_BAND_CELLS`, with the derived and pinned exports named as not levers; the `affordance-model.ts` path is completed.
+  - `[low]` `[patch]` `scene`'s 1,368 B headroom is stated beside `realism`'s.
+  - `[low]` `[patch]` Guard: a 9.11 screenshot's whole name is checked (a listed pose and display).
+  - `[low]` `[patch]` Guard: each wheel step must be in its own pose's row, 8.4's included, with a mutation that moves it into prose.
+  - `[low]` `[patch]` Guard: the recorded Displays field matches the Ark case-insensitively.
+- verification: `npm test` 2,375 tests, 2,374 pass, 0 fail, 1 skip (the environmental symlink skip); `npx tsc --noEmit` clean. 8.4's section is unchanged: every record hunk lies in 9.11's section.
 
 ### 2026-11-26 — Review pass
 - intent_gap: 0
