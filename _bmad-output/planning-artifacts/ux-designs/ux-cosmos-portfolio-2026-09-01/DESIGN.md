@@ -892,7 +892,7 @@ raised from `ink-label` (Q1). A name sits inside its own Star's glow, and its gr
 the halo composited over that glow, a belt and the nebula, not the flat page ground. On
 that ground `ink-label` held 4.5:1 only at the glyph's edge (3.2:1 half a pixel out, at
 a near Star seen close). `ink-prose` holds it at every committed Rail stop and viewport,
-5.4:1 at worst, with the halo unchanged. `star-client-receded.labelColor` follows. The
+5.0:1 at worst, with the halo unchanged. `star-client-receded.labelColor` follows. The
 subject's `ink-lift` still stands above it (17.9:1 against 9.9:1 on the page ground). The
 proof is `client-label-ground.test.ts`, a composited-ground check that models the halo.
 Thomas's on-screen pass remains the check on real pixels.]*

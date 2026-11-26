@@ -12,7 +12,7 @@
  *   builds it). A belt blends over what it lies on, so at alpha 1 it replaces the void;
  *   its profile, noise and junction fade are taken as 1, the worse case;
  * - plus every Star's glow at that point: its falloff `(1 - r²)²` over its projected
- *   `GLOW_RADIUS_RATIO` disc, at the subject's peak for the subject and its band's own
+ *   `GLOW_RADIUS_RATIO` disc, applied in linear before encoding as the shader does, at the subject's peak for the subject and its band's own
  *   peak otherwise, in its own tint;
  * - plus the nebula at its peak once for every pass of the ribbon over the point: the
  *   drawn Rail projected, each pass a run of segments within the ribbon's projected
@@ -186,12 +186,65 @@ interface Reading {
   readonly passes: number;
 }
 
+/** What the frame draws under a screen point, before any halo: its encoded colour, and the ribbon's passes there. */
+type Sky = (point: Spot) => { readonly scene: number[]; readonly passes: number };
+
+/**
+ * The sky behind the labels for one camera: the void or a belt, plus every Star's glow (its
+ * falloff applied in linear, before encoding, as the shader does), plus the nebula once per pass.
+ * `subject` is the Star whose glow is at the subject's peak, or `null` for none.
+ */
+function skyFor(sky: ReturnType<typeof committed>, view: ArrayLike<number>, projection: ArrayLike<number>, viewport: Viewport, subject: string | null): Sky {
+  const glows = sky.plans.flatMap((plan) => {
+    const screen = projectToScreen(plan.position, view, projection, viewport);
+    if (screen === null) return [];
+    const r = radiusPx(GLOW_RADIUS_RATIO * STAR_RADIUS, screen.depth, projection, viewport.height);
+    const tint = channels(tokens.colors[STAR_TINT_TOKENS[plan.tint]]);
+    const peak = bandPeak(plan.band, plan.id === subject ? 1 : 0);
+    return [{ x: screen.x, y: screen.y, r, linear: tint.map((value) => (value / Math.max(luminanceOf(tint), 1e-6)) * peak) }];
+  });
+  const ribbon = sky.line.map((point) => {
+    const screen = projectToScreen(point, view, projection, viewport);
+    return screen === null ? null : { x: screen.x, y: screen.y, r: radiusPx(NEBULA_HALF_WIDTH, screen.depth, projection, viewport.height) };
+  });
+  const strips = sky.belts.map((belt) => {
+    const at = (point: readonly [number, number, number], scale: number) => projectToScreen({ x: belt.centre.x + (point[0] - belt.centre.x) * scale, y: belt.centre.y + (point[1] - belt.centre.y) * scale, z: belt.centre.z + (point[2] - belt.centre.z) * scale }, view, projection, viewport);
+    const inner = belt.points.map((point) => at(point, 1 - BELT_HALF_WIDTH_RATIO));
+    const outer = belt.points.map((point) => at(point, 1 + BELT_HALF_WIDTH_RATIO));
+    const quads = inner.slice(0, -1).flatMap((a, i) => {
+      const [b, c, d] = [inner[i + 1], outer[i + 1], outer[i]];
+      return a === null || b == null || c == null || d == null ? [] : [[a, b, c, d] as const];
+    });
+    const xs = quads.flat().map((spot) => spot.x);
+    const ys = quads.flat().map((spot) => spot.y);
+    const bounds = { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) };
+    return { colour: tintAt(BELT_LINEAR, BELT_BAND_LUMINANCE[belt.band]), quads, bounds } satisfies Strip & { bounds: ScreenRect };
+  });
+  return (point) => {
+    const passes = ribbonPasses(point, ribbon);
+    const under = strips.filter((strip) => point.x >= strip.bounds.left && point.x <= strip.bounds.right && point.y >= strip.bounds.top && point.y <= strip.bounds.bottom && onStrip(point, strip));
+    const scene = VOID.map((empty, i) => {
+      const below = under.reduce((most, strip) => Math.max(most, strip.colour[i]!), empty);
+      const glow = glows.reduce((sum, disc) => {
+        const t = Math.hypot(point.x - disc.x, point.y - disc.y) / disc.r;
+        return t >= 1 ? sum : sum + toSrgb(Math.min(disc.linear[i]! * (1 - t * t) ** 2, 1));
+      }, 0);
+      return Math.min(below + glow + passes * NEBULA[i]!, 1);
+    });
+    return { scene, passes };
+  };
+}
+
+/** The contrast of an ink of luminance `ink` over `scene` with the page ground composited at `coverage`. */
+const readOver = (ink: number, scene: readonly number[], coverage: number): number => contrastOf(ink, luminanceOf(scene.map((value, i) => toLinear(coverage * VOID[i]! + (1 - coverage) * value))));
+
 /**
  * The least contrast each ink reads at, over every shown name at every stop and viewport,
  * for the halo `halo` and the inks given, and the most ribbon passes any point had.
  */
 function groundReadings(halo: string, inks: { subject: string; receded: string }): { subject: Reading; receded: Reading; names: number; maxPasses: number } {
-  const { artifact, bodies, rail, line, plans, belts } = committed();
+  const sky = committed();
+  const { artifact, bodies, rail } = sky;
   const coverages = READ_AT_PX.map((out) => haloCoverage(haloBlurs(halo), out));
   const worst = { subject: { where: '', contrast: Infinity, passes: 0 }, receded: { where: '', contrast: Infinity, passes: 0 } };
   let names = 0;
@@ -203,47 +256,17 @@ function groundReadings(halo: string, inks: { subject: string; receded: string }
       const camera = stopCamera(rail, bodies, k, viewport);
       const view = camera.matrixWorldInverse.elements;
       const projection = camera.projectionMatrix.elements;
-      const glows = plans.flatMap((plan) => {
-        const screen = projectToScreen(plan.position, view, projection, viewport);
-        if (screen === null) return [];
-        const r = radiusPx(GLOW_RADIUS_RATIO * STAR_RADIUS, screen.depth, projection, viewport.height);
-        const colour = tintAt(channels(tokens.colors[STAR_TINT_TOKENS[plan.tint]]), bandPeak(plan.band, plan.id === subject ? 1 : 0));
-        return [{ x: screen.x, y: screen.y, r, colour }];
-      });
-      const ribbon = line.map((point) => {
-        const screen = projectToScreen(point, view, projection, viewport);
-        return screen === null ? null : { x: screen.x, y: screen.y, r: radiusPx(NEBULA_HALF_WIDTH, screen.depth, projection, viewport.height) };
-      });
-      const strips: Strip[] = belts.map((belt) => {
-        const at = (point: readonly [number, number, number], scale: number) => projectToScreen({ x: belt.centre.x + (point[0] - belt.centre.x) * scale, y: belt.centre.y + (point[1] - belt.centre.y) * scale, z: belt.centre.z + (point[2] - belt.centre.z) * scale }, view, projection, viewport);
-        const inner = belt.points.map((point) => at(point, 1 - BELT_HALF_WIDTH_RATIO));
-        const outer = belt.points.map((point) => at(point, 1 + BELT_HALF_WIDTH_RATIO));
-        const quads = inner.slice(0, -1).flatMap((a, i) => {
-          const [b, c, d] = [inner[i + 1], outer[i + 1], outer[i]];
-          return a === null || b == null || c == null || d == null ? [] : [[a, b, c, d] as const];
-        });
-        return { colour: tintAt(BELT_LINEAR, BELT_BAND_LUMINANCE[belt.band]), quads };
-      });
+      const under = skyFor(sky, view, projection, viewport, subject);
       const draws = clientLabelFrame(nav, artifact, bodies, rail, view, projection, viewport);
       for (const draw of draws.filter((each): each is Extract<ClientLabelDraw, { visible: true }> => each.visible)) {
         names += 1;
         const which = draw.id === subject ? 'subject' : 'receded';
         const ink = luminanceOf(channels(which === 'subject' ? inks.subject : inks.receded));
         for (const point of samples(draw.box)) {
-          const passes = ribbonPasses(point, ribbon);
+          const { scene, passes } = under(point);
           maxPasses = Math.max(maxPasses, passes);
-          const under = strips.filter((strip) => onStrip(point, strip));
-          const scene = VOID.map((empty, i) => {
-            const below = under.reduce((most, strip) => Math.max(most, strip.colour[i]!), empty);
-            const glow = glows.reduce((sum, disc) => {
-              const t = Math.hypot(point.x - disc.x, point.y - disc.y) / disc.r;
-              return t >= 1 ? sum : sum + disc.colour[i]! * (1 - t * t) ** 2;
-            }, 0);
-            return Math.min(below + glow + passes * NEBULA[i]!, 1);
-          });
           for (const coverage of coverages) {
-            const ground = luminanceOf(scene.map((value, i) => toLinear(coverage * VOID[i]! + (1 - coverage) * value)));
-            const reading = contrastOf(ink, ground);
+            const reading = readOver(ink, scene, coverage);
             if (reading < worst[which].contrast) worst[which] = { where: `stop ${k} at ${viewport.width}×${viewport.height}, ${draw.id} at (${point.x.toFixed(0)}, ${point.y.toFixed(0)}), coverage ${coverage.toFixed(2)}`, contrast: reading, passes };
           }
         }
@@ -275,3 +298,4 @@ test('the halo model: two layers cover a 1px stroke about 0.66 at its edge, and 
   assert.ok(Math.abs(haloCoverage(blurs, 0) - 0.66) < 0.01, String(haloCoverage(blurs, 0)));
   assert.ok(haloCoverage(blurs, 0.5) < haloCoverage(blurs, 0) && haloCoverage(blurs, 1) < 0.2, 'the halo hugs the glyph');
 });
+
