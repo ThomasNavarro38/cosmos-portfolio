@@ -6,7 +6,8 @@ status: 'done'
 baseline_revision: '3b48f291372d8f034145c86b9a4b688dc2616c7c'
 m2_revision: '4669784b7e3832be40a25e4b00fd508034d89f9f'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
+followup_review: review-epic-7-9-followup-2026-11-26.md
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-7-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-7-9-labels-and-the-signal-survive-realism.md'

@@ -5,7 +5,8 @@ created: '2026-11-05'
 status: 'done'
 baseline_revision: 'ea02b524b2125a65e1c23549e23efc142c98a591'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
+followup_review: review-epic-7-9-followup-2026-11-26.md
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-7-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-7-6-planets-lit-by-their-own-star.md'

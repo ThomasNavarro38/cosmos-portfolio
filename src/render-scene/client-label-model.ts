@@ -22,7 +22,7 @@
  * whose box leaves `labelBounds` — the inner 76% of the frame, the outer
  * `EDGE_SHARE` off every side, with the panel's edge as the right bound while a
  * Project is Focused — is hidden, so every name shown is readable at its floor.
- * So is a name whose Star is behind the camera, a name whose opaque plate meets
+ * So is a name whose Star is behind the camera, a name whose box meets
  * another Body's disc (a Deep Planet's reaching its Ring and its Moon, as
  * `markPx` measures them), a name whose box meets the affordance's block or
  * leader (the affordance wins), and a name whose box meets a stronger name: the
@@ -135,7 +135,7 @@ export interface ClientLabel {
 /** The pool: one label per Client, in artifact order. The binding mounts one plate per entry. */
 export function clientLabels(artifact: ClientLabelArtifact): ClientLabel[] {
   return artifact.clients.map((client) => {
-    // A blank name would mount an empty opaque plate that hides Mote labels for nothing.
+    // A blank name would mount an empty box that Mote labels yield to for nothing.
     if (client.name.trim() === '') throw new Error(`a Client name must not be blank, but ${JSON.stringify(client.id)}'s is.`);
     return { id: client.id, name: client.name };
   });
@@ -258,7 +258,7 @@ function clientLabelPlacement(
   const bounds = labelBounds(viewport, nav.focusedProjectId !== null);
   const affordance = affordanceObstacles(nav, artifact, bodies, view, projection, viewport);
   const labels = clientLabels(artifact);
-  // The plate is opaque DOM over the canvas, so it hides whatever it lies on, at any depth.
+  // The name is DOM over the canvas, at any depth, and its halo darkens whatever it lies on, so it yields to every other Body's disc (Thomas, 2026-11-18).
   const discs = bodies.flatMap((body): Disc[] => {
     const screen = projectToScreen(body.position, view, projection, viewport);
     if (screen === null) return [];

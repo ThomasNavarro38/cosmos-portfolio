@@ -79,8 +79,8 @@ export type PipelineResult =
  * set against the entities it addresses, the Dwell, Shot and Rail lists
  * against the Client set they pace, frame and order, the Skill list against
  * the Projects whose Skills it ranks, each Body against its own content
- * (`checkContent`), and each Planet's appearance against a re-derivation
- * (`checkAppearance`). None is redundant with the
+ * (`checkContent`), and each Star's band and appearance and each Planet's
+ * appearance against a re-derivation (`checkAppearance`). None is redundant with the
  * gate — without them the *first* bad emission would be the one committed, and
  * the gate would only ever reject it afterwards, when the artifact on disk is
  * already wrong.
@@ -131,7 +131,7 @@ export function checkEmittedArtifact(artifact: Artifact): string[] {
 
   const appearanceFailures = checkAppearance(artifact);
   if (appearanceFailures.length > 0) {
-    return ['the emitted appearances disagree with the map library:', ...appearanceFailures];
+    return ['the emitted appearances disagree with their re-derivation:', ...appearanceFailures];
   }
 
   return [];
@@ -594,8 +594,8 @@ export function checkContent(artifact: Artifact): string[] {
 /**
  * Asserts each Star's `luminanceBand` and `appearance` against a re-derivation
  * (9.4), and each Planet's `appearance` against the library and its own ID (AD-21).
- * Returns the failure lines, empty on success, each naming the Project and either
- * the map no entry holds or the field that differs. So a hand edit fails, and so
+ * Returns the failure lines, empty on success, each naming the Client or the Project
+ * and either the map no entry holds or the field that differs. So a hand edit fails, and so
  * does a library changed with no re-solve.
  *
  * **This re-derives and does not solve** (AD-1): `appearanceOf` runs no force
@@ -833,13 +833,14 @@ function inspectArtifact(
     ]);
   }
 
-  // Each Planet's appearance against its ID and the map library (7.4). The one
-  // re-derivation the gate makes, and AD-21 asks for it by name: it reads an ID
-  // off the document, and runs no solve (AD-1).
+  // Each Star's band and appearance against its Projects' dates and its ID (9.4,
+  // 9.5), and each Planet's appearance against its ID and the map library (7.4).
+  // The one re-derivation the gate makes, and AD-21 asks for it by name: it reads
+  // the document, and runs no solve (AD-1).
   const appearance = checkAppearance(schema.artifact);
   if (appearance.length > 0) {
     return fail([
-      'the committed layout artifact has appearances that disagree with the map library:',
+      'the committed layout artifact has appearances that disagree with their re-derivation:',
       ...appearance,
       'Run `npm run solve` and commit the result.',
     ]);

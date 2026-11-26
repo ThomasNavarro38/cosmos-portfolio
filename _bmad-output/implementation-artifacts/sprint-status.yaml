@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 11-26-2026 12:27
+last_updated: 11-26-2026 14:08
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -708,7 +708,7 @@ action_items:
       before 8.5, folding in R1, R3 and R5; then clear followup_review_recommended
       on spec-7-4..7-8 and spec-7-10"
     owner: "Thomas"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-7-retro-11-16-2026.md"
   - id: "epic-7-retro-item-52-settle-the-depth-margin-check-7-6-passed"
     epic: 7
@@ -765,7 +765,7 @@ action_items:
       (7.4-7.8, item 51) and Epic 9 (61b0ed0^..7ec482f) folding in the Epic 9 retro
       findings, then clear the 17 followup_review_recommended flags (F-P1)"
     owner: "Thomas"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-9-retro-11-26-2026.md"
   - id: "epic-9-retro-item-58-prove-the-label-contrast-floor-over-real"
     epic: 9

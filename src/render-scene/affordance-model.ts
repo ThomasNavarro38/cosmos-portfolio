@@ -293,7 +293,9 @@ function typeMetrics(role: 'scene-label-project' | 'scene-label-secondary') {
 /**
  * The label block's estimated size: each line `chars × fontPx × (LABEL_CHAR_EM +
  * letterSpacing)` wide, the block as wide as its wider line and as tall as both
- * line boxes. An estimate — the DOM is never measured — erring wide.
+ * line boxes, plus its plate's `PLATE_PAD_PX` on every side, so the bounds and
+ * the obstacles cover the plate that is drawn. An estimate — the DOM is never
+ * measured — erring wide.
  */
 export function labelBox(text: AffordanceText): LabelBox {
   const lines = [
@@ -301,8 +303,8 @@ export function labelBox(text: AffordanceText): LabelBox {
     { chars: [...text.secondary].length, ...typeMetrics('scene-label-secondary') },
   ];
   return {
-    width: Math.max(...lines.map((line) => line.chars * line.fontPx * (LABEL_CHAR_EM + line.spacingEm))),
-    height: lines.reduce((sum, line) => sum + line.fontPx * line.lineHeight, 0),
+    width: Math.max(...lines.map((line) => line.chars * line.fontPx * (LABEL_CHAR_EM + line.spacingEm))) + 2 * PLATE_PAD_PX,
+    height: lines.reduce((sum, line) => sum + line.fontPx * line.lineHeight, 0) + 2 * PLATE_PAD_PX,
   };
 }
 
@@ -598,6 +600,9 @@ export function affordanceLeaderStyle() {
   } as const;
 }
 
+/** How far the plate reaches past the text's box, in CSS pixels. */
+export const PLATE_PAD_PX = 1;
+
 /**
  * The label block: placed at the canvas's top-left and moved by its transform,
  * one line per row, hidden until placed. Its outline offset is the keyboard
@@ -611,9 +616,6 @@ export function affordanceLeaderStyle() {
  * the void restored behind the words, not as a card. The outline sits at its
  * offset from the plate.
  */
-/** How far the plate reaches past the text's box, in CSS pixels. */
-export const PLATE_PAD_PX = 1;
-
 export function affordanceBlockStyle() {
   return {
     position: 'absolute',

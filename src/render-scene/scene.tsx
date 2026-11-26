@@ -63,12 +63,13 @@
  *
  * **Realism has one owner** (`<RealismMount>`, 7.5), mounted last and once, with
  * no conditional. On the frame after the first it imports the `realism` chunk and
- * decodes the maps the artifact names, then adds one fill per Planet to this
- * Canvas's scene without React (7.6). Nothing it does can suspend or throw: when a
- * step of its own fails, the fills go and this scene is what stays. A shader that
- * fails to compile or a map that fails to upload, inside three's render, does not
- * reach it until 7.8. It is the only way from here to the realism directory; Stars
- * are 7.7's, and the fade 7.8's.
+ * decodes the maps the artifact names, then builds the realism layer in this
+ * Canvas's scene without React: each Planet's fill, rim, belt and, when Deep, ring
+ * and moon, each Star's core and glow, and the Rail's nebula (7.6–7.8, 9.4–9.9).
+ * It warms the layer off-screen and checks every program's link status before
+ * fading it in, and the line-work out, on one fade (7.8, 9.10). Nothing it does can
+ * suspend or throw: when any step fails, the layer goes and this scene is what
+ * stays. It is the only way from here to the realism directory.
  *
  * **Dust is drawn strictly behind every Body** (FR-15). The model in
  * `dust-model.ts` decides what Dust exists; this file only guarantees the Dust's
@@ -249,7 +250,7 @@ export function Scene({ artifact }: SceneProps) {
         <WorstWindowMark />
         {/* The First Paint mark (6.4): marks the first frame once per document, on the visitor's own timeline. Draws nothing, sends nothing. */}
         <FirstFrameMark />
-        {/* Realism's owner (7.5, 7.6, 7.7): decodes the maps after the first frame, adds the fills and glows itself, and on a failure it can see leaves this scene exactly as it was. It takes the Rail to read the subject, and writes no store field. */}
+        {/* Realism's owner (7.5–7.8, 9.4–9.10): decodes the maps after the first frame, builds the realism layer itself, and on a failure it can see leaves this scene exactly as it was. It takes the Rail to read the subject and to sample the nebula's path, and writes no store field. */}
         <RealismMount artifact={artifact} rail={rail} />
       </Canvas>
       {/* The vignette: the ground over the frame's edge, 0 inside 42% rising to 0.9. Inert, and not narrated. */}

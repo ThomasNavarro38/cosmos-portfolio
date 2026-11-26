@@ -5,7 +5,8 @@ created: '2026-11-18'
 status: 'done'
 baseline_revision: 'caf377490e9a6f0056d88f1609f8fac2c075ebab'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
+followup_review: review-epic-7-9-followup-2026-11-26.md
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-9-context.md'
   - '{project-root}/_bmad-output/planning-artifacts/sprint-change-proposal-2026-11-17.md'

@@ -129,8 +129,8 @@ export const STAR_CORE_EDGE = 0.35;
 export const STAR_CORE_ALPHA_FLOOR = 0.5;
 
 /**
- * The linear relative luminance of `#B09468`, 9.4's one glow colour (`realism-star-glow`,
- * retired in 9.5): sRGB-decoded, weighted by Rec. 709. A test pins it against the hex.
+ * The linear relative luminance of `#B09468`, 9.4's one glow colour (a token retired in
+ * 9.5): sRGB-decoded, weighted by Rec. 709. A test pins it against the hex.
  */
 export const GLOW_94_LUMINANCE = 0.3140939169310539;
 

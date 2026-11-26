@@ -5,7 +5,8 @@ created: '2026-11-26'
 status: 'done'
 baseline_revision: 'e73313eb78e1db00ce80b7cfdb7084f9072877f0'
 review_loop_iteration: 1
-followup_review_recommended: true
+followup_review_recommended: false
+followup_review: review-epic-7-9-followup-2026-11-26.md
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-9-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-8-4-thomas-s-on-screen-judgement.md'

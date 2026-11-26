@@ -30,24 +30,29 @@ import { SHOT_FRAMINGS } from './shots.ts';
  * Story 1.7 added `dwell` and `shots`, **4** when Story 2.1 added `rail`, **5**
  * when Story 3.2 added each Project's `orbitNormal`, **6** when Story 3.5 added
  * the top-level `skills`, **7** when Story 3.9 narrowed `luminanceBand` to two
- * steps (`stroke-rest`, `stroke-near`), and is **8** now that Story 3.12 has
- * added `sourceDigest` and made `clients`, `destinations`, `dwell` and `shots`
- * non-empty, and is **9** now that Story 4.5 has added each Client's calendar
- * `span`: each time the contract's shape changed, the number it declares
- * changed with it. An artifact carrying `8` gives the Fallback no Client
- * dates, so it would have to aggregate its Projects' `duration`s itself — the
- * derivation AD-3 keeps out of a renderer. **10** is Story 7.4's each Project's
- * `appearance`: an artifact carrying `9` names no map, so a renderer would have
- * to import the library or pick one itself. **11** is Story 9.4's each Client's
- * `luminanceBand` and `appearance` (`pulsePhase`): an artifact carrying `10` gives
- * a Star's light no recency, so a renderer would have to rank Clients itself. **12** is
- * Story 9.5's each Client's `appearance.tint`: an artifact carrying `11` gives a
- * Star no colour of its own, so a renderer would have to pick one itself. An artifact carrying `7` names no source, so the gate could
- * not tell whether it was solved from the `career.json` beside it. An artifact
- * still carrying `5` publishes no Skill tiers, and must fail rather than be read
- * by a scene that seats Motes by them — it would have to count shares itself,
- * which is the classification AD-3 keeps out of the renderer. One carrying `6`
- * may hold a `stroke-dust` Body, which no longer exists as a band.
+ * steps (`stroke-rest`, `stroke-near`), **8** when Story 3.12 added
+ * `sourceDigest` and made `clients`, `destinations`, `dwell` and `shots`
+ * non-empty, **9** when Story 4.5 added each Client's calendar `span`, **10**
+ * when Story 7.4 added each Project's `appearance`, **11** when Story 9.4 added
+ * each Client's `luminanceBand` and `appearance` (`pulsePhase`), and is **12**
+ * now that Story 9.5 has added each Client's `appearance.tint`: each time the
+ * contract's shape changed, the number it declares changed with it. So an older
+ * number fails rather than being read:
+ *
+ * - `5` publishes no Skill tiers, so a scene that seats Motes by them would
+ *   have to count shares itself, the classification AD-3 keeps out of the
+ *   renderer.
+ * - `6` may hold a `stroke-dust` Body, which no longer exists as a band.
+ * - `7` names no source, so the gate could not tell whether it was solved from
+ *   the `career.json` beside it.
+ * - `8` gives the Fallback no Client dates, so it would have to aggregate its
+ *   Projects' `duration`s itself, the derivation AD-3 keeps out of a renderer.
+ * - `9` names no map, so a renderer would have to import the library or pick
+ *   one itself.
+ * - `10` gives a Star's light no recency, so a renderer would have to rank
+ *   Clients itself.
+ * - `11` gives a Star no colour of its own, so a renderer would have to pick
+ *   one itself.
  *
  * Every new field is **required**, not declared-and-empty. That is only possible
  * once something populates it — a required field nothing emits would have made

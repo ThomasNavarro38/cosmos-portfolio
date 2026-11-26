@@ -366,7 +366,7 @@ test('a stronger name hidden by the edge blocks nothing: its in-bounds neighbour
 
 // --- Yielding to the Bodies ------------------------------------------------------------------
 
-test('a name whose opaque plate meets another Body’s disc, a Deep Planet’s Ring or Moon included, is hidden while it does', () => {
+test('a name whose box meets another Body’s disc, a Deep Planet’s Ring or Moon included, is hidden while it does', () => {
   const camera = cameraAt(HD);
   const view = camera.matrixWorldInverse.elements;
   const projection = camera.projectionMatrix.elements;
@@ -481,7 +481,7 @@ test('the committed artifact at every Rail stop, at 16:9, 32:9 and 16:10: names 
   assert.ok(shownCount > 2 * stops, 'names are shown, not merely hidden');
 });
 
-test('at every committed Rail stop, at each viewport, no shown name’s opaque plate covers another Body, its Ring or its Moon', () => {
+test('at every committed Rail stop, at each viewport, no shown name’s box covers another Body, its Ring or its Moon', () => {
   const { artifact, bodies, rail } = committed();
   let checked = 0;
   for (const viewport of [HD, ARK, LAPTOP]) {

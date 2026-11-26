@@ -294,9 +294,9 @@ test('the label box is estimated from its text and the type roles, erring wide',
   const title = tokens.typography['scene-label-project'];
   const secondary = tokens.typography['scene-label-secondary'];
   const em = (spacing: string) => LABEL_CHAR_EM + Number.parseFloat(spacing);
-  assert.ok(Math.abs(long.width - 27 * Number.parseFloat(title.fontSize) * em(title.letterSpacing)) < 1e-9);
+  assert.ok(Math.abs(long.width - (27 * Number.parseFloat(title.fontSize) * em(title.letterSpacing) + 2 * PLATE_PAD_PX)) < 1e-9, 'its plate’s padding included');
   const height = Number.parseFloat(title.fontSize) * title.lineHeight + Number.parseFloat(secondary.fontSize) * secondary.lineHeight;
-  assert.ok(Math.abs(short.height - height) < 1e-9, 'two line boxes tall');
+  assert.ok(Math.abs(short.height - (height + 2 * PLATE_PAD_PX)) < 1e-9, 'two line boxes tall, and the plate drawn round them');
   assert.ok(LABEL_CHAR_EM >= 0.55, 'no narrower than a Helvetica average glyph');
 });
 
