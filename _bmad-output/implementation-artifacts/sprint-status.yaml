@@ -807,7 +807,7 @@ action_items:
     action: "File the deferred edge batch in deferred-work.md: F-L1, F-L2, F-L3, F-L4
       (Thomas to check on screen), F-L5, F-L7, F-L8, F-L9, F-L10, F-V6"
     owner: "Amelia (dev)"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-9-retro-11-26-2026.md"
   - id: "epic-9-retro-item-63-extract-one-shared-glsl-noise-chunk-for"
     epic: 9
