@@ -55,6 +55,7 @@ deferred:
 
 **Rulings taken (Thomas, 2026-11-18, accepting the first run's recommendations):**
 - **Q1, receded ink:** every receded name is `ink-label-dark` (5.85:1 on `surface-base-dark`). The subject's name is `ink-lift-dark`. §7.1's "`ink-quiet` or `ink-faint`" prose is stale, superseded by the 2026-09 fix (`.memlog.md:90`) and the frontmatter's `star-client-receded.labelColor`.
+  - *Superseded 2026-11-26 (Thomas, Epic 9 retro item 3): the receded ink is `ink-prose-dark`. On the halo composited over a near Star's glow, `ink-label-dark` held 4.5:1 only at the glyph edge. See `client-label-ground.test.ts`.*
 - **Q2, type:** every name, subject or receded, is `scene-label-client`. Subject and receded differ by ink alone.
 - **Q3, the frame edge, reading (a):** a name is hidden, never faded or moved, while its estimated box enters the outer `EDGE_SHARE` (12%) of the frame on any side, or, while a Project is Focused, crosses the panel edge. Every name that is shown is readable and at its floor.
 - **Collisions (the plan, unopposed):** a Client name yields to the affordance block and is hidden while its box meets it. The Motes' labels yield to a shown Client name, which joins their obstacles. No cap, because there are fewer Stars than 12.

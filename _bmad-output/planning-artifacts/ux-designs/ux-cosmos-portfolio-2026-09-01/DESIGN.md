@@ -219,7 +219,7 @@ components:
     stroke: "{colors.stroke-rest-dark}"
     strokeWidth: "{components.stroke-weight.hairline}"
     label: "{typography.scene-label-secondary}"
-    labelColor: "{colors.ink-label-dark}"
+    labelColor: "{colors.ink-prose-dark}"
 
   planet-shallow:
     stroke: "{colors.stroke-rest-dark}"
@@ -886,6 +886,16 @@ label or leader, and while it meets a stronger name (the subject's, then the
 nearer Star's), keeping a 4px gap from both; the Motes' labels yield to a shown
 name. The name-against-name order is story 9.3's own rule, not a ruling. No cap:
 there are fewer Stars than twelve.]*
+
+*[amended 2026-11-26 (Thomas, Epic 9 retro item 3): the receded name is `ink-prose`,
+raised from `ink-label` (Q1). A name sits inside its own Star's glow, and its ground is
+the halo composited over that glow, a belt and the nebula, not the flat page ground. On
+that ground `ink-label` held 4.5:1 only at the glyph's edge (3.2:1 half a pixel out, at
+a near Star seen close). `ink-prose` holds it at every committed Rail stop and viewport,
+5.4:1 at worst, with the halo unchanged. `star-client-receded.labelColor` follows. The
+subject's `ink-lift` still stands above it (17.9:1 against 9.9:1 on the page ground). The
+proof is `client-label-ground.test.ts`, a composited-ground check that models the halo.
+Thomas's on-screen pass remains the check on real pixels.]*
 
 ### 7.2 Project Planet — the Deep/Shallow signal
 

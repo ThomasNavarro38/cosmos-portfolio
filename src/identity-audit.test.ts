@@ -589,11 +589,11 @@ test('contrast: a role moved to a dimmer ink, or one whose ink cannot be read, f
     /^contrast: Client name, subject is ink-quiet-dark on surface-base-dark, \d\.\d\d:1 — below its 4\.5:1 floor$/,
   );
   assert.match(
-    failing(CLIENT_LABEL_TS, (s) => s.replace("CLIENT_LABEL_RECEDED_INK = tokens.colors['ink-label-dark']", "CLIENT_LABEL_RECEDED_INK = tokens.colors['ink-quiet-dark']")),
+    failing(CLIENT_LABEL_TS, (s) => s.replace("CLIENT_LABEL_RECEDED_INK = tokens.colors['ink-prose-dark']", "CLIENT_LABEL_RECEDED_INK = tokens.colors['ink-quiet-dark']")),
     /^contrast: Client name, receded is ink-quiet-dark on surface-base-dark, \d\.\d\d:1 — below its 4\.5:1 floor$/,
   );
   assert.match(
-    failing(CLIENT_LABEL_TS, (s) => s.replace("CLIENT_LABEL_RECEDED_INK = tokens.colors['ink-label-dark'];", 'CLIENT_LABEL_RECEDED_INK = RECEDED;')),
+    failing(CLIENT_LABEL_TS, (s) => s.replace("CLIENT_LABEL_RECEDED_INK = tokens.colors['ink-prose-dark'];", 'CLIENT_LABEL_RECEDED_INK = RECEDED;')),
     /^contrast: Client name, receded's ink could not be read off render-scene\/client-label-model\.ts as a colour token$/,
   );
   assert.match(

@@ -551,7 +551,7 @@ test('the plate is padded 1px, in scene-label-client, with no edge or corner', (
 
 test('both inks clear 4.5:1 on the halo’s ground, and the subject’s is the lifted one', () => {
   assert.equal(CLIENT_LABEL_SUBJECT_INK, tokens.colors['ink-lift-dark']);
-  assert.equal(CLIENT_LABEL_RECEDED_INK, tokens.colors['ink-label-dark']);
+  assert.equal(CLIENT_LABEL_RECEDED_INK, tokens.colors['ink-prose-dark'], 'raised from ink-label, 2026-11-26');
   for (const ink of [CLIENT_LABEL_SUBJECT_INK, CLIENT_LABEL_RECEDED_INK]) {
     assert.ok(contrast(ink, tokens.colors['surface-base-dark']) >= 4.5);
   }

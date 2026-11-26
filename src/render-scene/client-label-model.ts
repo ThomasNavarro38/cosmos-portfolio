@@ -31,7 +31,9 @@
  *
  * **The ink tells subject from receded, and nothing else does** (Q1, Q2). The
  * subject's name — `sceneSubject`'s Star — is `ink-lift`; every other name is
- * `ink-label`. Both in `scene-label-client`. While a Project is Focused the
+ * `ink-prose` (raised from `ink-label` by Thomas's 2026-11-26 ruling, so a receded name
+ * keeps 4.5:1 inside its own Star's glow, not only on the page ground). Both in
+ * `scene-label-client`. While a Project is Focused the
  * subject is a Planet, so no name is lifted.
  *
  * **The halo is the contrast ground.** Each name carries `CLIENT_LABEL_HALO`,
@@ -108,8 +110,11 @@ export const CLIENT_LABEL_CLEARANCE_PX = MOTE_LABEL_CLEARANCE_PX;
 /** The subject's name: `ink-lift`. */
 export const CLIENT_LABEL_SUBJECT_INK = tokens.colors['ink-lift-dark'];
 
-/** Every receded name: `ink-label`, 5.85:1 on the page ground (Q1). */
-export const CLIENT_LABEL_RECEDED_INK = tokens.colors['ink-label-dark'];
+/**
+ * Every receded name: `ink-prose`, 9.9:1 on the page ground. It was `ink-label` (Q1), which
+ * the halo held to 4.5:1 only at the glyph edge in a near Star's glow (Thomas, 2026-11-26).
+ */
+export const CLIENT_LABEL_RECEDED_INK = tokens.colors['ink-prose-dark'];
 
 // --- The artifact slice and the pool -------------------------------------------------
 
