@@ -29,7 +29,8 @@ if (!['ok', 'map-404', 'map-corrupt', 'chunk-404'].includes(mode)) throw new Err
 // The chunk's name is `realism-` and a hash. Find it by the one thing only it
 // holds, so a renamed chunk still fails loudly here rather than serving unbroken.
 const scripts = readdirSync(join(DIST, 'assets')).filter((name) => name.endsWith('.js'));
-const holding = scripts.filter((name) => readFileSync(join(DIST, 'assets', name), 'utf8').includes('.webp'));
+// Since Epic 8 the colophon's credits name the maps too, so the chunk is the one that also decodes them.
+const holding = scripts.filter((name) => { const text = readFileSync(join(DIST, 'assets', name), 'utf8'); return text.includes('.webp') && text.includes('imageOrientation'); });
 if (holding.length !== 1) throw new Error(`expected one chunk naming a map, found ${JSON.stringify(holding)}`);
 const realismChunk = `assets/${holding[0]}`;
 const layout = JSON.parse(readFileSync(join(DIST, 'layout.generated.json'), 'utf8'));
