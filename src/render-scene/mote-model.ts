@@ -189,11 +189,15 @@ export const MOTE_ORBIT_LINE_WIDTH_PX = strokeWidthPx('hairline');
 export const MOTE_ORBIT_LINE_SEGMENTS = 96;
 
 /**
- * The Mote label's ink: `ink-label`, the floor every Mote label tier sits at
- * (DESIGN.md §2). A stroke token on a glyph is what 3.2 forbids — the two
- * ladders never borrow each other's tokens.
+ * The Mote label's ink: `ink-prose`, above the `ink-label` floor every Mote label
+ * tier sits at (DESIGN.md §2). It was `ink-label` until Thomas's ruling of
+ * 2026-11-26 (Epic 9 retro item 3): a Mote label has no plate, and at Focus the
+ * Planet's own belt lies under it, where `ink-label` measured 3.32:1 on real
+ * pixels and `ink-prose` 5.63:1 (4.74:1 over the belt at its densest). A stroke
+ * token on a glyph is what 3.2 forbids — the two ladders never borrow each
+ * other's tokens.
  */
-export const MOTE_LABEL_COLOR = tokens.colors['ink-label-dark'];
+export const MOTE_LABEL_COLOR = tokens.colors['ink-prose-dark'];
 
 // --- The artifact slice ------------------------------------------------------
 

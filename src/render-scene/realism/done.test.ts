@@ -549,6 +549,10 @@ const needsM2 = { skip: HAS_M2 ? false : `git, or revision ${M2_REVISION} (absen
  * AD-20 and AD-24's must-stay-unchanged paths: the preview, the camera, the Rail, Focus and the Motes' layout.
  * `mote-field.tsx` left the list by Thomas's ruling of 2026-11-18 (AD-20 amended): its labels yield to the
  * shown Client names too, and its frame stays pinned statement by statement by `auditMoteField`.
+ *
+ * `mote-model.ts` and its test stay on the list with one admitted edit each (`SINCE_M2`), by Thomas's ruling
+ * of 2026-11-26 (Epic 9 retro item 3, AD-20 amended): the Mote label's ink is `ink-prose`, since the Focused
+ * Planet's belt lies under the labels. The file must equal M2's with exactly those replacements made.
  */
 const UNCHANGED = [
   'public/preview.png',
@@ -567,8 +571,53 @@ function git(args: readonly string[]): string {
   return run.stdout;
 }
 
+/** The edits a ruling admits since M2, by path: each `[before, after]` must occur exactly once. */
+const SINCE_M2: Readonly<Record<string, readonly (readonly [string, string])[]>> = {
+  'src/render-scene/mote-model.ts': [
+    [
+      [
+        " * The Mote label's ink: `ink-label`, the floor every Mote label tier sits at",
+        ' * (DESIGN.md §2). A stroke token on a glyph is what 3.2 forbids — the two',
+        " * ladders never borrow each other's tokens.",
+        ' */',
+        "export const MOTE_LABEL_COLOR = tokens.colors['ink-label-dark'];",
+      ].join('\n'),
+      [
+        " * The Mote label's ink: `ink-prose`, above the `ink-label` floor every Mote label",
+        " * tier sits at (DESIGN.md §2). It was `ink-label` until Thomas's ruling of",
+        ' * 2026-11-26 (Epic 9 retro item 3): a Mote label has no plate, and at Focus the',
+        " * Planet's own belt lies under it, where `ink-label` measured 3.32:1 on real",
+        ' * pixels and `ink-prose` 5.63:1 (4.74:1 over the belt at its densest). A stroke',
+        ' * token on a glyph is what 3.2 forbids — the two ladders never borrow each',
+        " * other's tokens.",
+        ' */',
+        "export const MOTE_LABEL_COLOR = tokens.colors['ink-prose-dark'];",
+      ].join('\n'),
+    ],
+  ],
+  'src/render-scene/mote-model.test.ts': [
+    ["  assert.equal(MOTE_LABEL_COLOR, tokens.colors['ink-label-dark']);", "  assert.equal(MOTE_LABEL_COLOR, tokens.colors['ink-prose-dark'], 'raised from ink-label, 2026-11-26');"],
+  ],
+};
+
+/** Where `text` is not M2's `path` with exactly its admitted edits made. */
+function admittedFailures(path: string, m2: string, text: string): string[] {
+  let expected = m2;
+  for (const [before, after] of SINCE_M2[path] ?? []) {
+    if (expected.split(before).length !== 2) return [`${path}: an admitted edit's text is not in M2's file exactly once`];
+    expected = expected.replace(before, after);
+  }
+  return expected === text ? [] : [`${path} differs from M2 beyond its admitted edits`];
+}
+
 test('the preview, camera, Rail, Focus and Mote sets are unchanged since M2, committed and in the working tree', needsM2, () => {
-  const paths = UNCHANGED.map((path) => `:(glob)${path}`);
+  const paths = [...UNCHANGED.map((path) => `:(glob)${path}`), ...Object.keys(SINCE_M2).map((path) => `:(exclude)${path}`)];
+  for (const path of Object.keys(SINCE_M2)) {
+    const m2 = git(['show', `${M2_REVISION}:${path}`]);
+    assert.deepEqual(admittedFailures(path, m2, readFileSync(join(REPO_ROOT, path), 'utf8')), [], 'the working tree is M2 with the admitted edits');
+    const committed = git(['show', `HEAD:${path}`]);
+    assert.ok(committed === m2 || admittedFailures(path, m2, committed).length === 0, `${path}: the commit is M2's, or M2's with the admitted edits`);
+  }
   for (const path of paths) assert.notEqual(git(['ls-files', '--', path]).trim(), '', `${path} names a tracked file`);
   assert.equal(git(['diff', '--stat', M2_REVISION, 'HEAD', '--', ...paths]), '', 'the epic changed none of them');
   assert.equal(git(['diff', '--stat', M2_REVISION, '--', ...paths]), '', 'nor does the working tree');

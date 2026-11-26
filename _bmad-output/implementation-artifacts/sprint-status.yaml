@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 11-26-2026 15:37
+last_updated: 11-26-2026 20:06
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -774,7 +774,7 @@ action_items:
       or rule the 9.11 on-screen pass as the proof and amend AC 9.3/9.7 (F-S2, F-V1,
       F-V2)"
     owner: "Thomas (ruling), then Amelia"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-9-retro-11-26-2026.md"
   - id: "epic-9-retro-item-59-reconcile-ac-9-3-epics-md-3181-plate-hal"
     epic: 9

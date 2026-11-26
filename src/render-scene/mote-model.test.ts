@@ -1296,7 +1296,7 @@ test('a Mote dot is filled by tier: stroke-active innermost, ink-label beyond (D
 });
 
 test('a Mote label is a glyph at ink-label — never a stroke token, never below the floor (3.2, 3.5)', () => {
-  assert.equal(MOTE_LABEL_COLOR, tokens.colors['ink-label-dark']);
+  assert.equal(MOTE_LABEL_COLOR, tokens.colors['ink-prose-dark'], 'raised from ink-label, 2026-11-26');
   assert.equal(moteLabelStyle().color, MOTE_LABEL_COLOR);
   const style = /export function moteLabelStyle\(\)[\s\S]*?\n\}/.exec(readFileSync(MODEL_TS, 'utf8'))?.[0] ?? '';
   assert.match(style, /color:\s*MOTE_LABEL_COLOR\b/);

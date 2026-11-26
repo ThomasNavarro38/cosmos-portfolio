@@ -590,7 +590,7 @@ minimums, not targets. Behavioural accessibility lives in EXPERIENCE.md.
 | Notable prose, panel title | `ink-lift-dark` on `surface-raised-dark` | ~17.4:1 | ≥ 7:1 (AAA) |
 | Field values, prose at rest | `ink-prose-dark` on `surface-raised-dark` | ~9.5:1 | ≥ 7:1 (AAA) |
 | Field labels, editorial rule | ~~`ink-quiet-dark`~~ → `ink-label-dark` on `surface-raised-dark` | **5.47:1** | ≥ 4.5:1 — **passes** |
-| Mote labels (tier 3) | ~~`ink-quiet-dark`~~ → `ink-label-dark` on `surface-base-dark` | **5.85:1** | ≥ 4.5:1 — **passes** |
+| Mote labels (all tiers) | ~~`ink-quiet-dark`~~ → ~~`ink-label-dark`~~ → `ink-prose-dark` on `surface-base-dark` (2026-11-26: the Focused Planet's belt lies under them, where `ink-label` read 3.32:1) | **9.93:1** | ≥ 4.5:1 — **passes** |
 | Corner chrome | ~~`ink-quiet-dark`~~ → `ink-label-dark` on `surface-base-dark` | **5.85:1** | ≥ 4.5:1 (it is text) — **passes** |
 | Scene labels, secondary | `ink-label-dark` on `surface-base-dark` | **5.85:1** | ≥ 4.5:1 — passes |
 | Chart link underline (index, chrome) — non-text | ~~`stroke-near-dark`~~ (2.11:1) → `ink-label-dark` on `surface-base-dark` | **5.85:1** | ≥ 3:1 (WCAG 1.4.11) — **passes** |

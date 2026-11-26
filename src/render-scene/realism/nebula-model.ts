@@ -17,7 +17,8 @@
  * divided by its own luminance (`nebulaColor`), so it encodes nothing. The ribbon is
  * additive and blends on encoded values, so its bounds are read over what it adds to:
  * over the void it decodes to at most `stroke-dust-dark`'s luminance, the Rail line it
- * replaces, and a Mote label (`ink-label-dark`, no plate) keeps 4.5:1 over it; stacked
+ * replaces, and a label at `ink-label-dark` with no plate (the Mote labels' ink until 2026-11-26,
+ * now `ink-prose`, so the bound is held for a dimmer ink than ships) keeps 4.5:1 over it; stacked
  * under two near glows it stays under `stroke-active`, and with the subject's glow under
  * `stroke-focus`, over every pair of tints. The tests pin each.
  *

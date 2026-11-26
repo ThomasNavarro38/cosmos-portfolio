@@ -580,7 +580,7 @@ test('contrast: a role moved to a dimmer ink, or one whose ink cannot be read, f
     /^contrast: chrome is ink-quiet-dark on surface-base-dark/,
   );
   assert.match(
-    failing(MOTE_TS, (s) => s.replace("MOTE_LABEL_COLOR = tokens.colors['ink-label-dark']", "MOTE_LABEL_COLOR = tokens.colors['ink-faint-dark']")),
+    failing(MOTE_TS, (s) => s.replace("MOTE_LABEL_COLOR = tokens.colors['ink-prose-dark']", "MOTE_LABEL_COLOR = tokens.colors['ink-faint-dark']")),
     /^contrast: Mote label is ink-faint-dark/,
   );
   // 9.3: either Client name at the quiet step fails naming its role, and an unreadable ink fails as unreadable.
