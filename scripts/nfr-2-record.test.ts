@@ -39,7 +39,23 @@
  *   placeholder); Commit the 40-hex hash under The build; and the Screenshots field
  *   naming at least one `judgement-8-4-*.png`, each present beside the record. Existence is injected,
  *   so the mutations need no file; the record as it stands is read against the
- *   real directory, so it passes in either state.
+ *   real directory, so it passes in either state. The sheet is one `Judgement`
+ *   description (`JUDGEMENT_8_4`) read by the one two-state `auditJudgement`.
+ * - **(g′) The 9.11 judgement sheet, the same audit over `JUDGEMENT_9_11`.** Its
+ *   section `## Second judgement (9.11)` stands after 8.4's and before Live
+ *   (8.5). Always, besides (g)'s parts: five poses (8.4's four and `Star close-up`)
+ *   with the `deltaY: 2266.64` and `deltaY: 1000` wheel steps, both displays
+ *   ("1920×1080", "Odyssey Ark") named in The poses, the thirteen routed looks
+ *   with the dark ring closed as superseded by 9.4, Epic 7's and Epic 9's levers
+ *   (the `realism-*` tokens) with the composer and line-work routed to the
+ *   memlog, a `Displays` field, and 8.4's verdict still reading "Rejected".
+ *   Wheel steps are matched bounded, so `deltaY: 10000` is not `deltaY: 1000`;
+ *   `1920x1080` counts as `1920×1080`; the heading appears once, and the order
+ *   check fails when a heading it compares is missing. Pending as (g).
+ *   Recorded: Date, Machine, Browser, Displays and Poses written, Displays
+ *   naming both displays, Commit the build's, and at least one
+ *   `judgement-9-11-<pose>-<display>.png` (`-1920x1080` or `-ark`) named, each
+ *   present beside the record.
  * - **(h) Live (8.5):** the status stays "not yet passed".
  *
  * The instrument (`worst-window.ts`, `chart-offer.ts`) is read as text, never
@@ -72,6 +88,7 @@ const HEADINGS = {
   pass: '### Pass condition',
   neverRun: '## Never run',
   judgement: '## On-screen judgement (8.4)',
+  secondJudgement: '## Second judgement (9.11)',
   live: '## Live (8.5)',
 } as const;
 
@@ -252,7 +269,7 @@ function auditNeverRun(record: string): string[] {
   return failures;
 }
 
-/** The judgement sheet's sub-sections, inside `HEADINGS.judgement`. */
+/** A judgement sheet's sub-sections, inside its heading: 8.4's and 9.11's alike. */
 const SHEET = {
   build: '### The build',
   poses: '### The poses',
@@ -260,23 +277,6 @@ const SHEET = {
   rejected: '### If a pose is rejected',
   verdict: '### The verdict',
 } as const;
-
-/** The four poses, each the first cell of a row of the poses table. */
-const POSES = ['opening frame', 'Client stop', 'Focus', 'rail(p=2.8333)'] as const;
-
-/** The step that reaches `rail(p=2.8333)`: 2.8333 × `WHEEL_PIXELS_PER_STOP` (800). */
-const RAIL_STEP = '2266.64';
-
-/** The seven looks Epic 7 routed to the judgement (retro F4), each the first cell of a row of the checklist. */
-const LOOKS = [
-  'A farther fill over a nearer glow',
-  'Half-disc Planets',
-  "The Star's dark ring",
-  'The fill-tilt axis wording',
-  'Jupiter worn by no Planet',
-  'The band between the plate and the keyboard outline',
-  'Overlapping rest glows',
-] as const;
 
 /** AC 8.4-3's route: Epic 7's tunable values, then the memlog for anything else. */
 const LEVERS: readonly (readonly [string, RegExp])[] = [
@@ -304,9 +304,7 @@ const CHUNKS: readonly (readonly [string, RegExp])[] = [
 
 const HASH = /(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])/;
 
-/** The verdict's fields, each a `- **Label:** value` line. */
-const FIELDS = ['Date', 'Machine', 'Browser', 'Commit', 'Poses', 'Verdict', 'Screenshots'] as const;
-/** What Date, Machine and Browser read until Thomas writes them. */
+/** What the fields left for Thomas read until he writes them. */
 const FIELD_PLACEHOLDER = 'To be written by Thomas.';
 /** The verdict while none is given. Any other value is a recorded verdict. */
 const VERDICT_PENDING = 'Not yet given.';
@@ -325,11 +323,6 @@ function holdsCalendarDate(value: string): boolean {
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
-/**
- * A screenshot's name: `judgement-8-4-<pose>.png`, beside the record. Bounded on
- * both sides, so `old-judgement-8-4-focus.png` is not read as another file's name.
- */
-const SCREENSHOT = /(?<![\w.-])judgement-8-4-[\w.()=-]+?\.png(?![\w.-])/g;
 
 /** A screenshot beside the record, by its bare name. */
 type Exists = (name: string) => boolean;
@@ -343,63 +336,219 @@ function fieldOf(section: string, label: string): string | undefined {
 }
 
 /**
- * The 8.4 judgement sheet, in both states. Always: the sheet's parts, so the
- * build, the poses, the looks and the route back are there to judge by. Pending
- * (the verdict reads `Not yet given.`): nothing more. Recorded (any other
- * verdict): every field written and every screenshot it names present beside
- * the record, by `exists`.
+ * One judgement sheet, described. The one two-state audit reads 8.4's and
+ * 9.11's through it, so both stay green together without an agent editing this
+ * test.
  */
-function auditJudgement(record: string, exists: Exists): string[] {
-  const section = sectionOf(record, HEADINGS.judgement);
-  if (section === undefined) return [`8.4: no "${HEADINGS.judgement}" section`];
+interface Judgement {
+  /** The failure prefix: `8.4` or `9.11`. */
+  readonly tag: string;
+  readonly heading: string;
+  /** Each within the first cell of a row of the poses table. */
+  readonly poses: readonly string[];
+  /** The wheel steps the poses text must give. */
+  readonly steps: readonly string[];
+  /** Each within the first cell of a row of the checklist. */
+  readonly looks: readonly string[];
+  readonly levers: readonly (readonly [string, RegExp])[];
+  /** Every field, each a `- **Label:** value` line. */
+  readonly fields: readonly string[];
+  /** The fields left for Thomas: the placeholder while pending. */
+  readonly left: readonly string[];
+  /** The fields a recorded verdict requires written. */
+  readonly written: readonly string[];
+  /** Every screenshot's name starts with this, beside the record. */
+  readonly prefix: string;
+  /**
+   * How a named screenshot must end, when the sheet fixes it: `rule` names it in
+   * the failure, and `sample` is the ending the recorded fixture uses. Absent: any
+   * `<prefix><pose>.png`.
+   */
+  readonly ending?: { readonly pattern: RegExp; readonly rule: string; readonly sample: string };
+  /** The verdict the recorded fixture writes: one this sheet's record may hold beside the other sheet's. */
+  readonly recordedVerdict: string;
+  /** The checks only this sheet carries, over the whole record and its own section. */
+  readonly extra: (record: string, section: string) => string[];
+  /** The checks only this sheet carries once a verdict is recorded, over the fields' values. */
+  readonly recorded: (values: ReadonlyMap<string, string | undefined>) => string[];
+}
+
+/** A wheel step as the poses text must give it: no digit or `.` before it, and no further digit after it, so `deltaY: 10000` is not `deltaY: 1000`. */
+const stepPattern = (step: string, flags = ''): RegExp => new RegExp(`(?<![\\d.])${escapeRegExp(step)}(?![\\d.]*\\d)`, flags);
+
+/**
+ * The screenshots a value names: `<prefix><pose>.png`. Bounded on both sides, so
+ * `old-judgement-8-4-focus.png` is not read as another file's name.
+ */
+const screenshotsIn = (value: string, prefix: string): string[] => [
+  ...new Set(value.match(new RegExp(`(?<![\\w.-])${escapeRegExp(prefix)}[\\w.()=-]+?\\.png(?![\\w.-])`, 'g')) ?? []),
+];
+
+/** The 8.4 sheet: four poses and the seven looks Epic 7 routed to it (retro F4). */
+const JUDGEMENT_8_4: Judgement = {
+  tag: '8.4',
+  heading: HEADINGS.judgement,
+  poses: ['opening frame', 'Client stop', 'Focus', 'rail(p=2.8333)'],
+  // The step that reaches `rail(p=2.8333)`: 2.8333 × `WHEEL_PIXELS_PER_STOP` (800).
+  steps: ['2266.64'],
+  looks: [
+    'A farther fill over a nearer glow',
+    'Half-disc Planets',
+    "The Star's dark ring",
+    'The fill-tilt axis wording',
+    'Jupiter worn by no Planet',
+    'The band between the plate and the keyboard outline',
+    'Overlapping rest glows',
+  ],
+  levers: LEVERS,
+  fields: ['Date', 'Machine', 'Browser', 'Commit', 'Poses', 'Verdict', 'Screenshots'],
+  left: ['Date', 'Machine', 'Browser'],
+  written: ['Date', 'Machine', 'Browser', 'Poses'],
+  prefix: 'judgement-8-4-',
+  // 8.4's own verdict is a rejection, and 9.11's sheet requires it to stay one.
+  recordedVerdict: 'Rejected. The stars still read as discs.',
+  extra: () => [],
+  recorded: () => [],
+};
+
+/**
+ * The two displays every 9.11 pose is judged at: each by its name, how The poses
+ * must name it, and how a recorded Displays field may. `1920x1080` with an ASCII x
+ * counts as `1920×1080`.
+ */
+const DISPLAYS: readonly (readonly [string, RegExp, RegExp])[] = [
+  ['1920×1080', /\b1920\s*[×x]\s*1080\b/, /\b1920\s*[×x]\s*1080\b/],
+  ['Odyssey Ark', /\bOdyssey Ark\b/, /\bArk\b/],
+];
+
+/** 9.11's own checks: both displays, the dark ring closed by 9.4, 8.4 still rejected, and the section's place. */
+function auditSecondOnly(record: string, section: string): string[] {
   const failures: string[] = [];
+  const poses = sectionOf(section, SHEET.poses);
+  if (poses !== undefined) for (const [display, pattern] of DISPLAYS) if (!pattern.test(flat(poses))) failures.push(`9.11: the poses do not name the display "${display}"`);
+  const checklist = sectionOf(section, SHEET.checklist);
+  const ring = checklist === undefined ? undefined : rowsOf(checklist).find((cells) => (cells[0] ?? '').toLowerCase().includes("the star's dark ring"));
+  if (ring !== undefined) {
+    const text = ring.join(' | ');
+    if (!/\bsuperseded\b/i.test(text) || !/(?<![\d.])9\.4(?!\d)/.test(text)) failures.push('9.11: the dark ring is not closed as superseded by 9.4');
+  }
+  const first = sectionOf(record, HEADINGS.judgement);
+  const firstVerdict = first === undefined ? undefined : sectionOf(first, SHEET.verdict);
+  const rejected = firstVerdict === undefined ? undefined : fieldOf(firstVerdict, 'Verdict');
+  if (rejected === undefined || !/^rejected\b/i.test(rejected.replace(/[*_`]/g, '').trim())) failures.push('9.11: 8.4\'s verdict no longer reads "Rejected"');
+  const lines = record.replace(/\r\n/g, '\n').split('\n').map((line) => line.trim());
+  const before = lines.indexOf(HEADINGS.judgement);
+  const at = lines.indexOf(HEADINGS.secondJudgement);
+  const after = lines.indexOf(HEADINGS.live);
+  // A heading it is compared against, missing, fails too: the place cannot be shown.
+  if (before === -1 || at === -1 || after === -1 || !(before < at && at < after)) failures.push("9.11: the section is not after 8.4's and before Live (8.5)");
+  return failures;
+}
+
+/** The 9.11 sheet: 8.4's four poses and a Star close-up, each at both displays, the routed looks, and Epic 7's and Epic 9's levers. */
+const JUDGEMENT_9_11: Judgement = {
+  tag: '9.11',
+  heading: HEADINGS.secondJudgement,
+  poses: ['opening frame', 'Client stop', 'Focus', 'rail(p=2.8333)', 'Star close-up'],
+  // rail(p=2.8333) by 2.8333 × 800; the Star close-up, rail(p=1.25), by 1.25 × 800.
+  steps: ['deltaY: 2266.64', 'deltaY: 1000'],
+  looks: [
+    "The Star's dark ring",
+    'Overlapping rest glows',
+    'A farther fill over a nearer glow',
+    'Half-disc Planets',
+    'The fill-tilt axis wording',
+    'Jupiter worn by no Planet',
+    'The band between the plate and the keyboard outline',
+    'Client names and their halo over the glows',
+    'The crossfade and its fade-time artefacts',
+    'The belt across a sibling Planet',
+    "The nebula's self-overlap",
+    'The ring disc at the opening frame',
+    "The rim switch against the Star's rise",
+  ],
+  levers: [...LEVERS, ['Epic 9', /\bEpic 9\b/], ['realism-* tokens', /`realism-\*`/], ['composer', /\bcomposer\b/i], ['line-work', /\bline-work\b/i]],
+  fields: ['Date', 'Machine', 'Browser', 'Displays', 'Commit', 'Poses', 'Verdict', 'Screenshots'],
+  left: ['Date', 'Machine', 'Browser', 'Displays'],
+  written: ['Date', 'Machine', 'Browser', 'Displays', 'Poses'],
+  prefix: 'judgement-9-11-',
+  // `judgement-9-11-<pose>-<display>.png`, the display `1920x1080` or `ark`.
+  ending: { pattern: /-(?:1920x1080|ark)\.png$/, rule: '-1920x1080.png or -ark.png', sample: '-1920x1080' },
+  recordedVerdict: 'Realistic, not a screensaver; ships.',
+  extra: auditSecondOnly,
+  recorded: (values) => {
+    const displays = values.get('Displays');
+    if (displays === undefined || isUnwritten(displays)) return [];
+    return DISPLAYS.filter(([, , pattern]) => !pattern.test(displays)).map(([display]) => `9.11: a verdict is given and the "Displays" field does not name ${display}`);
+  },
+};
+
+const JUDGEMENTS: readonly Judgement[] = [JUDGEMENT_8_4, JUDGEMENT_9_11];
+
+/**
+ * A judgement sheet, in both states. Always: the sheet's parts, so the build,
+ * the poses, the looks and the route back are there to judge by. Pending (the
+ * verdict reads `Not yet given.`): nothing more. Recorded (any other verdict):
+ * every field written and every screenshot it names present beside the record,
+ * by `exists`.
+ */
+function auditJudgement(record: string, sheet: Judgement, exists: Exists): string[] {
+  const { tag } = sheet;
+  const section = sectionOf(record, sheet.heading);
+  if (section === undefined) return [`${tag}: no "${sheet.heading}" section`];
+  const failures: string[] = [];
+  // sectionOf reads the first heading only, so a second one would be read past silently.
+  if (record.replace(/\r\n/g, '\n').split('\n').filter((line) => line.trim() === sheet.heading).length > 1) failures.push(`${tag}: the "${sheet.heading}" heading appears more than once`);
   const prose = flat(section);
-  if (!/not the target profile/i.test(prose)) failures.push('8.4: it does not say the machine is not the target profile');
-  if (!/not yet passed/i.test(prose)) failures.push('8.4: it does not say the status stays "not yet passed"');
-  for (const [criterion, pattern] of CRITERIA) if (!pattern.test(prose)) failures.push(`8.4: it does not name the criterion "${criterion}"`);
+  if (!/not the target profile/i.test(prose)) failures.push(`${tag}: it does not say the machine is not the target profile`);
+  if (!/not yet passed/i.test(prose)) failures.push(`${tag}: it does not say the status stays "not yet passed"`);
+  for (const [criterion, pattern] of CRITERIA) if (!pattern.test(prose)) failures.push(`${tag}: it does not name the criterion "${criterion}"`);
   const sub = (heading: string): string | undefined => {
     const text = sectionOf(section, heading);
-    if (text === undefined) failures.push(`8.4: no "${heading}" sub-section`);
+    if (text === undefined) failures.push(`${tag}: no "${heading}" sub-section`);
     return text;
   };
   const firstCells = (text: string | undefined): string[] => (text === undefined ? [] : rowsOf(text).map((cells) => cells[0] ?? ''));
   const build = sub(SHEET.build);
   // Under The build itself: the verdict's Commit line must not stand in for it.
   const buildCommit = build === undefined ? undefined : HASH.exec(build)?.[0];
-  if (build !== undefined && buildCommit === undefined) failures.push('8.4: no full 40-hex build commit');
-  if (build !== undefined) for (const [chunk, pattern] of CHUNKS) if (!pattern.test(build)) failures.push(`8.4: the build does not name the ${chunk} chunk`);
+  if (build !== undefined && buildCommit === undefined) failures.push(`${tag}: no full 40-hex build commit`);
+  if (build !== undefined) for (const [chunk, pattern] of CHUNKS) if (!pattern.test(build)) failures.push(`${tag}: the build does not name the ${chunk} chunk`);
   const poses = sub(SHEET.poses);
   const poseCells = firstCells(poses);
-  for (const pose of POSES) if (!poseCells.some((cell) => cell.includes(pose))) failures.push(`8.4: the pose "${pose}" is not in the poses table`);
-  if (poses !== undefined && !poses.includes(RAIL_STEP)) failures.push(`8.4: the poses do not give the ${RAIL_STEP} wheel step`);
+  for (const pose of sheet.poses) if (!poseCells.some((cell) => cell.includes(pose))) failures.push(`${tag}: the pose "${pose}" is not in the poses table`);
+  if (poses !== undefined) for (const step of sheet.steps) if (!stepPattern(step).test(poses)) failures.push(`${tag}: the poses do not give the ${step} wheel step`);
   const lookCells = firstCells(sub(SHEET.checklist)).map((cell) => cell.toLowerCase());
-  for (const look of LOOKS) if (!lookCells.some((cell) => cell.includes(look.toLowerCase()))) failures.push(`8.4: the look "${look}" is not in the checklist`);
+  for (const look of sheet.looks) if (!lookCells.some((cell) => cell.includes(look.toLowerCase()))) failures.push(`${tag}: the look "${look}" is not in the checklist`);
   const rejected = sub(SHEET.rejected);
-  if (rejected !== undefined) for (const [lever, pattern] of LEVERS) if (!pattern.test(flat(rejected))) failures.push(`8.4: the rejection route does not name "${lever}"`);
+  if (rejected !== undefined) for (const [lever, pattern] of sheet.levers) if (!pattern.test(flat(rejected))) failures.push(`${tag}: the rejection route does not name "${lever}"`);
+  failures.push(...sheet.extra(record, section));
   const verdict = sub(SHEET.verdict);
   if (verdict === undefined) return failures;
-  const values = new Map(FIELDS.map((label) => [label, fieldOf(verdict, label)]));
-  for (const [label, value] of values) if (value === undefined) failures.push(`8.4: no "${label}" field`);
+  const values = new Map(sheet.fields.map((label) => [label, fieldOf(verdict, label)]));
+  for (const [label, value] of values) if (value === undefined) failures.push(`${tag}: no "${label}" field`);
   // Only the first line of a label is read, so a second one would be read past silently.
-  for (const label of FIELDS) if ((verdict.match(fieldLine(label, 'gm')) ?? []).length > 1) failures.push(`8.4: the "${label}" field is written more than once`);
+  for (const label of sheet.fields) if ((verdict.match(fieldLine(label, 'gm')) ?? []).length > 1) failures.push(`${tag}: the "${label}" field is written more than once`);
   const given = values.get('Verdict');
   if (given === undefined || isPending(given)) return failures;
   // Recorded: a verdict is given, so every field it rests on must be written.
-  if (isUnwritten(given)) failures.push('8.4: the verdict is blank');
-  for (const label of ['Date', 'Machine', 'Browser', 'Poses'] as const) {
+  if (isUnwritten(given)) failures.push(`${tag}: the verdict is blank`);
+  for (const label of sheet.written) {
     const value = values.get(label);
-    if (value !== undefined && isUnwritten(value)) failures.push(`8.4: a verdict is given and the "${label}" field is not written`);
+    if (value !== undefined && isUnwritten(value)) failures.push(`${tag}: a verdict is given and the "${label}" field is not written`);
   }
   const date = values.get('Date');
-  if (date !== undefined && !isUnwritten(date) && !holdsCalendarDate(date)) failures.push('8.4: a verdict is given and the "Date" field is not a YYYY-MM-DD date');
+  if (date !== undefined && !isUnwritten(date) && !holdsCalendarDate(date)) failures.push(`${tag}: a verdict is given and the "Date" field is not a YYYY-MM-DD date`);
   const commit = values.get('Commit');
   const judged = commit === undefined ? undefined : HASH.exec(commit)?.[0];
-  if (commit !== undefined && judged === undefined) failures.push('8.4: a verdict is given and the "Commit" field holds no full 40-hex commit');
+  if (commit !== undefined && judged === undefined) failures.push(`${tag}: a verdict is given and the "Commit" field holds no full 40-hex commit`);
   // 8.5 matches the merged build by The build's commit and chunks, so the judged commit must be that one.
-  else if (judged !== undefined && buildCommit !== undefined && judged !== buildCommit) failures.push('8.4: a verdict is given and the "Commit" field is not the commit under The build');
-  const named = [...new Set(values.get('Screenshots')?.match(SCREENSHOT) ?? [])];
-  if (named.length === 0) failures.push('8.4: a verdict is given and the "Screenshots" field names no judgement-8-4-*.png');
-  for (const name of named) if (!exists(name)) failures.push(`8.4: the screenshot ${name} is not beside the record`);
+  else if (judged !== undefined && buildCommit !== undefined && judged !== buildCommit) failures.push(`${tag}: a verdict is given and the "Commit" field is not the commit under The build`);
+  const named = screenshotsIn(values.get('Screenshots') ?? '', sheet.prefix);
+  if (named.length === 0) failures.push(`${tag}: a verdict is given and the "Screenshots" field names no ${sheet.prefix}*.png`);
+  for (const name of named) if (!exists(name)) failures.push(`${tag}: the screenshot ${name} is not beside the record`);
+  if (sheet.ending !== undefined) for (const name of named) if (!sheet.ending.pattern.test(name)) failures.push(`${tag}: the screenshot ${name} does not end in ${sheet.ending.rule}`);
+  failures.push(...sheet.recorded(values));
   return failures;
 }
 
@@ -411,7 +560,7 @@ function auditLive(record: string): string[] {
 
 function auditRecord(record: string | undefined, measured: Instrument, exists: Exists = besideRecord): string[] {
   if (record === undefined) return [`the record is missing: ${RECORD_PATH}`];
-  return [...auditStatus(record), ...auditRun(record), ...auditBudgets(record), ...auditProtocol(record, measured), ...auditNeverRun(record), ...auditJudgement(record, exists), ...auditLive(record)];
+  return [...auditStatus(record), ...auditRun(record), ...auditBudgets(record), ...auditProtocol(record, measured), ...auditNeverRun(record), ...JUDGEMENTS.flatMap((sheet) => auditJudgement(record, sheet, exists)), ...auditLive(record)];
 }
 
 const readRecord = (): string | undefined => (existsSync(RECORD_PATH) ? readFileSync(RECORD_PATH, 'utf8').replace(/\r\n/g, '\n') : undefined);
@@ -522,66 +671,78 @@ test('the NFR-2 guard fails on each mutation of the record, naming it', () => {
   }
 });
 
-test('the 8.4 judgement sheet holds in both states: pending as written, recorded only when complete', () => {
+/**
+ * Drives one judgement sheet through both states, by mutation of its own section:
+ * pending as the agent leaves it, recorded only when complete. 8.4's failures keep
+ * their messages; 9.11's carry its own prefix.
+ */
+function holdsBothStates(sheet: Judgement): { readonly recorded: string; readonly present: Exists } {
   const found = readRecord();
   assert.ok(found !== undefined, `the record exists at ${RECORD_PATH}`);
   const record = found;
-  const judgement = sectionOf(record, HEADINGS.judgement);
-  assert.ok(judgement !== undefined, 'the record has the 8.4 section');
+  const { tag } = sheet;
+  const judgement = sectionOf(record, sheet.heading);
+  assert.ok(judgement !== undefined, `the record has the ${tag} section`);
   const none: Exists = () => false;
-  const audit = (text: string, exists: Exists = none): string => auditJudgement(text, exists).join('\n');
-  // A mutation of the 8.4 section alone, so a phrase elsewhere in the record cannot stand in for it.
+  const audit = (text: string, exists: Exists = none): string => auditJudgement(text, sheet, exists).join('\n');
+  // A mutation of this sheet's section alone, so a phrase elsewhere in the record cannot stand in for it.
   // Replacer functions throughout, so a `$` in the sheet or a value is never read as a replacement pattern.
   const inSheet = (from: string | RegExp, to: string | ((match: string, ...groups: string[]) => string), text = record): string => {
-    const sheet = sectionOf(text, HEADINGS.judgement) as string;
-    assert.ok(typeof from === 'string' ? sheet.includes(from) : from.test(sheet), `the 8.4 section holds ${String(from)}`);
+    const part = sectionOf(text, sheet.heading) as string;
+    assert.ok(typeof from === 'string' ? part.includes(from) : from.test(part), `the ${tag} section holds ${String(from)}`);
     const replace = typeof to === 'string' ? () => to : to;
-    const replaced = typeof from === 'string' ? sheet.replace(from, replace) : sheet.replace(from, replace);
-    return text.replace(sheet, () => replaced);
+    const replaced = typeof from === 'string' ? part.replace(from, replace) : part.replace(from, replace);
+    return text.replace(part, () => replaced);
   };
   const setField = (text: string, label: string, value: string): string => inSheet(new RegExp(`^(\\s*- \\*\\*${label}:\\*\\*).*$`, 'm'), (_match, lead) => `${lead} ${value}`, text);
-  const fails = (text: string, pattern: RegExp, why: string, exists: Exists = none): void => assert.match(audit(text, exists), pattern, why);
+  const fails = (text: string, pattern: RegExp, why: string, exists: Exists = none): void => assert.match(audit(text, exists), pattern, `${tag}: ${why}`);
+  const named = new RegExp(`${escapeRegExp(tag)}: `);
 
-  // Pending, as the agent leaves it: the verdict and the screenshots unwritten.
   // The record as it stands, in whichever state it is: a verdict Thomas has written passes on its real screenshots.
-  assert.deepEqual(auditJudgement(record, besideRecord), [], 'the record as written passes');
+  assert.deepEqual(auditJudgement(record, sheet, besideRecord), [], `the ${tag} sheet as written passes`);
   if (isPending(fieldOf(judgement, 'Verdict'))) {
     assert.equal(fieldOf(judgement, 'Screenshots'), 'None yet.', 'the screenshots read "None yet."');
-    for (const label of ['Date', 'Machine', 'Browser']) assert.equal(fieldOf(judgement, label), FIELD_PLACEHOLDER, `${label} is left for Thomas`);
+    for (const label of sheet.left) assert.equal(fieldOf(judgement, label), FIELD_PLACEHOLDER, `${label} is left for Thomas`);
   }
   for (const loose of ['Not yet given', '**Not yet given.**', 'not yet given.']) assert.ok(isPending(loose), `"${loose}" is still pending`);
   // The pending sheet, rebuilt from whatever is written, so these mutations hold in either state.
   let pendingRecord = setField(record, 'Verdict', VERDICT_PENDING);
   pendingRecord = setField(pendingRecord, 'Screenshots', 'None yet.');
-  for (const label of ['Date', 'Machine', 'Browser']) pendingRecord = setField(pendingRecord, label, FIELD_PLACEHOLDER);
-  assert.deepEqual(auditJudgement(pendingRecord, none), [], 'pending passes with no screenshot on disk');
+  for (const label of sheet.left) pendingRecord = setField(pendingRecord, label, FIELD_PLACEHOLDER);
+  assert.deepEqual(auditJudgement(pendingRecord, sheet, none), [], 'pending passes with no screenshot on disk');
 
   // Recorded: every field written, and the named screenshots "beside the record".
-  const shots = ['judgement-8-4-opening-frame.png', 'judgement-8-4-rail-2.8333.png'];
-  let recorded = setField(pendingRecord, 'Date', '2026-11-20.');
-  recorded = setField(recorded, 'Machine', 'the dev machine; not the target profile.');
-  recorded = setField(recorded, 'Browser', 'Chrome 142.');
-  recorded = setField(recorded, 'Verdict', 'Realistic, not a screensaver; ships.');
+  const ending = sheet.ending?.sample ?? '';
+  const shots = [`${sheet.prefix}opening-frame${ending}.png`, `${sheet.prefix}rail-2.8333${ending}.png`];
+  const written: Readonly<Record<string, string>> = {
+    Date: '2026-11-30.',
+    Machine: 'the dev machine; not the target profile.',
+    Browser: 'Chrome 159.',
+    Displays: 'a 1920×1080 display and the Odyssey Ark.',
+  };
+  let recorded = pendingRecord;
+  for (const label of sheet.left) recorded = setField(recorded, label, written[label] ?? 'written.');
+  recorded = setField(recorded, 'Verdict', sheet.recordedVerdict);
   recorded = setField(recorded, 'Screenshots', shots.map((name) => `\`${name}\``).join(', '));
   const present: Exists = (name) => shots.includes(name);
-  assert.deepEqual(auditJudgement(recorded, present), [], 'a complete recorded verdict passes');
-  assert.deepEqual(auditRecord(recorded, instrument(), present), [], 'and the whole record with it');
+  assert.deepEqual(auditJudgement(recorded, sheet, present), [], 'a complete recorded verdict passes');
+  assert.deepEqual(auditRecord(recorded, instrument(), (name) => present(name) || besideRecord(name)), [], 'and the whole record with it');
 
   // A verdict with a blank field: the placeholder, nothing, or markup alone.
   const blanks = [FIELD_PLACEHOLDER, '', '**', '``', '**To be written by Thomas.**'];
-  for (const label of ['Date', 'Machine', 'Browser', 'Poses']) {
-    for (const blank of blanks) fails(setField(recorded, label, blank), new RegExp(`the "${label}" field is not written`), `${label} as ${JSON.stringify(blank)}`, present);
+  for (const label of sheet.written) {
+    for (const blank of blanks) fails(setField(recorded, label, blank), new RegExp(`${named.source}a verdict is given and the "${label}" field is not written`), `${label} as ${JSON.stringify(blank)}`, present);
   }
   for (const blank of blanks) fails(setField(recorded, 'Verdict', blank), /the verdict is blank/, `the verdict as ${JSON.stringify(blank)}`, present);
   for (const bad of ['soon.', '2026-99-99.', '2026-02-30.', '12026-11-20.']) fails(setField(recorded, 'Date', bad), /"Date" field is not a YYYY-MM-DD date/, `the date ${bad}`, present);
-  assert.deepEqual(auditJudgement(setField(recorded, 'Date', '2028-02-29, evening.'), present), [], 'a leap day, with words after it, is a date');
+  assert.deepEqual(auditJudgement(setField(recorded, 'Date', '2028-02-29, evening.'), sheet, present), [], 'a leap day, with words after it, is a date');
   fails(setField(recorded, 'Commit', ''), /"Commit" field holds no full 40-hex commit/, 'the commit emptied', present);
   fails(setField(recorded, 'Commit', '`2adeaa5`'), /"Commit" field holds no full 40-hex commit/, 'a short commit', present);
   fails(inSheet(/^\s*- \*\*Commit:\*\*.*\n/m, '', recorded), /no "Commit" field/, 'the commit line dropped from a recorded sheet', present);
   // The judged commit is the one under The build: another build replaces both.
   const otherBuild = 'f'.repeat(40);
   fails(setField(recorded, 'Commit', `\`${otherBuild}\``), /the "Commit" field is not the commit under The build/, "a judged commit that is not the build's", present);
-  assert.deepEqual(auditJudgement(inSheet(new RegExp(HASH.source, 'g'), otherBuild, recorded), present), [], 'another build, written under The build too, passes');
+  assert.deepEqual(auditJudgement(inSheet(new RegExp(HASH.source, 'g'), otherBuild, recorded), sheet, present), [], 'another build, written under The build too, passes');
   const buildPart = sectionOf(judgement, SHEET.build) as string;
   fails(inSheet(buildPart, buildPart.replace(new RegExp(HASH.source, 'g'), '2adeaa5')), /no full 40-hex build commit/, 'the build shortened while the Commit field keeps its hash');
   // A field written twice, in either state: the first line must not stand for the sheet.
@@ -589,37 +750,103 @@ test('the 8.4 judgement sheet holds in both states: pending as written, recorded
   fails(inSheet(verdictLine, (line) => `${line}\n- **Verdict:** ${VERDICT_PENDING}`, recorded), /the "Verdict" field is written more than once/, 'a pending line left under a recorded verdict', present);
   fails(inSheet(verdictLine, (line) => `- **Verdict:** Ships.\n${line}`, pendingRecord), /the "Verdict" field is written more than once/, 'a verdict written above the pending line');
   const dollars = setField(recorded, 'Verdict', 'costs $1 and $&; ships.');
-  assert.equal(fieldOf(sectionOf(dollars, HEADINGS.judgement) as string, 'Verdict'), 'costs $1 and $&; ships.', 'a $ in a value is kept as written');
-  assert.deepEqual(auditJudgement(dollars, present), [], 'and the sheet holding it passes');
-  // A missing screenshot, or none named.
-  fails(recorded, /the screenshot judgement-8-4-rail-2\.8333\.png is not beside the record/, 'a named PNG absent', (name) => name === shots[0]);
-  fails(setField(recorded, 'Screenshots', 'None yet.'), /names no judgement-8-4-\*\.png/, 'a verdict with no screenshot', present);
-  fails(setField(recorded, 'Screenshots', '`opening.png`'), /names no judgement-8-4-\*\.png/, 'a screenshot not named judgement-8-4-*', present);
-  // A longer name only holds a screenshot's name: it is another file, whatever exists.
+  assert.equal(fieldOf(sectionOf(dollars, sheet.heading) as string, 'Verdict'), 'costs $1 and $&; ships.', 'a $ in a value is kept as written');
+  assert.deepEqual(auditJudgement(dollars, sheet, present), [], 'and the sheet holding it passes');
   const anything: Exists = () => true;
-  for (const longer of ['`old-judgement-8-4-opening-frame.png`', '`judgement-8-4-opening-frame.png.bak`']) {
-    fails(setField(recorded, 'Screenshots', longer), /names no judgement-8-4-\*\.png/, `the longer name ${longer}`, anything);
+  // A missing screenshot, or none named, or another sheet's named.
+  const prefixRe = escapeRegExp(sheet.prefix);
+  fails(recorded, new RegExp(`the screenshot ${escapeRegExp(shots[1] as string)} is not beside the record`), 'a named PNG absent', (name) => name === shots[0]);
+  // A name without the sheet's fixed ending, when it fixes one.
+  if (sheet.ending !== undefined) {
+    const bare = `${sheet.prefix}opening-frame.png`;
+    fails(setField(recorded, 'Screenshots', `\`${bare}\``), new RegExp(`the screenshot ${escapeRegExp(bare)} does not end in`), 'a screenshot without its display', anything);
+  }
+  fails(setField(recorded, 'Screenshots', 'None yet.'), new RegExp(`names no ${prefixRe}\\*\\.png`), 'a verdict with no screenshot', present);
+  fails(setField(recorded, 'Screenshots', '`opening.png`'), new RegExp(`names no ${prefixRe}\\*\\.png`), `a screenshot not named ${sheet.prefix}*`, present);
+  for (const other of JUDGEMENTS.filter((each) => each !== sheet)) {
+    fails(setField(recorded, 'Screenshots', `\`${other.prefix}opening-frame.png\``), new RegExp(`names no ${prefixRe}\\*\\.png`), `only ${other.prefix}* named`, anything);
+  }
+  // A longer name only holds a screenshot's name: it is another file, whatever exists.
+  for (const longer of [`\`old-${sheet.prefix}opening-frame.png\``, `\`${sheet.prefix}opening-frame.png.bak\``]) {
+    fails(setField(recorded, 'Screenshots', longer), new RegExp(`names no ${prefixRe}\\*\\.png`), `the longer name ${longer}`, anything);
   }
   // A field's line dropped, in either state.
-  for (const label of FIELDS) fails(inSheet(new RegExp(`^\\s*- \\*\\*${label}:\\*\\*.*\\n`, 'm'), ''), new RegExp(`no "${label}" field`), `the ${label} field dropped`);
-  // A pose or a look dropped.
+  for (const label of sheet.fields) fails(inSheet(new RegExp(`^\\s*- \\*\\*${label}:\\*\\*.*\\n`, 'm'), ''), new RegExp(`no "${label}" field`), `the ${label} field dropped`);
+  // A pose, a step or a look dropped.
   const rowStarting = (heading: string, cell: string): string => {
     const row = (sectionOf(judgement, heading) as string).split('\n').find((line) => line.trim().startsWith('|') && (cellsOf(line)[0] ?? '').toLowerCase().includes(cell.toLowerCase()));
     assert.ok(row !== undefined, `${heading} has a row for ${cell}`);
     return row;
   };
-  for (const pose of POSES) fails(inSheet(`${rowStarting(SHEET.poses, pose)}\n`, ''), new RegExp(`the pose "${escapeRegExp(pose)}" is not in the poses table`), `the ${pose} pose dropped`);
-  for (const look of LOOKS) fails(inSheet(`${rowStarting(SHEET.checklist, look)}\n`, ''), new RegExp(`the look "${escapeRegExp(look)}" is not in the checklist`), `the look ${look} dropped`);
-  fails(inSheet(/2266\.64/g, '2266'), /the 2266\.64 wheel step/, 'the wheel step changed');
+  for (const pose of sheet.poses) fails(inSheet(`${rowStarting(SHEET.poses, pose)}\n`, ''), new RegExp(`${named.source}the pose "${escapeRegExp(pose)}" is not in the poses table`), `the ${pose} pose dropped`);
+  for (const look of sheet.looks) fails(inSheet(`${rowStarting(SHEET.checklist, look)}\n`, ''), new RegExp(`${named.source}the look "${escapeRegExp(look)}" is not in the checklist`), `the look ${look} dropped`);
+  for (const step of sheet.steps) {
+    fails(inSheet(new RegExp(escapeRegExp(step), 'g'), step.replace(/\d+(?:\.\d+)?$/, '7')), new RegExp(`the ${escapeRegExp(step)} wheel step`), `the step ${step} changed`);
+    // A digit more is another step, not this one: `deltaY: 10000` is not `deltaY: 1000`.
+    fails(inSheet(stepPattern(step, 'g'), `${step}0`), new RegExp(`the ${escapeRegExp(step)} wheel step`), `the step ${step} with a digit appended`);
+  }
   // The sentences every state keeps.
   fails(inSheet(/not the target profile/gi, 'a fine machine'), /not the target profile/, 'the target-profile line lost');
   fails(inSheet(/not yet passed/gi, 'settled'), /not yet passed/, 'the status line lost');
   fails(inSheet(/(?<![0-9a-f])([0-9a-f]{40})(?![0-9a-f])/g, '2adeaa5'), /no full 40-hex build commit/, 'a short build commit');
-  for (const [lever, pattern] of LEVERS) {
+  for (const [lever, pattern] of sheet.levers) {
     const rejected = sectionOf(judgement, SHEET.rejected) as string;
-    fails(inSheet(rejected, rejected.replace(new RegExp(pattern.source, 'gi'), 'something')), new RegExp(`does not name "${lever}"`), `the lever ${lever} dropped`);
+    fails(inSheet(rejected, rejected.replace(new RegExp(pattern.source, 'gi'), 'something')), new RegExp(`does not name "${escapeRegExp(lever)}"`), `the lever ${lever} dropped`);
   }
   for (const [criterion, pattern] of CRITERIA) fails(inSheet(new RegExp(pattern.source, 'gi'), 'something'), new RegExp(`the criterion "${escapeRegExp(criterion)}"`), `the criterion ${criterion} dropped`);
   for (const [chunk, pattern] of CHUNKS) fails(inSheet(new RegExp(pattern.source, 'g'), '`chunk.js`'), new RegExp(`the build does not name the ${chunk} chunk`), `the ${chunk} chunk name dropped`);
-  for (const heading of Object.values(SHEET)) fails(inSheet(new RegExp(`^${escapeRegExp(heading)}$`, 'm'), `${heading} (renamed)`), new RegExp(`no "${escapeRegExp(heading)}" sub-section`), `${heading} renamed`);
+  for (const heading of Object.values(SHEET)) fails(inSheet(new RegExp(`^${escapeRegExp(heading)}$`, 'm'), `${heading} (renamed)`), new RegExp(`${named.source}no "${escapeRegExp(heading)}" sub-section`), `${heading} renamed`);
+  // The sheet's heading written twice: the second would be read past.
+  fails(`${record.trimEnd()}\n\n${sheet.heading}\n\nA stray copy.\n`, new RegExp(`${named.source}the "${escapeRegExp(sheet.heading)}" heading appears more than once`), 'the heading written twice');
+  return { recorded, present };
+}
+
+test('the 8.4 judgement sheet holds in both states: pending as written, recorded only when complete', () => {
+  holdsBothStates(JUDGEMENT_8_4);
+});
+
+test('the 9.11 judgement sheet holds in both states, beside 8.4 rejected, at both displays', () => {
+  const { recorded, present } = holdsBothStates(JUDGEMENT_9_11);
+  const record = readRecord() as string;
+  const sheet = JUDGEMENT_9_11;
+  const section = sectionOf(record, sheet.heading) as string;
+  const fails = (text: string, pattern: RegExp, why: string): void => assert.match(auditJudgement(text, sheet, () => true).join('\n'), pattern, `9.11: ${why}`);
+  const inSecond = (from: RegExp, to: string, part = section): string => {
+    assert.ok(from.test(part), `the 9.11 section holds ${String(from)}`);
+    return record.replace(part, () => part.replace(from, () => to));
+  };
+  // A display dropped from The poses.
+  const poses = sectionOf(section, SHEET.poses) as string;
+  for (const [display, pattern] of DISPLAYS) fails(inSecond(new RegExp(pattern.source, 'g'), 'a display', poses), new RegExp(`the poses do not name the display "${escapeRegExp(display)}"`), `${display} dropped`);
+  assert.deepEqual(auditJudgement(inSecond(/1920×1080/g, '1920x1080', poses), sheet, besideRecord), [], 'the display written 1920x1080, with an ASCII x, counts');
+  // A recorded Displays field naming one display only; both, in their short spellings, pass.
+  const setDisplays = (value: string): string => {
+    const part = sectionOf(recorded, sheet.heading) as string;
+    return recorded.replace(part, () => part.replace(/^(\s*- \*\*Displays:\*\*).*$/m, (_match, lead: string) => `${lead} ${value}`));
+  };
+  const recordedFails = (text: string, pattern: RegExp, why: string): void => assert.match(auditJudgement(text, sheet, present).join('\n'), pattern, `9.11: ${why}`);
+  recordedFails(setDisplays('the Odyssey Ark only.'), /the "Displays" field does not name 1920×1080/, 'Displays naming the Ark only');
+  recordedFails(setDisplays('a 1920×1080 display only.'), /the "Displays" field does not name Odyssey Ark/, 'Displays naming 1920×1080 only');
+  assert.deepEqual(auditJudgement(setDisplays('a Dell at 1920x1080, DPR 1, 100% scaling; the Ark, DPR 1.'), sheet, present), [], 'both displays, in their short spellings, pass');
+  // The dark ring not closed: its row loses "superseded" or "9.4".
+  const ring = (sectionOf(section, SHEET.checklist) as string).split('\n').find((line) => line.trim().startsWith('|') && /the star's dark ring/i.test(cellsOf(line)[0] ?? ''));
+  assert.ok(ring !== undefined, 'the checklist has the dark-ring row');
+  fails(inSecond(/superseded/gi, 'kept', ring), /the dark ring is not closed as superseded by 9\.4/, 'the dark ring loses "superseded"');
+  fails(inSecond(/(?<![\d.])9\.4(?!\d)/g, '9.x', ring), /the dark ring is not closed as superseded by 9\.4/, 'the dark ring loses "9.4"');
+  // 8.4 rewritten: its verdict no longer starts with "Rejected".
+  const first = sectionOf(record, HEADINGS.judgement) as string;
+  const passed = record.replace(first, () => first.replace(/^(\s*- \*\*Verdict:\*\*) .*$/m, (_match, lead: string) => `${lead} Ships.`));
+  fails(passed, /8\.4's verdict no longer reads "Rejected"/, "8.4's verdict rewritten");
+  // The section misplaced: moved after Live (8.5), or before 8.4's.
+  const block = `${sheet.heading}\n${section}`;
+  assert.ok(record.includes(block), 'the 9.11 section is one block');
+  const without = record.replace(block, '');
+  fails(`${without.trimEnd()}\n\n${block}`, /the section is not after 8\.4's and before Live \(8\.5\)/, 'the section moved after Live (8.5)');
+  fails(without.replace(HEADINGS.judgement, () => `${block}${HEADINGS.judgement}`), /the section is not after 8\.4's and before Live \(8\.5\)/, "the section moved before 8.4's");
+  // A heading the order is read against, missing: the place cannot be shown, so it fails.
+  for (const heading of [HEADINGS.judgement, HEADINGS.live]) {
+    fails(record.replace(new RegExp(`^${escapeRegExp(heading)}$`, 'm'), () => `${heading} (renamed)`), /the section is not after 8\.4's and before Live \(8\.5\)/, `${heading} missing`);
+  }
+  // 8.4's section stands as written beside it: both sheets audit clean on the record.
+  assert.deepEqual(auditJudgement(record, JUDGEMENT_8_4, besideRecord), [], "8.4's sheet is untouched by 9.11's");
 });

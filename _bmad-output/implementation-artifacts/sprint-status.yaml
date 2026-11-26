@@ -142,7 +142,7 @@ development_status:
   9-8-deep-planets-wear-a-ring-and-a-moon: done
   9-9-the-atmosphere-rim: done
   9-10-the-handover: done
-  9-11-the-second-judgement: backlog
+  9-11-the-second-judgement: review   # sheet ready in nfr-2-record-8-3.md; done only when Thomas records his verdict
   epic-9-retrospective: optional
 action_items:
   - id: "epic-1-retro-item-1-ci-test-automation"
