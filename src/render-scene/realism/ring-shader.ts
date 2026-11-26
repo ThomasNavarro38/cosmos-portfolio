@@ -35,7 +35,7 @@ import {
   RING_DISC_OPACITY,
   RING_DISC_OUTER,
 } from './ring-model.ts';
-import { glslFloat } from './star-shader.ts';
+import { glslFloat } from './glsl.ts';
 
 export const RING_DISC_VERTEX_SHADER = /* glsl */ `
   varying vec2 vDisc;

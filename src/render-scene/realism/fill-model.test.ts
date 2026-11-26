@@ -7,7 +7,7 @@
  */
 
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { relative, sep } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -39,6 +39,7 @@ import {
   addedDraws,
   FILL_CEILING_LUMINANCE,
   FILL_CLIP_OFFSET,
+  FILL_NEAR_CEILING,
   FILL_RADIUS_RATIO,
   FILL_SPHERE_HEIGHT_SEGMENTS,
   FILL_SPHERE_WIDTH_SEGMENTS,
@@ -51,6 +52,7 @@ import {
   spinAngle,
 } from './fill-model.ts';
 import { FILL_FRAGMENT_SHADER, FILL_VERTEX_SHADER } from './fill-shader.ts';
+import { glslFloat } from './glsl.ts';
 import { RIM_MIN_PX, RIM_STEP_LUMINANCE, RIM_WIDTH } from './rim-model.ts';
 
 const APPEARANCE = { map: 'moon', meanLuminance: 0.324, tilt: 0.25, spinRate: 0.05, spinPhase: 1.5 };
@@ -103,9 +105,44 @@ function linearLuminance(hex: string): number {
 test("the ceiling equals stroke-active-dark's linear luminance, and the shader carries it", () => {
   assert.ok(Math.abs(FILL_CEILING_LUMINANCE - linearLuminance(tokens.colors['stroke-active-dark'])) < 1e-12);
   assert.ok(FILL_TARGET_LUMINANCE > 0 && FILL_TARGET_LUMINANCE < FILL_CEILING_LUMINANCE, 'the target is below the ceiling');
-  assert.ok(FILL_FRAGMENT_SHADER.includes(`const float CEILING = ${FILL_CEILING_LUMINANCE};`));
-  assert.ok(FILL_FRAGMENT_SHADER.includes(`const float FILL_TARGET_LUMINANCE = ${FILL_TARGET_LUMINANCE};`));
+  assert.ok(FILL_FRAGMENT_SHADER.includes(`const float CEILING = ${glslFloat(FILL_CEILING_LUMINANCE)};`));
+  assert.ok(FILL_FRAGMENT_SHADER.includes(`const float FILL_TARGET_LUMINANCE = ${glslFloat(FILL_TARGET_LUMINANCE)};`));
+  assert.ok(FILL_FRAGMENT_SHADER.includes(`const float NEAR_CEILING = ${glslFloat(FILL_NEAR_CEILING)};`));
+  assert.ok(FILL_FRAGMENT_SHADER.includes(`max(${glslFloat(RIM_WIDTH)}, ${glslFloat(RIM_MIN_PX)} * fwidth(r))`), 'the rim widths, as floats');
+  assert.ok(FILL_FRAGMENT_SHADER.includes('float y = dot(lit, vec3(0.2126, 0.7152, 0.0722));'), 'the ceiling weighs by Rec. 709');
   assert.notEqual(linearLuminance(tokens.colors['stroke-focus-dark']), FILL_CEILING_LUMINANCE, 'the check can tell the tokens apart');
+});
+
+
+/**
+ * Every number a realism shader interpolates into its source, by the shader modules'
+ * text: `glslFloat(…)`, a `.toExponential()` (always a float literal), or an `int`
+ * constant. A raw `${X}` writes `1` for a tuning value of 1, which GLSL ES reads as an
+ * int, so the program fails to link and realism is lost everywhere, in silence (F-A5).
+ */
+function rawInterpolations(path: string, text: string): string[] {
+  const failures: string[] = [];
+  for (const match of text.matchAll(/(const\s+int\s+\w+\s*=\s*)?\$\{([^}]*)\}/g)) {
+    const [, int, expression = ''] = match;
+    if (int === undefined && !/^glslFloat\(.*\)$/.test(expression) && !/\.toExponential\(\)$/.test(expression)) failures.push(`${path} writes \${${expression}} raw`);
+  }
+  return failures;
+}
+
+const SHADER_DIR = fileURLToPath(new URL('.', import.meta.url));
+
+test("no realism shader interpolates a raw number, so none can turn into an int", () => {
+  const shaders = readdirSync(SHADER_DIR).filter((name) => name.endsWith('-shader.ts'));
+  for (const name of ['belt-shader.ts', 'fill-shader.ts', 'nebula-shader.ts', 'ring-shader.ts', 'star-shader.ts']) assert.ok(shaders.includes(name), `the walk reads ${name}`);
+  assert.deepEqual(shaders.flatMap((name) => rawInterpolations(name, readFileSync(`${SHADER_DIR}${name}`, 'utf8'))), []);
+  assert.equal(glslFloat(1), '1.0');
+  assert.equal(glslFloat(0.98), '0.98');
+});
+
+test('the raw-number audit rejects a raw float, and passes glslFloat, an exponent and an int', () => {
+  assert.match(rawInterpolations('x.ts', 'const float NEAR_CEILING = ${FILL_NEAR_CEILING};').join(), /raw/);
+  assert.match(rawInterpolations('x.ts', 'smoothstep(1.0 - max(${RIM_WIDTH}, 1.5), 1.0, r)').join(), /raw/);
+  assert.deepEqual(rawInterpolations('x.ts', 'const float A = ${glslFloat(A)}; gl_Position.z += ${B.toExponential()}; const int OCTAVES = ${N};'), []);
 });
 
 // --- The shader, by its source -------------------------------------------------------------------

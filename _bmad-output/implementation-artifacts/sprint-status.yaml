@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 09-01-2026 23:45
-last_updated: 11-26-2026 14:15
+last_updated: 11-26-2026 15:37
 project: cosmos-portfolio
 project_key: NOKEY
 tracking_system: file-system
@@ -790,7 +790,7 @@ action_items:
       guard the Star tint's luminance, pin the Star core's WEIGHTS/y/grain lines,
       add a generic forceSinglePass row in done.test.ts (F-A5, F-A6, F-V3, F-V4)"
     owner: "Amelia (dev)"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-9-retro-11-26-2026.md"
   - id: "epic-9-retro-item-61-add-a-committed-layout-check-that-no-bel"
     epic: 9

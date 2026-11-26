@@ -23,7 +23,7 @@
  */
 
 import { BELT_DENSITY_FLOOR, BELT_JUNCTION_RADIUS, BELT_JUNCTION_SOFTNESS, BELT_NOISE_CELLS } from './belt-model.ts';
-import { glslFloat } from './star-shader.ts';
+import { glslFloat } from './glsl.ts';
 
 export const BELT_VERTEX_SHADER = /* glsl */ `
   attribute vec2 aBelt;

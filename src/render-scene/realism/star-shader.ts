@@ -61,17 +61,7 @@ import {
   STAR_SUBJECT_CEILING_LUMINANCE,
   STAR_SUBJECT_DIP,
 } from './star-model.ts';
-
-/**
- * A number as a GLSL float literal, so a tuning value of 1 does not write `const float X = 1;`,
- * which GLSL ES refuses.
- *
- * @throws on a value that is not finite, which has no literal.
- */
-export function glslFloat(value: number): string {
-  if (!Number.isFinite(value)) throw new Error(`${value} has no GLSL literal`);
-  return Number.isInteger(value) ? value.toFixed(1) : String(value);
-}
+import { glslFloat } from './glsl.ts';
 
 export const STAR_FILL_VERTEX_SHADER = FILL_VERTEX_SHADER;
 
@@ -107,7 +97,7 @@ export const STAR_FILL_FRAGMENT_SHADER = /* glsl */ `
     float cells = clamp(0.5 + 0.25 * (sin(p.x + t) * sin(p.y - 0.7 * t) + sin(0.6 * (p.x + p.y) - 1.3 * t)), 0.0, 1.0);
     float grain = 1.0 - GRAIN_DEPTH * r * cells;
     float target = centre * limb * grain;
-    vec3 hue = mix(uColor / dot(uColor, WEIGHTS), vec3(1.0), uRise);
+    vec3 hue = mix(uColor / max(dot(uColor, WEIGHTS), 1e-6), vec3(1.0), uRise);
     vec3 lit = min(hue * target, vec3(1.0));
     float y = dot(lit, WEIGHTS);
     float limit = mix(REST_CEILING, SUBJECT_CEILING, uRise);
@@ -134,7 +124,7 @@ export const GLOW_FRAGMENT_SHADER = /* glsl */ `
   void main() {
     float edge = max(1.0 - dot(vDisc, vDisc), 0.0);
     float falloff = edge * edge;
-    vec3 glow = uColor / dot(uColor, WEIGHTS) * uPeak * falloff * uFade;
+    vec3 glow = uColor / max(dot(uColor, WEIGHTS), 1e-6) * uPeak * falloff * uFade;
     gl_FragColor = vec4(min(glow, vec3(1.0)), 1.0);
     #include <colorspace_fragment>
   }

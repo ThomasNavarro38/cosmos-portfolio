@@ -45,7 +45,7 @@ import { tmpdir } from 'node:os';
 import { join, posix, relative, sep } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { type Mesh, type Object3D, Scene } from 'three';
+import { DoubleSide, type Material, type Mesh, type Object3D, Scene } from 'three';
 import { loadMutant } from '../../../scripts/mutant.ts';
 import { missingNamedTests, tableUnder } from '../../../scripts/record-table.ts';
 import { filesUnder, isTestFile, SOURCE_MODULE, stripComments, stripCommentsAndStrings } from '../../../scripts/source-scan.ts';
@@ -144,6 +144,52 @@ test('added draws over the committed artifact: at least one Planet and one Star,
   assert.equal(layerDraws(artifact), addedDraws(planets, stars, railPoints, deep), 'the layer draws what the model counts');
   assert.equal(layerDraws(artifact), 24, 'the committed artifact (9.8)');
   assert.deepEqual(drawFailures(planets, stars, railPoints, deep, layerDraws(artifact)), []);
+});
+
+/**
+ * The draw count above counts Meshes, not GL draws: three splits a transparent
+ * `DoubleSide` material into a back-face and a front-face draw unless it is
+ * `forceSinglePass`, so such a Mesh would draw twice and the count would still pass
+ * (F-V4). Every transparent double-sided material the layer adds must be single-pass. A
+ * layer with none has nothing to measure, so it fails rather than passing by vacuity.
+ */
+function doublePassFailures(meshes: readonly Mesh[]): string[] {
+  const doubleSided = meshes.flatMap((mesh) => (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map((material: Material) => [mesh, material] as const)).filter(([, material]) => material.transparent && material.side === DoubleSide);
+  if (doubleSided.length === 0) return ['single pass: no transparent DoubleSide material, so nothing to measure'];
+  return doubleSided.filter(([, material]) => !material.forceSinglePass).map(([mesh]) => `single pass: ${mesh.name || mesh.uuid} is transparent and DoubleSide, so three draws it twice`);
+}
+
+/** Runs `check` over the Meshes the layer adds to a scene for the committed artifact, then frees the layer. */
+function withLayerMeshes<T>(check: (meshes: Mesh[]) => T): T {
+  const artifact = committed();
+  const images = new Map(fillPlans(artifact).map((plan) => [plan.map, {} as ImageBitmap]));
+  const scene = new Scene();
+  const layer = createFillLayer(artifact, images);
+  try {
+    layer.attach(scene);
+    return check(drawsOf(scene));
+  } finally {
+    layer.dispose();
+  }
+}
+
+test('every transparent DoubleSide material the layer adds is single-pass, so each Mesh is one draw', () => {
+  withLayerMeshes((meshes) => {
+    const doubleSided = meshes.filter((mesh) => !Array.isArray(mesh.material) && mesh.material.transparent && mesh.material.side === DoubleSide);
+    assert.ok(doubleSided.length >= 3, `the belts, the nebula and the ring disc are transparent and DoubleSide: ${doubleSided.length}`);
+    assert.deepEqual(doublePassFailures(meshes), []);
+  });
+});
+
+test('the single-pass row fails on a two-pass material, and on nothing to measure', () => {
+  withLayerMeshes((meshes) => {
+    const material = meshes.map((mesh) => mesh.material).find((each): each is Material => !Array.isArray(each) && each.transparent && each.side === DoubleSide);
+    assert.ok(material !== undefined);
+    material.forceSinglePass = false;
+    assert.match(doublePassFailures(meshes).join(' | '), /draws it twice/);
+    assert.match(doublePassFailures(meshes.filter((mesh) => mesh.material !== material && !(mesh.material as Material).transparent)).join(' | '), /nothing to measure/);
+  });
+  assert.match(doublePassFailures([]).join(' | '), /nothing to measure/);
 });
 
 test('added draws fail on nothing to measure: no Planet, no Star, or neither', () => {

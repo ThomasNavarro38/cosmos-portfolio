@@ -32,7 +32,7 @@ import {
 import { BELT_FRAGMENT_SHADER, BELT_VERTEX_SHADER } from './belt-shader.ts';
 import { createFillLayer } from './fill-layer.ts';
 import { addedDraws, FILL_CEILING_LUMINANCE, FILL_RADIUS_RATIO, fillPlans } from './fill-model.ts';
-import { glslFloat } from './star-shader.ts';
+import { glslFloat } from './glsl.ts';
 import { STAR_BAND_LUMINANCE, starPlans } from './star-model.ts';
 import { STAR_TINT_TOKENS } from './star-layer.ts';
 

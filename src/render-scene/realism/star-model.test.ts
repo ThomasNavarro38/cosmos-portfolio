@@ -54,7 +54,8 @@ import {
   GLOW_94_LUMINANCE,
   TINT_ORDER,
 } from './star-model.ts';
-import { GLOW_FRAGMENT_SHADER, GLOW_VERTEX_SHADER, glslFloat, STAR_FILL_FRAGMENT_SHADER, STAR_FILL_VERTEX_SHADER } from './star-shader.ts';
+import { glslFloat } from './glsl.ts';
+import { GLOW_FRAGMENT_SHADER, GLOW_VERTEX_SHADER, STAR_FILL_FRAGMENT_SHADER, STAR_FILL_VERTEX_SHADER } from './star-shader.ts';
 
 /** Each tint's token (9.5), as the layer's record must name it. */
 const TINT_TOKEN = (tint: StarTint): keyof typeof tokens.colors => `realism-star-${tint}-dark` as keyof typeof tokens.colors;
@@ -408,7 +409,7 @@ function coreFragment(disc: readonly [number, number], uniforms: { low: number; 
   const cells = Math.min(Math.max(0.5 + 0.25 * (Math.sin(p[0] + t) * Math.sin(p[1] - 0.7 * t) + Math.sin(0.6 * (p[0] + p[1]) - 1.3 * t)), 0), 1);
   const grain = 1 - STAR_GRAIN_DEPTH * r * cells;
   const target = centre * limb * grain;
-  const hue = color.map((value) => mix(value / luminanceOf(color), 1, uniforms.rise));
+  const hue = color.map((value) => mix(value / Math.max(luminanceOf(color), 1e-6), 1, uniforms.rise));
   const lit = hue.map((value) => Math.min(value * target, 1));
   const y = luminanceOf(lit);
   const clamped = hue.some((value) => value * target > 1);
@@ -598,7 +599,7 @@ test('the granulation drifts with the clock, and holds with it', () => {
 });
 
 /** The glow's centre, mirrored: the tint divided by its own luminance, by the peak, each channel clamped to 1. */
-const glowCentre = (color: readonly number[], peak: number): number[] => color.map((value) => Math.min((value / luminanceOf(color)) * peak, 1));
+const glowCentre = (color: readonly number[], peak: number): number[] => color.map((value) => Math.min((value / Math.max(luminanceOf(color), 1e-6)) * peak, 1));
 
 test("for every tint, a glow's own peak is well under each ceiling, and at rest two near ones summed on encoded values still are", () => {
   // Additive blending is on encoded values and a shader cannot read the destination, so this bounds the glow alone. The rest is on real pixels.
@@ -646,12 +647,15 @@ const CORE_LINES: readonly (readonly [string, string])[] = [
   ['the limb is not from mu', 'float mu = sqrt(max(1.0 - r * r, 0.0));'],
   ['the centre is not the band by the pulse, and the dipped ceiling by the rise', 'float centre = mix(mix(uLow, uHigh, uPulse), SUBJECT_CEILING * (1.0 - SUBJECT_DIP * (1.0 - uPulse)), uRise);'],
   ['the limb does not darken toward the edge', 'float limb = 1.0 - (1.0 - LIMB) * (1.0 - mu);'],
+  ['the granulation is not over the disc by GRAIN_SCALE', 'vec2 p = vDisc * GRAIN_SCALE;'],
   ['the granulation does not drift with uTime', 'float t = uTime * GRAIN_DRIFT;'],
   ['the granulation is not the mirrored cells', 'float cells = clamp(0.5 + 0.25 * (sin(p.x + t) * sin(p.y - 0.7 * t) + sin(0.6 * (p.x + p.y) - 1.3 * t)), 0.0, 1.0);'],
   ['the granulation does not dim only, by radius', 'float grain = 1.0 - GRAIN_DEPTH * r * cells;'],
   ['the target is not centre, limb and granulation', 'float target = centre * limb * grain;'],
-  ['the hue does not go white with the rise', 'vec3 hue = mix(uColor / dot(uColor, WEIGHTS), vec3(1.0), uRise);'],
+  ['the hue does not go white with the rise, or its divisor is unguarded', 'vec3 hue = mix(uColor / max(dot(uColor, WEIGHTS), 1e-6), vec3(1.0), uRise);'],
   ['a channel is not clamped to 1', 'vec3 lit = min(hue * target, vec3(1.0));'],
+  ['the core does not weigh by Rec. 709', 'const vec3 WEIGHTS = vec3(0.2126, 0.7152, 0.0722);'],
+  ['the luminance is not of the clamped colour', 'float y = dot(lit, WEIGHTS);'],
   ['the ceiling does not follow the rise', 'float limit = mix(REST_CEILING, SUBJECT_CEILING, uRise);'],
   ['the alpha is not the edge by the fade', 'gl_FragColor = vec4(y > limit ? lit * (limit / y) : lit, edge * uFade);'],
 ];
@@ -711,7 +715,11 @@ test('the Star core audit rejects a map, a light, a removed colorspace_fragment 
     ['a granulation that brightens', V, F.replace('1.0 - GRAIN_DEPTH * r * cells', '1.0 + GRAIN_DEPTH * r * cells'), /dim only, by radius/],
     ['a granulation at the centre', V, F.replace('1.0 - GRAIN_DEPTH * r * cells', '1.0 - GRAIN_DEPTH * cells'), /dim only, by radius/],
     ['a still granulation', V, F.replace('float t = uTime * GRAIN_DRIFT;', 'float t = 0.0;'), /drift with uTime/],
-    ['a hue that stays saturated', V, F.replace('mix(uColor / dot(uColor, WEIGHTS), vec3(1.0), uRise)', 'uColor / dot(uColor, WEIGHTS)'), /go white/],
+    ['a hue that stays saturated', V, F.replace('mix(uColor / max(dot(uColor, WEIGHTS), 1e-6), vec3(1.0), uRise)', 'uColor / max(dot(uColor, WEIGHTS), 1e-6)'), /go white/],
+    ['an unguarded divisor, NaN on a near-black tint', V, F.replace('uColor / max(dot(uColor, WEIGHTS), 1e-6)', 'uColor / dot(uColor, WEIGHTS)'), /divisor is unguarded/],
+    ['other weights', V, F.replace('const vec3 WEIGHTS = vec3(0.2126, 0.7152, 0.0722);', 'const vec3 WEIGHTS = vec3(0.3, 0.6, 0.1);'), /Rec\. 709/],
+    ['the luminance of the unclamped colour', V, F.replace('float y = dot(lit, WEIGHTS);', 'float y = dot(hue * target, WEIGHTS);'), /clamped colour/],
+    ['a granulation not scaled', V, F.replace('vec2 p = vDisc * GRAIN_SCALE;', 'vec2 p = vDisc;'), /by GRAIN_SCALE/],
     ['a hard edge', V, F.replace('smoothstep(0.0, EDGE, 1.0 - r)', '1.0'), /fall to 0 at the edge/],
     ['a channel left unclamped', V, F.replace('min(hue * target, vec3(1.0))', 'hue * target'), /not clamped/],
     ['a floor back near 0', V, F.replace('const float ALPHA_FLOOR = 0.5;', 'const float ALPHA_FLOOR = 0.02;'), /ALPHA_FLOOR is not/],
@@ -737,7 +745,7 @@ function auditGlow(vertex: string, fragment: string): string[] {
   if (/\bposition\.z\b|position\.xyz|vec4\(\s*position\s*,/.test(vertex)) failures.push('the sphere keeps its relief');
   if (!fragment.includes('float edge = max(1.0 - dot(vDisc, vDisc), 0.0);')) failures.push('the falloff does not reach 0 at the edge');
   if (!fragment.includes('float falloff = edge * edge;')) failures.push('the falloff has a slope at the edge');
-  if (!fragment.includes('vec3 glow = uColor / dot(uColor, WEIGHTS) * uPeak * falloff * uFade;')) failures.push('the colour is not the tint by its own luminance, by the peak, the falloff and the fade');
+  if (!fragment.includes('vec3 glow = uColor / max(dot(uColor, WEIGHTS), 1e-6) * uPeak * falloff * uFade;')) failures.push('the colour is not the tint by its own guarded luminance, by the peak, the falloff and the fade');
   if (!fragment.includes('const vec3 WEIGHTS = vec3(0.2126, 0.7152, 0.0722);')) failures.push('the glow does not weigh by Rec. 709');
   if (!fragment.includes('gl_FragColor = vec4(min(glow, vec3(1.0)), 1.0);')) failures.push('a glow channel is not clamped to 1, or the fade is the alpha');
   if (!fragment.includes('uniform float uPeak;')) failures.push('no peak uniform');
@@ -761,7 +769,7 @@ test('the glow shader audit rejects each departure', () => {
   const V = GLOW_VERTEX_SHADER;
   const F = GLOW_FRAGMENT_SHADER;
   const FLAT = 'vec4(position.xy, 0, 1)';
-  const MAIN = 'uColor / dot(uColor, WEIGHTS) * uPeak * falloff * uFade;';
+  const MAIN = 'uColor / max(dot(uColor, WEIGHTS), 1e-6) * uPeak * falloff * uFade;';
   for (const [name, vertex, fragment, message] of [
     ['relief', V.replace(FLAT, 'vec4(position, 1)'), F, /flattened/],
     ['a bias', V.replace(/\}\s*$/, 'gl_Position.z += 1e-6 * gl_Position.w; }'), F, /has a bias/],
@@ -769,11 +777,12 @@ test('the glow shader audit rejects each departure', () => {
     ['a floor at the edge', V, F.replace('max(1.0 - dot(vDisc, vDisc), 0.0)', 'max(1.0 - dot(vDisc, vDisc), 0.1)'), /reach 0/],
     ['a linear falloff, with a slope at the edge', V, F.replace('edge * edge', 'edge'), /slope/],
     ['no falloff', V, F.replace(MAIN, MAIN.replace(' * falloff', '')), /by the peak, the falloff/],
-    ['no normalisation, so a tint carries brightness', V, F.replace(MAIN, 'uColor * uPeak * falloff * uFade;'), /by its own luminance/],
+    ['no normalisation, so a tint carries brightness', V, F.replace(MAIN, 'uColor * uPeak * falloff * uFade;'), /by its own guarded luminance/],
+    ['an unguarded divisor, NaN on a near-black tint', V, F.replace(MAIN, 'uColor / dot(uColor, WEIGHTS) * uPeak * falloff * uFade;'), /by its own guarded luminance/],
     ['other weights', V, F.replace('const vec3 WEIGHTS = vec3(0.2126, 0.7152, 0.0722);', 'const vec3 WEIGHTS = vec3(0.3, 0.6, 0.1);'), /Rec\. 709/],
     ['no clamp', V, F.replace('vec4(min(glow, vec3(1.0)), 1.0)', 'vec4(glow, 1.0)'), /not clamped/],
-    ['another colour', V, F.replace(MAIN, MAIN.replaceAll('uColor', 'vec3(1.0)')), /by its own luminance/],
-    ['no peak', V, F.replace(MAIN, MAIN.replace('uPeak', '0.22')), /by its own luminance, by the peak/],
+    ['another colour', V, F.replace(MAIN, MAIN.replaceAll('uColor', 'vec3(1.0)')), /by its own guarded luminance/],
+    ['no peak', V, F.replace(MAIN, MAIN.replace('uPeak', '0.22')), /by its own guarded luminance, by the peak/],
     ['no peak uniform', V, F.replace('uniform float uPeak;', ''), /no peak uniform/],
     ['no fade, so a glow pops in', V, F.replace(MAIN, MAIN.replace(' * uFade', '')), /the falloff and the fade/],
     ['the fade as the alpha, which additive blending would ignore at 1', V, F.replace(MAIN, MAIN.replace(' * uFade', '')).replace('vec4(min(glow, vec3(1.0)), 1.0)', 'vec4(min(glow, vec3(1.0)), uFade)'), /the falloff and the fade/],

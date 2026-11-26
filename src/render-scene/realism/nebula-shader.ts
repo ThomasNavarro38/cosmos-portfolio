@@ -26,7 +26,7 @@
  */
 
 import { NEBULA_DENSITY_HIGH, NEBULA_DENSITY_LOW, NEBULA_END_UNITS, NEBULA_HALF_WIDTH, NEBULA_NOISE_PERIOD, NEBULA_NOISE_SCALE, NEBULA_OCTAVES, NEBULA_PEAK_LUMINANCE } from './nebula-model.ts';
-import { glslFloat } from './star-shader.ts';
+import { glslFloat } from './glsl.ts';
 
 export const NEBULA_VERTEX_SHADER = /* glsl */ `
   attribute vec3 aTangent;

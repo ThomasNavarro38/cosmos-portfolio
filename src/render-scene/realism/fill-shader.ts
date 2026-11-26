@@ -26,9 +26,11 @@
  * step's luminance from `rim-model.ts`, times a `smoothstep` over the outer
  * `max(RIM_WIDTH, RIM_MIN_PX × fwidth(r))` of the radius, added before the ceiling. The
  * ceiling is `max(CEILING, uRim × w)`, so only the subject's rim (never its surface inside
- * the rim) may pass `stroke-active`, up to `stroke-focus`; the 8-bit floor below uses the same value. The two constants are
- * written in as literals, to keep the chunk's bytes, so neither may be a whole number,
- * which GLSL would read as an int.
+ * the rim) may pass `stroke-active`, up to `stroke-focus`; the 8-bit floor below uses the same value.
+ *
+ * **Every number is written through `glslFloat`** (Epic 9 retro item 5), so tuning one to
+ * a whole number writes `1.0`, not a GLSL int that would fail to link and lose realism
+ * everywhere, in silence. `fill-model.test.ts` holds every shader module to it.
  *
  * **Rounding must not pass the ceiling.** The output is rounded to 8 bits per
  * channel, which read back up to 0.5% above the ceiling on a saturated pixel. So a
@@ -36,6 +38,7 @@
  */
 
 import { FILL_CEILING_LUMINANCE, FILL_CLIP_OFFSET, FILL_NEAR_CEILING, FILL_TARGET_LUMINANCE } from './fill-model.ts';
+import { glslFloat } from './glsl.ts';
 import { RIM_MIN_PX, RIM_WIDTH } from './rim-model.ts';
 
 export const FILL_VERTEX_SHADER = /* glsl */ `
@@ -60,9 +63,9 @@ export const FILL_FRAGMENT_SHADER = /* glsl */ `
   uniform float uRim;
   varying vec2 vDisc;
   varying mat3 vWorld;
-  const float FILL_TARGET_LUMINANCE = ${FILL_TARGET_LUMINANCE};
-  const float CEILING = ${FILL_CEILING_LUMINANCE};
-  const float NEAR_CEILING = ${FILL_NEAR_CEILING};
+  const float FILL_TARGET_LUMINANCE = ${glslFloat(FILL_TARGET_LUMINANCE)};
+  const float CEILING = ${glslFloat(FILL_CEILING_LUMINANCE)};
+  const float NEAR_CEILING = ${glslFloat(FILL_NEAR_CEILING)};
   const float PI = 3.141592653589793;
   void main() {
     vec3 n = vec3(vDisc, sqrt(max(1.0 - dot(vDisc, vDisc), 0.0)));
@@ -75,7 +78,7 @@ export const FILL_FRAGMENT_SHADER = /* glsl */ `
     float v = asin(clamp(m.y, -1.0, 1.0)) / PI + 0.5;
     vec3 albedo = texture2D(uMap, vec2(u, v)).rgb * (FILL_TARGET_LUMINANCE / uMeanLuminance);
     vec3 lit = albedo * max(dot(N, uLight), 0.0) + uAmbient;
-    float r = length(vDisc), w = smoothstep(1.0 - max(${RIM_WIDTH}, ${RIM_MIN_PX} * fwidth(r)), 1.0, r);
+    float r = length(vDisc), w = smoothstep(1.0 - max(${glslFloat(RIM_WIDTH)}, ${glslFloat(RIM_MIN_PX)} * fwidth(r)), 1.0, r);
     lit += vec3(uRim) * w;
     float top = max(CEILING, uRim * w);
     float y = dot(lit, vec3(0.2126, 0.7152, 0.0722));
