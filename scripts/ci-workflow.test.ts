@@ -1,10 +1,14 @@
 /**
  * A text-level ratchet on `.github/workflows/ci.yml`. The repo carries no YAML
  * parser and must not gain one for a test, so this pins the authored shape: a
- * push trigger on every branch, one job on a fixed runner, the approved action
- * SHAs, Node from `.nvmrc`, `npm ci`, a job timeout, and the four checks each
- * run as a bare command and guarded to run even when an earlier one failed —
- * the build last, because the AD-7 bundle assertion lives in `vite build`.
+ * push trigger on every branch plus a pull_request trigger on `main` alone, one
+ * job on a fixed runner, the approved action SHAs, Node from `.nvmrc`, `npm ci`,
+ * a job timeout, and the four checks each run as a bare command and guarded to
+ * run even when an earlier one failed — the build last, because the AD-7 bundle
+ * assertion lives in `vite build`. The follow-up flag check (Epic 9 retro item
+ * 10, `spec-e9-r10-hold-the-merge-on-follow-up-flags.md`; Thomas's Ask First
+ * approval 2026-11-27) runs on pull requests only, under the same guard, so an
+ * ordinary branch push stays green while flags are open.
  */
 
 import { strict as assert } from 'node:assert';
@@ -15,8 +19,11 @@ const WORKFLOW = readFileSync(new URL('../.github/workflows/ci.yml', import.meta
 const LINES = WORKFLOW.split('\n');
 const GUARD = "if: ${{ !cancelled() && steps.install.outcome == 'success' }}";
 const CHECKS = ['npm test', 'npm run typecheck', 'npm run gate', 'npm run build'];
-/** Every command the job may run, each the whole of its `run:` line. */
-const RUNS = ['npm ci', ...CHECKS];
+/** The follow-up flag check: the guard, narrowed to pull requests (item 10). */
+const FOLLOWUP = 'npm run check:followup';
+const FOLLOWUP_GUARD = "if: ${{ !cancelled() && steps.install.outcome == 'success' && github.event_name == 'pull_request' }}";
+/** Every command the job may run, each the whole of its `run:` line, in order. */
+const RUNS = ['npm ci', FOLLOWUP, ...CHECKS];
 /** The approved pins; moving either is an Ask First change, so it has to edit this list on purpose. */
 const APPROVED_ACTIONS = [
   'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1',
@@ -54,9 +61,12 @@ function steps(): string[][] {
   return all;
 }
 
-test('the workflow triggers on push with no branch filter, and on nothing else', () => {
-  assert.match(WORKFLOW, /^on: push$/m);
-  assert.doesNotMatch(WORKFLOW, /^\s*(branches|branches-ignore|tags|paths|paths-ignore)\s*:/m);
+test('the workflow triggers on push with no branch filter, on pull requests into main alone, and on nothing else', () => {
+  assert.match(WORKFLOW, /^on:\n {2}push:\n {2}pull_request:\n {4}branches: \[main\]\n\n/m);
+  const filters = LINES.filter((line) => /^\s*(branches|branches-ignore|tags|tags-ignore|paths|paths-ignore)\s*:/.test(line));
+  assert.deepEqual(filters, ['    branches: [main]'], "the one filter is pull_request's branches: [main]");
+  const top = WORKFLOW.slice(WORKFLOW.indexOf('\non:\n') + 1, WORKFLOW.indexOf('\npermissions:'));
+  assert.deepEqual([...top.matchAll(/^ {2}([\w-]+):/gm)].map((match) => match[1]), ['push', 'pull_request']);
 });
 
 test('the token is read-only, and no job widens it', () => {
@@ -100,6 +110,14 @@ test('each of test, typecheck, gate and build runs in exactly one step, carrying
     assert.equal(running.length, 1, `exactly one step must run ${command}`);
     assert.ok((running[0] as string[]).includes(GUARD), `${command} lacks the guard:\n${(running[0] as string[]).join('\n')}`);
   }
+});
+
+test('the follow-up flag check runs in exactly one step, on pull requests only, under the guard', () => {
+  const running = steps().filter((step) => step.includes(`run: ${FOLLOWUP}`));
+  assert.equal(running.length, 1, `exactly one step must run ${FOLLOWUP}`);
+  const step = running[0] as string[];
+  assert.ok(step.includes('name: Follow-up flags'), step.join('\n'));
+  assert.ok(step.includes(FOLLOWUP_GUARD), `${FOLLOWUP} lacks the pull-request guard:\n${step.join('\n')}`);
 });
 
 test('no job-level or workflow-level if: can skip the job', () => {

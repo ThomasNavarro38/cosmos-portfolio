@@ -1,6 +1,9 @@
 name: CI
 
-on: push
+on:
+  push:
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
@@ -19,6 +22,9 @@ jobs:
           cache: npm
       - id: install
         run: npm ci
+      - name: Follow-up flags
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && github.event_name == 'pull_request' }}
+        run: npm run check:followup
       - name: Test
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm test

@@ -837,5 +837,14 @@ action_items:
       flag is true unless Thomas waives it, and run the epic-wide review before the
       on-screen judgement (F-P1, F-P3)"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-11-27: Thomas ruled the design; scripts/check-followup.ts
+      (npm run check:followup) fails while any .md under
+      _bmad-output/implementation-artifacts/ has followup_review_recommended: true
+      and no non-empty followup_review_waived: \"Thomas, <date>, <reason>\"; it runs
+      in ci.yml on pull requests into main and in deploy.yml before npm test, not in
+      npm test or gate. The rule, including the epic-wide review before an on-screen
+      judgement, is stated in CLAUDE.md and the persistent_facts of
+      bmad-build-auto.toml and bmad-build.toml. 11 flags hold the merge at HEAD
+      (spec-e9-r10-hold-the-merge-on-follow-up-flags.md)"
     ref: "_bmad-output/implementation-artifacts/epic-9-retro-11-26-2026.md"

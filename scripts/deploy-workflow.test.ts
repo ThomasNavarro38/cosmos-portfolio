@@ -1,8 +1,10 @@
 /**
  * A text-level ratchet on `.github/workflows/deploy.yml`, in the manner of
  * `ci-workflow.test.ts`: no YAML parser, the authored shape pinned. A push to
- * `main` (or a manual run) builds from a clean checkout, runs the test suite,
- * the typecheck and the build — which holds the gate and the bundle
+ * `main` (or a manual run) builds from a clean checkout, runs the follow-up
+ * flag check (Epic 9 retro item 10, `spec-e9-r10-hold-the-merge-on-follow-up-flags.md`;
+ * Thomas's Ask First approval 2026-11-27, so a direct push to `main` does not
+ * deploy while a flag is held), the test suite, the typecheck and the build — which holds the gate and the bundle
  * assertion — in that order, each failing the job, then uploads `dist/` and
  * deploys it to GitHub Pages. The token is read-only except on the deploy job,
  * which alone may write Pages and mint its OIDC token. No step reads an
@@ -27,7 +29,7 @@ const APPROVED_ACTIONS = [
 ];
 
 /** Every `run:` command, in order. */
-const RUNS = ['npm ci', 'npm test', 'npm run typecheck', 'npm run build'];
+const RUNS = ['npm ci', 'npm run check:followup', 'npm test', 'npm run typecheck', 'npm run build'];
 
 /** The text of the job keyed `name`, from its key to the next job or the end. */
 function job(workflow: string, name: string): string {
@@ -62,6 +64,7 @@ function auditDeploy(workflow: string): string[] {
   if (!/node-version-file: \.nvmrc\n/.test(build)) failures.push('Node does not come from .nvmrc');
   const runs = [...workflow.matchAll(/^\s*(?:-\s+)?run:\s*(.*)$/gm)].map((match) => (match[1] as string).trim());
   if (JSON.stringify(runs) !== JSON.stringify(RUNS)) failures.push(`the commands are ${JSON.stringify(runs)}, not ${JSON.stringify(RUNS)}, each bare, in order`);
+  if (!/^ {6}- run: npm ci\n {6}- run: npm run check:followup\n {6}- run: npm test\n/m.test(build)) failures.push('the follow-up flag check does not run right after npm ci and before npm test');
   if (build.indexOf('run: npm run build') > build.indexOf('upload-pages-artifact')) failures.push('the artifact is uploaded before the build');
   if (!/upload-pages-artifact@\S+ # v[\d.]+\n {8}with:\n {10}path: dist\n/.test(build)) failures.push('the uploaded artifact is not dist');
   if (/^\s*if:/m.test(workflow)) failures.push('an if: can skip a step or a job');
@@ -91,6 +94,9 @@ test('the deploy audit rejects each guarantee broken', () => {
     ['configure-pages added', (s) => s.replace('      - run: npm ci\n', '      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0\n      - run: npm ci\n'), /not an approved pin/],
     ['credentials persisted', (s) => s.replace('          persist-credentials: false\n', ''), /persists credentials/],
     ['the tests skipped', (s) => s.replace('      - run: npm test\n', ''), /the commands are/],
+    ['the follow-up flag check dropped', (s) => s.replace('      - run: npm run check:followup\n', ''), /the commands are|follow-up flag check/],
+    ['the follow-up flag check after the tests', (s) => s.replace('      - run: npm run check:followup\n', '').replace('      - run: npm test\n', '      - run: npm test\n      - run: npm run check:followup\n'), /follow-up flag check/],
+    ['the follow-up flag check skippable', (s) => s.replace('      - run: npm run check:followup\n', "      - run: npm run check:followup\n        if: ${{ github.event_name == 'push' }}\n"), /an if:|follow-up flag check/],
     ['a chained command', (s) => s.replace('run: npm run typecheck', 'run: npm run typecheck || true'), /the commands are/],
     ['the build after the upload', (s) => s.replace('      - run: npm run build\n', '').replace('          path: dist\n', '          path: dist\n      - run: npm run build\n'), /the commands are|before the build/],
     ['another artifact', (s) => s.replace('path: dist', 'path: .'), /not dist/],

@@ -18,7 +18,8 @@
     "typecheck": "tsc --noEmit",
     "validate": "node src/data/validate.ts",
     "test": "node --test \"src/**/*.test.ts\" \"scripts/**/*.test.ts\"",
-    "check:pins": "node scripts/check-pins.ts"
+    "check:pins": "node scripts/check-pins.ts",
+    "check:followup": "node scripts/check-followup.ts"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",

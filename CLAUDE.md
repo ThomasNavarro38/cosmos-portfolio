@@ -117,3 +117,41 @@ the commit; `abdbac2` carried both records in the same commit):
 has not given the ruling, `bmad-build-auto` HALTs with status `blocked` and
 names the ruling needed. Any other session asks Thomas, and does not commit
 without the ruling.
+
+## Follow-up review flags hold the merge to `main`
+
+Source: Thomas, Epic 9 retro item 10 (F-P1, F-P3), with the design ruled
+2026-11-27 (`spec-e9-r10-hold-the-merge-on-follow-up-flags.md`). Follow-up
+reviews piled up unrun, and the lenses that looked across story boundaries
+found what each story's own review missed.
+
+**The hold:** no merge into `main` and no push to `main` while any flag counts
+in the tree `main` would have after it, so the commit that records a review or
+a waiver may itself land. A flag counts when a `.md` file anywhere under
+`_bmad-output/implementation-artifacts/` (subfolders included, not only the
+branch's own specs) has `followup_review_recommended: true` (in any case) in its
+leading frontmatter and no `followup_review_waived:` value in the ruled form
+below. Clear a flag by running the follow-up review it asks for; that review's
+own run sets the flag to `false`, as Epic 9 retro item 2 did for 17 flags.
+
+**The waiver:** `followup_review_waived: "Thomas, <YYYY-MM-DD>, <reason>"` in
+the spec's frontmatter. The check accepts only that form, so a placeholder such
+as `''`, `null`, `false` or `TODO` waives nothing. The flag stays `true` for history. Only Thomas grants a
+waiver; an agent writes the field only when quoting Thomas's ruling.
+
+**Review order:** an epic whose last story is an on-screen judgement runs its
+epic-wide follow-up review before that judgement, not after.
+
+**The check:** `npm run check:followup` (`scripts/check-followup.ts`) lists each
+counted file and exits 1, or prints `no follow-up review flags held`. It runs in
+`ci.yml` on pull requests into `main` and in `deploy.yml` before the build, so a
+direct push to `main` does not deploy. It is not part of `npm test` or
+`npm run gate`, so branch work stays green while flags are open. A missing
+artifacts folder fails the check, never passes it. A red PR check blocks the
+merge button only once `Follow-up flags` is a required status check in GitHub
+branch protection, a setting outside the repo; a local merge pushed to `main`
+is held only at the deploy.
+
+**Who rules:** if asked to merge or push to `main` while a flag counts,
+`bmad-build-auto` HALTs with status `blocked` and names the flagged specs. Any
+other session asks Thomas to review or waive them first.

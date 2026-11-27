@@ -17,3 +17,5 @@ Step 1's version-control check needs a clean tree. At HEAD `31ff9d8c8f351854e6f4
 To resume, commit or move those two files, then re-run `/bmad-build-auto action-item 9-10`.
 
 Expect the same kind of question that blocked item 9. Item 10 is also a process rule owned by Thomas. It is open where it should be carried: the build skills' `persistent_facts`, `CLAUDE.md`, or a mechanical merge gate such as a check that fails while any spec has `followup_review_recommended: true`. It is also open what counts as "the merge to `main`" and what form a waiver takes. Ruling on these alongside item 9's questions would let both items run unattended.
+
+Resumed 2026-11-27 under `spec-e9-r10-hold-the-merge-on-follow-up-flags.md`, after Thomas ruled the design in session (five questions); the item is done there.
