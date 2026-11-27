@@ -5,7 +5,8 @@ created: '2026-11-27'
 status: 'done'
 baseline_revision: '71979a166fffb6d5d4fb68ecee131e345034c5ee'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
+followup_review: review-followup-12-flags-2026-11-27.md
 context: []
 warnings: []
 deferred: []

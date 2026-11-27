@@ -1637,8 +1637,9 @@ test('the effects audit rejects each form, in code, and ignores comments', () =>
     assert.notDeepEqual(effectsIn([{ path: 'src/shell/x.tsx', source }]), [], `${source} must be rejected`);
   }
   assert.deepEqual(effectsIn([{ path: 'src/shell/x.tsx', source: '// no glow, no bloom, no ambientLight\n/* boxShadow */' }]), []);
-  // The DOM's `blur()` (4.10, `shell/arrival.ts`) moves focus and draws nothing: a
-  // CSS `blur(` always takes a length, so an empty call or declaration is admitted.
+  // The DOM's `blur()` (4.10, `shell/arrival.ts`) moves focus and draws nothing, so an
+  // empty call or declaration is admitted. A CSS `blur()` with no length is valid too,
+  // but it defaults to 0 and draws nothing either; any CSS blur with a length is rejected.
   assert.deepEqual(effectsIn([{ path: 'src/shell/x.tsx', source: 'main.blur();\ninterface T { blur(): void; }' }]), []);
   assert.notDeepEqual(effectsIn([{ path: 'src/shell/x.tsx', source: "const css = 'filter: blur( 2px)';" }]), [], 'a CSS blur with a space before its length is still rejected');
   // Every match, not the first, each with its line.

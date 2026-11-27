@@ -841,10 +841,12 @@ action_items:
     resolution: "2026-11-27: Thomas ruled the design; scripts/check-followup.ts
       (npm run check:followup) fails while any .md under
       _bmad-output/implementation-artifacts/ has followup_review_recommended: true
-      and no non-empty followup_review_waived: \"Thomas, <date>, <reason>\"; it runs
-      in ci.yml on pull requests into main and in deploy.yml before npm test, not in
+      and no followup_review_waived in the ruled form \"Thomas, <YYYY-MM-DD>, <reason>\"
+      (any other value waives nothing); it runs in ci.yml on pull requests into main
+      (its own Follow-up flags job since 2026-11-27) and in deploy.yml before npm test, not in
       npm test or gate. The rule, including the epic-wide review before an on-screen
       judgement, is stated in CLAUDE.md and the persistent_facts of
-      bmad-build-auto.toml and bmad-build.toml. 11 flags hold the merge at HEAD
+      bmad-build-auto.toml and bmad-build.toml. 12 flags hold the merge at HEAD, this
+      item's own spec among them
       (spec-e9-r10-hold-the-merge-on-follow-up-flags.md)"
     ref: "_bmad-output/implementation-artifacts/epic-9-retro-11-26-2026.md"

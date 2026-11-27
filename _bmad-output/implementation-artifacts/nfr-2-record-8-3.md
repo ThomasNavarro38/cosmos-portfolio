@@ -64,11 +64,12 @@ The protocol for the one run that can change the status. The instrument is alrea
 Record, beside the result:
 
 - `chrome://gpu` (or `edge://gpu`): WebGL and WebGL2 show hardware accelerated. A software renderer is not the target profile's GPU, and the run is void.
+- The display's refresh rate. The browser paints at most once per refresh, so the reading can never exceed it.
 - `window.devicePixelRatio`, the OS display scaling, and the canvas's drawing-buffer size once the scene is up. R3F's `dpr` of `[1, 2]` follows `devicePixelRatio`, so these fix how many pixels the run drew.
 
 ### The steps
 
-1. Open a new tab and open DevTools (the Console) in it, and keep it open for the whole run, so reading the mark adds no stall. Then, in that tab, make a fresh load of `/`. A reload of a tab that was already open does not count, nor does a load followed by any earlier interaction.
+1. Open a new tab and open DevTools (the Console) in it, undocked (a separate window, so the viewport keeps its 1920×1080), and keep it open for the whole run, so reading the mark adds no stall. Then, in that tab, make a fresh load of the site's root under its base, `/cosmos-portfolio/` (`https://thomasnavarro38.github.io/cosmos-portfolio/` live, `http://localhost:4173/cosmos-portfolio/` on `npm run preview`). A reload of a tab that was already open does not count, nor does a load followed by any earlier interaction.
 2. Wait, without input, until the realism fade has finished and the Planets' fills and the Stars' glows are fully up.
 3. From then on, give no input except the scroll. No click, no key, no hover over the chrome, no resize.
 4. Scroll the Rails once, completely forward to their end and completely back to their start: one complete forward-and-back scroll, at a steady reading pace.
@@ -100,7 +101,7 @@ The run passes NFR-2 when, and only when, all three hold:
 - `gaps === 0`;
 - `fps >= 30`, so every full window held 30fps.
 
-Below 30, the bands are:
+With `fps` not null and `gaps === 0`, the bands below 30 are (a run with any gap is not a pass and falls under the gap rule, whatever `fps` reads):
 
 - `fps >= 24` (`FALLBACK_FLOOR_FPS`): accepted degraded, not a pass. The status stays "not yet passed".
 - Below 24: below the floor, a fail. The Fallback is offered at that rate, so the scene has missed both the target and the floor.
@@ -109,7 +110,7 @@ A pass changes the status line above, with the run recorded here beside it. Noth
 
 ## Never run
 
-None of these has been run on any machine. Each is listed beside NFR-2 so its absence is on the record, not mistaken for a pass (Epic 7 retro item 54).
+None of these has been run beyond the dev machine and Chrome, and none on the target profile. Each is listed beside NFR-2 so its absence is on the record, not mistaken for a pass (Epic 7 retro item 54).
 
 - The depth bias (`FILL_CLIP_OFFSET`, 1e-6) on integrated GPUs, on phones, and on depth buffers below 24 bits. Only the dev machine has run it.
 - Firefox and Safari, including the maps' upload with `imageOrientation: 'flipY'`. No run has been made in either; only Chrome has drawn the scene.

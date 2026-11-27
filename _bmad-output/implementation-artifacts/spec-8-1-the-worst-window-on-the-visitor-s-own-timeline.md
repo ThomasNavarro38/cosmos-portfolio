@@ -5,7 +5,8 @@ created: '2026-11-16'
 status: 'done'
 baseline_revision: '5fadc30f0576e7c3fb7c0ff03ee23bb69152d32f'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
+followup_review: review-followup-12-flags-2026-11-27.md
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-8-context.md'
 warnings: ['oversized']

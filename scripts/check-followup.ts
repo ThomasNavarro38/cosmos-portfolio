@@ -75,14 +75,23 @@ function valueOf(lines: readonly string[], key: string): string | undefined {
 }
 
 /** Thomas's waiver, as ruled: `Thomas, <YYYY-MM-DD>, <reason>`. Anything else (`''`, `~`, `null`, `false`, `TODO`) waives nothing. */
-export const WAIVER = /^Thomas, \d{4}-\d{2}-\d{2}, \S/;
+export const WAIVER = /^Thomas, (\d{4})-(\d{2})-(\d{2}), \S/;
+
+/** True when `value` is a waiver in the ruled form whose date exists on the calendar (no `2026-02-30`). */
+function isWaiver(value: string): boolean {
+  const match = WAIVER.exec(value);
+  if (match === null) return false;
+  const [year, month, day] = [match[1], match[2], match[3]].map(Number) as [number, number, number];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return year > 0 && date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
 
 /** True when the file's frontmatter sets the flag (`true` in any case) and no waiver in the ruled form. */
 export function isHeld(text: string): boolean {
   const lines = frontmatterLines(text);
   if (lines === undefined) return false;
   if ((valueOf(lines, 'followup_review_recommended') ?? '').toLowerCase() !== 'true') return false;
-  return !WAIVER.test(valueOf(lines, 'followup_review_waived') ?? '');
+  return !isWaiver(valueOf(lines, 'followup_review_waived') ?? '');
 }
 
 /**

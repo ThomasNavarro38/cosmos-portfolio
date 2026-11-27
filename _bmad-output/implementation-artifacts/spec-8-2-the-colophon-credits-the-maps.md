@@ -5,7 +5,8 @@ created: '2026-11-16'
 status: 'done'
 baseline_revision: 'b073297489ce4898b9749de1a2a38fdde923e17e'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
+followup_review: review-followup-12-flags-2026-11-27.md
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-8-context.md'
 warnings: ['oversized']
@@ -191,6 +192,6 @@ Verification: `npm test` 2175/2176, one environmental skip ("the walk keeps a sy
 
 Residual risks:
 - The page was not looked at in a browser.
-- The two widened lists in the Spec Change Log need Thomas's confirmation.
+- The two widened lists in the Spec Change Log need Thomas's confirmation. Confirmed by Thomas on 2026-11-27, with the Colophon import list, as recorded in the architecture `.memlog.md` RULING and `review-followup-12-flags-2026-11-27.md`.
 - The ruled statement's straight apostrophes differ from the page's typographic `’`; it is verbatim as ruled.
 - A failed solver import on open also disables the re-solve (deferred).

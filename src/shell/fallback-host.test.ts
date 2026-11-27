@@ -135,7 +135,8 @@ function fakeClick(init: Partial<Pick<RouteClick, 'button' | 'ctrlKey' | 'metaKe
  * The click rule, run on `handler` — the `onClick` the link `name` was handed —
  * through `recording`: a primary click the router takes navigates to `to` once
  * and prevents the default once; a refused one navigates once and prevents
- * nothing; a Ctrl-click and a middle click do neither. (`corner-chrome.test.ts`
+ * nothing; a click with Ctrl, Shift, Meta or Alt held, a middle click and a
+ * click already prevented do neither. (`corner-chrome.test.ts`
  * holds its twin, for the chrome's link.)
  */
 function followsRouteRule(name: string, handler: unknown, to: Route): string[] {

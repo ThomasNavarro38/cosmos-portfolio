@@ -46,6 +46,13 @@ test("EMPTY_WAIVER: a flag with followup_review_waived: '' or \"\" is counted", 
   assert.ok(!isHeld('---\nfollowup_review_recommended: true\nfollowup_review_waived: "Thomas, 2026-11-27, reviewed"\n---\n'));
 });
 
+test('BAD_DATE: a waiver whose date is not a real calendar date waives nothing', () => {
+  for (const date of ['2026-99-99', '2026-13-01', '2026-02-30', '2026-11-00', '0000-00-00']) {
+    assert.ok(isHeld(`---\nfollowup_review_recommended: true\nfollowup_review_waived: "Thomas, ${date}, ok"\n---\n`), date);
+  }
+  assert.ok(!isHeld('---\nfollowup_review_recommended: true\nfollowup_review_waived: "Thomas, 2028-02-29, a leap day"\n---\n'));
+});
+
 test('FALSE: followup_review_recommended: false is not counted', () => {
   assert.ok(!HELD.includes(at('false.md')));
 });

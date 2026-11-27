@@ -5,7 +5,8 @@ created: '2026-11-27'
 status: 'done'
 baseline_revision: 'd8798b6c66f3580de74096ba0507729c07cc9a81'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
+followup_review: review-followup-12-flags-2026-11-27.md
 context: []
 warnings: ['oversized']
 deferred: []
@@ -29,7 +30,7 @@ Nothing carries either rule today.
 ## Boundaries & Constraints
 
 **Always:**
-- **What counts.** Every `.md` file under `_bmad-output/implementation-artifacts/`, searched recursively. A file counts when its leading YAML frontmatter has `followup_review_recommended: true` and no non-empty `followup_review_waived:` value. This covers all specs in the repo, not only the branch's own.
+- **What counts.** Every `.md` file under `_bmad-output/implementation-artifacts/`, searched recursively. A file counts when its leading YAML frontmatter has `followup_review_recommended: true` and no `followup_review_waived:` value in the ruled form (amended 2026-11-27, see the Spec Change Log). This covers all specs in the repo, not only the branch's own.
 - **The waiver.** A waiver is the frontmatter field `followup_review_waived: "Thomas, <YYYY-MM-DD>, <reason>"`. The flag stays `true` for history. Only Thomas grants a waiver. An agent writes the field only when quoting Thomas's ruling.
 - **What the check reports.** The check prints each counted file's path and exits non-zero. When nothing counts, it says so and exits 0. It reads frontmatter only, and a frontmatter that is malformed, unterminated or missing counts as no flag. It needs no YAML dependency, because the repo carries none.
 - **CI.** `ci.yml` triggers on `push`, as it does today, and also on `pull_request` with `branches: [main]`. A new step runs `npm run check:followup` on `pull_request` events only, under the existing guard, so ordinary branch pushes stay green.
@@ -111,6 +112,11 @@ Nothing carries either rule today.
 - Given fresh `render_skill.py` renders of both skills, when each is read, then each holds the deferral fact and item 9's fact unchanged, plus the new item 10 fact with its own ending.
 
 ## Spec Change Log
+
+### 2026-11-27 — Follow-up review (`review-followup-12-flags-2026-11-27.md`)
+
+- **What counts (amended).** A file counts when its leading frontmatter has `followup_review_recommended: true` and no `followup_review_waived:` value in the ruled form `Thomas, <YYYY-MM-DD>, <reason>`, with the date a real calendar date. Any other value, `TODO` included, waives nothing. The review pass's waiver patch had already changed the code to this. The Always text had not been changed with it.
+- **The CI check (amended; Thomas's ruling and Ask First approval, 2026-11-27).** The check now runs in its own `ci.yml` job, `followup`, named `Follow-up flags`. That job runs on pull requests only (`if: ${{ github.event_name == 'pull_request' }}`). It takes no `npm ci`, because the script imports only Node built-ins. The step it replaces in the `check` job is gone. The reason is that GitHub branch protection can require a job but never a single step, so `Follow-up flags` can now be required on its own. `scripts/ci-workflow.test.ts` pins two jobs instead of one.
 
 ## Review Triage Log
 

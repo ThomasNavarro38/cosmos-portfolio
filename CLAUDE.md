@@ -144,7 +144,9 @@ epic-wide follow-up review before that judgement, not after.
 
 **The check:** `npm run check:followup` (`scripts/check-followup.ts`) lists each
 counted file and exits 1, or prints `no follow-up review flags held`. It runs in
-`ci.yml` on pull requests into `main` and in `deploy.yml` before the build, so a
+`ci.yml`'s own `Follow-up flags` job on pull requests into `main` (its own job,
+because branch protection requires jobs, never steps) and in `deploy.yml`
+before the build, so a
 direct push to `main` does not deploy. It is not part of `npm test` or
 `npm run gate`, so branch work stays green while flags are open. A missing
 artifacts folder fails the check, never passes it. A red PR check blocks the

@@ -181,7 +181,8 @@ function fakeClick(init: Partial<Pick<RouteClick, 'button' | 'ctrlKey' | 'metaKe
  * The click rule, run on `handler` — the `onClick` the link `name` was handed —
  * through `recording`: a primary click the router takes navigates to `to` once
  * and prevents the default once; a refused one navigates once and prevents
- * nothing; a Ctrl-click and a middle click do neither.
+ * nothing; a click with Ctrl, Shift, Meta or Alt held, a middle click and a
+ * click already prevented do neither.
  */
 function followsRouteRule(name: string, handler: unknown, to: Route): string[] {
   if (typeof handler !== 'function') return [`${name}: no click handler`];
@@ -222,16 +223,16 @@ async function linkHandler(href: '/cosmos-portfolio/chart' | '/cosmos-portfolio/
 
 const chartLinkHandler = (): Promise<unknown> => linkHandler('/cosmos-portfolio/chart');
 
-test('the chrome’s the chart, clicked: primary → navigate(chart) once and preventDefault once; refused → no preventDefault; Ctrl or middle → neither', async () => {
+test('the chrome’s the chart, clicked: primary → navigate(chart) once and preventDefault once; refused → no preventDefault; modified, middle or already prevented → neither', async () => {
   assert.deepEqual(followsRouteRule('the chart', await chartLinkHandler(), 'chart'), []);
 });
 
-test('the chrome’s the model, clicked (5.1): primary → navigate(colophon) once and preventDefault once; refused → no preventDefault; Ctrl or middle → neither', async () => {
+test('the chrome’s the model, clicked (5.1): primary → navigate(colophon) once and preventDefault once; refused → no preventDefault; modified, middle or already prevented → neither', async () => {
   assert.deepEqual(followsRouteRule('the model', await linkHandler('/cosmos-portfolio/colophon'), 'colophon'), []);
   assert.notDeepEqual(followsRouteRule('the model', await linkHandler('/cosmos-portfolio/colophon'), 'chart'), [], 'the real handler, read as a link to the chart');
 });
 
-test('the click check is red against a broken handler: one that never prevents the default, one to the wrong route, one navigating on every click, none', async () => {
+test('the click check is red against a broken handler: one that never prevents the default, one to the wrong route, one navigating on every click, one preventing whatever the router says, none', async () => {
   assert.notDeepEqual(followsRouteRule('the chart', await chartLinkHandler(), 'colophon'), [], 'the real handler, read as a link to the colophon');
   const broken: readonly (readonly [string, unknown])[] = [
     ['never preventDefault', (event: RouteClick) => void (event.button === 0 && recordingRouter.navigate('chart'))],

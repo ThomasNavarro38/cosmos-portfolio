@@ -5,7 +5,8 @@ created: '2026-10-20'
 status: 'done'
 baseline_commit: 'afca259ac4c3c9b5f6a31b86f2842eba296bac1f'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
+followup_review: review-followup-12-flags-2026-11-27.md
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-4-context.md'
 warnings: ['oversized']
