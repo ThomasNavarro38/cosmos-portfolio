@@ -27,9 +27,14 @@ const BASE = '/cosmos-portfolio/';
 const SETTLE_MS = 9000;
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
-// The realism chunk, found as serve.mjs finds it: the one script naming a map.
+// The realism chunk, found as serve.mjs finds it: the one script naming a map that also decodes them (since
+// Epic 8 the Colophon's credits name the maps too, so naming one is no longer enough).
 const assets = join(root, 'dist', 'assets');
-const holding = readdirSync(assets).filter((name) => name.endsWith('.js') && readFileSync(join(assets, name), 'utf8').includes('.webp'));
+const holding = readdirSync(assets).filter((name) => {
+  if (!name.endsWith('.js')) return false;
+  const text = readFileSync(join(assets, name), 'utf8');
+  return text.includes('.webp') && text.includes('imageOrientation');
+});
 if (holding.length !== 1) throw new Error(`expected one chunk naming a map, found ${JSON.stringify(holding)}`);
 const REALISM_CHUNK = `assets/${holding[0]}`;
 

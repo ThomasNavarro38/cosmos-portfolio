@@ -1,105 +1,107 @@
-routes (7.10): 2026-11-14T21:48:05.224Z, dist/ served by serve.mjs ok at http://127.0.0.1:5370/cosmos-portfolio/, realism chunk assets/realism-CStsH7CG.js, 9000 ms per load, Chrome at C:/Program Files/Google/Chrome/Application/chrome.exe
+routes (7.10): 2026-11-27T14:17:38.357Z, dist/ served by serve.mjs ok at http://127.0.0.1:5376/cosmos-portfolio/, realism chunk assets/realism-CxKvPGfz.js, 9000 ms per load, Chrome at C:/Program Files/Google/Chrome/Application/chrome.exe
 
 Fallback: /cosmos-portfolio/chart/ (landed on /cosmos-portfolio/chart, titled "Thomas Navarro · the chart")
   page requests, the site's (12):
-    http://127.0.0.1:5370/cosmos-portfolio/chart/
-    http://127.0.0.1:5370/cosmos-portfolio/assets/index-DePJLjUX.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/index-DAqYS0Fi.css
-    http://127.0.0.1:5370/cosmos-portfolio/assets/mount-DerTCXFo.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/rolldown-runtime-hePW80VL.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/ui-CH2cvWpL.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/ui-CyFwSkbF.css
-    http://127.0.0.1:5370/cosmos-portfolio/assets/chart-rHD8nCYz.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/tokens-C7aYfGEI.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/chart-DfmMtjx4.css
-    http://127.0.0.1:5370/cosmos-portfolio/favicon.svg
-    http://127.0.0.1:5370/cosmos-portfolio/favicon.svg
+    http://127.0.0.1:5376/cosmos-portfolio/chart/
+    http://127.0.0.1:5376/cosmos-portfolio/assets/index-BBC_APjg.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/index-walQ0QcD.css
+    http://127.0.0.1:5376/cosmos-portfolio/assets/mount-iSVu0im-.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/rolldown-runtime-hePW80VL.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/ui-CH2cvWpL.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/ui-CyFwSkbF.css
+    http://127.0.0.1:5376/cosmos-portfolio/assets/chart-E6_8A8Iv.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/tokens-BhYsO5kf.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/chart-DfmMtjx4.css
+    http://127.0.0.1:5376/cosmos-portfolio/favicon.svg
+    http://127.0.0.1:5376/cosmos-portfolio/favicon.svg
   server answered (12):
     200 /cosmos-portfolio/chart/
-    200 /cosmos-portfolio/assets/index-DAqYS0Fi.css
-    200 /cosmos-portfolio/assets/index-DePJLjUX.js
+    200 /cosmos-portfolio/assets/index-BBC_APjg.js
+    200 /cosmos-portfolio/assets/index-walQ0QcD.css
+    200 /cosmos-portfolio/assets/mount-iSVu0im-.js
     200 /cosmos-portfolio/assets/rolldown-runtime-hePW80VL.js
-    200 /cosmos-portfolio/assets/mount-DerTCXFo.js
     200 /cosmos-portfolio/assets/ui-CH2cvWpL.js
     200 /cosmos-portfolio/assets/ui-CyFwSkbF.css
-    200 /cosmos-portfolio/assets/tokens-C7aYfGEI.js
-    200 /cosmos-portfolio/assets/chart-rHD8nCYz.js
+    200 /cosmos-portfolio/assets/tokens-BhYsO5kf.js
+    200 /cosmos-portfolio/assets/chart-E6_8A8Iv.js
     200 /cosmos-portfolio/assets/chart-DfmMtjx4.css
     200 /cosmos-portfolio/favicon.svg
     200 /cosmos-portfolio/favicon.svg
   the document as received differs from the served file by 1 injected script(s), from http://gc.kis.v2.scr.kaspersky-labs.com (paths withheld: they carry the machine's install IDs)
   requests to the injected script's origin (http://gc.kis.v2.scr.kaspersky-labs.com), the machine's and not the site's, not failed: 18
-  rendered: assets/chart-rHD8nCYz.js requested true; title "Thomas Navarro · the chart" is "Thomas Navarro · the chart"
+  rendered: assets/chart-E6_8A8Iv.js requested true; title "Thomas Navarro · the chart" is "Thomas Navarro · the chart"
   findings: none
 
 Colophon: /cosmos-portfolio/colophon/ (landed on /cosmos-portfolio/colophon, titled "Thomas Navarro · the model")
-  page requests, the site's (13):
-    http://127.0.0.1:5370/cosmos-portfolio/colophon/
-    http://127.0.0.1:5370/cosmos-portfolio/assets/index-DePJLjUX.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/index-DAqYS0Fi.css
-    http://127.0.0.1:5370/cosmos-portfolio/assets/mount-DerTCXFo.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/rolldown-runtime-hePW80VL.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/ui-CH2cvWpL.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/ui-CyFwSkbF.css
-    http://127.0.0.1:5370/cosmos-portfolio/assets/colophon-DvUtv6y4.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/colophon-CTpMAo9k.css
-    http://127.0.0.1:5370/cosmos-portfolio/favicon.svg
-    http://127.0.0.1:5370/cosmos-portfolio/favicon.svg
-    http://127.0.0.1:5370/cosmos-portfolio/career.json
-    http://127.0.0.1:5370/cosmos-portfolio/layout.generated.json
-  server answered (13):
+  page requests, the site's (14):
+    http://127.0.0.1:5376/cosmos-portfolio/colophon/
+    http://127.0.0.1:5376/cosmos-portfolio/assets/index-BBC_APjg.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/index-walQ0QcD.css
+    http://127.0.0.1:5376/cosmos-portfolio/assets/mount-iSVu0im-.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/rolldown-runtime-hePW80VL.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/ui-CH2cvWpL.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/ui-CyFwSkbF.css
+    http://127.0.0.1:5376/cosmos-portfolio/assets/colophon-qbMbe5-E.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/colophon-jmBFyhAt.css
+    http://127.0.0.1:5376/cosmos-portfolio/favicon.svg
+    http://127.0.0.1:5376/cosmos-portfolio/favicon.svg
+    http://127.0.0.1:5376/cosmos-portfolio/career.json
+    http://127.0.0.1:5376/cosmos-portfolio/layout.generated.json
+    http://127.0.0.1:5376/cosmos-portfolio/assets/live-oTbkRw8w.js
+  server answered (14):
     200 /cosmos-portfolio/colophon/
-    200 /cosmos-portfolio/assets/index-DePJLjUX.js
-    200 /cosmos-portfolio/assets/index-DAqYS0Fi.css
+    200 /cosmos-portfolio/assets/index-BBC_APjg.js
+    200 /cosmos-portfolio/assets/index-walQ0QcD.css
+    200 /cosmos-portfolio/assets/mount-iSVu0im-.js
     200 /cosmos-portfolio/assets/rolldown-runtime-hePW80VL.js
-    200 /cosmos-portfolio/assets/mount-DerTCXFo.js
-    200 /cosmos-portfolio/assets/ui-CyFwSkbF.css
     200 /cosmos-portfolio/assets/ui-CH2cvWpL.js
-    200 /cosmos-portfolio/assets/colophon-DvUtv6y4.js
-    200 /cosmos-portfolio/assets/colophon-CTpMAo9k.css
+    200 /cosmos-portfolio/assets/ui-CyFwSkbF.css
+    200 /cosmos-portfolio/assets/colophon-jmBFyhAt.css
+    200 /cosmos-portfolio/assets/colophon-qbMbe5-E.js
     200 /cosmos-portfolio/favicon.svg
     200 /cosmos-portfolio/favicon.svg
     200 /cosmos-portfolio/career.json
     200 /cosmos-portfolio/layout.generated.json
+    200 /cosmos-portfolio/assets/live-oTbkRw8w.js
   the document as received differs from the served file by 1 injected script(s), from http://gc.kis.v2.scr.kaspersky-labs.com (paths withheld: they carry the machine's install IDs)
   requests to the injected script's origin (http://gc.kis.v2.scr.kaspersky-labs.com), the machine's and not the site's, not failed: 18
-  rendered: assets/colophon-DvUtv6y4.js requested true; title "Thomas Navarro · the model" is "Thomas Navarro · the model"
+  rendered: assets/colophon-qbMbe5-E.js requested true; title "Thomas Navarro · the model" is "Thomas Navarro · the model"
   findings: none
 
 control /: /cosmos-portfolio/ (landed on /cosmos-portfolio/, titled "Thomas Navarro · the scene")
   page requests, the site's (14):
-    http://127.0.0.1:5370/cosmos-portfolio/
-    http://127.0.0.1:5370/cosmos-portfolio/assets/index-DePJLjUX.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/index-DAqYS0Fi.css
-    http://127.0.0.1:5370/cosmos-portfolio/assets/mount-DerTCXFo.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/rolldown-runtime-hePW80VL.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/ui-CH2cvWpL.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/ui-CyFwSkbF.css
-    http://127.0.0.1:5370/cosmos-portfolio/assets/scene-CSxlRgY3.js
-    http://127.0.0.1:5370/cosmos-portfolio/assets/tokens-C7aYfGEI.js
-    http://127.0.0.1:5370/cosmos-portfolio/favicon.svg
-    http://127.0.0.1:5370/cosmos-portfolio/assets/realism-CStsH7CG.js
-    http://127.0.0.1:5370/cosmos-portfolio/textures/io.webp
-    http://127.0.0.1:5370/cosmos-portfolio/textures/mars.webp
-    http://127.0.0.1:5370/cosmos-portfolio/textures/moon.webp
+    http://127.0.0.1:5376/cosmos-portfolio/
+    http://127.0.0.1:5376/cosmos-portfolio/assets/index-BBC_APjg.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/index-walQ0QcD.css
+    http://127.0.0.1:5376/cosmos-portfolio/assets/mount-iSVu0im-.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/rolldown-runtime-hePW80VL.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/ui-CH2cvWpL.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/ui-CyFwSkbF.css
+    http://127.0.0.1:5376/cosmos-portfolio/assets/scene-zcMmMLEW.js
+    http://127.0.0.1:5376/cosmos-portfolio/assets/tokens-BhYsO5kf.js
+    http://127.0.0.1:5376/cosmos-portfolio/favicon.svg
+    http://127.0.0.1:5376/cosmos-portfolio/assets/realism-CxKvPGfz.js
+    http://127.0.0.1:5376/cosmos-portfolio/textures/io.webp
+    http://127.0.0.1:5376/cosmos-portfolio/textures/mars.webp
+    http://127.0.0.1:5376/cosmos-portfolio/textures/moon.webp
   server answered (14):
     200 /cosmos-portfolio/
-    200 /cosmos-portfolio/assets/index-DePJLjUX.js
-    200 /cosmos-portfolio/assets/index-DAqYS0Fi.css
-    200 /cosmos-portfolio/assets/mount-DerTCXFo.js
+    200 /cosmos-portfolio/assets/index-BBC_APjg.js
+    200 /cosmos-portfolio/assets/index-walQ0QcD.css
+    200 /cosmos-portfolio/assets/mount-iSVu0im-.js
     200 /cosmos-portfolio/assets/rolldown-runtime-hePW80VL.js
     200 /cosmos-portfolio/assets/ui-CH2cvWpL.js
     200 /cosmos-portfolio/assets/ui-CyFwSkbF.css
-    200 /cosmos-portfolio/assets/scene-CSxlRgY3.js
-    200 /cosmos-portfolio/assets/tokens-C7aYfGEI.js
+    200 /cosmos-portfolio/assets/tokens-BhYsO5kf.js
+    200 /cosmos-portfolio/assets/scene-zcMmMLEW.js
     200 /cosmos-portfolio/favicon.svg
-    200 /cosmos-portfolio/assets/realism-CStsH7CG.js
+    200 /cosmos-portfolio/assets/realism-CxKvPGfz.js
     200 /cosmos-portfolio/textures/io.webp
-    200 /cosmos-portfolio/textures/moon.webp
     200 /cosmos-portfolio/textures/mars.webp
+    200 /cosmos-portfolio/textures/moon.webp
   the document as received differs from the served file by 1 injected script(s), from http://gc.kis.v2.scr.kaspersky-labs.com (paths withheld: they carry the machine's install IDs)
   requests to the injected script's origin (http://gc.kis.v2.scr.kaspersky-labs.com), the machine's and not the site's, not failed: 17
-  rendered: assets/realism-CStsH7CG.js requested true; title "Thomas Navarro · the scene" is "Thomas Navarro · the scene"
+  rendered: assets/realism-CxKvPGfz.js requested true; title "Thomas Navarro · the scene" is "Thomas Navarro · the scene"
   control: realism chunk requested true, a map requested true, off-site 0
 
-PASS: neither /chart/ nor /colophon/ requested a map, the realism chunk or an off-site URL, and / requested both.
+PASS: neither /chart/ nor /colophon/ requested a map, the realism chunk or an off-site URL beyond the injected origin listed above (exempt by ruling, 2026-11-15), and / requested both.

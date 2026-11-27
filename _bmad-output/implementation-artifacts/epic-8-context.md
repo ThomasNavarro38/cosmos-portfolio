@@ -4,7 +4,7 @@
 
 ## Goal
 
-Ship M3 to the live site and be honest about it. M3 is the realism layer built in Epic 7 and reworked into physical objects in Epic 9. The Colophon tells the visitor that a Body's appearance is assigned and encodes nothing, and it credits every map. A record says exactly what M3 has and has not proven. The 30fps framerate target is **not yet passed**, because no target-profile machine exists. The one shipped frame monitor keeps its worst window, so a single future run on such a machine can settle the question with no new instrument. The framerate gate can't run, so Thomas's on-screen judgement is what lets M3 ship. His first judgement (8.4) rejected the build, and its points became Epic 9. His second (9.11, 2026-11-26) passed. Only 8.5 remains: merging `m3-realism` into `main`, which publishes, then checking the live site. A green CI must never be read as a framerate pass, and colour must never be read as data.
+Ship M3 to the live site and be honest about it. M3 is the realism layer built in Epic 7 and reworked into physical objects in Epic 9. The Colophon tells the visitor that a Body's appearance is assigned and encodes nothing, and it credits every map. A record says exactly what M3 has and has not proven. The 30fps framerate target is **not yet passed**, because no target-profile machine exists. The one shipped frame monitor keeps its worst window, so a single future run on such a machine can settle the question with no new instrument. The framerate gate can't run, so Thomas's on-screen judgement is what lets M3 ship. His first judgement (8.4) rejected the build, and its points became Epic 9. His second (9.11, 2026-11-26) passed, and Thomas ruled on 2026-11-27 that the pass carries over to `m3-realism`'s HEAD. Only 8.5 remains: merging `m3-realism` into `main`, which publishes, then checking the live site. A green CI must never be read as a framerate pass, and colour must never be read as data.
 
 ## Stories
 
@@ -12,7 +12,7 @@ Ship M3 to the live site and be honest about it. M3 is the realism layer built i
 - Story 8.2: The Colophon credits the maps (done)
 - Story 8.3: The record says "not yet passed" (done)
 - Story 8.4: Thomas's on-screen judgement (done, verdict: rejected)
-- Story 8.5: M3 reaches the live site (next; was blocked on 9.11, which passed)
+- Story 8.5: M3 reaches the live site (next)
 
 ## Requirements & Constraints
 
@@ -36,7 +36,8 @@ Ship M3 to the live site and be honest about it. M3 is the realism layer built i
 - **Before judging, confirm the build** (the record's rule):
   - After `npm run build`, compare the three chunk names in `dist/assets/` with those above.
   - At a later HEAD, also check that `git diff --stat e73313eb78e1db00ce80b7cfdb7084f9072877f0 -- src public index.html` is empty, or check out the build commit first.
-  - If either differs, it is another build, and the judgement does not carry over to it. The names are necessary but not sufficient, since they cover only the JavaScript.
+  - If either differs, it is another build, and the judgement does not carry over to it unless Thomas rules that it does. The names are necessary but not sufficient, since they cover only the JavaScript.
+- **The carry-over ruling (Thomas, 2026-11-27).** The 9.11 pass carries over to `m3-realism`'s HEAD for 8.5's merge, with no new judgement, although four later commits change shipped code: `b11aceb` (affordance plate padding inside its obstacle and bounds box, plus comment and gate-message text), `afd753d` (shader hardening: `glslFloat`, the shared `glsl.ts`, the Star tint luminance guard), `16ad04f` (receded Client names at `ink-prose`) and `c2ae22d` (Mote labels at `ink-prose` over the Focused belt). Every other commit since `e73313e` touches tests, scripts or records only. It is recorded in the architecture `.memlog.md` and in the record's "Carried over (2026-11-27)" section under the 9.11 verdict. The judged commit and chunk names stay as judged. The ruling covers those four commits only, so any further change to shipped code before the merge would need a new judgement or ruling.
 - **The record's "Live (8.5)" section** is a stub today. 8.5 fills it with the live commit, and it must keep the line "The status stays 'not yet passed': going live is not a framerate result."
 
 ## UX & Interaction Patterns
@@ -47,15 +48,10 @@ Ship M3 to the live site and be honest about it. M3 is the realism layer built i
 ## Cross-Story Dependencies
 
 - **8.5's merge gates:**
-  - A passing 9.11 verdict **for the exact build being merged**.
+  - A passing 9.11 verdict for the build being merged: met for `m3-realism`'s HEAD by the 2026-11-27 carry-over ruling.
   - Green `npm test` (with any skip named), `tsc` and `npm run build`.
   - `npm run check:followup` prints `no follow-up review flags held`. It did on 2026-11-27, after `review-followup-12-flags-2026-11-27.md`.
   - Thomas's explicit go-ahead, since merging publishes.
-- **Open blocker (2026-11-27).** The last `/bmad-build-auto 8-5` run (`bmad-build-auto-result-8-5-m3-reaches-the-live-site.md`) HALTed `blocked`. HEAD is not the judged build: about 14 shipped non-test modules differ from `e73313e`. Some changes are visible, such as the label inks raised to `ink-prose` and the affordance plate padding. Others include shader hardening and lost-WebGL-context handling. No ruling carries the verdict over. Thomas must choose one of two routes:
-  - re-judge HEAD's build in a third judgement section, with its commit, chunk names, five poses on both displays and a verdict;
-  - or rule that 9.11's pass covers HEAD, as a dated RULING in the architecture `.memlog.md` and beside the 9.11 verdict.
-
-  Until then, 8.5 must not merge.
 - **8.5's live check:**
   - On a real browser, every map and the `realism` chunk return 200 under the base path, and the fade is actually seen. "No error on screen" is not evidence.
   - The live Stars show their Client names and tints, and the crossfade from line-work to realism is seen to happen, not just the fade-in.
