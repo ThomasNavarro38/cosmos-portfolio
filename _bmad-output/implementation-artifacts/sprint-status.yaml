@@ -811,10 +811,10 @@ action_items:
     ref: "_bmad-output/implementation-artifacts/epic-9-retro-11-26-2026.md"
   - id: "epic-9-retro-item-63-extract-one-shared-glsl-noise-chunk-for"
     epic: 9
-    action: "Extract one shared GLSL noise chunk for belt, nebula and ring shaders,
-      freeing realism bytes (F-A2)"
+    action: "Defer extracting one shared GLSL noise chunk for belt, nebula and ring
+      shaders, which would free realism bytes (F-A2), filed in deferred-work.md"
     owner: "Amelia (dev)"
-    status: open
+    status: done
     ref: "_bmad-output/implementation-artifacts/epic-9-retro-11-26-2026.md"
   - id: "epic-9-retro-item-64-process-an-off-story-fix-touching-a-ruli"
     epic: 9
