@@ -821,7 +821,15 @@ action_items:
     action: "Process: an off-story fix touching a ruling, allowance or budget needs
       a spec and a memlog entry before it lands, as abdbac2 had (F-P2)"
     owner: "Thomas"
-    status: open
+    status: done
+    resolution: "2026-11-27: Thomas ruled the scope; the rule is stated in CLAUDE.md
+      and in the persistent_facts of bmad-build-auto.toml and bmad-build.toml, and
+      the mechanical guard is deferred in deferred-work.md. A change not covered by
+      an epic story's spec that touches an AD ruling, an audit allowance, a DESIGN.md
+      ruled section or token, or a budget (a limit, or growth of 20%+ of headroom or
+      to under 2,000 B free) needs a spec and a dated memlog RULING entry by its
+      commit; agents record Thomas's ruling, never make one
+      (spec-e9-r9-off-story-rulings-need-a-spec-and-a-memlog-entry.md)"
     ref: "_bmad-output/implementation-artifacts/epic-9-retro-11-26-2026.md"
   - id: "epic-9-retro-item-65-process-hold-the-merge-to-main-while-any"
     epic: 9

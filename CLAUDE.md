@@ -68,3 +68,52 @@ irm https://astral.sh/uv/install.ps1 | iex
 # or
 winget install --id=astral-sh.uv -e
 ```
+
+## Rulings, allowances and budgets: spec and memlog first
+
+Source: Thomas, Epic 9 retro item 9 (F-P2), with the scope ruled 2026-11-27
+(`spec-e9-r9-off-story-rulings-need-a-spec-and-a-memlog-entry.md`). It exists
+because `d157b65` amended AD-19 and `DESIGN.md` and spent 507 B of `scene`
+headroom with no spec and no memlog entry, against AD-23.
+
+**Who it binds:** any change whose ruling, allowance or budget effect is not
+already covered by an epic story's spec. That includes ad-hoc fixes, retro
+remediation items (`spec-e*-r*`), and review fix-ups after a story is `done`.
+
+**What triggers it** (any one):
+
+- **(a) A ruling:** a change to an AD ruling in
+  `_bmad-output/planning-artifacts/architecture/architecture-cosmos-portfolio-2026-09-01/ARCHITECTURE-SPINE.md`.
+- **(b) An allowance:** a change to a named audit allowance, meaning AD-19's
+  list in the spine or any allowlist in the audit tests that enforce it:
+  `src/render-scene/scene-model.test.ts` (the effects scan, `PREFERENCE_ROLES`),
+  `scripts/bundle-assertion.test.ts` (the chunk module lists) and
+  `src/render-scene/realism/done.test.ts` (`UNCHANGED`, `SINCE_M2`).
+- **(c) Design:** a change to a ruled section or a token value in
+  `_bmad-output/planning-artifacts/ux-designs/ux-cosmos-portfolio-2026-09-01/DESIGN.md`.
+- **(d) A budget:** changing a limit in `src/render-scene/realism/budgets.ts`
+  (AD-23), or a single change that grows a byte budget's chunk (`realism` or
+  `scene`) by 20% or more of its remaining headroom, or grows it to leave less
+  than 2,000 B free. Measure with `scripts/bundle-assertion.test.ts` before
+  and after the change. Today both chunks are already under 2,000 B free
+  (`scene` 1,364 B, `realism` 181 B), so any growth of either triggers (d).
+
+**What is required, no later than the change's own commit** ("lands" means
+the commit; `abdbac2` carried both records in the same commit):
+
+1. a spec in `_bmad-output/implementation-artifacts/`;
+2. a dated RULING entry in each memlog whose trigger applies: the architecture
+   `.memlog.md`
+   (`_bmad-output/planning-artifacts/architecture/architecture-cosmos-portfolio-2026-09-01/.memlog.md`)
+   for (a), (b) and (d), and the UX `.memlog.md`
+   (`_bmad-output/planning-artifacts/ux-designs/ux-cosmos-portfolio-2026-09-01/.memlog.md`)
+   for (c). A change like `d157b65` needs both. The entry gives the measured
+   cost when there is one.
+
+`abdbac2` is the model: it has `spec-belt-soft-planet-junction.md` and the
+2026-11-22 RULING entry (architecture `.memlog.md:124`).
+
+**Who rules:** an agent records Thomas's ruling; it never makes one. If Thomas
+has not given the ruling, `bmad-build-auto` HALTs with status `blocked` and
+names the ruling needed. Any other session asks Thomas, and does not commit
+without the ruling.
