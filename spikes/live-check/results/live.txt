@@ -1,0 +1,269 @@
+live check (8.5): 2026-11-27T14:24:54.910Z, https://thomasnavarro38.github.io/cosmos-portfolio/, local build: entry assets/index-BBC_APjg.js, scene assets/scene-zcMmMLEW.js, realism assets/realism-CxKvPGfz.js, Chrome at C:/Program Files/Google/Chrome/Application/chrome.exe
+deploy: the live index.html names assets/index-BBC_APjg.js, the local build's entry, at 2026-11-27T14:24:55.120Z (0 s waited)
+
+(1) the scene: /cosmos-portfolio/ at 1920×1080, DPR 1 (landed on /cosmos-portfolio/, titled "Thomas Navarro · the scene")
+  the site's requests (14), with status:
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/index-BBC_APjg.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/index-walQ0QcD.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/mount-iSVu0im-.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/rolldown-runtime-hePW80VL.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/ui-CH2cvWpL.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/ui-CyFwSkbF.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/scene-zcMmMLEW.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/tokens-BhYsO5kf.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/favicon.svg
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/realism-CxKvPGfz.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/textures/io.webp
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/textures/mars.webp
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/textures/moon.webp
+  the document as received differs from the live file by 1 injected script(s), from https://gc.kis.v2.scr.kaspersky-labs.com (paths withheld: they carry the machine's install IDs)
+  requests to the injected origin (https://gc.kis.v2.scr.kaspersky-labs.com), the machine's and not the site's, not failed: 4
+  schematic-first-frame: 1130.5 ms
+  resource timing (path, start ms, end ms): /cosmos-portfolio/assets/realism-CxKvPGfz.js 1136 1286; /cosmos-portfolio/textures/mars.webp 1288 1432; /cosmos-portfolio/textures/io.webp 1288 1451; /cosmos-portfolio/textures/moon.webp 1288 1430
+  maps answered: /cosmos-portfolio/textures/io.webp 200, /cosmos-portfolio/textures/mars.webp 200, /cosmos-portfolio/textures/moon.webp 200; realism chunk: /cosmos-portfolio/assets/realism-CxKvPGfz.js 200
+  frames captured: 136 over 12 s, 126 after the first-frame mark; per frame over the region 520×180 at (700, 450) (t ms: mean |difference| from the first drawn frame, mean chroma):
+    1258: 0.000, 2.177
+    1342: 0.000, 2.177
+    1427: 0.000, 2.177
+    1513: 0.000, 2.177
+    1598: 0.031, 2.198
+    1681: 0.064, 2.220
+    1767: 0.096, 2.243
+    1851: 0.128, 2.266
+    1936: 0.159, 2.288
+    2021: 0.191, 2.309
+    2105: 0.222, 2.329
+    2190: 0.253, 2.349
+    2275: 0.285, 2.370
+    2361: 0.319, 2.389
+    2444: 0.354, 2.410
+    2525: 0.381, 2.428
+    2608: 0.381, 2.428
+    2693: 0.381, 2.428
+    2777: 0.382, 2.428
+    2864: 0.382, 2.428
+    2948: 0.382, 2.428
+    3034: 0.382, 2.429
+    3118: 0.382, 2.428
+    3204: 0.382, 2.428
+    3288: 0.382, 2.429
+    3371: 0.382, 2.429
+    3457: 0.382, 2.429
+    3543: 0.382, 2.429
+    3626: 0.382, 2.428
+    3712: 0.382, 2.428
+    3796: 0.382, 2.429
+    3880: 0.382, 2.429
+    3962: 0.382, 2.428
+    4045: 0.382, 2.429
+    4129: 0.382, 2.429
+    4214: 0.382, 2.429
+    4299: 0.382, 2.429
+    4384: 0.382, 2.429
+    4469: 0.382, 2.429
+    4554: 0.382, 2.429
+    4639: 0.382, 2.430
+    4724: 0.382, 2.430
+    4809: 0.382, 2.430
+    4896: 0.382, 2.429
+    4983: 0.382, 2.429
+    5069: 0.382, 2.429
+    5154: 0.382, 2.430
+    5239: 0.382, 2.429
+    5324: 0.382, 2.430
+    5408: 0.382, 2.430
+    5493: 0.382, 2.430
+    5578: 0.382, 2.430
+    5663: 0.382, 2.430
+    5748: 0.382, 2.430
+    5833: 0.382, 2.430
+    5918: 0.382, 2.430
+    6003: 0.382, 2.430
+    6087: 0.382, 2.430
+    6171: 0.382, 2.430
+    6256: 0.382, 2.430
+    6343: 0.382, 2.430
+    6428: 0.382, 2.430
+    6513: 0.382, 2.430
+    6598: 0.382, 2.430
+    6683: 0.382, 2.430
+    6767: 0.382, 2.430
+    6852: 0.382, 2.430
+    6937: 0.382, 2.430
+    7022: 0.382, 2.430
+    7107: 0.382, 2.430
+    7192: 0.382, 2.430
+    7276: 0.382, 2.430
+    7361: 0.382, 2.430
+    7446: 0.382, 2.430
+    7532: 0.382, 2.430
+    7616: 0.381, 2.430
+    7701: 0.381, 2.430
+    7788: 0.381, 2.430
+    7876: 0.381, 2.430
+    7961: 0.381, 2.430
+    8046: 0.381, 2.430
+    8131: 0.381, 2.430
+    8215: 0.381, 2.430
+    8300: 0.381, 2.430
+    8388: 0.381, 2.429
+    8476: 0.382, 2.429
+    8561: 0.382, 2.429
+    8646: 0.381, 2.429
+    8731: 0.382, 2.429
+    8816: 0.382, 2.429
+    8901: 0.382, 2.430
+    8988: 0.382, 2.430
+    9076: 0.382, 2.430
+    9161: 0.382, 2.430
+    9246: 0.382, 2.430
+    9331: 0.382, 2.430
+    9415: 0.382, 2.430
+    9501: 0.382, 2.430
+    9589: 0.382, 2.430
+    9678: 0.382, 2.430
+    9765: 0.382, 2.430
+    9849: 0.382, 2.430
+    9931: 0.382, 2.430
+    10016: 0.382, 2.430
+    10101: 0.382, 2.430
+    10189: 0.382, 2.430
+    10276: 0.382, 2.430
+    10361: 0.382, 2.430
+    10446: 0.382, 2.430
+    10534: 0.383, 2.430
+    10622: 0.383, 2.430
+    10710: 0.383, 2.430
+    10797: 0.383, 2.430
+    10885: 0.383, 2.430
+    10975: 0.383, 2.430
+    11067: 0.383, 2.430
+    11155: 0.383, 2.430
+    11241: 0.383, 2.430
+    11329: 0.383, 2.430
+    11416: 0.383, 2.430
+    11505: 0.383, 2.430
+    11599: 0.383, 2.430
+    11698: 0.383, 2.431
+    11791: 0.383, 2.430
+    11876: 0.383, 2.431
+    11961: 0.383, 2.431
+    settled 18643: 0.383, 2.431
+  first drawn frame 1258 ms, chroma 2.177; settled: difference 0.383, chroma 2.431; frames in the fade (difference strictly between 10 % and 90 % of the settled one): 9
+  screenshots kept (each with a -crop.png at 3×): scene-01258ms-first.png, scene-01681ms-fade.png, scene-01767ms-fade.png, scene-01851ms-fade.png, scene-01936ms-fade.png, scene-02021ms-fade.png, scene-02105ms-fade.png, scene-02190ms-fade.png, scene-02275ms-fade.png, scene-02361ms-fade.png, scene-03034ms-second.png, scene-03962ms-second.png, scene-04983ms-second.png, scene-06003ms-second.png, scene-07022ms-second.png, scene-07961ms-second.png, scene-08988ms-second.png, scene-10016ms-second.png, scene-10975ms-second.png, scene-11961ms-second.png, scene-18643ms-settled.png
+
+(2) desktop /chart/: /cosmos-portfolio/chart/ (landed on /cosmos-portfolio/chart, titled "Thomas Navarro · the chart", viewport 1920×1080 @1.0000000149011612, coarse pointer false)
+  the site's requests (12), with status:
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/chart/
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/index-BBC_APjg.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/index-walQ0QcD.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/mount-iSVu0im-.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/rolldown-runtime-hePW80VL.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/ui-CH2cvWpL.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/ui-CyFwSkbF.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/chart-E6_8A8Iv.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/tokens-BhYsO5kf.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/chart-DfmMtjx4.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/favicon.svg
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/favicon.svg
+  the document as received differs from the live file by 1 injected script(s), from https://gc.kis.v2.scr.kaspersky-labs.com (paths withheld: they carry the machine's install IDs)
+  requests to the injected origin (https://gc.kis.v2.scr.kaspersky-labs.com), the machine's and not the site's, not failed: 5
+  rendered: assets/chart-E6_8A8Iv.js requested true; title "Thomas Navarro · the chart" is "Thomas Navarro · the chart"
+  findings: none
+
+(2) desktop /colophon/: /cosmos-portfolio/colophon/ (landed on /cosmos-portfolio/colophon, titled "Thomas Navarro · the model", viewport 1920×1080 @1.0000000149011612, coarse pointer false)
+  the site's requests (14), with status:
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/colophon/
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/index-BBC_APjg.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/index-walQ0QcD.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/mount-iSVu0im-.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/rolldown-runtime-hePW80VL.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/ui-CH2cvWpL.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/ui-CyFwSkbF.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/colophon-qbMbe5-E.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/colophon-jmBFyhAt.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/favicon.svg
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/favicon.svg
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/career.json
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/layout.generated.json
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/live-oTbkRw8w.js
+  the document as received differs from the live file by 1 injected script(s), from https://gc.kis.v2.scr.kaspersky-labs.com (paths withheld: they carry the machine's install IDs)
+  requests to the injected origin (https://gc.kis.v2.scr.kaspersky-labs.com), the machine's and not the site's, not failed: 5
+  rendered: assets/colophon-qbMbe5-E.js requested true; title "Thomas Navarro · the model" is "Thomas Navarro · the model"
+  findings: none
+
+(4) the Colophon text
+  the ruled appearance statement is visible: true
+  moon: the credit line appears 1 time(s)
+  mars: the credit line appears 1 time(s)
+  io: the credit line appears 1 time(s)
+  jupiter: the credit line appears 1 time(s)
+
+(3) phone /: /cosmos-portfolio/ (landed on /cosmos-portfolio/, titled "Thomas Navarro · the chart", viewport 390×844 @3.0000001192092896, coarse pointer true)
+  the site's requests (11), with status:
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/index-BBC_APjg.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/index-walQ0QcD.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/mount-iSVu0im-.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/rolldown-runtime-hePW80VL.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/ui-CH2cvWpL.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/ui-CyFwSkbF.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/chart-E6_8A8Iv.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/tokens-BhYsO5kf.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/chart-DfmMtjx4.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/favicon.svg
+  the document as received differs from the live file by 1 injected script(s), from https://gc.kis.v2.scr.kaspersky-labs.com (paths withheld: they carry the machine's install IDs)
+  requests to the injected origin (https://gc.kis.v2.scr.kaspersky-labs.com), the machine's and not the site's, not failed: 4
+  rendered: assets/chart-E6_8A8Iv.js requested true; title "Thomas Navarro · the chart" is "Thomas Navarro · the chart"
+  findings: none
+
+(3) phone /chart/: /cosmos-portfolio/chart/ (landed on /cosmos-portfolio/chart, titled "Thomas Navarro · the chart", viewport 390×844 @3.0000001192092896, coarse pointer true)
+  the site's requests (12), with status:
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/chart/
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/index-BBC_APjg.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/index-walQ0QcD.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/mount-iSVu0im-.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/rolldown-runtime-hePW80VL.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/ui-CH2cvWpL.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/ui-CyFwSkbF.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/chart-E6_8A8Iv.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/tokens-BhYsO5kf.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/chart-DfmMtjx4.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/favicon.svg
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/favicon.svg
+  the document as received differs from the live file by 1 injected script(s), from https://gc.kis.v2.scr.kaspersky-labs.com (paths withheld: they carry the machine's install IDs)
+  requests to the injected origin (https://gc.kis.v2.scr.kaspersky-labs.com), the machine's and not the site's, not failed: 5
+  rendered: assets/chart-E6_8A8Iv.js requested true; title "Thomas Navarro · the chart" is "Thomas Navarro · the chart"
+  findings: none
+
+(3) phone /colophon/: /cosmos-portfolio/colophon/ (landed on /cosmos-portfolio/colophon, titled "Thomas Navarro · the model", viewport 390×844 @3.0000001192092896, coarse pointer true)
+  the site's requests (14), with status:
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/colophon/
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/index-BBC_APjg.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/index-walQ0QcD.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/mount-iSVu0im-.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/rolldown-runtime-hePW80VL.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/ui-CH2cvWpL.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/ui-CyFwSkbF.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/colophon-qbMbe5-E.js
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/colophon-jmBFyhAt.css
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/favicon.svg
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/favicon.svg
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/career.json
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/layout.generated.json
+    200 https://thomasnavarro38.github.io/cosmos-portfolio/assets/live-oTbkRw8w.js
+  the document as received differs from the live file by 1 injected script(s), from https://gc.kis.v2.scr.kaspersky-labs.com (paths withheld: they carry the machine's install IDs)
+  requests to the injected origin (https://gc.kis.v2.scr.kaspersky-labs.com), the machine's and not the site's, not failed: 5
+  rendered: assets/colophon-qbMbe5-E.js requested true; title "Thomas Navarro · the model" is "Thomas Navarro · the model"
+  findings: none
+
+(5) preview.png: live 124087 B, public/preview.png 124087 B, byte-identical true
+
+(6) First Paint, 6.4's P1 on the proxy (Thomas, 2026-10-29): the dev machine, not the target profile; each run a fresh Chrome profile, 1920×1080, DPR 1, 4× CPU throttling and Fast 4G (latency 165 ms, down 1012500 B/s, up 168750 B/s) set before navigation
+  run 1: schematic-first-frame startTime 1854.7 ms; step-6 count 1 / 1 (to /cosmos-portfolio/chart and Back to /cosmos-portfolio/); realism chunk requested at 1883.8 ms, after the mark true; timing in p1-run-1-timing.json
+  run 2: schematic-first-frame startTime 1856.4 ms; step-6 count 1 / 1 (to /cosmos-portfolio/chart and Back to /cosmos-portfolio/); realism chunk requested at 1885.5 ms, after the mark true; timing in p1-run-2-timing.json
+  run 3: schematic-first-frame startTime 1865.7 ms; step-6 count 1 / 1 (to /cosmos-portfolio/chart and Back to /cosmos-portfolio/); realism chunk requested at 1895.2 ms, after the mark true; timing in p1-run-3-timing.json
+  median 1856.4 ms (1854.7, 1856.4, 1865.7), beside M2's 1,938.3 ms (6.4, b144586's build): the dev machine, a proxy by ruling, not the target profile
+
+PASS: every check passed.

@@ -2,7 +2,7 @@
 title: 'Story 8.5: M3 reaches the live site'
 type: 'chore'
 created: '2026-11-27'
-status: 'in-progress'
+status: 'done'
 baseline_revision: '2a80b3aea4beab4d0296d832ab2a2d10646cf193'
 review_loop_iteration: 0
 followup_review_recommended: false
