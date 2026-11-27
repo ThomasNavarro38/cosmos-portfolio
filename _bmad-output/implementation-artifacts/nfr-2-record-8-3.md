@@ -279,6 +279,17 @@ If another build is judged, its commit and chunk names replace those under The b
 - **Verdict:** Passed.
 - **Screenshots:** `judgement-9-11-opening-frame-ark.png`
 
+### Carried over (2026-11-27)
+
+RULING (Thomas, 2026-11-27): the 9.11 verdict, Passed, carries over to the build at `m3-realism`'s HEAD for 8.5's merge, without a new judgement. The verdict above was given on `e73313e`, and since then `git diff --stat e73313e -- src public index.html` is not empty. Four later commits change shipped code:
+
+- `b11aceb` (the Epic 7 and Epic 9 follow-up review): the affordance plate's padding now sits inside its obstacle and bounds box (`labelBox`, `affordance-model.ts`). It also rewords comments and gate messages in `artifact-schema.ts`, `derive/index.ts`, `client-label-model.ts`, `star-model.ts` and `scene.tsx`.
+- `afd753d` (Epic 9 retro item 5): shader hardening. `glslFloat` is used for every float in `fill-shader.ts`, the new `glsl.ts` is shared, the Star tint's luminance is guarded, and the belt, nebula, ring and Star shaders follow.
+- `16ad04f` (Epic 9 retro item 3): the receded Client names are raised to `ink-prose`, proven over the composited ground.
+- `c2ae22d` (Epic 9 retro item 3): the Mote labels are raised to `ink-prose` over the Focused belt, and `nebula-model.ts` exports the value the check reads.
+
+Every other commit since `e73313e` touches tests, scripts or records only. The judged build's commit and chunk names above stay as they were judged. 8.5 names the commit that goes live in Live (8.5) below. The architecture `.memlog.md` records this ruling.
+
 ## Live (8.5)
 
 Story 8.5 names the live commit here when M3 reaches the live site. The status stays "not yet passed": going live is not a framerate result.
